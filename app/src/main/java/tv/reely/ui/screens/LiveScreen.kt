@@ -74,6 +74,7 @@ fun LiveScreen(
                     text = "Live TV",
                     color = Parchment,
                     fontSize = 24.sp,
+                    lineHeight = 30.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
@@ -171,6 +172,7 @@ private fun XtreamSignInPanel(
             text = "Sign in to your IPTV provider",
             color = Parchment,
             fontSize = 26.sp,
+            lineHeight = 32.sp,
             fontWeight = FontWeight.SemiBold,
         )
         Text(

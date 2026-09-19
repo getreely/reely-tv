@@ -49,6 +49,7 @@ fun StatusScreen(
             text = "Status",
             color = Parchment,
             fontSize = 24.sp,
+            lineHeight = 30.sp,
             fontWeight = FontWeight.SemiBold,
         )
 

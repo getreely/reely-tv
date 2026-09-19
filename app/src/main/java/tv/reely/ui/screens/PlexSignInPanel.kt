@@ -48,6 +48,7 @@ fun PlexSignInPanel(
             text = "Sign in to see a library",
             color = Parchment,
             fontSize = 26.sp,
+            lineHeight = 32.sp,
             fontWeight = FontWeight.SemiBold,
         )
         Text(
@@ -92,6 +93,7 @@ fun PlexSignInPanel(
                     text = code,
                     color = Accent,
                     fontSize = 46.sp,
+                    lineHeight = 58.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 8.sp,
                 )

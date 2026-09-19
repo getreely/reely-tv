@@ -173,6 +173,7 @@ fun TvPosterTile(
                     text = title.take(1).uppercase(),
                     color = Faint,
                     fontSize = 34.sp,
+                    lineHeight = 42.sp,
                     modifier = Modifier.align(Alignment.Center),
                 )
             }

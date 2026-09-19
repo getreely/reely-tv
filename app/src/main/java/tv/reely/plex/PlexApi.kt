@@ -82,7 +82,10 @@ object PlexApi {
         val request = Request.Builder()
             .url("$PLEX_TV/api/v2/pins")
             .plexHeaders(clientId)
-            .post(FormBody.Builder().add("strong", "true").build())
+            // Not a strong PIN: plex.tv/link takes the short four-character kind.
+            // A strong PIN is a long string meant for the app.plex.tv deep-link flow,
+            // which nobody can type into four boxes on a television.
+            .post(FormBody.Builder().add("strong", "false").build())
             .build()
         Http.client.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()

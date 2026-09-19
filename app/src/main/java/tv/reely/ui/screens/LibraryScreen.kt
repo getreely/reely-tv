@@ -81,6 +81,7 @@ fun LibraryScreen(
                     text = browse.trail.lastOrNull()?.title ?: kind.title,
                     color = Parchment,
                     fontSize = 24.sp,
+                    lineHeight = 30.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 if (browse.trail.size > 1) {

@@ -142,6 +142,7 @@ private fun TopBar(
             text = "reely",
             color = Accent,
             fontSize = 20.sp,
+            lineHeight = 25.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(end = 20.dp),
         )

@@ -243,6 +243,7 @@ fun PlayerScreen(
                     text = playback.title,
                     color = Parchment,
                     fontSize = 26.sp,
+                    lineHeight = 32.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                 )
