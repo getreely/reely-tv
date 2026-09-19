@@ -1013,6 +1013,17 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Previous or next episode, from the queue the detail page or Continue Watching
+     * already supplied for Up Next. Does nothing at either end of a season.
+     */
+    fun stepEpisode(delta: Int) {
+        val playback = _state.value.playback ?: return
+        if (playback.isLive) return
+        val next = playback.queue.getOrNull(playback.queueIndex + delta) ?: return
+        play(next, queue = playback.queue)
+    }
+
     /** Channel surfing from the player — the thing that decides whether this feels like a TV app. */
     fun stepChannel(delta: Int) {
         val playback = _state.value.playback ?: return

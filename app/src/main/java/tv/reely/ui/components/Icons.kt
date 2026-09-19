@@ -98,3 +98,149 @@ fun SearchGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) {
         )
     }
 }
+
+@Composable
+fun PauseGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(size)) {
+        val s = size.toPx()
+        val bar = s * 0.17f
+        drawRoundRect(
+            color = color,
+            topLeft = androidx.compose.ui.geometry.Offset(s * 0.27f, s * 0.18f),
+            size = androidx.compose.ui.geometry.Size(bar, s * 0.64f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(bar * 0.4f),
+        )
+        drawRoundRect(
+            color = color,
+            topLeft = androidx.compose.ui.geometry.Offset(s * 0.56f, s * 0.18f),
+            size = androidx.compose.ui.geometry.Size(bar, s * 0.64f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(bar * 0.4f),
+        )
+    }
+}
+
+/** Two chevrons, pointing whichever way the seek goes. */
+@Composable
+fun SeekGlyph(color: Color, forward: Boolean, size: Dp = 18.dp, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(size)) {
+        val s = size.toPx()
+        fun wedge(originX: Float): Path = Path().apply {
+            if (forward) {
+                moveTo(originX, s * 0.22f)
+                lineTo(originX + s * 0.3f, s * 0.5f)
+                lineTo(originX, s * 0.78f)
+            } else {
+                moveTo(originX + s * 0.3f, s * 0.22f)
+                lineTo(originX, s * 0.5f)
+                lineTo(originX + s * 0.3f, s * 0.78f)
+            }
+            close()
+        }
+        drawPath(wedge(s * 0.1f), color)
+        drawPath(wedge(s * 0.42f), color)
+    }
+}
+
+/** A triangle against a bar: the jump to the next or previous thing. */
+@Composable
+fun SkipGlyph(color: Color, forward: Boolean, size: Dp = 18.dp, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(size)) {
+        val s = size.toPx()
+        val barWidth = s * 0.11f
+        val triangle = Path().apply {
+            if (forward) {
+                moveTo(s * 0.16f, s * 0.2f)
+                lineTo(s * 0.62f, s * 0.5f)
+                lineTo(s * 0.16f, s * 0.8f)
+            } else {
+                moveTo(s * 0.84f, s * 0.2f)
+                lineTo(s * 0.38f, s * 0.5f)
+                lineTo(s * 0.84f, s * 0.8f)
+            }
+            close()
+        }
+        drawPath(triangle, color)
+        drawRoundRect(
+            color = color,
+            topLeft = androidx.compose.ui.geometry.Offset(
+                if (forward) s * 0.68f else s * 0.21f,
+                s * 0.2f,
+            ),
+            size = androidx.compose.ui.geometry.Size(barWidth, s * 0.6f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(barWidth * 0.4f),
+        )
+    }
+}
+
+/** A speaker cone with two waves — the audio track picker. */
+@Composable
+fun SpeakerGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(size)) {
+        val s = size.toPx()
+        val cone = Path().apply {
+            moveTo(s * 0.1f, s * 0.36f)
+            lineTo(s * 0.26f, s * 0.36f)
+            lineTo(s * 0.46f, s * 0.18f)
+            lineTo(s * 0.46f, s * 0.82f)
+            lineTo(s * 0.26f, s * 0.64f)
+            lineTo(s * 0.1f, s * 0.64f)
+            close()
+        }
+        drawPath(cone, color)
+        drawArc(
+            color = color,
+            startAngle = -55f,
+            sweepAngle = 110f,
+            useCenter = false,
+            topLeft = androidx.compose.ui.geometry.Offset(s * 0.34f, s * 0.26f),
+            size = androidx.compose.ui.geometry.Size(s * 0.34f, s * 0.48f),
+            style = Stroke(width = s * 0.08f, cap = androidx.compose.ui.graphics.StrokeCap.Round),
+        )
+        drawArc(
+            color = color,
+            startAngle = -55f,
+            sweepAngle = 110f,
+            useCenter = false,
+            topLeft = androidx.compose.ui.geometry.Offset(s * 0.4f, s * 0.14f),
+            size = androidx.compose.ui.geometry.Size(s * 0.5f, s * 0.72f),
+            style = Stroke(width = s * 0.08f, cap = androidx.compose.ui.graphics.StrokeCap.Round),
+        )
+    }
+}
+
+/** A speech bubble carrying two lines: the subtitle picker. */
+@Composable
+fun SubtitleGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(size)) {
+        val s = size.toPx()
+        drawRoundRect(
+            color = color,
+            topLeft = androidx.compose.ui.geometry.Offset(s * 0.1f, s * 0.18f),
+            size = androidx.compose.ui.geometry.Size(s * 0.8f, s * 0.54f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(s * 0.16f),
+            style = Stroke(width = s * 0.09f),
+        )
+        // The bubble's tail.
+        val tail = Path().apply {
+            moveTo(s * 0.28f, s * 0.7f)
+            lineTo(s * 0.28f, s * 0.9f)
+            lineTo(s * 0.48f, s * 0.7f)
+            close()
+        }
+        drawPath(tail, color)
+        drawLine(
+            color,
+            start = androidx.compose.ui.geometry.Offset(s * 0.24f, s * 0.38f),
+            end = androidx.compose.ui.geometry.Offset(s * 0.62f, s * 0.38f),
+            strokeWidth = s * 0.085f,
+            cap = androidx.compose.ui.graphics.StrokeCap.Round,
+        )
+        drawLine(
+            color,
+            start = androidx.compose.ui.geometry.Offset(s * 0.24f, s * 0.53f),
+            end = androidx.compose.ui.geometry.Offset(s * 0.76f, s * 0.53f),
+            strokeWidth = s * 0.085f,
+            cap = androidx.compose.ui.graphics.StrokeCap.Round,
+        )
+    }
+}

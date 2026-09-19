@@ -85,6 +85,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             onPlayUpNext = viewModel::playUpNext,
             onDismissUpNext = viewModel::dismissUpNext,
             onStepChannel = viewModel::stepChannel,
+            onStepEpisode = viewModel::stepEpisode,
             onToggleFormat = viewModel::toggleFormat,
             onReportProgress = viewModel::reportProgress,
             onNudgeSubtitleScale = viewModel::nudgeSubtitleScale,

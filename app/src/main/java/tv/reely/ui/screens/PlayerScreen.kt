@@ -66,6 +66,13 @@ import tv.reely.core.Settings
 import tv.reely.plex.PlexItem
 import tv.reely.ui.PlayerPrefs
 import tv.reely.ui.Playback
+import tv.reely.ui.components.PauseGlyph
+import tv.reely.ui.components.PlayGlyph
+import tv.reely.ui.components.SeekGlyph
+import tv.reely.ui.components.SkipGlyph
+import tv.reely.ui.components.SpeakerGlyph
+import tv.reely.ui.components.SubtitleGlyph
+import tv.reely.ui.components.TransportButton
 import tv.reely.ui.components.TvActionButton
 import tv.reely.ui.components.TvListRow
 import tv.reely.ui.theme.Accent
@@ -97,6 +104,7 @@ fun PlayerScreen(
     onPlayUpNext: () -> Unit,
     onDismissUpNext: () -> Unit,
     onStepChannel: (Int) -> Unit,
+    onStepEpisode: (Int) -> Unit,
     onToggleFormat: () -> Unit,
     onReportProgress: (Long, Boolean) -> Unit,
     onNudgeSubtitleScale: (Float) -> Unit,
@@ -129,6 +137,11 @@ fun PlayerScreen(
     var controlsVisible by remember { mutableStateOf(true) }
     var interaction by remember { mutableIntStateOf(0) }
     var panel by remember { mutableStateOf(Panel.NONE) }
+
+    // Live skips a channel; on demand it skips an episode, when the queue has one.
+    val canSkipBack = if (playback.isLive) true else playback.queueIndex > 0
+    val canSkipForward = if (playback.isLive) true
+    else playback.queueIndex >= 0 && playback.queueIndex < playback.queue.lastIndex
 
     // Nothing else tells the system the screen is in use, so Fire OS starts its screensaver
     // over a playing film. This is what stops that.
@@ -197,7 +210,7 @@ fun PlayerScreen(
         controlsVisible = false
     }
 
-    val scrubberFocus = remember { FocusRequester() }
+    val playFocus = remember { FocusRequester() }
     val rootFocus = remember { FocusRequester() }
     val panelFocus = remember { FocusRequester() }
 
@@ -205,8 +218,7 @@ fun PlayerScreen(
         runCatching {
             when {
                 panel != Panel.NONE -> panelFocus.requestFocus()
-                controlsVisible && !playback.isLive -> scrubberFocus.requestFocus()
-                controlsVisible -> rootFocus.requestFocus()
+                controlsVisible -> playFocus.requestFocus()
                 else -> rootFocus.requestFocus()
             }
         }
@@ -310,7 +322,14 @@ fun PlayerScreen(
                 positionMs = positionMs,
                 durationMs = durationMs,
                 bufferedMs = bufferedMs,
-                scrubberFocus = scrubberFocus,
+                canSkipBack = canSkipBack,
+                canSkipForward = canSkipForward,
+                playFocus = playFocus,
+                onSkip = { delta ->
+                    interaction++
+                    // The same pair of buttons: a channel when live, an episode when not.
+                    if (playback.isLive) onStepChannel(delta) else onStepEpisode(delta)
+                },
                 onSeek = { delta ->
                     interaction++
                     val target = (exoPlayer.currentPosition + delta)
@@ -361,8 +380,11 @@ private fun Controls(
     positionMs: Long,
     durationMs: Long,
     bufferedMs: Long,
-    scrubberFocus: FocusRequester,
+    canSkipBack: Boolean,
+    canSkipForward: Boolean,
+    playFocus: FocusRequester,
     onSeek: (Long) -> Unit,
+    onSkip: (Int) -> Unit,
     onTogglePlay: () -> Unit,
     onOpenSubtitles: () -> Unit,
     onOpenAudio: () -> Unit,
@@ -377,14 +399,14 @@ private fun Controls(
                     listOf(Color.Transparent, Ink.copy(alpha = 0.85f), Ink.copy(alpha = 0.97f))
                 )
             )
-            .padding(horizontal = 44.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(horizontal = 44.dp, vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text(
             text = playback.title,
             color = Parchment,
-            fontSize = 25.sp,
-            lineHeight = 31.sp,
+            fontSize = 22.sp,
+            lineHeight = 28.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -393,46 +415,93 @@ private fun Controls(
             Text(
                 text = it,
                 color = Muted,
-                fontSize = 14.sp,
-                lineHeight = 18.sp,
+                fontSize = 13.sp,
+                lineHeight = 17.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
 
         if (playback.isLive) {
-            Text(text = "LIVE", color = Accent, fontSize = 12.sp, lineHeight = 16.sp, letterSpacing = 1.6.sp)
-        } else {
-            Scrubber(
-                positionMs = positionMs,
-                durationMs = durationMs,
-                bufferedMs = bufferedMs,
-                focusRequester = scrubberFocus,
-                onSeek = onSeek,
-                onTogglePlay = onTogglePlay,
+            Text(
+                text = "LIVE",
+                color = Accent,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+                letterSpacing = 1.6.sp,
+                fontWeight = FontWeight.Medium,
             )
+        } else {
+            Scrubber(positionMs = positionMs, durationMs = durationMs, bufferedMs = bufferedMs)
         }
 
-        Row(
-            modifier = Modifier.focusGroup(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            TvActionButton(label = if (playing) "Pause" else "Play", onClick = onTogglePlay)
-            TvActionButton(label = "Subtitles", onClick = onOpenSubtitles)
-            TvActionButton(label = "Audio", onClick = onOpenAudio)
-            if (playback.isLive) {
-                TvActionButton(
-                    label = "Switch to ${if (playback.format.label == "MPEG-TS") "HLS" else "MPEG-TS"}",
-                    onClick = onToggleFormat,
+        Box(modifier = Modifier.fillMaxWidth()) {
+            // The transport sits in the middle of the screen, where a player's controls belong.
+            Row(
+                modifier = Modifier.align(Alignment.Center).focusGroup(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TransportButton(
+                    onClick = { onSkip(-1) },
+                    enabled = canSkipBack,
+                    glyph = { SkipGlyph(it, forward = false, size = 20.dp) },
                 )
+                if (!playback.isLive) {
+                    TransportButton(
+                        onClick = { onSeek(-SEEK_STEP_MS) },
+                        glyph = { SeekGlyph(it, forward = false, size = 20.dp) },
+                    )
+                }
+                TransportButton(
+                    onClick = onTogglePlay,
+                    filled = true,
+                    diameter = 58.dp,
+                    modifier = Modifier.focusRequester(playFocus),
+                    glyph = {
+                        if (playing) PauseGlyph(it, 26.dp) else PlayGlyph(it, 26.dp)
+                    },
+                )
+                if (!playback.isLive) {
+                    TransportButton(
+                        onClick = { onSeek(SEEK_STEP_MS) },
+                        glyph = { SeekGlyph(it, forward = true, size = 20.dp) },
+                    )
+                }
+                TransportButton(
+                    onClick = { onSkip(1) },
+                    enabled = canSkipForward,
+                    glyph = { SkipGlyph(it, forward = true, size = 20.dp) },
+                )
+            }
+
+            Row(
+                modifier = Modifier.align(Alignment.CenterEnd).focusGroup(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TransportButton(
+                    onClick = onOpenSubtitles,
+                    glyph = { SubtitleGlyph(it, 20.dp) },
+                )
+                TransportButton(
+                    onClick = onOpenAudio,
+                    glyph = { SpeakerGlyph(it, 20.dp) },
+                )
+                if (playback.isLive) {
+                    TvActionButton(
+                        label = if (playback.format.label == "MPEG-TS") "HLS" else "TS",
+                        onClick = onToggleFormat,
+                    )
+                }
             }
         }
 
         Text(
             text = if (playback.isLive)
-                "Up/Down changes channel · Back leaves"
+                "Up and down change channel · Back leaves"
             else
-                "Left/Right seeks 10s · Down for buttons · Back leaves",
+                "Left and right seek 10 seconds · Back leaves",
             color = Faint,
             fontSize = 12.sp,
             lineHeight = 16.sp,
@@ -440,44 +509,23 @@ private fun Controls(
     }
 }
 
-/** A focusable progress bar: left and right scrub, OK plays or pauses. */
+/** Position, buffer and remaining time. Read-only: the transport does the seeking. */
 @Composable
-private fun Scrubber(
-    positionMs: Long,
-    durationMs: Long,
-    bufferedMs: Long,
-    focusRequester: FocusRequester,
-    onSeek: (Long) -> Unit,
-    onTogglePlay: () -> Unit,
-) {
-    var focused by remember { mutableStateOf(false) }
+private fun Scrubber(positionMs: Long, durationMs: Long, bufferedMs: Long) {
     val total = durationMs.coerceAtLeast(1)
-
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(if (focused) 10.dp else 6.dp)
-                .clip(RoundedCornerShape(5.dp))
-                .background(Parchment.copy(alpha = 0.22f))
-                .focusRequester(focusRequester)
-                .onFocusChanged { focused = it.isFocused }
-                .focusable()
-                .onPreviewKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    when (event.key) {
-                        Key.DirectionLeft -> { onSeek(-SEEK_STEP_MS); true }
-                        Key.DirectionRight -> { onSeek(SEEK_STEP_MS); true }
-                        Key.DirectionCenter, Key.Enter -> { onTogglePlay(); true }
-                        else -> false
-                    }
-                },
+                .height(6.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(Parchment.copy(alpha = 0.22f)),
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth((bufferedMs.toFloat() / total).coerceIn(0f, 1f))
                     .fillMaxHeight()
-                    .background(Parchment.copy(alpha = 0.32f)),
+                    .background(Parchment.copy(alpha = 0.3f)),
             )
             Box(
                 modifier = Modifier

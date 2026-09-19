@@ -304,3 +304,51 @@ fun channelTint(id: String): Color {
     val hash = id.fold(7) { acc, char -> acc * 31 + char.code }
     return palette[((hash % palette.size) + palette.size) % palette.size]
 }
+
+/**
+ * A transport control. No caption: the shapes are the universal ones, and a row of
+ * labelled buttons is not what a player looks like.
+ */
+@Composable
+fun TransportButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    filled: Boolean = false,
+    enabled: Boolean = true,
+    diameter: androidx.compose.ui.unit.Dp = 44.dp,
+    glyph: @Composable (Color) -> Unit,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val tint = when {
+        !enabled -> Parchment.copy(alpha = 0.25f)
+        filled -> Ink
+        else -> Parchment
+    }
+    Box(
+        modifier = modifier
+            .size(diameter)
+            .onFocusChanged { focused = it.isFocused }
+            .clip(RoundedCornerShape(50))
+            .background(
+                when {
+                    !enabled -> Color.Transparent
+                    filled -> Accent
+                    focused -> Parchment.copy(alpha = 0.18f)
+                    else -> Glass
+                }
+            )
+            .border(
+                width = if (focused) 3.dp else 1.dp,
+                color = when {
+                    focused -> Parchment
+                    !enabled -> Color.Transparent
+                    else -> GlassEdge
+                },
+                shape = RoundedCornerShape(50),
+            )
+            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        glyph(tint)
+    }
+}
