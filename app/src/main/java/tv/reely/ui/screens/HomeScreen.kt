@@ -2,14 +2,17 @@ package tv.reely.ui.screens
 
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -21,17 +24,23 @@ import tv.reely.plex.formatDuration
 import tv.reely.ui.EpisodeGroup
 import tv.reely.ui.HomeState
 import tv.reely.ui.PlexState
+import tv.reely.ui.components.BlurredBackdrop
 import tv.reely.ui.components.EmptyNote
 import tv.reely.ui.components.ErrorNote
+import tv.reely.ui.components.HeroText
 import tv.reely.ui.components.PosterCard
-import tv.reely.ui.components.WideCard
 import tv.reely.ui.theme.Parchment
+
+private val HERO_HEIGHT = 250.dp
 
 @Composable
 fun HomeScreen(
     plex: PlexState,
     home: HomeState,
+    focused: PlexItem?,
     imageUrl: (String?, Int, Int) -> String?,
+    blurredUrl: (String?) -> String?,
+    onFocusItem: (PlexItem?) -> Unit,
     onPlay: (PlexItem) -> Unit,
     onOpenDetail: (String) -> Unit,
     onStartLink: () -> Unit,
@@ -50,105 +59,127 @@ fun HomeScreen(
         return
     }
 
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
-    ) {
-        if (home.error != null) {
-            item {
-                ErrorNote(
-                    message = home.error,
-                    modifier = Modifier.padding(horizontal = 40.dp),
-                )
+    Box(modifier = modifier.fillMaxSize()) {
+        BlurredBackdrop(
+            url = blurredUrl(focused?.art ?: focused?.thumb),
+            modifier = Modifier.fillMaxSize(),
+        )
+
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(HERO_HEIGHT)
+                    .padding(horizontal = 40.dp, vertical = 16.dp),
+            ) {
+                if (focused != null) {
+                    HeroText(
+                        eyebrow = if (focused.type == "episode") focused.grandparentTitle else null,
+                        title = focused.title,
+                        criticRating = null,
+                        audienceRating = null,
+                        contentRating = null,
+                        facts = listOfNotNull(
+                            focused.caption,
+                            formatDuration(focused.durationMs).takeIf { it.isNotEmpty() },
+                        ),
+                        summary = focused.summary,
+                        modifier = Modifier.widthIn(max = 700.dp),
+                    )
+                } else {
+                    Text(
+                        text = "Home",
+                        color = Parchment,
+                        fontSize = 34.sp,
+                        lineHeight = 42.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
-        }
 
-        if (home.continueWatching.isNotEmpty()) {
-            item {
-                Row(title = "Continue Watching") {
-                    LazyRow(
-                        modifier = Modifier.focusGroup(),
-                        contentPadding = PaddingValues(horizontal = 36.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        items(home.continueWatching, key = { it.ratingKey }) { item ->
-                            WideCard(
-                                title = if (item.type == "episode") item.grandparentTitle ?: item.title
-                                else item.title,
-                                subtitle = when (item.type) {
-                                    "episode" -> listOfNotNull(item.caption, item.title)
-                                        .joinToString("  ·  ")
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 30.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
+            ) {
+                if (home.error != null) {
+                    item { ErrorNote(home.error, modifier = Modifier.padding(horizontal = 40.dp)) }
+                }
 
-                                    else -> item.caption
-                                },
-                                imageUrl = imageUrl(item.art ?: item.thumb, 480, 270),
-                                progress = item.resumeFraction,
-                                onClick = { onPlay(item) },
-                            )
+                if (home.continueWatching.isNotEmpty()) {
+                    item {
+                        PosterRow(title = "Continue Watching") {
+                            items(home.continueWatching, key = { it.ratingKey }) { item ->
+                                PosterCard(
+                                    title = item.rowTitle,
+                                    subtitle = episodeLine(item),
+                                    imageUrl = imageUrl(posterArt(item), 300, 450),
+                                    progress = item.resumeFraction,
+                                    watched = item.isWatched,
+                                    onFocus = { onFocusItem(item) },
+                                    onClick = { onPlay(item) },
+                                )
+                            }
                         }
                     }
                 }
-            }
-        }
 
-        if (home.recentEpisodes.isNotEmpty()) {
-            item {
-                Row(title = "Recently Added Episodes") {
-                    LazyRow(
-                        modifier = Modifier.focusGroup(),
-                        contentPadding = PaddingValues(horizontal = 36.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        itemsIndexed(
-                            items = home.recentEpisodes,
-                            key = { index, group -> group.showRatingKey ?: index.toString() },
-                        ) { _, group ->
-                            EpisodeGroupCard(group, imageUrl, onOpenDetail, onPlay)
+                if (home.recentEpisodes.isNotEmpty()) {
+                    item {
+                        PosterRow(title = "Recently Added Episodes") {
+                            items(home.recentEpisodes, key = { it.showRatingKey ?: it.showTitle }) { group ->
+                                EpisodeGroupCard(group, imageUrl, onFocusItem, onOpenDetail, onPlay)
+                            }
                         }
                     }
                 }
-            }
-        }
 
-        if (home.recentMovies.isNotEmpty()) {
-            item {
-                Row(title = "Recently Added Movies") {
-                    LazyRow(
-                        modifier = Modifier.focusGroup(),
-                        contentPadding = PaddingValues(horizontal = 36.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        items(home.recentMovies, key = { it.ratingKey }) { movie ->
-                            PosterCard(
-                                title = movie.title,
-                                subtitle = movie.caption,
-                                imageUrl = imageUrl(movie.thumb, 300, 450),
-                                progress = movie.resumeFraction,
-                                onClick = { onOpenDetail(movie.ratingKey) },
-                            )
+                if (home.recentMovies.isNotEmpty()) {
+                    item {
+                        PosterRow(title = "Recently Added Movies") {
+                            items(home.recentMovies, key = { it.ratingKey }) { movie ->
+                                PosterCard(
+                                    title = movie.title,
+                                    subtitle = movie.caption,
+                                    imageUrl = imageUrl(movie.thumb, 300, 450),
+                                    progress = movie.resumeFraction,
+                                    watched = movie.isWatched,
+                                    onFocus = { onFocusItem(movie) },
+                                    onClick = { onOpenDetail(movie.ratingKey) },
+                                )
+                            }
                         }
                     }
                 }
-            }
-        }
 
-        if (home.isEmpty) {
-            item {
-                EmptyNote(
-                    if (home.busy) "Reading your library…"
-                    else "Nothing to show yet. Watch something and it will appear here.",
-                    modifier = Modifier.padding(horizontal = 40.dp, vertical = 24.dp),
-                )
+                if (home.isEmpty) {
+                    item {
+                        EmptyNote(
+                            if (home.busy) "Reading your library…"
+                            else "Nothing to show yet. Watch something and it will appear here.",
+                            modifier = Modifier.padding(horizontal = 40.dp, vertical = 20.dp),
+                        )
+                    }
+                }
             }
         }
     }
+}
+
+/** An episode's own still is nearly always better than its show's poster in a row. */
+internal fun posterArt(item: PlexItem): String? =
+    if (item.type == "episode") item.grandparentThumb ?: item.thumb else item.thumb
+
+internal fun episodeLine(item: PlexItem): String? = when (item.type) {
+    "episode" -> listOfNotNull(item.caption, item.title).joinToString(" · ")
+    else -> item.caption
 }
 
 @Composable
 private fun EpisodeGroupCard(
     group: EpisodeGroup,
     imageUrl: (String?, Int, Int) -> String?,
+    onFocusItem: (PlexItem?) -> Unit,
     onOpenDetail: (String) -> Unit,
     onPlay: (PlexItem) -> Unit,
 ) {
@@ -158,8 +189,8 @@ private fun EpisodeGroupCard(
         subtitle = if (group.count > 1) "${group.count} new episodes" else newest.caption,
         imageUrl = imageUrl(group.thumb, 300, 450),
         badge = group.count,
+        onFocus = { onFocusItem(newest) },
         onClick = {
-            // One new episode is a thing to watch; several is a thing to choose from.
             val showKey = group.showRatingKey
             if (group.count == 1 || showKey == null) onPlay(newest) else onOpenDetail(showKey)
         },
@@ -167,7 +198,10 @@ private fun EpisodeGroupCard(
 }
 
 @Composable
-private fun Row(title: String, content: @Composable () -> Unit) {
+private fun PosterRow(
+    title: String,
+    content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
             text = title,
@@ -177,10 +211,11 @@ private fun Row(title: String, content: @Composable () -> Unit) {
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(horizontal = 40.dp),
         )
-        content()
+        LazyRow(
+            modifier = Modifier.focusGroup(),
+            contentPadding = PaddingValues(horizontal = 36.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            content = content,
+        )
     }
 }
-
-/** Kept next to the rows because runtime formatting is the only thing it is used for. */
-internal fun episodeDuration(item: PlexItem): String? =
-    formatDuration(item.durationMs).takeIf { it.isNotEmpty() }

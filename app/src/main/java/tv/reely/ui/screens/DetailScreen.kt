@@ -1,6 +1,5 @@
 package tv.reely.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,46 +8,51 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
-import coil.compose.AsyncImage
 import tv.reely.plex.PlexItem
 import tv.reely.plex.formatDuration
 import tv.reely.ui.DetailState
+import tv.reely.ui.components.BlurredBackdrop
 import tv.reely.ui.components.CastCircle
+import tv.reely.ui.components.CheckGlyph
 import tv.reely.ui.components.EmptyNote
-import tv.reely.ui.components.EpisodeRow
 import tv.reely.ui.components.ErrorNote
+import tv.reely.ui.components.HeroText
+import tv.reely.ui.components.IconAction
+import tv.reely.ui.components.InfoGlyph
+import tv.reely.ui.components.PlayGlyph
 import tv.reely.ui.components.SectionHeading
-import tv.reely.ui.components.TvActionButton
+import tv.reely.ui.components.TrailerGlyph
 import tv.reely.ui.components.TvChip
-import tv.reely.ui.theme.Faint
-import tv.reely.ui.theme.Ink
+import tv.reely.ui.components.EpisodeTile
 import tv.reely.ui.theme.Muted
-import tv.reely.ui.theme.Parchment
 
 @Composable
 fun DetailScreen(
     state: DetailState,
     imageUrl: (String?, Int, Int) -> String?,
+    blurredUrl: (String?) -> String?,
     onPlay: (PlexItem) -> Unit,
     onPlayDetail: () -> Unit,
+    onPlayTrailer: () -> Unit,
+    onToggleWatched: (PlexItem) -> Unit,
+    onToggleWatchedDetail: () -> Unit,
+    onFocusEpisode: (PlexItem?) -> Unit,
     onSelectSeason: (PlexItem) -> Unit,
-    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val detail = state.detail
@@ -59,158 +63,148 @@ fun DetailScreen(
         return
     }
 
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 40.dp),
-    ) {
-        item {
-            Box(modifier = Modifier.fillMaxWidth().height(300.dp)) {
-                val art = imageUrl(detail.art ?: detail.thumb, 1280, 720)
-                if (art != null) {
-                    AsyncImage(
-                        model = art,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-                // Scrim, so the title stays readable over whatever the artwork is.
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(Ink.copy(alpha = 0.55f), Ink.copy(alpha = 0.92f), Ink)
-                            )
-                        )
-                )
+    var expanded by remember(state.ratingKey) { mutableStateOf(false) }
+    val episode = state.focusedEpisode
 
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(horizontal = 40.dp, vertical = 20.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    if (detail.grandparentTitle != null) {
-                        Text(
-                            text = detail.grandparentTitle,
-                            color = Faint,
-                            fontSize = 14.sp,
-                            lineHeight = 18.sp,
-                        )
-                    }
-                    Text(
-                        text = detail.title,
-                        color = Parchment,
-                        fontSize = 34.sp,
-                        lineHeight = 42.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    val facts = listOfNotNull(
-                        detail.facts.takeIf { it.isNotBlank() },
-                        detail.rating?.let { "★ %.1f".format(it) },
-                    ).joinToString("  ·  ")
-                    if (facts.isNotBlank()) {
-                        Text(text = facts, color = Muted, fontSize = 14.sp, lineHeight = 18.sp)
-                    }
-                }
-            }
-        }
+    // The block of text always describes whatever has focus: the show, or an episode.
+    val backdrop = blurredUrl(episode?.thumb ?: detail.art ?: detail.thumb)
 
-        item {
-            Column(
-                modifier = Modifier.padding(horizontal = 40.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                if (state.error != null) ErrorNote(state.error)
+    Box(modifier = modifier.fillMaxSize()) {
+        BlurredBackdrop(url = backdrop, modifier = Modifier.fillMaxSize())
 
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    TvActionButton(
-                        label = playLabel(state),
-                        onClick = onPlayDetail,
-                        emphasised = true,
-                    )
-                }
-
-                if (detail.tagline != null) {
-                    Text(
-                        text = detail.tagline,
-                        color = Faint,
-                        fontSize = 15.sp,
-                        lineHeight = 21.sp,
-                        modifier = Modifier.widthIn(max = 860.dp),
-                    )
-                }
-
-                if (detail.summary != null) {
-                    Text(
-                        text = detail.summary,
-                        color = Muted,
-                        fontSize = 15.sp,
-                        lineHeight = 23.sp,
-                        modifier = Modifier.widthIn(max = 860.dp),
-                    )
-                }
-
-                val credits = buildList {
-                    if (detail.genres.isNotEmpty()) add("Genres" to detail.genres.joinToString(", "))
-                    if (detail.directors.isNotEmpty()) {
-                        add("Director" to detail.directors.joinToString(", "))
-                    }
-                }
-                credits.forEach { (label, value) ->
-                    Text(
-                        text = "$label   $value",
-                        color = Faint,
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp,
-                        modifier = Modifier.widthIn(max = 860.dp),
-                    )
-                }
-            }
-        }
-
-        if (detail.roles.isNotEmpty()) {
-            item {
-                Column(
-                    modifier = Modifier.padding(top = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    SectionHeading("Cast", modifier = Modifier.padding(horizontal = 40.dp))
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(top = 14.dp, bottom = 34.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            if (detail.isShow && state.seasons.isNotEmpty()) {
+                item {
                     LazyRow(
+                        modifier = Modifier.focusGroup(),
                         contentPadding = PaddingValues(horizontal = 40.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        items(detail.roles.take(24)) { role ->
-                            CastCircle(
-                                name = role.name,
-                                role = role.role,
-                                imageUrl = imageUrl(role.thumb, 160, 160),
+                        items(state.seasons, key = { it.ratingKey }) { season ->
+                            TvChip(
+                                label = season.title,
+                                selected = state.selectedSeason?.ratingKey == season.ratingKey,
+                                onClick = { onSelectSeason(season) },
                             )
                         }
                     }
                 }
             }
-        }
 
-        if (detail.isShow) {
-            if (state.seasons.isNotEmpty()) {
-                item {
-                    Column(
-                        modifier = Modifier.padding(top = 26.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+            item {
+                Column(
+                    modifier = Modifier.padding(horizontal = 40.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    if (state.error != null) ErrorNote(state.error)
+
+                    HeroText(
+                        eyebrow = when {
+                            episode != null -> listOfNotNull(
+                                episode.grandparentTitle,
+                                state.selectedSeason?.title,
+                            ).joinToString("  ·  ")
+
+                            else -> null
+                        },
+                        title = episode?.title ?: detail.title,
+                        criticRating = if (episode == null) detail.rating else null,
+                        audienceRating = if (episode == null) detail.audienceRating else null,
+                        contentRating = if (episode == null) detail.contentRating else null,
+                        facts = if (episode != null) {
+                            listOfNotNull(
+                                episode.caption,
+                                formatDuration(episode.durationMs).takeIf { it.isNotEmpty() },
+                            )
+                        } else {
+                            listOfNotNull(
+                                detail.year?.toString(),
+                                detail.childCount.takeIf { it > 0 && detail.isShow }
+                                    ?.let { "$it seasons" },
+                                formatDuration(detail.durationMs).takeIf { !detail.isShow && it.isNotEmpty() },
+                                detail.studio,
+                            )
+                        },
+                        summary = null,
+                        modifier = Modifier.widthIn(max = 780.dp),
+                    )
+
+                    val summary = episode?.summary ?: detail.summary
+                    if (!summary.isNullOrBlank()) {
+                        Text(
+                            text = summary,
+                            color = Muted,
+                            fontSize = 15.sp,
+                            lineHeight = 22.sp,
+                            maxLines = if (expanded) 12 else 3,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.widthIn(max = 780.dp),
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.focusGroup(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        SectionHeading("Seasons", modifier = Modifier.padding(horizontal = 40.dp))
+                        val target = episode
+                        IconAction(
+                            label = if ((target?.viewOffsetMs ?: detail.viewOffsetMs) > 0) "Resume" else "Play",
+                            filled = true,
+                            onClick = { if (target != null) onPlay(target) else onPlayDetail() },
+                            glyph = { PlayGlyph(it, 20.dp) },
+                        )
+                        IconAction(
+                            label = if ((target?.isWatched ?: detail.isWatched)) "Unwatch" else "Watched",
+                            filled = false,
+                            onClick = { if (target != null) onToggleWatched(target) else onToggleWatchedDetail() },
+                            glyph = { CheckGlyph(it, 20.dp) },
+                        )
+                        // Only appears when the server actually has a trailer to play.
+                        if (state.trailers.isNotEmpty() && episode == null) {
+                            IconAction(
+                                label = "Trailer",
+                                filled = false,
+                                onClick = onPlayTrailer,
+                                glyph = { TrailerGlyph(it, 20.dp) },
+                            )
+                        }
+                        IconAction(
+                            label = if (expanded) "Less" else "Info",
+                            filled = false,
+                            onClick = { expanded = !expanded },
+                            glyph = { InfoGlyph(it, 20.dp) },
+                        )
+                    }
+                }
+            }
+
+            if (detail.isShow) {
+                if (state.busy && state.episodes.isEmpty()) {
+                    item {
+                        EmptyNote("Loading episodes…", modifier = Modifier.padding(horizontal = 40.dp))
+                    }
+                }
+                if (state.episodes.isNotEmpty()) {
+                    item {
                         LazyRow(
                             modifier = Modifier.focusGroup(),
-                            contentPadding = PaddingValues(horizontal = 40.dp),
+                            contentPadding = PaddingValues(horizontal = 36.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            items(state.seasons, key = { it.ratingKey }) { season ->
-                                TvChip(
-                                    label = season.title,
-                                    selected = state.selectedSeason?.ratingKey == season.ratingKey,
-                                    onClick = { onSelectSeason(season) },
+                            items(state.episodes, key = { it.ratingKey }) { entry ->
+                                EpisodeTile(
+                                    number = entry.index?.toString().orEmpty(),
+                                    title = entry.title,
+                                    duration = formatDuration(entry.durationMs).takeIf { it.isNotEmpty() },
+                                    imageUrl = imageUrl(entry.thumb, 320, 180),
+                                    progress = entry.resumeFraction,
+                                    watched = entry.isWatched,
+                                    onFocus = { onFocusEpisode(entry) },
+                                    onClick = { onPlay(entry) },
                                 )
                             }
                         }
@@ -218,41 +212,37 @@ fun DetailScreen(
                 }
             }
 
-            if (state.busy && state.episodes.isEmpty()) {
+            if (detail.roles.isNotEmpty()) {
                 item {
-                    EmptyNote(
-                        "Loading episodes…",
-                        modifier = Modifier.padding(horizontal = 40.dp, vertical = 20.dp),
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        SectionHeading("Cast", modifier = Modifier.padding(horizontal = 40.dp))
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 40.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            items(detail.roles.take(24)) { role ->
+                                CastCircle(
+                                    name = role.name,
+                                    role = role.role,
+                                    imageUrl = imageUrl(role.thumb, 160, 160),
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
-            items(state.episodes, key = { it.ratingKey }) { episode ->
-                EpisodeRow(
-                    number = episode.index?.toString().orEmpty(),
-                    title = episode.title,
-                    description = episode.summary,
-                    duration = formatDuration(episode.durationMs).takeIf { it.isNotEmpty() },
-                    imageUrl = imageUrl(episode.thumb, 320, 180),
-                    progress = episode.resumeFraction,
-                    onClick = { onPlay(episode) },
-                    modifier = Modifier.padding(horizontal = 36.dp, vertical = 2.dp),
-                )
+            if (detail.genres.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "Genres   " + detail.genres.joinToString(", "),
+                        color = Muted,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 40.dp),
+                    )
+                }
             }
         }
     }
-}
-
-private fun playLabel(state: DetailState): String {
-    val detail = state.detail ?: return "Play"
-    if (detail.isShow) {
-        val resume = state.episodes.firstOrNull { it.resumeFraction != null }
-        return if (resume != null) {
-            "Resume ${listOfNotNull(resume.caption).joinToString()}".trim()
-        } else {
-            "Play"
-        }
-    }
-    val offset = detail.viewOffsetMs
-    return if (offset > 0) "Resume from ${formatDuration(offset)}" else "Play"
 }

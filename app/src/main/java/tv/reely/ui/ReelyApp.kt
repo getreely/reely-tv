@@ -42,11 +42,13 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.Text
 import tv.reely.ui.components.EmptyNote
+import tv.reely.ui.components.SearchGlyph
 import tv.reely.ui.screens.DetailScreen
 import tv.reely.ui.screens.GuideScreen
 import tv.reely.ui.screens.HomeScreen
+import tv.reely.ui.screens.LiveCategoriesScreen
+import tv.reely.ui.screens.SearchScreen
 import tv.reely.ui.screens.LibraryScreen
-import tv.reely.ui.screens.LiveScreen
 import tv.reely.ui.screens.PlayerScreen
 import tv.reely.ui.screens.StatusScreen
 import tv.reely.ui.theme.Accent
@@ -56,14 +58,14 @@ import tv.reely.ui.theme.Line
 import tv.reely.ui.theme.Muted
 import tv.reely.ui.theme.Parchment
 
-private data class Destination(val label: String, val route: Route)
+private data class Destination(val label: String, val route: Route, val isSearch: Boolean = false)
 
 private val destinations = listOf(
+    Destination("Search", Route.Search, isSearch = true),
     Destination("Home", Route.Home),
     Destination("Movies", Route.Library(LibraryKind.MOVIES)),
     Destination("TV Shows", Route.Library(LibraryKind.SHOWS)),
     Destination("Live TV", Route.Live),
-    Destination("Guide", Route.Guide),
     Destination("Status", Route.Status),
 )
 
@@ -140,8 +142,6 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             serverName = state.plex.serverName,
         )
 
-        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Line))
-
         if (state.restoring) {
             EmptyNote("Starting up…", modifier = Modifier.padding(40.dp))
             return@Column
@@ -169,7 +169,10 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             is Route.Home -> HomeScreen(
                 plex = state.plex,
                 home = state.home,
+                focused = state.focused,
                 imageUrl = viewModel::plexImageUrl,
+                blurredUrl = viewModel::plexBlurredUrl,
+                onFocusItem = viewModel::focusItem,
                 onPlay = { viewModel.play(it) },
                 onOpenDetail = { viewModel.navigate(Route.Detail(it)) },
                 onStartLink = viewModel::startPlexLink,
@@ -181,7 +184,10 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 kind = route.kind,
                 plex = state.plex,
                 home = state.home,
+                focused = state.focused,
                 imageUrl = viewModel::plexImageUrl,
+                blurredUrl = viewModel::plexBlurredUrl,
+                onFocusItem = viewModel::focusItem,
                 onPlay = { viewModel.play(it) },
                 onOpenDetail = { viewModel.navigate(Route.Detail(it)) },
                 onStartLink = viewModel::startPlexLink,
@@ -189,6 +195,17 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onDismissPlexError = viewModel::dismissPlexError,
                 onSelectSection = { viewModel.openSection(route.kind, it) },
                 onDismissBrowseError = { viewModel.dismissBrowseError(route.kind) },
+            )
+
+            is Route.Search -> SearchScreen(
+                search = state.search,
+                focused = state.focused,
+                imageUrl = viewModel::plexImageUrl,
+                blurredUrl = viewModel::plexBlurredUrl,
+                onQueryChange = viewModel::setQuery,
+                onFocusItem = viewModel::focusItem,
+                onOpenDetail = { viewModel.navigate(Route.Detail(it)) },
+                onPlay = { viewModel.play(it) },
             )
 
             is Route.Detail -> {
@@ -199,34 +216,39 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                     DetailScreen(
                         state = detail,
                         imageUrl = viewModel::plexImageUrl,
+                        blurredUrl = viewModel::plexBlurredUrl,
                         onPlay = { viewModel.play(it, queue = detail.episodes) },
-                        onPlayDetail = { viewModel.playFromDetail() },
+                        onPlayDetail = viewModel::playFromDetail,
+                        onPlayTrailer = viewModel::playTrailer,
+                        onToggleWatched = viewModel::toggleWatched,
+                        onToggleWatchedDetail = viewModel::toggleWatchedDetail,
+                        onFocusEpisode = viewModel::focusEpisode,
                         onSelectSeason = viewModel::selectSeason,
-                        onBack = viewModel::goBack,
                     )
                 }
             }
 
-            is Route.Live -> LiveScreen(
-                live = state.live,
-                onSignIn = viewModel::signInXtream,
-                onSelectCategory = viewModel::openCategory,
-                onFocusChannel = viewModel::focusChannel,
-                onPlayChannel = viewModel::playChannel,
-                onDismissError = viewModel::dismissLiveError,
-            )
-
-            is Route.Guide -> GuideScreen(
-                live = state.live,
-                guide = state.guide,
-                previewEnabled = state.prefs.guidePreview,
-                onSelectCategory = viewModel::openCategory,
-                onMoveChannel = viewModel::guideMoveChannel,
-                onMoveTime = viewModel::guideMoveTime,
-                onJumpToNow = viewModel::guideJumpToNow,
-                onRefresh = { viewModel.refreshGuide(force = true) },
-                onPlaySelected = viewModel::guidePlaySelected,
-            )
+            // Live TV is the grid, but a category has to be chosen before there is one.
+            is Route.Live -> if (state.live.selectedCategory == null) {
+                LiveCategoriesScreen(
+                    live = state.live,
+                    onSignIn = viewModel::signInXtream,
+                    onSelectCategory = viewModel::openCategory,
+                    onDismissError = viewModel::dismissLiveError,
+                )
+            } else {
+                GuideScreen(
+                    live = state.live,
+                    guide = state.guide,
+                    previewEnabled = state.prefs.guidePreview,
+                    onMoveChannel = viewModel::guideMoveChannel,
+                    onMoveTime = viewModel::guideMoveTime,
+                    onJumpToNow = viewModel::guideJumpToNow,
+                    onRefresh = { viewModel.refreshGuide(force = true) },
+                    onPlaySelected = viewModel::guidePlaySelected,
+                    onBackToCategories = viewModel::clearCategory,
+                )
+            }
 
             is Route.Status -> StatusScreen(
                 plex = state.plex,
@@ -251,7 +273,7 @@ private fun routeKey(route: Route): String = when (route) {
     is Route.Library -> "library:${route.kind}"
     is Route.Detail -> "detail:${route.ratingKey}"
     is Route.Live -> "live"
-    is Route.Guide -> "guide"
+    is Route.Search -> "search"
     is Route.Status -> "status"
 }
 
@@ -261,7 +283,7 @@ private fun contentReady(state: ReelyState): Boolean = when (val route = state.r
     is Route.Library -> !state.plex.isConnected || state.plex.browseFor(route.kind).items.isNotEmpty()
     is Route.Detail -> state.detail?.detail != null
     is Route.Live -> true
-    is Route.Guide -> true
+    is Route.Search -> true
     is Route.Status -> true
 }
 
@@ -295,6 +317,7 @@ private fun TopBar(
             NavTab(
                 label = destination.label,
                 selected = isSelected,
+                iconOnly = destination.isSearch,
                 onSelect = { onSelect(destination.route) },
                 onFocused = onTabFocused,
                 canSelectOnFocus = canSelectOnFocus,
@@ -315,6 +338,7 @@ private fun TopBar(
 private fun NavTab(
     label: String,
     selected: Boolean,
+    iconOnly: Boolean = false,
     onSelect: () -> Unit,
     onFocused: () -> Unit,
     canSelectOnFocus: () -> Boolean,
@@ -344,18 +368,19 @@ private fun NavTab(
                 shape = RoundedCornerShape(99.dp),
             )
             .clickable(onClick = onSelect)
-            .padding(horizontal = 18.dp, vertical = 9.dp),
+            .padding(horizontal = if (iconOnly) 13.dp else 18.dp, vertical = 9.dp),
     ) {
-        Text(
-            text = label,
-            color = when {
-                selected -> Parchment
-                focused -> Parchment
-                else -> Muted
-            },
-            fontSize = 16.sp,
-            lineHeight = 21.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-        )
+        val tint = if (selected || focused) Parchment else Muted
+        if (iconOnly) {
+            SearchGlyph(color = tint, size = 20.dp)
+        } else {
+            Text(
+                text = label,
+                color = tint,
+                fontSize = 16.sp,
+                lineHeight = 21.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            )
+        }
     }
 }

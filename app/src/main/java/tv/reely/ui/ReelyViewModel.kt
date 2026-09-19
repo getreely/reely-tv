@@ -17,6 +17,7 @@ import tv.reely.core.Settings
 import tv.reely.core.wrapIndex
 import tv.reely.plex.PlexApi
 import tv.reely.plex.PlexDetail
+import tv.reely.plex.PlexExtra
 import tv.reely.plex.PlexItem
 import tv.reely.plex.PlexSection
 import tv.reely.plex.PlexSubtitle
@@ -46,7 +47,7 @@ sealed interface Route {
     data object Home : Route
     data class Library(val kind: LibraryKind) : Route
     data object Live : Route
-    data object Guide : Route
+    data object Search : Route
     data object Status : Route
     data class Detail(val ratingKey: String) : Route
 }
@@ -86,6 +87,9 @@ data class DetailState(
     val seasons: List<PlexItem> = emptyList(),
     val selectedSeason: PlexItem? = null,
     val episodes: List<PlexItem> = emptyList(),
+    /** What the text block at the top is describing: the show, or an episode under it. */
+    val focusedEpisode: PlexItem? = null,
+    val trailers: List<PlexExtra> = emptyList(),
     val busy: Boolean = true,
     val error: String? = null,
 )
@@ -124,6 +128,12 @@ data class LiveState(
 
     fun nowNext(streamId: Int): List<XtreamProgramme> = guide[streamId].orEmpty()
 }
+
+data class SearchState(
+    val query: String = "",
+    val results: List<PlexItem> = emptyList(),
+    val busy: Boolean = false,
+)
 
 sealed interface GuideStatus {
     data object Idle : GuideStatus
@@ -176,6 +186,9 @@ data class ReelyState(
     val detail: DetailState? = null,
     val live: LiveState = LiveState(),
     val guide: GuideState = GuideState(),
+    val search: SearchState = SearchState(),
+    /** Whatever the cursor is on. The hero at the top of a browse screen describes it. */
+    val focused: PlexItem? = null,
     val playback: Playback? = null,
     val upNext: PlexItem? = null,
     val prefs: PlayerPrefs = PlayerPrefs(),
@@ -208,6 +221,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     private var guideJob: Job? = null
     private var timelineJob: Job? = null
     private var importJob: Job? = null
+    private var searchJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -223,11 +237,11 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { current ->
             // Switching top-level destination replaces the stack rather than growing it.
             val stack = if (route is Route.Detail) current.stack + route else listOf(route)
-            current.copy(stack = stack)
+            current.copy(stack = stack, focused = null)
         }
         if (route is Route.Detail) loadDetail(route.ratingKey)
         if (route is Route.Home) refreshHome()
-        if (route is Route.Guide) openGuide()
+        if (route is Route.Live) openGuide()
     }
 
     /** True when there is somewhere to go back to. */
@@ -355,6 +369,19 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             SecureStore.PLEX_SERVER_NAME,
         )
         _state.update { it.copy(plex = PlexState(), home = HomeState(), detail = null) }
+    }
+
+    /** The stretched-thumbnail stand-in for a blur; see BlurredBackdrop. */
+    fun plexBlurredUrl(path: String?): String? {
+        val plex = _state.value.plex
+        val base = plex.baseUrl ?: return null
+        val token = plex.serverToken ?: return null
+        return PlexApi.blurredUrl(base, token, path)
+    }
+
+    fun toggleWatchedDetail() {
+        val detail = _state.value.detail?.detail ?: return
+        toggleWatched(detail.asItem())
     }
 
     fun plexImageUrl(path: String?, width: Int, height: Int): String? {
@@ -505,6 +532,16 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             _state.update { it.copy(detail = it.detail?.copy(detail = detail, busy = detail.isShow)) }
+
+            launch {
+                val trailers = runCatching { PlexApi.trailers(base, token, ratingKey) }
+                    .getOrElse { emptyList() }
+                _state.update { current ->
+                    if (current.detail?.ratingKey != ratingKey) current
+                    else current.copy(detail = current.detail.copy(trailers = trailers))
+                }
+            }
+
             if (!detail.isShow) return@launch
 
             val seasons = runCatching { PlexApi.children(base, token, ratingKey) }
@@ -523,7 +560,14 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val token = plex.serverToken ?: return
         viewModelScope.launch {
             _state.update {
-                it.copy(detail = it.detail?.copy(selectedSeason = season, busy = true, episodes = emptyList()))
+                it.copy(
+                    detail = it.detail?.copy(
+                        selectedSeason = season,
+                        busy = true,
+                        episodes = emptyList(),
+                        focusedEpisode = null,
+                    )
+                )
             }
             val episodes = runCatching { PlexApi.children(base, token, season.ratingKey) }
                 .getOrElse { emptyList() }
@@ -737,6 +781,116 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(prefs = it.prefs.copy(subtitleBackground = next)) }
     }
 
+    // ---------------------------------------------------------------- Search
+
+    fun setQuery(query: String) {
+        _state.update { it.copy(search = it.search.copy(query = query)) }
+        searchJob?.cancel()
+        if (query.isBlank()) {
+            _state.update { it.copy(search = it.search.copy(results = emptyList(), busy = false)) }
+            return
+        }
+        val plex = _state.value.plex
+        val base = plex.baseUrl ?: return
+        val token = plex.serverToken ?: return
+        searchJob = viewModelScope.launch {
+            _state.update { it.copy(search = it.search.copy(busy = true)) }
+            // Typing on a remote is slow; wait for a pause rather than asking per letter.
+            delay(400)
+            val results = runCatching { PlexApi.search(base, token, query) }.getOrElse { emptyList() }
+            _state.update { current ->
+                if (current.search.query != query) current
+                else current.copy(search = current.search.copy(results = results, busy = false))
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------- Focus and watched
+
+    /** The cursor moved onto something; the hero above follows it. */
+    fun focusItem(item: PlexItem?) {
+        if (_state.value.focused?.ratingKey == item?.ratingKey) return
+        _state.update { it.copy(focused = item) }
+    }
+
+    /** Null means the text block goes back to describing the show itself. */
+    fun focusEpisode(episode: PlexItem?) {
+        _state.update { it.copy(detail = it.detail?.copy(focusedEpisode = episode)) }
+    }
+
+    /**
+     * Marks watched on the server so every Plex client agrees. The tick flips here first
+     * and is put back if the server disagrees, because waiting on a round trip to redraw
+     * a checkbox feels broken.
+     */
+    fun toggleWatched(item: PlexItem) {
+        val plex = _state.value.plex
+        val base = plex.baseUrl ?: return
+        val token = plex.serverToken ?: return
+        val watched = !item.isWatched
+
+        applyWatched(item.ratingKey, watched)
+        viewModelScope.launch {
+            val ok = runCatching { PlexApi.setWatched(base, token, item.ratingKey, watched) }.isSuccess
+            if (!ok) {
+                applyWatched(item.ratingKey, !watched)
+                reportPlaybackProblem("Couldn't mark that as ${if (watched) "watched" else "unwatched"}.")
+            } else {
+                refreshHome()
+            }
+        }
+    }
+
+    /** Patches the tick everywhere the same item is on screen. */
+    private fun applyWatched(ratingKey: String, watched: Boolean) {
+        fun patch(item: PlexItem): PlexItem =
+            if (item.ratingKey != ratingKey) item
+            else item.copy(
+                viewCount = if (watched) maxOf(1, item.viewCount) else 0,
+                viewOffsetMs = if (watched) 0 else item.viewOffsetMs,
+            )
+
+        _state.update { current ->
+            current.copy(
+                focused = current.focused?.let(::patch),
+                home = current.home.copy(
+                    continueWatching = current.home.continueWatching.map(::patch),
+                    recentMovies = current.home.recentMovies.map(::patch),
+                ),
+                plex = current.plex.copy(
+                    browse = current.plex.browse.mapValues { (_, browse) ->
+                        browse.copy(items = browse.items.map(::patch))
+                    }
+                ),
+                detail = current.detail?.let { detail ->
+                    detail.copy(
+                        episodes = detail.episodes.map(::patch),
+                        focusedEpisode = detail.focusedEpisode?.let(::patch),
+                    )
+                },
+            )
+        }
+    }
+
+    /** Plays the item's trailer, when the server has one to give. */
+    fun playTrailer() {
+        val detail = _state.value.detail ?: return
+        val trailer = detail.trailers.firstOrNull() ?: return
+        val title = detail.detail?.title ?: "Trailer"
+        _state.update {
+            it.copy(
+                upNext = null,
+                playback = Playback(
+                    title = title,
+                    subtitle = trailer.title,
+                    url = trailer.url,
+                    isLive = false,
+                    durationMs = trailer.durationMs,
+                ),
+            )
+        }
+    }
+
     // ---------------------------------------------------------------- Live TV
 
     private suspend fun restoreLive() {
@@ -783,7 +937,12 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 error = null,
             )
         }
-        categories.firstOrNull()?.let { openCategory(it) }
+    }
+
+    /** Backing out of the grid returns to the category picker. */
+    fun clearCategory() {
+        guideJob?.cancel()
+        updateLive { it.copy(selectedCategory = null, channels = emptyList(), focusedChannel = null) }
     }
 
     fun openCategory(category: XtreamCategory) {
@@ -1069,6 +1228,7 @@ private fun PlexDetail.asItem(): PlexItem = PlexItem(
     viewOffsetMs = viewOffsetMs,
     leafCount = leafCount,
     viewedLeafCount = 0,
+    viewCount = viewCount,
     addedAt = 0,
 )
 

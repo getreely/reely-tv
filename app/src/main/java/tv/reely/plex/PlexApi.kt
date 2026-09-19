@@ -36,6 +36,13 @@ data class PlexSubtitle(
     val language: String?,
 )
 
+/** A trailer or other extra attached to a library item. */
+data class PlexExtra(
+    val title: String,
+    val url: String,
+    val durationMs: Long,
+)
+
 data class PlexPlayback(
     val url: String,
     val subtitles: List<PlexSubtitle>,
@@ -67,9 +74,21 @@ data class PlexItem(
     val viewOffsetMs: Long,
     val leafCount: Int,
     val viewedLeafCount: Int,
+    val viewCount: Int,
     val addedAt: Long,
 ) {
     val isPlayable: Boolean get() = type == "movie" || type == "episode"
+
+    /**
+     * A film or episode is watched once Plex has counted a view. A show or season is
+     * watched when every episode under it has been.
+     */
+    val isWatched: Boolean
+        get() = when (type) {
+            "movie", "episode" -> viewCount > 0
+            "show", "season" -> leafCount > 0 && viewedLeafCount >= leafCount
+            else -> false
+        }
 
     val isShow: Boolean get() = type == "show"
 
@@ -108,6 +127,9 @@ data class PlexDetail(
     val viewOffsetMs: Long,
     val contentRating: String?,
     val rating: Double?,
+    val audienceRating: Double?,
+    val airDate: String?,
+    val viewCount: Int,
     val studio: String?,
     val thumb: String?,
     val art: String?,
@@ -121,6 +143,13 @@ data class PlexDetail(
     val parentIndex: Int?,
 ) {
     val isShow: Boolean get() = type == "show"
+
+    val isWatched: Boolean
+        get() = when (type) {
+            "movie", "episode" -> viewCount > 0
+            "show", "season" -> leafCount > 0 && childCount >= 0 && viewCount > 0
+            else -> false
+        }
 
     /** "2014 · 2h 18m · TV-MA" — the line Plex puts under a title. */
     val facts: String
@@ -322,6 +351,9 @@ object PlexApi {
                 viewOffsetMs = entry.optLong("viewOffset"),
                 contentRating = entry.optString("contentRating").takeIf(String::isNotBlank),
                 rating = entry.optDouble("rating").takeIf { !it.isNaN() && it > 0 },
+                audienceRating = entry.optDouble("audienceRating").takeIf { !it.isNaN() && it > 0 },
+                airDate = entry.optString("originallyAvailableAt").takeIf(String::isNotBlank),
+                viewCount = entry.optInt("viewCount"),
                 studio = entry.optString("studio").takeIf(String::isNotBlank),
                 thumb = entry.optString("thumb").takeIf(String::isNotEmpty),
                 art = entry.optString("art").takeIf(String::isNotEmpty),
@@ -376,11 +408,87 @@ object PlexApi {
         Unit
     }
 
+    /** Searches the whole library at once — films, shows and episodes together. */
+    suspend fun search(base: String, token: String, query: String): List<PlexItem> =
+        withContext(Dispatchers.IO) {
+            if (query.isBlank()) return@withContext emptyList()
+            val encoded = URLEncoder.encode(query.trim(), "UTF-8")
+            val hubs = container("$base/hubs/search?query=$encoded&limit=30", token)
+                .optJSONArray("Hub") ?: JSONArray()
+
+            val wanted = setOf("movie", "show", "episode")
+            buildList {
+                for (index in 0 until hubs.length()) {
+                    val metadata = hubs.getJSONObject(index).optJSONArray("Metadata") ?: continue
+                    for (entry in 0 until metadata.length()) {
+                        val item = parseItem(metadata.getJSONObject(entry))
+                        if (item.type in wanted && item.ratingKey.isNotEmpty()) add(item)
+                    }
+                }
+            }.distinctBy { it.ratingKey }
+        }
+
+    /**
+     * Trailers and other extras. Locally stored ones are always here; Plex's own online
+     * trailers arrive only for Plex Pass accounts, which is why the button that uses this
+     * appears only when something actually comes back.
+     */
+    suspend fun trailers(base: String, token: String, ratingKey: String): List<PlexExtra> =
+        withContext(Dispatchers.IO) {
+            val metadata = runCatching {
+                container("$base/library/metadata/$ratingKey/extras", token)
+                    .optJSONArray("Metadata")
+            }.getOrNull() ?: return@withContext emptyList()
+
+            (0 until metadata.length())
+                .map { metadata.getJSONObject(it) }
+                .filter { it.optString("subtype").equals("trailer", ignoreCase = true) }
+                .mapNotNull { entry ->
+                    val part = entry.optJSONArray("Media")?.optJSONObject(0)
+                        ?.optJSONArray("Part")?.optJSONObject(0) ?: return@mapNotNull null
+                    val key = part.optString("key").takeIf(String::isNotEmpty) ?: return@mapNotNull null
+                    PlexExtra(
+                        title = entry.optString("title").ifEmpty { "Trailer" },
+                        url = if (key.startsWith("http")) key else "$base$key?X-Plex-Token=$token",
+                        durationMs = entry.optLong("duration"),
+                    )
+                }
+        }
+
+    /**
+     * Marks something watched or unwatched on the server, so every Plex client agrees
+     * rather than just this one.
+     */
+    suspend fun setWatched(
+        base: String,
+        token: String,
+        ratingKey: String,
+        watched: Boolean,
+    ) = withContext(Dispatchers.IO) {
+        val action = if (watched) "scrobble" else "unscrobble"
+        val url = "$base/:/$action?key=$ratingKey" +
+            "&identifier=com.plexapp.plugins.library&X-Plex-Token=$token"
+        val request = Request.Builder().url(url).header("accept", "application/json").get().build()
+        Http.client.newCall(request).execute().use { response ->
+            require(response.isSuccessful) { "Plex returned ${response.code} marking that watched" }
+        }
+        Unit
+    }
+
     /**
      * Images go through Plex's photo transcoder at the size they will actually be drawn.
      * A stick has about 1.5 GB of RAM, and a screen of full-size posters is the quickest
      * way to spend it.
      */
+    /**
+     * A deliberately tiny version of the same artwork. Stretched across the screen it is
+     * indistinguishable from a Gaussian blur — which matters because a Firestick cannot
+     * do a real one: Compose's blur is backed by RenderEffect, which is API 31, and Fire
+     * OS tops out at API 30. The server does the work and the bitmap costs a few KB.
+     */
+    fun blurredUrl(base: String, token: String, path: String?): String? =
+        imageUrl(base, token, path, width = 48, height = 27)
+
     fun imageUrl(
         base: String,
         token: String,
@@ -413,6 +521,7 @@ object PlexApi {
         viewOffsetMs = entry.optLong("viewOffset"),
         leafCount = entry.optInt("leafCount"),
         viewedLeafCount = entry.optInt("viewedLeafCount"),
+        viewCount = entry.optInt("viewCount"),
         addedAt = entry.optLong("addedAt"),
     )
 

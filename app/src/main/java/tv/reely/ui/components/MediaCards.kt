@@ -144,6 +144,8 @@ fun PosterCard(
     modifier: Modifier = Modifier,
     badge: Int? = null,
     progress: Float? = null,
+    watched: Boolean = false,
+    onFocus: () -> Unit = {},
     width: androidx.compose.ui.unit.Dp = 150.dp,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -153,7 +155,10 @@ fun PosterCard(
         modifier = modifier
             .width(width)
             .scale(scale)
-            .onFocusChanged { focused = it.isFocused }
+            .onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) onFocus()
+            }
             .clickable(onClick = onClick)
             .padding(4.dp),
     ) {
@@ -184,6 +189,21 @@ fun PosterCard(
                     lineHeight = 42.sp,
                     modifier = Modifier.align(Alignment.Center),
                 )
+            }
+
+            // Watched is marked in green: "finished" must never compete with "focused".
+            if (watched && (badge == null || badge <= 1)) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(tv.reely.ui.theme.Good),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CheckGlyph(color = Ink, size = 15.dp)
+                }
             }
 
             if (badge != null && badge > 1) {
@@ -357,6 +377,88 @@ fun EpisodeRow(
                     modifier = Modifier.padding(top = 6.dp),
                 )
             }
+        }
+    }
+}
+
+/**
+ * An episode in a rail. Deliberately lean — still, number, title, runtime — because the
+ * description belongs in the text block above, where it has room to be read.
+ */
+@Composable
+fun EpisodeTile(
+    number: String,
+    title: String,
+    duration: String?,
+    imageUrl: String?,
+    progress: Float?,
+    watched: Boolean,
+    onFocus: () -> Unit,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(if (focused) 1.05f else 1f, label = "episode-scale")
+
+    Column(
+        modifier = modifier
+            .width(210.dp)
+            .scale(scale)
+            .onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) onFocus()
+            }
+            .clickable(onClick = onClick)
+            .padding(4.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f)
+                .clip(RoundedCornerShape(8.dp))
+                .background(SurfaceHigh)
+                .border(
+                    width = 2.dp,
+                    color = if (focused) Accent else Color.Transparent,
+                    shape = RoundedCornerShape(8.dp),
+                ),
+        ) {
+            if (imageUrl != null) {
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            if (watched) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(tv.reely.ui.theme.Good),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CheckGlyph(color = Ink, size = 15.dp)
+                }
+            }
+            if (progress != null) {
+                ProgressStrip(progress, modifier = Modifier.align(Alignment.BottomStart))
+            }
+        }
+        Text(
+            text = listOfNotNull(number.takeIf { it.isNotBlank() }, title).joinToString(". "),
+            color = if (focused) Parchment else Muted,
+            fontSize = 14.sp,
+            lineHeight = 18.sp,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        if (duration != null) {
+            Text(text = duration, color = Faint, fontSize = 11.sp, lineHeight = 14.sp, maxLines = 1)
         }
     }
 }

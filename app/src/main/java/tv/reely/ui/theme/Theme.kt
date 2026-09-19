@@ -17,6 +17,11 @@ val Accent = Color(0xFFD85A64)
 val Good = Color(0xFF8CBE6E)
 val Warn = Color(0xFFE9A343)
 
+// Frosted surfaces. Real blur is impossible on this hardware, so "glass" here means a
+// translucent fill with a hairline edge, sitting over a stretched low-resolution backdrop.
+val Glass = Color(0x8C241D20)
+val GlassEdge = Color(0x24E8DCCE)
+
 private val ReelyColors = darkColorScheme(
     primary = Accent,
     onPrimary = Ink,
