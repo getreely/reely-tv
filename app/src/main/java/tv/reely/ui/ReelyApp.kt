@@ -86,6 +86,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             onDismissUpNext = viewModel::dismissUpNext,
             onStepChannel = viewModel::stepChannel,
             onStepEpisode = viewModel::stepEpisode,
+            onDecodeFailure = viewModel::retryWithTranscode,
             onToggleFormat = viewModel::toggleFormat,
             onReportProgress = viewModel::reportProgress,
             onNudgeSubtitleScale = viewModel::nudgeSubtitleScale,
@@ -195,6 +196,9 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onCancelLink = viewModel::cancelPlexLink,
                 onDismissPlexError = viewModel::dismissPlexError,
                 onSelectSection = { viewModel.openSection(route.kind, it) },
+                onCycleSort = { viewModel.cycleSort(route.kind) },
+                onToggleUnwatched = { viewModel.toggleUnwatchedOnly(route.kind) },
+                onSelectGenre = { viewModel.selectGenre(route.kind, it) },
                 onDismissBrowseError = { viewModel.dismissBrowseError(route.kind) },
             )
 
@@ -207,6 +211,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onFocusItem = viewModel::focusItem,
                 onOpenDetail = { viewModel.navigate(Route.Detail(it)) },
                 onPlay = { viewModel.play(it) },
+                onPlayChannel = viewModel::playSearchChannel,
             )
 
             is Route.Detail -> {
@@ -219,7 +224,11 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                         imageUrl = viewModel::plexImageUrl,
                         backdropUrl = viewModel::plexBackdropUrl,
                         onPlay = { viewModel.play(it, queue = detail.episodes) },
-                        onPlayDetail = viewModel::playFromDetail,
+                        onPlayFromStart = {
+                            viewModel.play(it, queue = detail.episodes, resume = false)
+                        },
+                        onPlayDetail = { viewModel.playFromDetail() },
+                        onPlayDetailFromStart = { viewModel.playFromDetail(resume = false) },
                         onPlayTrailer = viewModel::playTrailer,
                         onToggleWatched = viewModel::toggleWatched,
                         onToggleWatchedDetail = viewModel::toggleWatchedDetail,
@@ -262,6 +271,8 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onToggleSubtitleBackground = viewModel::toggleSubtitleBackground,
                 onNudgeUpNext = viewModel::nudgeUpNextSeconds,
                 onToggleGuidePreview = viewModel::toggleGuidePreview,
+                onCyclePlaybackMode = viewModel::cyclePlaybackMode,
+                onCycleMaxBitrate = viewModel::cycleMaxBitrate,
             )
         }
         }

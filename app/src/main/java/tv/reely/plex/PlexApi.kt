@@ -23,6 +23,9 @@ data class PlexSection(
     val type: String,
 )
 
+/** One genre a library can be narrowed to. The id is what the filter takes. */
+data class PlexGenre(val id: String, val title: String)
+
 /**
  * A sidecar or embedded text subtitle Plex is willing to hand over as a separate file.
  * Image-based subtitles (PGS, VOBSUB) are deliberately absent: those can only be burned
@@ -317,6 +320,27 @@ object PlexApi {
             .filter { it.key.isNotEmpty() }
     }
 
+    /**
+     * The genres this library actually contains, as the server counts them. Offering a
+     * fixed list would show genres nothing in the library matches.
+     */
+    suspend fun genres(
+        base: String,
+        token: String,
+        sectionKey: String,
+        type: Int,
+    ): List<PlexGenre> = withContext(Dispatchers.IO) {
+        val directories = container("$base/library/sections/$sectionKey/genre?type=$type", token)
+            .optJSONArray("Directory") ?: JSONArray()
+        (0 until directories.length())
+            .map { directories.getJSONObject(it) }
+            .mapNotNull { entry ->
+                val key = entry.optString("key").takeIf(String::isNotBlank) ?: return@mapNotNull null
+                val title = entry.optString("title").takeIf(String::isNotBlank) ?: return@mapNotNull null
+                PlexGenre(id = key, title = title)
+            }
+    }
+
     suspend fun items(
         base: String,
         token: String,
@@ -424,6 +448,48 @@ object PlexApi {
         runCatching { Http.client.newCall(request).execute().use { it.isSuccessful } }
         Unit
     }
+
+    /**
+     * Asks the server to transcode instead of handing over the file.
+     *
+     * This is the universal transcoder: Plex remuxes or re-encodes on the fly and serves
+     * HLS, which is why a file the stick cannot decode still plays. The server only ever
+     * transcodes when a client asks, which is the whole reason direct play could fail.
+     */
+    fun transcodeUrl(
+        base: String,
+        token: String,
+        clientId: String,
+        ratingKey: String,
+        sessionId: String,
+        offsetMs: Long,
+        maxBitrateKbps: Int,
+        resolution: String,
+    ): String {
+        val path = URLEncoder.encode("/library/metadata/$ratingKey", "UTF-8")
+        val bitrate = if (maxBitrateKbps > 0) "&maxVideoBitrate=$maxBitrateKbps" else ""
+        return "$base/video/:/transcode/universal/start.m3u8" +
+            "?path=$path&mediaIndex=0&partIndex=0" +
+            "&protocol=hls&fastSeek=1&directPlay=0&directStream=1" +
+            // Burned in, because a transcode is exactly when the picture subtitles that
+            // cannot be sideloaded become playable.
+            "&subtitles=burn&audioBoost=100&videoQuality=100" +
+            "&videoResolution=$resolution$bitrate" +
+            "&offset=${offsetMs / 1000}" +
+            "&session=$sessionId" +
+            "&X-Plex-Client-Identifier=$clientId" +
+            "&X-Plex-Platform=Android&X-Plex-Product=" + URLEncoder.encode(PRODUCT, "UTF-8") +
+            "&X-Plex-Token=$token"
+    }
+
+    /** Releases the server's encoder. Without this a session lingers and keeps working. */
+    suspend fun stopTranscode(base: String, token: String, sessionId: String) =
+        withContext(Dispatchers.IO) {
+            val url = "$base/video/:/transcode/universal/stop?session=$sessionId&X-Plex-Token=$token"
+            val request = Request.Builder().url(url).get().build()
+            runCatching { Http.client.newCall(request).execute().use { it.isSuccessful } }
+            Unit
+        }
 
     /** Searches the whole library at once — films, shows and episodes together. */
     suspend fun search(base: String, token: String, query: String): List<PlexItem> =

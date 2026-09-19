@@ -488,3 +488,77 @@ fun EpisodeTile(
         }
     }
 }
+
+/**
+ * A live channel as a search result. Providers are erratic about logos, so the tile falls
+ * back to the channel's initials on a colour derived from its id — which at least stays
+ * the same channel-to-channel.
+ */
+@Composable
+fun ChannelCard(
+    name: String,
+    number: Int,
+    logoUrl: String?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(if (focused) 1.05f else 1f, label = "channel-scale")
+
+    Column(
+        modifier = modifier
+            .width(132.dp)
+            .scale(scale)
+            .onFocusChanged { focused = it.isFocused }
+            .clickable(onClick = onClick),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(74.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(channelTint(name))
+                .border(
+                    width = 2.dp,
+                    color = if (focused) Accent else Color.Transparent,
+                    shape = RoundedCornerShape(12.dp),
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (logoUrl != null) {
+                AsyncImage(
+                    model = logoUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(56.dp).clip(RoundedCornerShape(6.dp)),
+                )
+            } else {
+                Text(
+                    text = name.take(3).uppercase(),
+                    color = Parchment,
+                    fontSize = 17.sp,
+                    lineHeight = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+        // Fixed height, so a row of these lines up and down-arrow lands where it should.
+        Column(modifier = Modifier.height(40.dp).padding(top = 6.dp)) {
+            Text(
+                text = name,
+                color = if (focused) Parchment else Muted,
+                fontSize = 13.sp,
+                lineHeight = 17.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = if (number > 0) "Channel $number" else "Live",
+                color = Faint,
+                fontSize = 11.sp,
+                lineHeight = 15.sp,
+                maxLines = 1,
+            )
+        }
+    }
+}

@@ -35,6 +35,7 @@ import tv.reely.ui.components.HeroText
 import tv.reely.ui.components.IconAction
 import tv.reely.ui.components.InfoGlyph
 import tv.reely.ui.components.PlayGlyph
+import tv.reely.ui.components.RestartGlyph
 import tv.reely.ui.components.SectionHeading
 import tv.reely.ui.components.TrailerGlyph
 import tv.reely.ui.components.TvChip
@@ -47,7 +48,9 @@ fun DetailScreen(
     imageUrl: (String?, Int, Int) -> String?,
     backdropUrl: (String?) -> String?,
     onPlay: (PlexItem) -> Unit,
+    onPlayFromStart: (PlexItem) -> Unit,
     onPlayDetail: () -> Unit,
+    onPlayDetailFromStart: () -> Unit,
     onPlayTrailer: () -> Unit,
     onToggleWatched: (PlexItem) -> Unit,
     onToggleWatchedDetail: () -> Unit,
@@ -151,12 +154,32 @@ fun DetailScreen(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         val target = episode
+                        // What Play would resume. For a show that is the part-watched
+                        // episode, which is also what starting over would restart.
+                        val resumeFrom = when {
+                            target != null -> target.viewOffsetMs
+                            detail.isShow ->
+                                state.episodes.firstOrNull { it.resumeFraction != null }?.viewOffsetMs ?: 0L
+
+                            else -> detail.viewOffsetMs
+                        }
                         IconAction(
-                            label = if ((target?.viewOffsetMs ?: detail.viewOffsetMs) > 0) "Resume" else "Play",
+                            label = if (resumeFrom > 0) "Resume" else "Play",
                             filled = true,
                             onClick = { if (target != null) onPlay(target) else onPlayDetail() },
                             glyph = { PlayGlyph(it, 20.dp) },
                         )
+                        // Only worth offering when Play would pick up part-way through.
+                        if (resumeFrom > 0) {
+                            IconAction(
+                                label = "Restart",
+                                filled = false,
+                                onClick = {
+                                    if (target != null) onPlayFromStart(target) else onPlayDetailFromStart()
+                                },
+                                glyph = { RestartGlyph(it, 20.dp) },
+                            )
+                        }
                         IconAction(
                             label = if ((target?.isWatched ?: detail.isWatched)) "Unwatch" else "Watched",
                             filled = false,

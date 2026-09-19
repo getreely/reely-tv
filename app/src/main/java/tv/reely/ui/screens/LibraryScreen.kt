@@ -28,6 +28,7 @@ import tv.reely.plex.formatDuration
 import tv.reely.ui.BrowseState
 import tv.reely.ui.HomeState
 import tv.reely.ui.LibraryKind
+import tv.reely.ui.LibrarySort
 import tv.reely.ui.PlexState
 import tv.reely.ui.components.HeroBackdrop
 import tv.reely.ui.components.EmptyNote
@@ -58,6 +59,9 @@ fun LibraryScreen(
     onCancelLink: () -> Unit,
     onDismissPlexError: () -> Unit,
     onSelectSection: (PlexSection) -> Unit,
+    onCycleSort: () -> Unit,
+    onToggleUnwatched: () -> Unit,
+    onSelectGenre: (String?) -> Unit,
     onDismissBrowseError: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -226,15 +230,58 @@ fun LibraryScreen(
                                 }
                             }
                         }
+                        // Sort, then the watched filter, then genres. One row that runs
+                        // off to the right, so a library with forty genres still fits.
+                        if (sections.isNotEmpty()) {
+                            LazyRow(
+                                modifier = Modifier.focusGroup(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                item {
+                                    TvChip(
+                                        label = "Sort · ${browse.sort.label}",
+                                        selected = browse.sort != LibrarySort.TITLE,
+                                        onClick = onCycleSort,
+                                    )
+                                }
+                                item {
+                                    TvChip(
+                                        label = "Unwatched",
+                                        selected = browse.unwatchedOnly,
+                                        onClick = onToggleUnwatched,
+                                    )
+                                }
+                                if (browse.genres.isNotEmpty()) {
+                                    item {
+                                        TvChip(
+                                            label = "All genres",
+                                            selected = browse.genreId == null,
+                                            onClick = { onSelectGenre(null) },
+                                        )
+                                    }
+                                    items(browse.genres, key = { it.id }) { genre ->
+                                        TvChip(
+                                            label = genre.title,
+                                            selected = browse.genreId == genre.id,
+                                            onClick = { onSelectGenre(genre.id) },
+                                        )
+                                    }
+                                }
+                            }
+                        }
                         if (browse.error != null) {
                             ErrorNote(message = browse.error, onDismiss = onDismissBrowseError)
                         }
-                        if (sections.isEmpty()) {
-                            EmptyNote(
+                        when {
+                            sections.isEmpty() -> EmptyNote(
                                 "No ${kind.title.lowercase()} library on ${plex.serverName ?: "this server"}."
                             )
-                        } else if (browse.busy && browse.items.isEmpty()) {
-                            EmptyNote("Loading ${kind.title.lowercase()}…")
+
+                            browse.busy && browse.items.isEmpty() ->
+                                EmptyNote("Loading ${kind.title.lowercase()}…")
+
+                            browse.items.isEmpty() && browse.isFiltered ->
+                                EmptyNote("Nothing in this library matches those filters.")
                         }
                     }
                 }

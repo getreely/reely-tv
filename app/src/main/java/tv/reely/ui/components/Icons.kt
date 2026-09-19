@@ -222,3 +222,28 @@ fun SubtitleGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier)
         )
     }
 }
+
+/** An arrow curling back on itself: start this again from the beginning. */
+@Composable
+fun RestartGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(size)) {
+        val s = size.toPx()
+        // Open at the top left so the arrowhead has somewhere to sit.
+        drawArc(
+            color = color,
+            startAngle = 160f,
+            sweepAngle = 300f,
+            useCenter = false,
+            topLeft = androidx.compose.ui.geometry.Offset(s * 0.16f, s * 0.16f),
+            size = androidx.compose.ui.geometry.Size(s * 0.68f, s * 0.68f),
+            style = Stroke(width = s * 0.12f, cap = androidx.compose.ui.graphics.StrokeCap.Round),
+        )
+        val head = Path().apply {
+            moveTo(s * 0.18f, s * 0.08f)
+            lineTo(s * 0.18f, s * 0.44f)
+            lineTo(s * 0.48f, s * 0.26f)
+            close()
+        }
+        drawPath(head, color)
+    }
+}

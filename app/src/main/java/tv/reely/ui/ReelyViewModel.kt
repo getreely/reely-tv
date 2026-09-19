@@ -17,6 +17,7 @@ import tv.reely.core.Settings
 import tv.reely.core.wrapIndex
 import tv.reely.plex.PlexApi
 import tv.reely.plex.PlexDetail
+import tv.reely.plex.PlexGenre
 import tv.reely.plex.PlexExtra
 import tv.reely.plex.PlexItem
 import tv.reely.plex.PlexMarker
@@ -74,13 +75,31 @@ data class HomeState(
         get() = continueWatching.isEmpty() && recentEpisodes.isEmpty() && recentMovies.isEmpty()
 }
 
+/**
+ * How a library grid is ordered. The value is Plex's own sort key, so the server does the
+ * ordering over the whole library rather than this app re-sorting one page of it.
+ */
+enum class LibrarySort(val key: String, val label: String) {
+    TITLE("titleSort:asc", "A–Z"),
+    ADDED("addedAt:desc", "Recently Added"),
+    RELEASED("year:desc", "Newest First"),
+    RATED("rating:desc", "Top Rated"),
+}
+
 /** One library grid. No drill-down: opening something goes to its own detail route. */
 data class BrowseState(
     val section: PlexSection? = null,
     val items: List<PlexItem> = emptyList(),
+    val genres: List<PlexGenre> = emptyList(),
+    val sort: LibrarySort = LibrarySort.TITLE,
+    val genreId: String? = null,
+    val unwatchedOnly: Boolean = false,
     val busy: Boolean = false,
     val error: String? = null,
-)
+) {
+    /** True when the grid is showing less than the whole library. */
+    val isFiltered: Boolean get() = genreId != null || unwatchedOnly
+}
 
 data class DetailState(
     val ratingKey: String,
@@ -133,6 +152,8 @@ data class LiveState(
 data class SearchState(
     val query: String = "",
     val results: List<PlexItem> = emptyList(),
+    /** Live channels whose name matches. Empty when no provider is configured. */
+    val channels: List<XtreamChannel> = emptyList(),
     val busy: Boolean = false,
 )
 
@@ -171,6 +192,9 @@ data class Playback(
     val queue: List<PlexItem> = emptyList(),
     val queueIndex: Int = -1,
     val markers: List<PlexMarker> = emptyList(),
+    /** True when the server is encoding this rather than handing over the file. */
+    val transcoding: Boolean = false,
+    val transcodeSession: String? = null,
 )
 
 data class PlayerPrefs(
@@ -178,6 +202,8 @@ data class PlayerPrefs(
     val subtitleBackground: Boolean = false,
     val upNextSeconds: Int = Settings.DEFAULT_UP_NEXT,
     val guidePreview: Boolean = true,
+    val playbackMode: String = Settings.MODE_AUTO,
+    val maxBitrateKbps: Int = 0,
 )
 
 data class ReelyState(
@@ -211,6 +237,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 subtitleBackground = settings.subtitleBackground,
                 upNextSeconds = settings.upNextSeconds,
                 guidePreview = settings.guidePreview,
+                playbackMode = settings.playbackMode,
+                maxBitrateKbps = settings.maxBitrateKbps,
             )
         )
     )
@@ -224,6 +252,11 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     private var timelineJob: Job? = null
     private var importJob: Job? = null
     private var searchJob: Job? = null
+    private var channelsJob: Job? = null
+    private val browseJobs = mutableMapOf<LibraryKind, Job>()
+
+    /** Every live channel the account carries, fetched once and reused by search. */
+    private var allChannels: List<XtreamChannel>? = null
 
     init {
         viewModelScope.launch {
@@ -495,20 +528,73 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     // ---------------------------------------------------------------- Library grids
 
     fun openSection(kind: LibraryKind, section: PlexSection) {
-        viewModelScope.launch {
-            val plex = _state.value.plex
-            val base = plex.baseUrl ?: return@launch
-            val token = plex.serverToken ?: return@launch
-            updateBrowse(kind) {
-                it.copy(busy = true, error = null, section = section, items = emptyList())
+        // A different library is a clean slate: the old library's genres do not apply.
+        updateBrowse(kind) {
+            BrowseState(section = section, sort = it.sort, busy = true)
+        }
+        loadBrowse(kind)
+        loadGenres(kind, section)
+    }
+
+    /** Cycles the grid through the orderings a library client actually offers. */
+    fun cycleSort(kind: LibraryKind) {
+        val choices = LibrarySort.entries
+        updateBrowse(kind) {
+            it.copy(sort = choices[(choices.indexOf(it.sort) + 1) % choices.size])
+        }
+        loadBrowse(kind)
+    }
+
+    fun toggleUnwatchedOnly(kind: LibraryKind) {
+        updateBrowse(kind) { it.copy(unwatchedOnly = !it.unwatchedOnly) }
+        loadBrowse(kind)
+    }
+
+    /** Null is "all genres"; picking the genre already on also clears it. */
+    fun selectGenre(kind: LibraryKind, genreId: String?) {
+        updateBrowse(kind) { it.copy(genreId = if (it.genreId == genreId) null else genreId) }
+        loadBrowse(kind)
+    }
+
+    /**
+     * Fetches the grid for whatever sort and filters are currently set. The server does
+     * the work: sorting and filtering here would only ever order the page in hand.
+     */
+    private fun loadBrowse(kind: LibraryKind) {
+        val plex = _state.value.plex
+        val base = plex.baseUrl ?: return
+        val token = plex.serverToken ?: return
+        val browse = plex.browseFor(kind)
+        val section = browse.section ?: return
+
+        browseJobs[kind]?.cancel()
+        browseJobs[kind] = viewModelScope.launch {
+            updateBrowse(kind) { it.copy(busy = true, error = null) }
+            val path = buildString {
+                append("/library/sections/${section.key}/all?type=${kind.filter}")
+                append("&sort=${browse.sort.key}")
+                browse.genreId?.let { append("&genre=$it") }
+                if (browse.unwatchedOnly) append("&unwatched=1")
             }
-            val path = "/library/sections/${section.key}/all?type=${kind.filter}"
             val items = runCatching { PlexApi.items(base, token, path, limit = 400) }
                 .getOrElse { failure ->
                     updateBrowse(kind) { it.copy(busy = false, error = failure.readable()) }
                     return@launch
                 }
             updateBrowse(kind) { it.copy(busy = false, items = items) }
+        }
+    }
+
+    private fun loadGenres(kind: LibraryKind, section: PlexSection) {
+        val plex = _state.value.plex
+        val base = plex.baseUrl ?: return
+        val token = plex.serverToken ?: return
+        viewModelScope.launch {
+            val genres = runCatching { PlexApi.genres(base, token, section.key, kind.filter) }
+                .getOrElse { emptyList() }
+            updateBrowse(kind) {
+                if (it.section?.key != section.key) it else it.copy(genres = genres)
+            }
         }
     }
 
@@ -585,18 +671,19 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * The Play button on a detail page. For a show that means the episode you are part-way
-     * through, or the first one; for a film it means the film.
+     * through, or the first one; for a film it means the film. With [resume] off it is the
+     * same choice of thing to watch, started again from zero.
      */
-    fun playFromDetail() {
+    fun playFromDetail(resume: Boolean = true) {
         val detailState = _state.value.detail ?: return
         val detail = detailState.detail ?: return
         if (detail.isShow) {
             val episode = detailState.episodes.firstOrNull { it.resumeFraction != null }
                 ?: detailState.episodes.firstOrNull()
                 ?: return
-            play(episode, queue = detailState.episodes)
+            play(episode, queue = detailState.episodes, resume = resume)
         } else {
-            play(detail.asItem())
+            play(detail.asItem(), resume = resume)
         }
     }
 
@@ -618,21 +705,43 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             val effectiveQueue = queue.ifEmpty { siblingQueue(item) }
+            val startAt = if (resume) item.viewOffsetMs else 0
+            val transcode = _state.value.prefs.playbackMode == Settings.MODE_TRANSCODE
+            val session = UUID.randomUUID().toString()
+
+            releaseTranscode()
             _state.update {
                 it.copy(
                     upNext = null,
                     playback = Playback(
-                        title = if (item.type == "episode") item.title else item.title,
+                        title = item.title,
                         subtitle = subtitleLineFor(item),
-                        url = resolved.url,
+                        url = if (transcode) {
+                            PlexApi.transcodeUrl(
+                                base = base,
+                                token = token,
+                                clientId = clientId,
+                                ratingKey = item.ratingKey,
+                                sessionId = session,
+                                offsetMs = startAt,
+                                maxBitrateKbps = it.prefs.maxBitrateKbps,
+                                resolution = RESOLUTION,
+                            )
+                        } else {
+                            resolved.url
+                        },
                         isLive = false,
                         ratingKey = item.ratingKey,
-                        startPositionMs = if (resume) item.viewOffsetMs else 0,
+                        // A transcode already starts at the offset, so the player must not
+                        // seek there as well.
+                        startPositionMs = if (transcode) 0 else startAt,
                         durationMs = item.durationMs,
-                        subtitles = resolved.subtitles,
+                        subtitles = if (transcode) emptyList() else resolved.subtitles,
                         markers = resolved.markers,
                         queue = effectiveQueue,
                         queueIndex = effectiveQueue.indexOfFirst { entry -> entry.ratingKey == item.ratingKey },
+                        transcoding = transcode,
+                        transcodeSession = if (transcode) session else null,
                     ),
                 )
             }
@@ -747,7 +856,73 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * The device could not decode the file. Ask the server to do the work instead and
+     * carry on from where it stopped — the point of having a transcoder at all.
+     */
+    fun retryWithTranscode(positionMs: Long) {
+        val playback = _state.value.playback ?: return
+        if (playback.transcoding || playback.isLive) return
+        if (_state.value.prefs.playbackMode == Settings.MODE_DIRECT) return
+        val ratingKey = playback.ratingKey ?: return
+        val plex = _state.value.plex
+        val base = plex.baseUrl ?: return
+        val token = plex.serverToken ?: return
+
+        val session = UUID.randomUUID().toString()
+        _state.update {
+            it.copy(
+                playback = playback.copy(
+                    url = PlexApi.transcodeUrl(
+                        base = base,
+                        token = token,
+                        clientId = clientId,
+                        ratingKey = ratingKey,
+                        sessionId = session,
+                        offsetMs = positionMs,
+                        maxBitrateKbps = it.prefs.maxBitrateKbps,
+                        resolution = RESOLUTION,
+                    ),
+                    startPositionMs = 0,
+                    subtitles = emptyList(),
+                    transcoding = true,
+                    transcodeSession = session,
+                )
+            )
+        }
+    }
+
+    /** Hands the server's encoder back. A session left running keeps encoding. */
+    private fun releaseTranscode() {
+        val playback = _state.value.playback ?: return
+        val session = playback.transcodeSession ?: return
+        val plex = _state.value.plex
+        val base = plex.baseUrl ?: return
+        val token = plex.serverToken ?: return
+        viewModelScope.launch { PlexApi.stopTranscode(base, token, session) }
+    }
+
+    fun setPlaybackMode(mode: String) {
+        settings.playbackMode = mode
+        _state.update { it.copy(prefs = it.prefs.copy(playbackMode = mode)) }
+    }
+
+    /** Direct → Auto → Always transcode, and round again. */
+    fun cyclePlaybackMode() {
+        val choices = listOf(Settings.MODE_DIRECT, Settings.MODE_AUTO, Settings.MODE_TRANSCODE)
+        val next = choices[(choices.indexOf(settings.playbackMode).coerceAtLeast(0) + 1) % choices.size]
+        setPlaybackMode(next)
+    }
+
+    fun cycleMaxBitrate() {
+        val choices = Settings.BITRATE_CHOICES
+        val next = choices[(choices.indexOf(settings.maxBitrateKbps).coerceAtLeast(0) + 1) % choices.size]
+        settings.maxBitrateKbps = next
+        _state.update { it.copy(prefs = it.prefs.copy(maxBitrateKbps = next)) }
+    }
+
     fun stopPlayback(positionMs: Long = 0) {
+        releaseTranscode()
         val playback = _state.value.playback
         val ratingKey = playback?.ratingKey
         val plex = _state.value.plex
@@ -797,21 +972,79 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(search = it.search.copy(query = query)) }
         searchJob?.cancel()
         if (query.isBlank()) {
-            _state.update { it.copy(search = it.search.copy(results = emptyList(), busy = false)) }
+            _state.update {
+                it.copy(search = it.search.copy(results = emptyList(), channels = emptyList(), busy = false))
+            }
             return
         }
+        primeChannelIndex()
         val plex = _state.value.plex
-        val base = plex.baseUrl ?: return
-        val token = plex.serverToken ?: return
+        val base = plex.baseUrl
+        val token = plex.serverToken
+
         searchJob = viewModelScope.launch {
             _state.update { it.copy(search = it.search.copy(busy = true)) }
             // Typing on a remote is slow; wait for a pause rather than asking per letter.
             delay(400)
-            val results = runCatching { PlexApi.search(base, token, query) }.getOrElse { emptyList() }
+            val results = if (base != null && token != null) {
+                runCatching { PlexApi.search(base, token, query) }.getOrElse { emptyList() }
+            } else {
+                emptyList()
+            }
+            // Channels are matched here rather than asked of the panel: the panel has no
+            // search, and the whole list is already in hand.
+            val channels = allChannels.orEmpty()
+                .filter { it.name.contains(query.trim(), ignoreCase = true) }
+                .take(CHANNEL_RESULTS)
             _state.update { current ->
                 if (current.search.query != query) current
-                else current.copy(search = current.search.copy(results = results, busy = false))
+                else current.copy(
+                    search = current.search.copy(results = results, channels = channels, busy = false)
+                )
             }
+        }
+    }
+
+    /** Pulls the whole channel list once, so search has something to match against. */
+    private fun primeChannelIndex() {
+        if (allChannels != null || channelsJob?.isActive == true) return
+        val credentials = _state.value.live.credentials ?: return
+        channelsJob = viewModelScope.launch {
+            allChannels = runCatching { XtreamApi.liveChannels(credentials) }.getOrElse { emptyList() }
+            // The list usually lands after the debounce, so re-run the match it missed.
+            val query = _state.value.search.query
+            if (query.isNotBlank()) {
+                val channels = allChannels.orEmpty()
+                    .filter { it.name.contains(query.trim(), ignoreCase = true) }
+                    .take(CHANNEL_RESULTS)
+                _state.update { current ->
+                    if (current.search.query != query) current
+                    else current.copy(search = current.search.copy(channels = channels))
+                }
+            }
+        }
+    }
+
+    /**
+     * Plays a channel found by search. It may not be in the category currently open, in
+     * which case there is nothing to surf through and the skip buttons stay quiet.
+     */
+    fun playSearchChannel(channel: XtreamChannel) {
+        val live = _state.value.live
+        val credentials = live.credentials ?: return
+        val index = live.channels.indexOfFirst { it.streamId == channel.streamId }
+        _state.update {
+            it.copy(
+                upNext = null,
+                playback = Playback(
+                    title = channel.name,
+                    subtitle = null,
+                    url = XtreamApi.streamUrl(credentials, channel, live.format),
+                    isLive = true,
+                    channelIndex = index,
+                    format = live.format,
+                ),
+            )
         }
     }
 
@@ -922,6 +1155,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun connectXtream(credentials: XtreamCredentials, persist: Boolean) {
+        allChannels = null
         updateLive { it.copy(busy = true, error = null) }
         val account = runCatching { XtreamApi.login(credentials) }.getOrElse { failure ->
             updateLive { it.copy(busy = false, error = failure.readable()) }
@@ -1046,7 +1280,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val playback = _state.value.playback ?: return
         if (!playback.isLive) return
         val channels = _state.value.live.channels
-        if (channels.isEmpty()) return
+        if (channels.isEmpty() || playback.channelIndex < 0) return
         playChannel(wrapIndex(playback.channelIndex + delta, channels.size))
     }
 
@@ -1200,7 +1434,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
     fun signOutXtream() {
         store.remove(SecureStore.XTREAM_HOST, SecureStore.XTREAM_USERNAME, SecureStore.XTREAM_PASSWORD)
-        _state.update { it.copy(live = LiveState()) }
+        channelsJob?.cancel()
+        allChannels = null
+        _state.update { it.copy(live = LiveState(), search = it.search.copy(channels = emptyList())) }
     }
 
     fun dismissPlexError() = updatePlex { it.copy(error = null) }
@@ -1231,12 +1467,18 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         /** Guide data older than this is worth fetching again. */
         const val REFRESH_AFTER_SECONDS = 6L * 3_600
 
+        /** What a transcode is asked to produce. A stick has no use for more. */
+        const val RESOLUTION = "1920x1080"
+
         /** How many shows the Recently Added row aims to carry. */
         const val TARGET_SHOW_COUNT = 30
         const val EPISODE_PAGE = 200
 
         /** A ceiling, so a library of nothing but one huge series still finishes. */
         const val MAX_EPISODE_SCAN = 2_000
+
+        /** A search for "sports" on a big panel matches thousands; a screenful is plenty. */
+        const val CHANNEL_RESULTS = 40
     }
 }
 

@@ -104,6 +104,7 @@ fun PlayerScreen(
     onDismissUpNext: () -> Unit,
     onStepChannel: (Int) -> Unit,
     onStepEpisode: (Int) -> Unit,
+    onDecodeFailure: (Long) -> Unit,
     onToggleFormat: () -> Unit,
     onReportProgress: (Long, Boolean) -> Unit,
     onNudgeSubtitleScale: (Float) -> Unit,
@@ -170,7 +171,15 @@ fun PlayerScreen(
             }
 
             override fun onPlayerError(playbackError: PlaybackException) {
-                error = describe(playbackError)
+                // Anything in the parsing, decoding or audio-output ranges means this
+                // device could not handle the file — which is what the server's
+                // transcoder is for. Network errors are not that, and stay errors.
+                val deviceCannotPlay = playbackError.errorCode in 3_000..5_999
+                if (deviceCannotPlay && !playback.transcoding) {
+                    onDecodeFailure(exoPlayer.currentPosition.coerceAtLeast(0))
+                } else {
+                    error = describe(playbackError)
+                }
             }
         }
         exoPlayer.addListener(listener)

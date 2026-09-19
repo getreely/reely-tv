@@ -110,11 +110,17 @@ object XtreamApi {
             }.filter { it.id.isNotEmpty() }
         }
 
+    /**
+     * One category's channels, or — with no category — every channel the account carries.
+     * The whole list is what search needs; a panel with tens of thousands of channels
+     * makes that a slow call, so it is asked for once and kept.
+     */
     suspend fun liveChannels(
         credentials: XtreamCredentials,
-        categoryId: String,
+        categoryId: String? = null,
     ): List<XtreamChannel> = withContext(Dispatchers.IO) {
-        val array = JSONArray(get(credentials, "get_live_streams", "category_id" to categoryId))
+        val extras = categoryId?.let { arrayOf("category_id" to it) } ?: emptyArray()
+        val array = JSONArray(get(credentials, "get_live_streams", *extras))
         (0 until array.length()).map { array.getJSONObject(it) }.mapNotNull {
             val streamId = it.optInt("stream_id", -1)
             if (streamId < 0) return@mapNotNull null

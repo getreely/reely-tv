@@ -43,6 +43,8 @@ fun StatusScreen(
     onToggleSubtitleBackground: () -> Unit,
     onNudgeUpNext: (Int) -> Unit,
     onToggleGuidePreview: () -> Unit,
+    onCyclePlaybackMode: () -> Unit,
+    onCycleMaxBitrate: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -61,6 +63,15 @@ fun StatusScreen(
         )
 
         Panel(title = "Playback") {
+            FactLine("Mode", playbackModeLabel(prefs.playbackMode))
+            FactLine("Transcode ceiling", bitrateLabel(prefs.maxBitrateKbps))
+            Row(
+                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                TvActionButton(label = "Change mode", onClick = onCyclePlaybackMode)
+                TvActionButton(label = "Change ceiling", onClick = onCycleMaxBitrate)
+            }
             FactLine("Subtitle size", "${(prefs.subtitleScale * 100).toInt()}%")
             FactLine("Subtitle background", if (prefs.subtitleBackground) "On" else "Off (outlined)")
             FactLine(
@@ -161,9 +172,11 @@ fun StatusScreen(
 
         Panel(title = "About this build") {
             Text(
-                text = "Playback is direct play: the file is streamed as it sits on the server, and " +
-                    "nothing is transcoded. Text subtitles are selectable tracks; image subtitles " +
-                    "would have to be burned in by the server, so they are not offered.",
+                text = "Direct play streams the file as it sits on the server and asks this device " +
+                    "to decode it, which is the best picture and no work for the server. When the " +
+                    "device cannot decode something, the server re-encodes it on the fly — which " +
+                    "is what Auto falls back to, and what Always transcode does from the start. " +
+                    "A transcode burns subtitles into the picture, so image subtitles play too.",
                 color = Muted,
                 fontSize = 14.sp,
                 lineHeight = 21.sp,
@@ -196,3 +209,12 @@ private fun Panel(title: String, content: @Composable () -> Unit) {
         content()
     }
 }
+
+private fun playbackModeLabel(mode: String): String = when (mode) {
+    Settings.MODE_DIRECT -> "Direct play only"
+    Settings.MODE_TRANSCODE -> "Always transcode"
+    else -> "Auto — transcode only if direct play fails"
+}
+
+private fun bitrateLabel(kbps: Int): String =
+    if (kbps <= 0) "Original quality" else "${kbps / 1_000} Mbps"
