@@ -201,12 +201,16 @@ fun TvListRow(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onFocus: () -> Unit = {},
 ) {
     var focused by remember { mutableStateOf(false) }
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .onFocusChanged { focused = it.isFocused }
+            .onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) onFocus()
+            }
             .clip(RoundedCornerShape(8.dp))
             .background(
                 when {

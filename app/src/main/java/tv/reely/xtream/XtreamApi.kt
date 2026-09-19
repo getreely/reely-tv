@@ -1,12 +1,15 @@
 package tv.reely.xtream
 
 import android.net.Uri
+import android.util.Base64
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 import tv.reely.core.Http
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 data class XtreamCredentials(
     val base: String,
@@ -33,6 +36,27 @@ data class XtreamChannel(
 enum class StreamFormat(val extension: String, val label: String) {
     TS("ts", "MPEG-TS"),
     HLS("m3u8", "HLS"),
+}
+
+/**
+ * One programme from the panel's own short EPG. This is the cheap guide: a handful of
+ * entries for a single channel, asked for when somebody looks at that channel. The full
+ * XMLTV dump for a large provider runs to tens of megabytes and cannot be held in memory
+ * on a stick, so it is not what feeds this.
+ */
+data class XtreamProgramme(
+    val title: String,
+    val description: String?,
+    val startEpochSeconds: Long,
+    val endEpochSeconds: Long,
+) {
+    /** How far through the programme we are now, or null when it is not on yet. */
+    fun progressAt(nowEpochSeconds: Long): Float? {
+        if (nowEpochSeconds < startEpochSeconds || nowEpochSeconds > endEpochSeconds) return null
+        val span = (endEpochSeconds - startEpochSeconds).toFloat()
+        if (span <= 0f) return null
+        return ((nowEpochSeconds - startEpochSeconds) / span).coerceIn(0f, 1f)
+    }
 }
 
 /**
@@ -137,4 +161,55 @@ object XtreamApi {
             return body
         }
     }
+
+    /**
+     * Now and next for one channel. Panels base64-encode the title and description and
+     * are inconsistent about which timestamp fields they send, so both are handled.
+     */
+    suspend fun shortEpg(
+        credentials: XtreamCredentials,
+        streamId: Int,
+        limit: Int = 4,
+    ): List<XtreamProgramme> = withContext(Dispatchers.IO) {
+        val body = get(
+            credentials,
+            "get_short_epg",
+            "stream_id" to streamId.toString(),
+            "limit" to limit.toString(),
+        )
+        val listings = JSONObject(body).optJSONArray("epg_listings") ?: return@withContext emptyList()
+        (0 until listings.length())
+            .map { listings.getJSONObject(it) }
+            .mapNotNull { entry ->
+                val start = entry.optString("start_timestamp").toLongOrNull()
+                    ?: parsePanelTime(entry.optString("start"))
+                    ?: return@mapNotNull null
+                val end = entry.optString("stop_timestamp").toLongOrNull()
+                    ?: parsePanelTime(entry.optString("end"))
+                    ?: return@mapNotNull null
+                XtreamProgramme(
+                    title = decodeField(entry.optString("title")).ifEmpty { "Untitled" },
+                    description = decodeField(entry.optString("description")).takeIf { it.isNotBlank() },
+                    startEpochSeconds = start,
+                    endEpochSeconds = end,
+                )
+            }
+            .sortedBy { it.startEpochSeconds }
+    }
+
+    /** Panel fields are usually base64; a panel that sends plain text should still work. */
+    private fun decodeField(raw: String): String {
+        if (raw.isEmpty()) return ""
+        return runCatching {
+            String(Base64.decode(raw, Base64.DEFAULT), Charsets.UTF_8)
+        }.getOrDefault(raw).trim()
+    }
+
+    private fun parsePanelTime(raw: String): Long? {
+        if (raw.isBlank()) return null
+        return runCatching {
+            SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).parse(raw)?.time?.div(1000)
+        }.getOrNull()
+    }
 }
+

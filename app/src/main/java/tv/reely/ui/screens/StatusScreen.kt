@@ -18,7 +18,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
+import tv.reely.core.Settings
 import tv.reely.ui.LiveState
+import tv.reely.ui.PlayerPrefs
 import tv.reely.ui.PlexState
 import tv.reely.ui.components.FactLine
 import tv.reely.ui.components.SectionHeading
@@ -33,17 +35,21 @@ import tv.reely.xtream.StreamFormat
 fun StatusScreen(
     plex: PlexState,
     live: LiveState,
+    prefs: PlayerPrefs,
     onSignOutPlex: () -> Unit,
     onSignOutXtream: () -> Unit,
     onToggleFormat: () -> Unit,
+    onNudgeSubtitleScale: (Float) -> Unit,
+    onToggleSubtitleBackground: () -> Unit,
+    onNudgeUpNext: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 40.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
+            .padding(horizontal = 40.dp, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         Text(
             text = "Status",
@@ -52,6 +58,45 @@ fun StatusScreen(
             lineHeight = 30.sp,
             fontWeight = FontWeight.SemiBold,
         )
+
+        Panel(title = "Playback") {
+            FactLine("Subtitle size", "${(prefs.subtitleScale * 100).toInt()}%")
+            FactLine("Subtitle background", if (prefs.subtitleBackground) "On" else "Off (outlined)")
+            FactLine(
+                "Up Next countdown",
+                if (prefs.upNextSeconds > 0) "${prefs.upNextSeconds} seconds" else "Off — waits for you",
+            )
+            Row(
+                modifier = Modifier.padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                TvActionButton(
+                    label = "Subtitles smaller",
+                    onClick = { onNudgeSubtitleScale(-Settings.SCALE_STEP) },
+                )
+                TvActionButton(
+                    label = "Subtitles bigger",
+                    onClick = { onNudgeSubtitleScale(Settings.SCALE_STEP) },
+                )
+                TvActionButton(
+                    label = if (prefs.subtitleBackground) "Background off" else "Background on",
+                    onClick = onToggleSubtitleBackground,
+                )
+            }
+            Row(
+                modifier = Modifier.padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                TvActionButton(
+                    label = "Countdown shorter",
+                    onClick = { onNudgeUpNext(-Settings.UP_NEXT_STEP) },
+                )
+                TvActionButton(
+                    label = "Countdown longer",
+                    onClick = { onNudgeUpNext(Settings.UP_NEXT_STEP) },
+                )
+            }
+        }
 
         Panel(title = "Plex library") {
             if (plex.isConnected) {
@@ -62,14 +107,15 @@ fun StatusScreen(
                     plex.sections.joinToString(", ") { "${it.title} (${it.type})" }
                         .ifEmpty { "none" },
                 )
-                Row(modifier = Modifier.padding(top = 6.dp)) {
+                Row(modifier = Modifier.padding(top = 8.dp)) {
                     TvActionButton(label = "Sign out of Plex", onClick = onSignOutPlex)
                 }
             } else {
                 Text(
-                    text = "Not signed in. The Movies and TV Shows tabs will offer to link an account.",
+                    text = "Not signed in. The Home, Movies and TV Shows tabs will offer to link an account.",
                     color = Muted,
                     fontSize = 14.sp,
+                    lineHeight = 20.sp,
                 )
             }
         }
@@ -85,8 +131,8 @@ fun StatusScreen(
                 FactLine("Categories", live.categories.size.toString())
                 FactLine("Stream container", live.format.label)
                 Row(
-                    modifier = Modifier.padding(top = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     TvActionButton(
                         label = "Use ${if (live.format == StreamFormat.TS) "HLS" else "MPEG-TS"}",
@@ -99,25 +145,27 @@ fun StatusScreen(
                     text = "No provider configured. The Live TV tab will ask for a panel address.",
                     color = Muted,
                     fontSize = 14.sp,
+                    lineHeight = 20.sp,
                 )
             }
         }
 
         Panel(title = "About this build") {
             Text(
-                text = "A thin spike. It exists to answer two things that cannot be reasoned about: " +
-                    "whether these streams decode acceptably on this hardware, and whether D-pad " +
-                    "navigation feels tolerable. The player overlay reports time to first frame, the " +
-                    "decoded video and audio formats, and any error the provider returns.",
+                text = "Playback is direct play: the file is streamed as it sits on the server, and " +
+                    "nothing is transcoded. Text subtitles are selectable tracks; image subtitles " +
+                    "would have to be burned in by the server, so they are not offered.",
                 color = Muted,
                 fontSize = 14.sp,
+                lineHeight = 21.sp,
             )
             Text(
-                text = "Playback is direct play only: the file is streamed as it sits on the server. " +
-                    "Text subtitles are sideloaded as selectable tracks; image subtitles and " +
-                    "server-side transcoding are not wired up yet.",
+                text = "The live guide asks the provider for now and next on the channel you are " +
+                    "looking at. A full scrolling grid needs the whole XMLTV guide, which is far too " +
+                    "large to hold in memory on a stick.",
                 color = Muted,
                 fontSize = 14.sp,
+                lineHeight = 21.sp,
                 modifier = Modifier.padding(top = 8.dp),
             )
         }
