@@ -41,8 +41,7 @@ fun HomeScreen(
     imageUrl: (String?, Int, Int) -> String?,
     backdropUrl: (String?) -> String?,
     onFocusItem: (PlexItem?) -> Unit,
-    onPlay: (PlexItem) -> Unit,
-    onOpenDetail: (String) -> Unit,
+    onOpenItem: (PlexItem) -> Unit,
     onStartLink: () -> Unit,
     onCancelLink: () -> Unit,
     onDismissPlexError: () -> Unit,
@@ -117,7 +116,7 @@ fun HomeScreen(
                                     progress = item.resumeFraction,
                                     watched = item.isWatched,
                                     onFocus = { onFocusItem(item) },
-                                    onClick = { onPlay(item) },
+                                    onClick = { onOpenItem(item) },
                                 )
                             }
                         }
@@ -128,7 +127,7 @@ fun HomeScreen(
                     item {
                         PosterRow(title = "Recently Added Episodes") {
                             items(home.recentEpisodes, key = { it.showRatingKey ?: it.showTitle }) { group ->
-                                EpisodeGroupCard(group, imageUrl, onFocusItem, onOpenDetail, onPlay)
+                                EpisodeGroupCard(group, imageUrl, onFocusItem, onOpenItem)
                             }
                         }
                     }
@@ -145,7 +144,7 @@ fun HomeScreen(
                                     progress = movie.resumeFraction,
                                     watched = movie.isWatched,
                                     onFocus = { onFocusItem(movie) },
-                                    onClick = { onOpenDetail(movie.ratingKey) },
+                                    onClick = { onOpenItem(movie) },
                                 )
                             }
                         }
@@ -180,8 +179,7 @@ private fun EpisodeGroupCard(
     group: EpisodeGroup,
     imageUrl: (String?, Int, Int) -> String?,
     onFocusItem: (PlexItem?) -> Unit,
-    onOpenDetail: (String) -> Unit,
-    onPlay: (PlexItem) -> Unit,
+    onOpenItem: (PlexItem) -> Unit,
 ) {
     val newest = group.newest
     PosterCard(
@@ -190,10 +188,8 @@ private fun EpisodeGroupCard(
         imageUrl = imageUrl(group.thumb, 300, 450),
         badge = group.count,
         onFocus = { onFocusItem(newest) },
-        onClick = {
-            val showKey = group.showRatingKey
-            if (group.count == 1 || showKey == null) onPlay(newest) else onOpenDetail(showKey)
-        },
+        // Whether one episode arrived or twelve, this opens the show at the newest one.
+        onClick = { onOpenItem(newest) },
     )
 }
 

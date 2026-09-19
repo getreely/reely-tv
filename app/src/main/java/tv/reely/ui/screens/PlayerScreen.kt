@@ -89,6 +89,10 @@ import tv.reely.ui.theme.SurfaceRaised
 private const val SEEK_STEP_MS = 10_000L
 private const val CONTROLS_TIMEOUT_MS = 6_000L
 
+/** Roughly half a second of frames, which is far longer than a layout pass needs. */
+private const val FOCUS_ATTEMPTS = 16
+private const val FOCUS_RETRY_MS = 32L
+
 private enum class Panel { NONE, SUBTITLES, AUDIO }
 
 private data class TrackChoice(
@@ -276,13 +280,24 @@ fun PlayerScreen(
     val rootFocus = remember { FocusRequester() }
     val panelFocus = remember { FocusRequester() }
 
-    LaunchedEffect(controlsVisible, panel, playback.isLive) {
-        runCatching {
-            when {
-                panel != Panel.NONE -> panelFocus.requestFocus()
-                controlsVisible -> playFocus.requestFocus()
-                else -> rootFocus.requestFocus()
-            }
+    /*
+     * A FocusRequester throws until the node it is attached to has been laid out, and on
+     * the player's first frame none of them have been. Swallowing that left the controls
+     * on screen with nothing focused: they were visible but dead, and only came to life
+     * after they timed out and were summoned back, which re-ran this against nodes that
+     * existed by then. So keep asking for a few frames instead of giving up on the first.
+     */
+    LaunchedEffect(controlsVisible, panel, playback.isLive, playback.url) {
+        repeat(FOCUS_ATTEMPTS) {
+            val placed = runCatching {
+                when {
+                    panel != Panel.NONE -> panelFocus.requestFocus()
+                    controlsVisible -> playFocus.requestFocus()
+                    else -> rootFocus.requestFocus()
+                }
+            }.isSuccess
+            if (placed) return@LaunchedEffect
+            delay(FOCUS_RETRY_MS)
         }
     }
 

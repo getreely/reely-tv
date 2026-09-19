@@ -51,7 +51,15 @@ sealed interface Route {
     data object Live : Route
     data object Search : Route
     data object Status : Route
-    data class Detail(val ratingKey: String) : Route
+    /**
+     * A page for one thing. An episode has no page of its own: it is a place inside its
+     * show's, so the season to open and the episode to land on travel with the route.
+     */
+    data class Detail(
+        val ratingKey: String,
+        val seasonKey: String? = null,
+        val episodeKey: String? = null,
+    ) : Route
 }
 
 /** Episodes added for the same show collapse into one tile carrying a count. */
@@ -274,7 +282,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             val stack = if (route is Route.Detail) current.stack + route else listOf(route)
             current.copy(stack = stack, focused = null)
         }
-        if (route is Route.Detail) loadDetail(route.ratingKey)
+        if (route is Route.Detail) loadDetail(route)
         if (route is Route.Home) refreshHome()
         if (route is Route.Live) openGuide()
     }
@@ -288,7 +296,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             else current.copy(stack = current.stack.dropLast(1), detail = null)
         }
         val route = _state.value.route
-        if (route is Route.Detail) loadDetail(route.ratingKey)
+        if (route is Route.Detail) loadDetail(route)
     }
 
     // ---------------------------------------------------------------- Plex connection
@@ -602,7 +610,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
     // ---------------------------------------------------------------- Detail
 
-    private fun loadDetail(ratingKey: String) {
+    private fun loadDetail(route: Route.Detail) {
+        val ratingKey = route.ratingKey
         val plex = _state.value.plex
         val base = plex.baseUrl ?: return
         val token = plex.serverToken ?: return
@@ -640,13 +649,19 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 .getOrElse { emptyList() }
                 .filter { it.type == "season" }
             _state.update { it.copy(detail = it.detail?.copy(seasons = seasons, busy = seasons.isNotEmpty())) }
-            seasons.firstOrNull()?.let { selectSeason(it) } ?: run {
+
+            // Arriving from a row means arriving at one episode, not at the top of the show.
+            val season = seasons.firstOrNull { it.ratingKey == route.seasonKey }
+                ?: seasons.firstOrNull()
+            if (season == null) {
                 _state.update { it.copy(detail = it.detail?.copy(busy = false)) }
+            } else {
+                selectSeason(season, focusEpisodeKey = route.episodeKey)
             }
         }
     }
 
-    fun selectSeason(season: PlexItem) {
+    fun selectSeason(season: PlexItem, focusEpisodeKey: String? = null) {
         val plex = _state.value.plex
         val base = plex.baseUrl ?: return
         val token = plex.serverToken ?: return
@@ -663,7 +678,16 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             }
             val episodes = runCatching { PlexApi.children(base, token, season.ratingKey) }
                 .getOrElse { emptyList() }
-            _state.update { it.copy(detail = it.detail?.copy(episodes = episodes, busy = false)) }
+            val landOn = focusEpisodeKey?.let { key -> episodes.firstOrNull { it.ratingKey == key } }
+            _state.update { current ->
+                current.copy(
+                    detail = current.detail?.copy(
+                        episodes = episodes,
+                        focusedEpisode = landOn,
+                        busy = false,
+                    )
+                )
+            }
         }
     }
 
@@ -1115,20 +1139,47 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Plays the item's trailer, when the server has one to give. */
+    /**
+     * Plays the item's trailer, when the server has one to give.
+     *
+     * Always through the transcoder, whatever the playback mode says. An extra's part key
+     * is not something this app can fetch directly — an online trailer's is indirect and
+     * the server answers a direct request for it with a 401 — so the server is asked to
+     * resolve and serve it instead. A trailer is two minutes; the encoding costs nothing.
+     *
+     * No rating key goes on the playback, so watching a trailer is never reported to Plex
+     * as watching the film.
+     */
     fun playTrailer() {
+        val plex = _state.value.plex
+        val base = plex.baseUrl ?: return
+        val token = plex.serverToken ?: return
         val detail = _state.value.detail ?: return
         val trailer = detail.trailers.firstOrNull() ?: return
         val title = detail.detail?.title ?: "Trailer"
+        val session = UUID.randomUUID().toString()
+
+        releaseTranscode()
         _state.update {
             it.copy(
                 upNext = null,
                 playback = Playback(
                     title = title,
                     subtitle = trailer.title,
-                    url = trailer.url,
+                    url = PlexApi.transcodeUrl(
+                        base = base,
+                        token = token,
+                        clientId = clientId,
+                        ratingKey = trailer.ratingKey,
+                        sessionId = session,
+                        offsetMs = 0,
+                        maxBitrateKbps = it.prefs.maxBitrateKbps,
+                        resolution = RESOLUTION,
+                    ),
                     isLive = false,
                     durationMs = trailer.durationMs,
+                    transcoding = true,
+                    transcodeSession = session,
                 ),
             )
         }

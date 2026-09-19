@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,6 +70,19 @@ fun DetailScreen(
 
     var expanded by remember(state.ratingKey) { mutableStateOf(false) }
     val episode = state.focusedEpisode
+
+    // Arriving from a row lands on one episode, which in season nineteen is a long way
+    // off the left edge. The rail is brought to it once, when the season's episodes
+    // arrive — not on every focus change, which would fight the rail's own scrolling.
+    val episodeRail = rememberLazyListState()
+    var railBroughtTo by remember(state.ratingKey) { mutableStateOf<String?>(null) }
+    LaunchedEffect(state.episodes) {
+        val key = state.focusedEpisode?.ratingKey ?: return@LaunchedEffect
+        if (railBroughtTo == key) return@LaunchedEffect
+        val index = state.episodes.indexOfFirst { it.ratingKey == key }
+        if (index > 0) runCatching { episodeRail.scrollToItem(index) }
+        railBroughtTo = key
+    }
 
     // The block of text always describes whatever has focus: the show, or an episode.
     val backdrop = backdropUrl(episode?.thumb ?: detail.art ?: detail.thumb)
@@ -214,6 +229,7 @@ fun DetailScreen(
                 if (state.episodes.isNotEmpty()) {
                     item {
                         LazyRow(
+                            state = episodeRail,
                             modifier = Modifier.focusGroup(),
                             contentPadding = PaddingValues(horizontal = 36.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp),

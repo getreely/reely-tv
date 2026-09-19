@@ -53,8 +53,7 @@ fun LibraryScreen(
     imageUrl: (String?, Int, Int) -> String?,
     backdropUrl: (String?) -> String?,
     onFocusItem: (PlexItem?) -> Unit,
-    onPlay: (PlexItem) -> Unit,
-    onOpenDetail: (String) -> Unit,
+    onOpenItem: (PlexItem) -> Unit,
     onStartLink: () -> Unit,
     onCancelLink: () -> Unit,
     onDismissPlexError: () -> Unit,
@@ -142,7 +141,7 @@ fun LibraryScreen(
                                         progress = item.resumeFraction,
                                         watched = item.isWatched,
                                         onFocus = { onFocusItem(item) },
-                                        onClick = { onPlay(item) },
+                                        onClick = { onOpenItem(item) },
                                     )
                                 }
                             }
@@ -165,7 +164,7 @@ fun LibraryScreen(
                                         progress = movie.resumeFraction,
                                         watched = movie.isWatched,
                                         onFocus = { onFocusItem(movie) },
-                                        onClick = { onOpenDetail(movie.ratingKey) },
+                                        onClick = { onOpenItem(movie) },
                                     )
                                 }
                             }
@@ -191,11 +190,7 @@ fun LibraryScreen(
                                         imageUrl = imageUrl(group.thumb, 300, 450),
                                         badge = group.count,
                                         onFocus = { onFocusItem(group.newest) },
-                                        onClick = {
-                                            val showKey = group.showRatingKey
-                                            if (group.count == 1 || showKey == null) onPlay(group.newest)
-                                            else onOpenDetail(showKey)
-                                        },
+                                        onClick = { onOpenItem(group.newest) },
                                     )
                                 }
                             }
@@ -294,7 +289,7 @@ fun LibraryScreen(
                         progress = item.resumeFraction,
                         watched = item.isWatched,
                         onFocus = { onFocusItem(item) },
-                        onClick = { onOpenDetail(item.ratingKey) },
+                        onClick = { onOpenItem(item) },
                     )
                 }
             }

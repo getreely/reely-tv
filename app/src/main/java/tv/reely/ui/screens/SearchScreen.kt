@@ -39,8 +39,7 @@ fun SearchScreen(
     backdropUrl: (String?) -> String?,
     onQueryChange: (String) -> Unit,
     onFocusItem: (PlexItem?) -> Unit,
-    onOpenDetail: (String) -> Unit,
-    onPlay: (PlexItem) -> Unit,
+    onOpenItem: (PlexItem) -> Unit,
     onPlayChannel: (XtreamChannel) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -128,11 +127,7 @@ fun SearchScreen(
                     progress = item.resumeFraction,
                     watched = item.isWatched,
                     onFocus = { onFocusItem(item) },
-                    onClick = {
-                        // An episode is a thing to watch; a film or show is a page to open.
-                        if (item.type == "episode") onPlay(item)
-                        else onOpenDetail(item.ratingKey)
-                    },
+                    onClick = { onOpenItem(item) },
                 )
             }
         }

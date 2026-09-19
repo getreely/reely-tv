@@ -41,8 +41,8 @@ data class PlexSubtitle(
 
 /** A trailer or other extra attached to a library item. */
 data class PlexExtra(
+    val ratingKey: String,
     val title: String,
-    val url: String,
     val durationMs: Long,
 )
 
@@ -515,6 +515,11 @@ object PlexApi {
      * Trailers and other extras. Locally stored ones are always here; Plex's own online
      * trailers arrive only for Plex Pass accounts, which is why the button that uses this
      * appears only when something actually comes back.
+     *
+     * Only the extra's own rating key is taken. The part key underneath it is not a file
+     * this app can fetch: an online trailer's part is marked indirect, meaning the key has
+     * to be followed a hop before it resolves, and the server rejects a direct request for
+     * it. Playing an extra through the transcoder lets the server resolve its own source.
      */
     suspend fun trailers(base: String, token: String, ratingKey: String): List<PlexExtra> =
         withContext(Dispatchers.IO) {
@@ -527,12 +532,11 @@ object PlexApi {
                 .map { metadata.getJSONObject(it) }
                 .filter { it.optString("subtype").equals("trailer", ignoreCase = true) }
                 .mapNotNull { entry ->
-                    val part = entry.optJSONArray("Media")?.optJSONObject(0)
-                        ?.optJSONArray("Part")?.optJSONObject(0) ?: return@mapNotNull null
-                    val key = part.optString("key").takeIf(String::isNotEmpty) ?: return@mapNotNull null
+                    val key = entry.optString("ratingKey").takeIf(String::isNotBlank)
+                        ?: return@mapNotNull null
                     PlexExtra(
+                        ratingKey = key,
                         title = entry.optString("title").ifEmpty { "Trailer" },
-                        url = if (key.startsWith("http")) key else "$base$key?X-Plex-Token=$token",
                         durationMs = entry.optLong("duration"),
                     )
                 }

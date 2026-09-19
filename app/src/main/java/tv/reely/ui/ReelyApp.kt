@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.Text
+import tv.reely.plex.PlexItem
 import tv.reely.ui.components.EmptyNote
 import tv.reely.ui.components.SearchGlyph
 import tv.reely.ui.screens.DetailScreen
@@ -175,8 +176,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 imageUrl = viewModel::plexImageUrl,
                 backdropUrl = viewModel::plexBackdropUrl,
                 onFocusItem = viewModel::focusItem,
-                onPlay = { viewModel.play(it) },
-                onOpenDetail = { viewModel.navigate(Route.Detail(it)) },
+                onOpenItem = { viewModel.navigate(detailRouteFor(it)) },
                 onStartLink = viewModel::startPlexLink,
                 onCancelLink = viewModel::cancelPlexLink,
                 onDismissPlexError = viewModel::dismissPlexError,
@@ -190,8 +190,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 imageUrl = viewModel::plexImageUrl,
                 backdropUrl = viewModel::plexBackdropUrl,
                 onFocusItem = viewModel::focusItem,
-                onPlay = { viewModel.play(it) },
-                onOpenDetail = { viewModel.navigate(Route.Detail(it)) },
+                onOpenItem = { viewModel.navigate(detailRouteFor(it)) },
                 onStartLink = viewModel::startPlexLink,
                 onCancelLink = viewModel::cancelPlexLink,
                 onDismissPlexError = viewModel::dismissPlexError,
@@ -209,8 +208,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 backdropUrl = viewModel::plexBackdropUrl,
                 onQueryChange = viewModel::setQuery,
                 onFocusItem = viewModel::focusItem,
-                onOpenDetail = { viewModel.navigate(Route.Detail(it)) },
-                onPlay = { viewModel.play(it) },
+                onOpenItem = { viewModel.navigate(detailRouteFor(it)) },
                 onPlayChannel = viewModel::playSearchChannel,
             )
 
@@ -279,11 +277,25 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     }
 }
 
+/**
+ * Where a card in a row leads. Nothing plays straight from a row any more: an episode
+ * with nowhere to go but the player leaves no way to mark it watched, look at what it
+ * is, or start it over. An episode's page is a place inside its show's page.
+ */
+private fun detailRouteFor(item: PlexItem): Route.Detail {
+    val show = item.grandparentRatingKey
+    return if (item.type == "episode" && show != null) {
+        Route.Detail(ratingKey = show, seasonKey = item.parentRatingKey, episodeKey = item.ratingKey)
+    } else {
+        Route.Detail(item.ratingKey)
+    }
+}
+
 /** Identifies a destination for focus bookkeeping, ignoring data that arrives later. */
 private fun routeKey(route: Route): String = when (route) {
     is Route.Home -> "home"
     is Route.Library -> "library:${route.kind}"
-    is Route.Detail -> "detail:${route.ratingKey}"
+    is Route.Detail -> "detail:${route.ratingKey}:${route.episodeKey}"
     is Route.Live -> "live"
     is Route.Search -> "search"
     is Route.Status -> "status"
