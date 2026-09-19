@@ -230,10 +230,11 @@ fun HeroText(
     facts: List<String>,
     summary: String?,
     modifier: Modifier = Modifier,
+    summaryMaxLines: Int = 2,
 ) {
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (eyebrow != null) {
             Text(
@@ -250,10 +251,10 @@ fun HeroText(
         Text(
             text = title,
             color = Parchment,
-            fontSize = 38.sp,
-            lineHeight = 44.sp,
+            fontSize = 30.sp,
+            lineHeight = 36.sp,
             fontWeight = FontWeight.Bold,
-            maxLines = 2,
+            maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         if (criticRating != null || audienceRating != null || !contentRating.isNullOrBlank() || facts.isNotEmpty()) {
@@ -268,9 +269,9 @@ fun HeroText(
             Text(
                 text = summary,
                 color = Muted,
-                fontSize = 15.sp,
-                lineHeight = 22.sp,
-                maxLines = 3,
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+                maxLines = summaryMaxLines,
                 overflow = TextOverflow.Ellipsis,
             )
         }

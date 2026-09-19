@@ -212,11 +212,13 @@ fun PlayerScreen(
         }
     }
 
+    // Back leaves. It used to hide the controls first, but the key also counted as an
+    // interaction, which re-showed them on the same press — so Back never got past step
+    // one and the player could not be left at all.
     BackHandler {
         when {
             panel != Panel.NONE -> panel = Panel.NONE
             upNext != null -> onDismissUpNext()
-            controlsVisible && playing -> controlsVisible = false
             else -> onExit(exoPlayer.currentPosition.coerceAtLeast(0))
         }
     }
@@ -230,6 +232,9 @@ fun PlayerScreen(
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 if (panel != Panel.NONE) return@onPreviewKeyEvent false
+                // Back belongs to the handler above; counting it here would keep the
+                // controls awake and swallow the press.
+                if (event.key == Key.Back) return@onPreviewKeyEvent false
                 interaction++
                 when (event.key) {
                     Key.DirectionUp -> if (playback.isLive) {

@@ -146,7 +146,7 @@ fun PosterCard(
     progress: Float? = null,
     watched: Boolean = false,
     onFocus: () -> Unit = {},
-    width: androidx.compose.ui.unit.Dp = 150.dp,
+    width: androidx.compose.ui.unit.Dp = 132.dp,
 ) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (focused) 1.07f else 1f, label = "poster-scale")
@@ -231,20 +231,36 @@ fun PosterCard(
                 ProgressStrip(progress, modifier = Modifier.align(Alignment.BottomStart))
             }
         }
-        Text(
-            text = title,
-            color = if (focused) Parchment else Muted,
-            fontSize = 13.sp,
-            lineHeight = 17.sp,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-        if (subtitle != null) {
-            Text(text = subtitle, color = Faint, fontSize = 11.sp, lineHeight = 14.sp, maxLines = 1)
+        // Every card is exactly the same height. Ragged bottoms make Compose's downward
+        // focus search pick a sibling further along the row instead of the row below.
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(POSTER_CAPTION_HEIGHT)
+                .padding(top = 7.dp),
+        ) {
+            Text(
+                text = title,
+                color = if (focused) Parchment else Muted,
+                fontSize = 13.sp,
+                lineHeight = 16.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = subtitle.orEmpty(),
+                color = Faint,
+                fontSize = 11.sp,
+                lineHeight = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
+
+private val POSTER_CAPTION_HEIGHT = 40.dp
+private val EPISODE_CAPTION_HEIGHT = 44.dp
 
 /** A face from the cast list. Not focusable: this is information, not a destination. */
 @Composable
@@ -402,7 +418,7 @@ fun EpisodeTile(
 
     Column(
         modifier = modifier
-            .width(210.dp)
+            .width(186.dp)
             .scale(scale)
             .onFocusChanged {
                 focused = it.isFocused
@@ -448,17 +464,27 @@ fun EpisodeTile(
                 ProgressStrip(progress, modifier = Modifier.align(Alignment.BottomStart))
             }
         }
-        Text(
-            text = listOfNotNull(number.takeIf { it.isNotBlank() }, title).joinToString(". "),
-            color = if (focused) Parchment else Muted,
-            fontSize = 14.sp,
-            lineHeight = 18.sp,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-        if (duration != null) {
-            Text(text = duration, color = Faint, fontSize = 11.sp, lineHeight = 14.sp, maxLines = 1)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(EPISODE_CAPTION_HEIGHT)
+                .padding(top = 7.dp),
+        ) {
+            Text(
+                text = listOfNotNull(number.takeIf { it.isNotBlank() }, title).joinToString(". "),
+                color = if (focused) Parchment else Muted,
+                fontSize = 14.sp,
+                lineHeight = 18.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = duration.orEmpty(),
+                color = Faint,
+                fontSize = 11.sp,
+                lineHeight = 14.sp,
+                maxLines = 1,
+            )
         }
     }
 }

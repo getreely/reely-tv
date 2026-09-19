@@ -31,7 +31,7 @@ import tv.reely.ui.components.HeroText
 import tv.reely.ui.components.PosterCard
 import tv.reely.ui.theme.Parchment
 
-private val HERO_HEIGHT = 250.dp
+private val HERO_HEIGHT = 168.dp
 
 @Composable
 fun HomeScreen(
@@ -70,7 +70,7 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(HERO_HEIGHT)
-                    .padding(horizontal = 40.dp, vertical = 16.dp),
+                    .padding(horizontal = 40.dp, vertical = 10.dp),
             ) {
                 if (focused != null) {
                     HeroText(
@@ -90,8 +90,8 @@ fun HomeScreen(
                     Text(
                         text = "Home",
                         color = Parchment,
-                        fontSize = 34.sp,
-                        lineHeight = 42.sp,
+                        fontSize = 28.sp,
+                        lineHeight = 34.sp,
                         fontWeight = FontWeight.Bold,
                     )
                 }
@@ -99,8 +99,8 @@ fun HomeScreen(
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 30.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp),
+                contentPadding = PaddingValues(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 if (home.error != null) {
                     item { ErrorNote(home.error, modifier = Modifier.padding(horizontal = 40.dp)) }
@@ -206,8 +206,8 @@ private fun PosterRow(
         Text(
             text = title,
             color = Parchment,
-            fontSize = 19.sp,
-            lineHeight = 24.sp,
+            fontSize = 17.sp,
+            lineHeight = 22.sp,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(horizontal = 40.dp),
         )

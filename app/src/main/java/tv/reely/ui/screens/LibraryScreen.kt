@@ -37,7 +37,7 @@ import tv.reely.ui.components.PosterCard
 import tv.reely.ui.components.TvChip
 import tv.reely.ui.theme.Parchment
 
-private val HERO_HEIGHT = 230.dp
+private val HERO_HEIGHT = 150.dp
 
 /**
  * A library tab is its own small home: what you are part-way through and what just
@@ -89,7 +89,7 @@ fun LibraryScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(HERO_HEIGHT)
-                    .padding(horizontal = 40.dp, vertical = 14.dp),
+                    .padding(horizontal = 40.dp, vertical = 8.dp),
             ) {
                 if (focused != null) {
                     HeroText(
@@ -109,15 +109,15 @@ fun LibraryScreen(
                     Text(
                         text = browse.section?.title ?: kind.title,
                         color = Parchment,
-                        fontSize = 34.sp,
-                        lineHeight = 42.sp,
+                        fontSize = 28.sp,
+                        lineHeight = 34.sp,
                         fontWeight = FontWeight.Bold,
                     )
                 }
             }
 
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 158.dp),
+                columns = GridCells.Adaptive(minSize = 140.dp),
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(start = 36.dp, end = 36.dp, bottom = 34.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -207,8 +207,8 @@ fun LibraryScreen(
                         Text(
                             text = browse.section?.title ?: "All ${kind.title}",
                             color = Parchment,
-                            fontSize = 19.sp,
-                            lineHeight = 24.sp,
+                            fontSize = 17.sp,
+                            lineHeight = 22.sp,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.padding(horizontal = 4.dp),
                         )
@@ -261,8 +261,8 @@ private fun RowBlock(title: String, content: @Composable () -> Unit) {
         Text(
             text = title,
             color = Parchment,
-            fontSize = 19.sp,
-            lineHeight = 24.sp,
+            fontSize = 17.sp,
+            lineHeight = 22.sp,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(horizontal = 4.dp),
         )
