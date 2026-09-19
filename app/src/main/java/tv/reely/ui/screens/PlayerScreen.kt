@@ -68,7 +68,6 @@ import tv.reely.ui.PlayerPrefs
 import tv.reely.ui.Playback
 import tv.reely.ui.components.PauseGlyph
 import tv.reely.ui.components.PlayGlyph
-import tv.reely.ui.components.SeekGlyph
 import tv.reely.ui.components.SkipGlyph
 import tv.reely.ui.components.SpeakerGlyph
 import tv.reely.ui.components.SubtitleGlyph
@@ -211,6 +210,7 @@ fun PlayerScreen(
     }
 
     val playFocus = remember { FocusRequester() }
+    val scrubberFocus = remember { FocusRequester() }
     val rootFocus = remember { FocusRequester() }
     val panelFocus = remember { FocusRequester() }
 
@@ -325,6 +325,7 @@ fun PlayerScreen(
                 canSkipBack = canSkipBack,
                 canSkipForward = canSkipForward,
                 playFocus = playFocus,
+                scrubberFocus = scrubberFocus,
                 onSkip = { delta ->
                     interaction++
                     // The same pair of buttons: a channel when live, an episode when not.
@@ -383,6 +384,7 @@ private fun Controls(
     canSkipBack: Boolean,
     canSkipForward: Boolean,
     playFocus: FocusRequester,
+    scrubberFocus: FocusRequester,
     onSeek: (Long) -> Unit,
     onSkip: (Int) -> Unit,
     onTogglePlay: () -> Unit,
@@ -432,27 +434,29 @@ private fun Controls(
                 fontWeight = FontWeight.Medium,
             )
         } else {
-            Scrubber(positionMs = positionMs, durationMs = durationMs, bufferedMs = bufferedMs)
+            Scrubber(
+                positionMs = positionMs,
+                durationMs = durationMs,
+                bufferedMs = bufferedMs,
+                focusRequester = scrubberFocus,
+                onSeek = onSeek,
+                onTogglePlay = onTogglePlay,
+            )
         }
 
         Box(modifier = Modifier.fillMaxWidth()) {
-            // The transport sits in the middle of the screen, where a player's controls belong.
+            // The transport sits in the middle of the screen, where a player's controls
+            // belong. Seeking is the progress bar's job, so there is nothing here for it.
             Row(
                 modifier = Modifier.align(Alignment.Center).focusGroup(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TransportButton(
                     onClick = { onSkip(-1) },
                     enabled = canSkipBack,
-                    glyph = { SkipGlyph(it, forward = false, size = 20.dp) },
+                    glyph = { SkipGlyph(it, forward = false, size = 21.dp) },
                 )
-                if (!playback.isLive) {
-                    TransportButton(
-                        onClick = { onSeek(-SEEK_STEP_MS) },
-                        glyph = { SeekGlyph(it, forward = false, size = 20.dp) },
-                    )
-                }
                 TransportButton(
                     onClick = onTogglePlay,
                     filled = true,
@@ -462,16 +466,10 @@ private fun Controls(
                         if (playing) PauseGlyph(it, 26.dp) else PlayGlyph(it, 26.dp)
                     },
                 )
-                if (!playback.isLive) {
-                    TransportButton(
-                        onClick = { onSeek(SEEK_STEP_MS) },
-                        glyph = { SeekGlyph(it, forward = true, size = 20.dp) },
-                    )
-                }
                 TransportButton(
                     onClick = { onSkip(1) },
                     enabled = canSkipForward,
-                    glyph = { SkipGlyph(it, forward = true, size = 20.dp) },
+                    glyph = { SkipGlyph(it, forward = true, size = 21.dp) },
                 )
             }
 
@@ -501,7 +499,7 @@ private fun Controls(
             text = if (playback.isLive)
                 "Up and down change channel · Back leaves"
             else
-                "Left and right seek 10 seconds · Back leaves",
+                "Up to the bar, then left and right to seek · Back leaves",
             color = Faint,
             fontSize = 12.sp,
             lineHeight = 16.sp,
@@ -509,17 +507,41 @@ private fun Controls(
     }
 }
 
-/** Position, buffer and remaining time. Read-only: the transport does the seeking. */
+/**
+ * Position, buffer and remaining time — and the only way to scrub. Left and right move
+ * ten seconds while it holds focus; OK plays or pauses without leaving it.
+ */
 @Composable
-private fun Scrubber(positionMs: Long, durationMs: Long, bufferedMs: Long) {
+private fun Scrubber(
+    positionMs: Long,
+    durationMs: Long,
+    bufferedMs: Long,
+    focusRequester: FocusRequester,
+    onSeek: (Long) -> Unit,
+    onTogglePlay: () -> Unit,
+) {
+    var focused by remember { mutableStateOf(false) }
     val total = durationMs.coerceAtLeast(1)
+
     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(Parchment.copy(alpha = 0.22f)),
+                .height(if (focused) 10.dp else 6.dp)
+                .clip(RoundedCornerShape(5.dp))
+                .background(Parchment.copy(alpha = if (focused) 0.3f else 0.22f))
+                .focusRequester(focusRequester)
+                .onFocusChanged { focused = it.isFocused }
+                .focusable()
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (event.key) {
+                        Key.DirectionLeft -> { onSeek(-SEEK_STEP_MS); true }
+                        Key.DirectionRight -> { onSeek(SEEK_STEP_MS); true }
+                        Key.DirectionCenter, Key.Enter -> { onTogglePlay(); true }
+                        else -> false
+                    }
+                },
         ) {
             Box(
                 modifier = Modifier

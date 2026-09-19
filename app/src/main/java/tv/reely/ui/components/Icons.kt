@@ -119,28 +119,6 @@ fun PauseGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) {
     }
 }
 
-/** Two chevrons, pointing whichever way the seek goes. */
-@Composable
-fun SeekGlyph(color: Color, forward: Boolean, size: Dp = 18.dp, modifier: Modifier = Modifier) {
-    Canvas(modifier.size(size)) {
-        val s = size.toPx()
-        fun wedge(originX: Float): Path = Path().apply {
-            if (forward) {
-                moveTo(originX, s * 0.22f)
-                lineTo(originX + s * 0.3f, s * 0.5f)
-                lineTo(originX, s * 0.78f)
-            } else {
-                moveTo(originX + s * 0.3f, s * 0.22f)
-                lineTo(originX, s * 0.5f)
-                lineTo(originX + s * 0.3f, s * 0.78f)
-            }
-            close()
-        }
-        drawPath(wedge(s * 0.1f), color)
-        drawPath(wedge(s * 0.42f), color)
-    }
-}
-
 /** A triangle against a bar: the jump to the next or previous thing. */
 @Composable
 fun SkipGlyph(color: Color, forward: Boolean, size: Dp = 18.dp, modifier: Modifier = Modifier) {
