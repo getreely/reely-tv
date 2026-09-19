@@ -3,6 +3,7 @@ package tv.reely.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -10,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import tv.reely.core.SecureStore
 import tv.reely.core.Settings
 import tv.reely.core.wrapIndex
@@ -24,6 +26,9 @@ import tv.reely.xtream.XtreamApi
 import tv.reely.xtream.XtreamCategory
 import tv.reely.xtream.XtreamChannel
 import tv.reely.xtream.XtreamCredentials
+import tv.reely.xtream.EpgProgramme
+import tv.reely.xtream.EpgStore
+import tv.reely.xtream.XmltvImporter
 import tv.reely.xtream.XtreamProgramme
 import java.util.UUID
 
@@ -41,6 +46,7 @@ sealed interface Route {
     data object Home : Route
     data class Library(val kind: LibraryKind) : Route
     data object Live : Route
+    data object Guide : Route
     data object Status : Route
     data class Detail(val ratingKey: String) : Route
 }
@@ -50,11 +56,10 @@ data class EpisodeGroup(
     val showTitle: String,
     val showRatingKey: String?,
     val thumb: String?,
-    val episodes: List<PlexItem>,
-) {
-    val count: Int get() = episodes.size
-    val newest: PlexItem get() = episodes.first()
-}
+    val newest: PlexItem,
+    val count: Int,
+    val addedAt: Long,
+)
 
 data class HomeState(
     val continueWatching: List<PlexItem> = emptyList(),
@@ -120,6 +125,27 @@ data class LiveState(
     fun nowNext(streamId: Int): List<XtreamProgramme> = guide[streamId].orEmpty()
 }
 
+sealed interface GuideStatus {
+    data object Idle : GuideStatus
+    data class Importing(val written: Int, val scanned: Int) : GuideStatus
+    data class Ready(val count: Int) : GuideStatus
+    data class Failed(val message: String) : GuideStatus
+}
+
+/**
+ * The grid guide. Programmes for the window on screen are held here; everything else
+ * stays in SQLite, which is the only reason a full XMLTV guide fits on this hardware.
+ */
+data class GuideState(
+    val status: GuideStatus = GuideStatus.Idle,
+    val programmes: Map<String, List<EpgProgramme>> = emptyMap(),
+    val windowStart: Long = 0,
+    val windowEnd: Long = 0,
+    val focusTime: Long = 0,
+    val channelIndex: Int = 0,
+    val importedAt: Long = 0,
+)
+
 data class Playback(
     val title: String,
     val subtitle: String?,
@@ -139,6 +165,7 @@ data class PlayerPrefs(
     val subtitleScale: Float = Settings.DEFAULT_SCALE,
     val subtitleBackground: Boolean = false,
     val upNextSeconds: Int = Settings.DEFAULT_UP_NEXT,
+    val guidePreview: Boolean = true,
 )
 
 data class ReelyState(
@@ -148,6 +175,7 @@ data class ReelyState(
     val home: HomeState = HomeState(),
     val detail: DetailState? = null,
     val live: LiveState = LiveState(),
+    val guide: GuideState = GuideState(),
     val playback: Playback? = null,
     val upNext: PlexItem? = null,
     val prefs: PlayerPrefs = PlayerPrefs(),
@@ -159,6 +187,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
     private val store = SecureStore(application)
     private val settings = Settings(application)
+    private val epgStore = EpgStore(application)
 
     private val _state = MutableStateFlow(
         ReelyState(
@@ -166,6 +195,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 subtitleScale = settings.subtitleScale,
                 subtitleBackground = settings.subtitleBackground,
                 upNextSeconds = settings.upNextSeconds,
+                guidePreview = settings.guidePreview,
             )
         )
     )
@@ -177,6 +207,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     private var linkJob: Job? = null
     private var guideJob: Job? = null
     private var timelineJob: Job? = null
+    private var importJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -196,6 +227,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         }
         if (route is Route.Detail) loadDetail(route.ratingKey)
         if (route is Route.Home) refreshHome()
+        if (route is Route.Guide) openGuide()
     }
 
     /** True when there is somewhere to go back to. */
@@ -354,17 +386,13 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 }.getOrElse { emptyList() }
             }.sortedByDescending { it.addedAt }.take(40)
 
-            val recentEpisodes = showSections.flatMap { section ->
-                runCatching {
-                    PlexApi.recentlyAdded(base, token, section.key, PlexApi.TYPE_EPISODE, limit = 80)
-                }.getOrElse { emptyList() }
-            }.sortedByDescending { it.addedAt }
+            val recentEpisodes = recentEpisodeGroups(base, token, showSections)
 
             _state.update {
                 it.copy(
                     home = HomeState(
                         continueWatching = onDeck,
-                        recentEpisodes = groupEpisodes(recentEpisodes).take(30),
+                        recentEpisodes = recentEpisodes,
                         recentMovies = recentMovies,
                         busy = false,
                     )
@@ -374,24 +402,61 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Six episodes of one show dropping at once is one thing that happened, not six.
-     * Collapse them onto the show, newest first, and let the tile carry the count.
+     * Six episodes of one show dropping at once is one thing that happened, not six — so
+     * they collapse onto the show, with the tile carrying the count.
+     *
+     * The row is therefore measured in shows, not episodes, and paged until it has enough
+     * of them. Asking for a fixed number of episodes does not work: importing one series
+     * with eighty episodes would fill the whole row with a single show.
      */
-    private fun groupEpisodes(episodes: List<PlexItem>): List<EpisodeGroup> {
-        val order = LinkedHashMap<String, MutableList<PlexItem>>()
-        for (episode in episodes) {
-            val key = episode.grandparentRatingKey ?: episode.ratingKey
-            order.getOrPut(key) { mutableListOf() }.add(episode)
+    private suspend fun recentEpisodeGroups(
+        base: String,
+        token: String,
+        sections: List<PlexSection>,
+    ): List<EpisodeGroup> {
+        val groups = LinkedHashMap<String, EpisodeGroup>()
+
+        for (section in sections) {
+            var offset = 0
+            var scanned = 0
+            while (groups.size < TARGET_SHOW_COUNT && scanned < MAX_EPISODE_SCAN) {
+                val page = runCatching {
+                    PlexApi.recentlyAdded(
+                        base = base,
+                        token = token,
+                        sectionKey = section.key,
+                        type = PlexApi.TYPE_EPISODE,
+                        limit = EPISODE_PAGE,
+                        offset = offset,
+                    )
+                }.getOrElse { emptyList() }
+                if (page.isEmpty()) break
+
+                for (episode in page) {
+                    val key = episode.grandparentRatingKey ?: episode.ratingKey
+                    val existing = groups[key]
+                    if (existing == null) {
+                        groups[key] = EpisodeGroup(
+                            showTitle = episode.grandparentTitle ?: episode.title,
+                            showRatingKey = episode.grandparentRatingKey ?: key,
+                            thumb = episode.grandparentThumb ?: episode.thumb,
+                            newest = episode,
+                            count = 1,
+                            addedAt = episode.addedAt,
+                        )
+                    } else {
+                        // Only the newest episode is kept; the rest are just a tally.
+                        groups[key] = existing.copy(count = existing.count + 1)
+                    }
+                }
+
+                scanned += page.size
+                offset += page.size
+                if (page.size < EPISODE_PAGE) break
+            }
         }
-        return order.map { (key, group) ->
-            val first = group.first()
-            EpisodeGroup(
-                showTitle = first.grandparentTitle ?: first.title,
-                showRatingKey = first.grandparentRatingKey ?: key,
-                thumb = first.grandparentThumb ?: first.thumb,
-                episodes = group,
-            )
-        }
+
+        return groups.values.sortedByDescending { it.addedAt }.take(TARGET_SHOW_COUNT)
     }
 
     // ---------------------------------------------------------------- Library grids
@@ -654,6 +719,12 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(prefs = it.prefs.copy(subtitleScale = next)) }
     }
 
+    fun toggleGuidePreview() {
+        val next = !settings.guidePreview
+        settings.guidePreview = next
+        _state.update { it.copy(prefs = it.prefs.copy(guidePreview = next)) }
+    }
+
     fun nudgeUpNextSeconds(delta: Int) {
         val next = (settings.upNextSeconds + delta).coerceIn(0, Settings.MAX_UP_NEXT)
         settings.upNextSeconds = next
@@ -733,6 +804,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
             updateLive { it.copy(busy = false, channels = channels) }
+            _state.update { it.copy(guide = it.guide.copy(channelIndex = 0)) }
+            loadGuideWindow()
             channels.firstOrNull()?.let { focusChannel(it) }
         }
     }
@@ -794,6 +867,146 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         if (playback.isLive) playChannel(playback.channelIndex)
     }
 
+    // ---------------------------------------------------------------- Grid guide
+
+    /** Entering the guide: show what is stored, then top it up if it has gone stale. */
+    fun openGuide() {
+        val now = System.currentTimeMillis() / 1000
+        val windowStart = (now / 1_800) * 1_800 - 3_600
+        _state.update {
+            it.copy(
+                guide = it.guide.copy(
+                    focusTime = now,
+                    windowStart = windowStart,
+                    windowEnd = windowStart + WINDOW_SECONDS,
+                )
+            )
+        }
+        viewModelScope.launch {
+            val importedAt = withContext(Dispatchers.IO) { epgStore.lastImportedAt() }
+            val stored = withContext(Dispatchers.IO) { epgStore.programmeCount() }
+            _state.update {
+                it.copy(
+                    guide = it.guide.copy(
+                        importedAt = importedAt,
+                        status = if (stored > 0) GuideStatus.Ready(stored) else it.guide.status,
+                    )
+                )
+            }
+            loadGuideWindow()
+            val stale = importedAt == 0L || now - importedAt > REFRESH_AFTER_SECONDS
+            if (stale) refreshGuide(force = false)
+        }
+    }
+
+    /**
+     * Pulls the provider's whole XMLTV guide and streams it into SQLite. This is the one
+     * genuinely heavy thing the app does, so it reports progress and can be cancelled.
+     */
+    fun refreshGuide(force: Boolean) {
+        if (importJob?.isActive == true) {
+            if (!force) return
+            importJob?.cancel()
+        }
+        val credentials = _state.value.live.credentials ?: run {
+            _state.update {
+                it.copy(guide = it.guide.copy(status = GuideStatus.Failed("Sign in to a provider first.")))
+            }
+            return
+        }
+        importJob = viewModelScope.launch {
+            _state.update { it.copy(guide = it.guide.copy(status = GuideStatus.Importing(0, 0))) }
+            val now = System.currentTimeMillis() / 1_000
+            runCatching {
+                XmltvImporter.import(credentials, epgStore, now) { written, scanned ->
+                    _state.update {
+                        it.copy(guide = it.guide.copy(status = GuideStatus.Importing(written, scanned)))
+                    }
+                }
+            }.onSuccess { written ->
+                _state.update {
+                    it.copy(guide = it.guide.copy(status = GuideStatus.Ready(written), importedAt = now))
+                }
+                loadGuideWindow()
+            }.onFailure { failure ->
+                _state.update {
+                    it.copy(guide = it.guide.copy(status = GuideStatus.Failed(failure.readable())))
+                }
+            }
+        }
+    }
+
+    /** Reads only the window the grid can draw, for the channels currently listed. */
+    private fun loadGuideWindow() {
+        val guide = _state.value.guide
+        val channelIds = _state.value.live.channels.mapNotNull { it.epgChannelId }
+        if (channelIds.isEmpty() || guide.windowEnd <= guide.windowStart) return
+        viewModelScope.launch {
+            val programmes = withContext(Dispatchers.IO) {
+                epgStore.programmes(channelIds, guide.windowStart, guide.windowEnd)
+            }
+            _state.update { it.copy(guide = it.guide.copy(programmes = programmes)) }
+        }
+    }
+
+    fun guideMoveChannel(delta: Int) {
+        val channels = _state.value.live.channels
+        if (channels.isEmpty()) return
+        val next = (_state.value.guide.channelIndex + delta).coerceIn(0, channels.lastIndex)
+        _state.update { it.copy(guide = it.guide.copy(channelIndex = next)) }
+    }
+
+    /**
+     * Left and right step programme by programme, the way a guide should. Where a channel
+     * has no listing to step onto, the window slides by half an hour instead.
+     */
+    fun guideMoveTime(delta: Int) {
+        val state = _state.value
+        val guide = state.guide
+        val channel = state.live.channels.getOrNull(guide.channelIndex)
+        val listing = channel?.epgChannelId?.let { guide.programmes[it] }.orEmpty()
+
+        val current = listing.indexOfFirst { it.isOnAt(guide.focusTime) }
+        val target = if (current >= 0) listing.getOrNull(current + delta) else null
+        val focusTime = target?.start ?: (guide.focusTime + delta * 1_800L)
+
+        val clamped = focusTime.coerceAtLeast(guide.windowStart)
+        _state.update { it.copy(guide = it.guide.copy(focusTime = clamped)) }
+
+        // Sliding near either edge pulls the next stretch out of the database.
+        if (clamped > guide.windowEnd - 3 * 3_600 || clamped < guide.windowStart + 3_600) {
+            val windowStart = (clamped / 1_800) * 1_800 - 3_600
+            _state.update {
+                it.copy(
+                    guide = it.guide.copy(
+                        windowStart = windowStart,
+                        windowEnd = windowStart + WINDOW_SECONDS,
+                    )
+                )
+            }
+            loadGuideWindow()
+        }
+    }
+
+    fun guideJumpToNow() {
+        val now = System.currentTimeMillis() / 1_000
+        val windowStart = (now / 1_800) * 1_800 - 3_600
+        _state.update {
+            it.copy(
+                guide = it.guide.copy(
+                    focusTime = now,
+                    windowStart = windowStart,
+                    windowEnd = windowStart + WINDOW_SECONDS,
+                )
+            )
+        }
+        loadGuideWindow()
+    }
+
+    fun guidePlaySelected() {
+        playChannel(_state.value.guide.channelIndex)
+    }
+
     fun signOutXtream() {
         store.remove(SecureStore.XTREAM_HOST, SecureStore.XTREAM_USERNAME, SecureStore.XTREAM_PASSWORD)
         _state.update { it.copy(live = LiveState()) }
@@ -813,6 +1026,26 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun updateLive(block: (LiveState) -> LiveState) {
         _state.update { it.copy(live = block(it.live)) }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        epgStore.close()
+    }
+
+    private companion object {
+        /** How much of the guide is held in memory at once. */
+        const val WINDOW_SECONDS = 24L * 3_600
+
+        /** Guide data older than this is worth fetching again. */
+        const val REFRESH_AFTER_SECONDS = 6L * 3_600
+
+        /** How many shows the Recently Added row aims to carry. */
+        const val TARGET_SHOW_COUNT = 30
+        const val EPISODE_PAGE = 200
+
+        /** A ceiling, so a library of nothing but one huge series still finishes. */
+        const val MAX_EPISODE_SCAN = 2_000
     }
 }
 

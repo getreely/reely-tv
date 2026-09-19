@@ -31,6 +31,8 @@ data class XtreamChannel(
     val number: Int,
     val name: String,
     val icon: String?,
+    /** Ties this channel to the XMLTV guide. Panels are inconsistent about case. */
+    val epgChannelId: String?,
 )
 
 enum class StreamFormat(val extension: String, val label: String) {
@@ -121,9 +123,19 @@ object XtreamApi {
                 number = it.optInt("num"),
                 name = it.optString("name").ifEmpty { "Channel $streamId" },
                 icon = it.optString("stream_icon").takeIf { icon -> icon.startsWith("http") },
+                epgChannelId = it.optString("epg_channel_id")
+                    .takeIf(String::isNotBlank)?.lowercase(),
             )
         }
     }
+
+    /** Where the provider serves its whole XMLTV guide. */
+    fun xmltvUrl(credentials: XtreamCredentials): String =
+        Uri.parse("${credentials.base}/xmltv.php").buildUpon()
+            .appendQueryParameter("username", credentials.username)
+            .appendQueryParameter("password", credentials.password)
+            .build()
+            .toString()
 
     fun streamUrl(
         credentials: XtreamCredentials,

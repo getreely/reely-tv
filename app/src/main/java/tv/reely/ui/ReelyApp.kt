@@ -26,7 +26,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -35,6 +43,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.Text
 import tv.reely.ui.components.EmptyNote
 import tv.reely.ui.screens.DetailScreen
+import tv.reely.ui.screens.GuideScreen
 import tv.reely.ui.screens.HomeScreen
 import tv.reely.ui.screens.LibraryScreen
 import tv.reely.ui.screens.LiveScreen
@@ -54,9 +63,11 @@ private val destinations = listOf(
     Destination("Movies", Route.Library(LibraryKind.MOVIES)),
     Destination("TV Shows", Route.Library(LibraryKind.SHOWS)),
     Destination("Live TV", Route.Live),
+    Destination("Guide", Route.Guide),
     Destination("Status", Route.Status),
 )
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
@@ -85,7 +96,13 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     BackHandler(enabled = state.stack.size > 1) { viewModel.goBack() }
 
     val contentFocus = remember { FocusRequester() }
-    val firstTab = remember { FocusRequester() }
+    // Always attached to whichever tab is currently selected, so leaving the content
+    // upwards returns to the tab you are actually on rather than the nearest one.
+    val selectedTab = remember { FocusRequester() }
+    // Focus landing on a tab only counts as choosing it when a direction key put it
+    // there. Focus that arrives any other way — most often the fallback when a screen
+    // replaces itself and briefly has nothing focusable — must not navigate.
+    var arrivedByDirectionKey by remember { mutableStateOf(false) }
     // The tab row picks a destination as soon as it is focused, which is the television
     // convention. The cost is that focus must never land there by accident: when a screen
     // replaces itself, the focused node goes with it and focus would fall back onto the
@@ -93,7 +110,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     // not own focus, focus is put back into the content as soon as it has something in it.
     var tabRowHasFocus by remember { mutableStateOf(true) }
 
-    LaunchedEffect(Unit) { runCatching { firstTab.requestFocus() } }
+    LaunchedEffect(Unit) { runCatching { selectedTab.requestFocus() } }
     LaunchedEffect(routeKey(state.route), contentReady(state)) {
         if (!tabRowHasFocus && contentReady(state)) {
             runCatching { contentFocus.requestFocus() }
@@ -103,13 +120,23 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Ink),
+            .background(Ink)
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown) {
+                    arrivedByDirectionKey = event.key == Key.DirectionUp ||
+                        event.key == Key.DirectionDown ||
+                        event.key == Key.DirectionLeft ||
+                        event.key == Key.DirectionRight
+                }
+                false
+            },
     ) {
         TopBar(
             current = state.stack.first(),
             onSelect = viewModel::navigate,
             onTabFocused = { tabRowHasFocus = true },
-            firstTab = firstTab,
+            selectedTab = selectedTab,
+            canSelectOnFocus = { arrivedByDirectionKey.also { arrivedByDirectionKey = false } },
             serverName = state.plex.serverName,
         )
 
@@ -126,7 +153,17 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 .weight(1f)
                 .focusRequester(contentFocus)
                 .focusGroup()
-                .onFocusChanged { if (it.hasFocus) tabRowHasFocus = false },
+                .focusProperties {
+                    exit = { direction ->
+                        if (direction == FocusDirection.Up) selectedTab else FocusRequester.Default
+                    }
+                }
+                .onFocusChanged {
+                    if (it.hasFocus) {
+                        tabRowHasFocus = false
+                        arrivedByDirectionKey = false
+                    }
+                },
         ) {
         when (val route = state.route) {
             is Route.Home -> HomeScreen(
@@ -179,6 +216,18 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onDismissError = viewModel::dismissLiveError,
             )
 
+            is Route.Guide -> GuideScreen(
+                live = state.live,
+                guide = state.guide,
+                previewEnabled = state.prefs.guidePreview,
+                onSelectCategory = viewModel::openCategory,
+                onMoveChannel = viewModel::guideMoveChannel,
+                onMoveTime = viewModel::guideMoveTime,
+                onJumpToNow = viewModel::guideJumpToNow,
+                onRefresh = { viewModel.refreshGuide(force = true) },
+                onPlaySelected = viewModel::guidePlaySelected,
+            )
+
             is Route.Status -> StatusScreen(
                 plex = state.plex,
                 live = state.live,
@@ -189,6 +238,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onNudgeSubtitleScale = viewModel::nudgeSubtitleScale,
                 onToggleSubtitleBackground = viewModel::toggleSubtitleBackground,
                 onNudgeUpNext = viewModel::nudgeUpNextSeconds,
+                onToggleGuidePreview = viewModel::toggleGuidePreview,
             )
         }
         }
@@ -201,6 +251,7 @@ private fun routeKey(route: Route): String = when (route) {
     is Route.Library -> "library:${route.kind}"
     is Route.Detail -> "detail:${route.ratingKey}"
     is Route.Live -> "live"
+    is Route.Guide -> "guide"
     is Route.Status -> "status"
 }
 
@@ -210,6 +261,7 @@ private fun contentReady(state: ReelyState): Boolean = when (val route = state.r
     is Route.Library -> !state.plex.isConnected || state.plex.browseFor(route.kind).items.isNotEmpty()
     is Route.Detail -> state.detail?.detail != null
     is Route.Live -> true
+    is Route.Guide -> true
     is Route.Status -> true
 }
 
@@ -218,7 +270,8 @@ private fun TopBar(
     current: Route,
     onSelect: (Route) -> Unit,
     onTabFocused: () -> Unit,
-    firstTab: FocusRequester,
+    selectedTab: FocusRequester,
+    canSelectOnFocus: () -> Boolean,
     serverName: String?,
 ) {
     Row(
@@ -237,13 +290,15 @@ private fun TopBar(
             modifier = Modifier.padding(end = 18.dp),
         )
 
-        destinations.forEachIndexed { index, destination ->
+        destinations.forEach { destination ->
+            val isSelected = destination.route == current
             NavTab(
                 label = destination.label,
-                selected = destination.route == current,
+                selected = isSelected,
                 onSelect = { onSelect(destination.route) },
                 onFocused = onTabFocused,
-                modifier = if (index == 0) Modifier.focusRequester(firstTab) else Modifier,
+                canSelectOnFocus = canSelectOnFocus,
+                modifier = if (isSelected) Modifier.focusRequester(selectedTab) else Modifier,
             )
         }
 
@@ -262,6 +317,7 @@ private fun NavTab(
     selected: Boolean,
     onSelect: () -> Unit,
     onFocused: () -> Unit,
+    canSelectOnFocus: () -> Boolean,
     modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -271,7 +327,7 @@ private fun NavTab(
                 focused = it.isFocused
                 if (it.isFocused) {
                     onFocused()
-                    onSelect()
+                    if (canSelectOnFocus()) onSelect()
                 }
             }
             .clip(RoundedCornerShape(99.dp))

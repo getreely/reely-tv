@@ -42,6 +42,7 @@ fun StatusScreen(
     onNudgeSubtitleScale: (Float) -> Unit,
     onToggleSubtitleBackground: () -> Unit,
     onNudgeUpNext: (Int) -> Unit,
+    onToggleGuidePreview: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -130,6 +131,10 @@ fun StatusScreen(
                 )
                 FactLine("Categories", live.categories.size.toString())
                 FactLine("Stream container", live.format.label)
+                FactLine(
+                    "Guide preview",
+                    if (prefs.guidePreview) "On — uses one connection while browsing" else "Off",
+                )
                 Row(
                     modifier = Modifier.padding(top = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -137,6 +142,10 @@ fun StatusScreen(
                     TvActionButton(
                         label = "Use ${if (live.format == StreamFormat.TS) "HLS" else "MPEG-TS"}",
                         onClick = onToggleFormat,
+                    )
+                    TvActionButton(
+                        label = if (prefs.guidePreview) "Preview off" else "Preview on",
+                        onClick = onToggleGuidePreview,
                     )
                     TvActionButton(label = "Sign out of live TV", onClick = onSignOutXtream)
                 }
@@ -160,9 +169,9 @@ fun StatusScreen(
                 lineHeight = 21.sp,
             )
             Text(
-                text = "The live guide asks the provider for now and next on the channel you are " +
-                    "looking at. A full scrolling grid needs the whole XMLTV guide, which is far too " +
-                    "large to hold in memory on a stick.",
+                text = "The Guide tab reads the provider's whole XMLTV guide and writes it straight " +
+                    "into a local database as it downloads, so a guide of several hundred thousand " +
+                    "programmes never has to fit in memory at once.",
                 color = Muted,
                 fontSize = 14.sp,
                 lineHeight = 21.sp,

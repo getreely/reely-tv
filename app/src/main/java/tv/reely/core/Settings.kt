@@ -19,6 +19,14 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(SUBTITLE_BACKGROUND, false)
         set(value) = prefs.edit().putBoolean(SUBTITLE_BACKGROUND, value).apply()
 
+    /**
+     * Whether the guide plays a preview of the channel under the cursor. It costs one of
+     * the provider's simultaneous connections while it runs, so it can be switched off.
+     */
+    var guidePreview: Boolean
+        get() = prefs.getBoolean(GUIDE_PREVIEW, true)
+        set(value) = prefs.edit().putBoolean(GUIDE_PREVIEW, value).apply()
+
     /** Seconds before the next episode starts by itself. Zero switches that off. */
     var upNextSeconds: Int
         get() = prefs.getInt(UP_NEXT_SECONDS, DEFAULT_UP_NEXT).coerceIn(0, MAX_UP_NEXT)
@@ -28,6 +36,7 @@ class Settings(context: Context) {
         private const val SUBTITLE_SCALE = "subtitle.scale"
         private const val SUBTITLE_BACKGROUND = "subtitle.background"
         private const val UP_NEXT_SECONDS = "upnext.seconds"
+        private const val GUIDE_PREVIEW = "guide.preview"
 
         // A multiplier on ExoPlayer's standard caption size, so 1.0 is "normal".
         const val DEFAULT_SCALE = 0.9f

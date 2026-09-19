@@ -278,9 +278,10 @@ object PlexApi {
         token: String,
         path: String,
         limit: Int = 200,
+        offset: Int = 0,
     ): List<PlexItem> = withContext(Dispatchers.IO) {
         val separator = if (path.contains('?')) "&" else "?"
-        val url = "$base$path${separator}X-Plex-Container-Start=0&X-Plex-Container-Size=$limit"
+        val url = "$base$path${separator}X-Plex-Container-Start=$offset&X-Plex-Container-Size=$limit"
         val metadata = container(url, token).optJSONArray("Metadata") ?: JSONArray()
         (0 until metadata.length()).map { parseItem(metadata.getJSONObject(it)) }
     }
@@ -299,8 +300,9 @@ object PlexApi {
         sectionKey: String,
         type: Int,
         limit: Int = 60,
+        offset: Int = 0,
     ): List<PlexItem> =
-        items(base, token, "/library/sections/$sectionKey/all?type=$type&sort=addedAt:desc", limit)
+        items(base, token, "/library/sections/$sectionKey/all?type=$type&sort=addedAt:desc", limit, offset)
 
     suspend fun children(base: String, token: String, ratingKey: String): List<PlexItem> =
         items(base, token, "/library/metadata/$ratingKey/children", limit = 400)

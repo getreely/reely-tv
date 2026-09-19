@@ -3,6 +3,13 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!--
+      The player holds a wake lock and a wifi lock while something is playing, so Fire OS
+      does not doze the CPU or let wifi power-save mid-stream. Acquiring either without
+      declaring it throws a SecurityException as playback starts.
+    -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
     <!-- A television app, but not required so the same APK installs on a phone for quick checks. -->
     <uses-feature
