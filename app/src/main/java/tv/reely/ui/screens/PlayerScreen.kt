@@ -137,6 +137,11 @@ fun PlayerScreen(
     var interaction by remember { mutableIntStateOf(0) }
     var panel by remember { mutableStateOf(Panel.NONE) }
 
+    // Plex's own intro and credits detection, when the server has it.
+    val intro = playback.markers.firstOrNull { it.isIntro }
+    val credits = playback.markers.firstOrNull { it.isCredits }
+    val skipFocus = remember { FocusRequester() }
+
     // Live skips a channel; on demand it skips an episode, when the queue has one.
     val canSkipBack = if (playback.isLive) true else playback.queueIndex > 0
     val canSkipForward = if (playback.isLive) true
@@ -357,6 +362,37 @@ fun PlayerScreen(
                 onNudgeScale = onNudgeSubtitleScale,
                 onToggleBackground = onToggleSubtitleBackground,
                 modifier = Modifier.align(Alignment.CenterEnd),
+            )
+        }
+
+        // A skip prompt only while the marker is actually under the playhead. It takes
+        // focus so OK reaches it without hunting, and hands focus back when it goes.
+        val inIntro = intro != null && positionMs >= intro.startMs && positionMs < intro.endMs - 500
+        val inCredits = credits != null && positionMs >= credits.startMs && canSkipForward
+        val skipLabel = when {
+            inIntro -> "Skip Intro"
+            inCredits && upNext == null -> "Next Episode"
+            else -> null
+        }
+
+        LaunchedEffect(skipLabel) {
+            runCatching {
+                if (skipLabel != null) skipFocus.requestFocus() else rootFocus.requestFocus()
+            }
+        }
+
+        if (skipLabel != null) {
+            TvActionButton(
+                label = skipLabel,
+                onClick = {
+                    interaction++
+                    if (inIntro && intro != null) exoPlayer.seekTo(intro.endMs) else onStepEpisode(1)
+                },
+                emphasised = true,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 44.dp, bottom = if (controlsVisible) 210.dp else 44.dp)
+                    .focusRequester(skipFocus),
             )
         }
 

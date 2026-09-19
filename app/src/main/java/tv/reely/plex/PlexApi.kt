@@ -43,9 +43,24 @@ data class PlexExtra(
     val durationMs: Long,
 )
 
+/**
+ * A stretch of an episode the server has identified — the intro, or the closing credits.
+ * Plex generates these itself, as a Plex Pass feature, so a server without it simply
+ * returns none and the buttons that use them never appear.
+ */
+data class PlexMarker(
+    val type: String,
+    val startMs: Long,
+    val endMs: Long,
+) {
+    val isIntro: Boolean get() = type.equals("intro", ignoreCase = true)
+    val isCredits: Boolean get() = type.equals("credits", ignoreCase = true)
+}
+
 data class PlexPlayback(
     val url: String,
     val subtitles: List<PlexSubtitle>,
+    val markers: List<PlexMarker> = emptyList(),
 )
 
 /** A person in the cast, as Plex records them. */
@@ -375,7 +390,8 @@ object PlexApi {
      */
     suspend fun playback(base: String, token: String, ratingKey: String): PlexPlayback? =
         withContext(Dispatchers.IO) {
-            val metadata = container("$base/library/metadata/$ratingKey", token)
+            // includeMarkers asks the server for its intro and credits detection.
+            val metadata = container("$base/library/metadata/$ratingKey?includeMarkers=1", token)
                 .optJSONArray("Metadata")?.optJSONObject(0) ?: return@withContext null
             val media = metadata.optJSONArray("Media")?.optJSONObject(0) ?: return@withContext null
             val part = media.optJSONArray("Part")?.optJSONObject(0) ?: return@withContext null
@@ -384,6 +400,7 @@ object PlexApi {
             PlexPlayback(
                 url = "$base$key?X-Plex-Token=$token",
                 subtitles = subtitlesOf(part, base, token),
+                markers = markersOf(metadata),
             )
         }
 
@@ -533,6 +550,19 @@ object PlexApi {
                     role = role.optString("role").takeIf(String::isNotBlank),
                     thumb = role.optString("thumb").takeIf(String::isNotEmpty),
                 )
+            }
+    }
+
+    private fun markersOf(metadata: JSONObject): List<PlexMarker> {
+        val markers = metadata.optJSONArray("Marker") ?: return emptyList()
+        return (0 until markers.length())
+            .map { markers.getJSONObject(it) }
+            .mapNotNull { marker ->
+                val type = marker.optString("type").takeIf(String::isNotBlank) ?: return@mapNotNull null
+                val start = marker.optLong("startTimeOffset", -1)
+                val end = marker.optLong("endTimeOffset", -1)
+                if (start < 0 || end <= start) return@mapNotNull null
+                PlexMarker(type = type, startMs = start, endMs = end)
             }
     }
 

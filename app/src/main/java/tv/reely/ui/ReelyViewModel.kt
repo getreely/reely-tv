@@ -19,6 +19,7 @@ import tv.reely.plex.PlexApi
 import tv.reely.plex.PlexDetail
 import tv.reely.plex.PlexExtra
 import tv.reely.plex.PlexItem
+import tv.reely.plex.PlexMarker
 import tv.reely.plex.PlexSection
 import tv.reely.plex.PlexSubtitle
 import tv.reely.xtream.StreamFormat
@@ -169,6 +170,7 @@ data class Playback(
     val subtitles: List<PlexSubtitle> = emptyList(),
     val queue: List<PlexItem> = emptyList(),
     val queueIndex: Int = -1,
+    val markers: List<PlexMarker> = emptyList(),
 )
 
 data class PlayerPrefs(
@@ -628,6 +630,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                         startPositionMs = if (resume) item.viewOffsetMs else 0,
                         durationMs = item.durationMs,
                         subtitles = resolved.subtitles,
+                        markers = resolved.markers,
                         queue = effectiveQueue,
                         queueIndex = effectiveQueue.indexOfFirst { entry -> entry.ratingKey == item.ratingKey },
                     ),
@@ -694,7 +697,10 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val plex = _state.value.plex
         val base = plex.baseUrl ?: return null
         val token = plex.serverToken ?: return null
-        val current = _state.value.playback?.queue?.lastOrNull() ?: return null
+        val playback = _state.value.playback ?: return null
+        val current = playback.queue.getOrNull(playback.queueIndex)
+            ?: playback.queue.lastOrNull()
+            ?: return null
         val showKey = current.grandparentRatingKey ?: return null
 
         val seasons = runCatching { PlexApi.children(base, token, showKey) }
@@ -1020,8 +1026,19 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     fun stepEpisode(delta: Int) {
         val playback = _state.value.playback ?: return
         if (playback.isLive) return
-        val next = playback.queue.getOrNull(playback.queueIndex + delta) ?: return
-        play(next, queue = playback.queue)
+
+        val next = playback.queue.getOrNull(playback.queueIndex + delta)
+        if (next != null) {
+            play(next, queue = playback.queue)
+            return
+        }
+        // Off the end of a season. Up Next already carries on into the next one, so the
+        // button that means the same thing should too.
+        if (delta > 0) {
+            viewModelScope.launch {
+                firstOfNextSeason()?.let { play(it) }
+            }
+        }
     }
 
     /** Channel surfing from the player — the thing that decides whether this feels like a TV app. */
