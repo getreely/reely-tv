@@ -48,6 +48,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -122,6 +126,15 @@ fun PlayerScreen(
                     .setBufferDurationsMs(2_000, 30_000, 1_000, 2_000)
                     .build()
             )
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                    .setUsage(C.USAGE_MEDIA)
+                    .build(),
+                // Hand audio focus to whatever takes it — an alarm, a voice assistant,
+                // another app's video — instead of playing underneath it.
+                /* handleAudioFocus = */ true,
+            )
             .build()
             .apply { setWakeMode(C.WAKE_MODE_NETWORK) }
     }
@@ -153,6 +166,41 @@ fun PlayerScreen(
     DisposableEffect(playing) {
         view.keepScreenOn = playing
         onDispose { view.keepScreenOn = false }
+    }
+
+    /*
+     * Home on the remote hides the app but does not stop the player: the launcher comes
+     * up and the show carries on playing underneath it. Stopping on ON_STOP is what fixes
+     * that, and the position is reported while this still knows what it is.
+     *
+     * Coming back differs by kind. A film waits where it was left, paused with the
+     * controls up. A live channel has moved on in the meantime, so it rejoins the stream
+     * rather than resuming a buffer that is now minutes behind.
+     */
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, playback.url) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> {
+                    exoPlayer.playWhenReady = false
+                    if (!playback.isLive && playback.ratingKey != null) {
+                        onReportProgress(exoPlayer.currentPosition.coerceAtLeast(0), false)
+                    }
+                }
+
+                // A fresh observer is handed the events that bring it up to date, so
+                // ON_START also arrives on the very first composition — before anything
+                // has been queued. Preparing an empty player would report it as ended.
+                Lifecycle.Event.ON_START -> if (playback.isLive && exoPlayer.mediaItemCount > 0) {
+                    exoPlayer.prepare()
+                    exoPlayer.playWhenReady = true
+                }
+
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     DisposableEffect(exoPlayer) {
