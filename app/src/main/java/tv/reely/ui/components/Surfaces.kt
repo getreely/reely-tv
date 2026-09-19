@@ -44,15 +44,16 @@ import tv.reely.ui.theme.Muted
 import tv.reely.ui.theme.Parchment
 
 /**
- * The soft wash behind a browse screen.
+ * The artwork behind a browse screen, darkened until text sits comfortably on it.
  *
- * A Firestick cannot blur anything — Compose's blur is RenderEffect, which is API 31,
- * and Fire OS stops at 30 — so the artwork is fetched at about 48 pixels wide and
- * stretched instead. The server does the scaling, the bitmap costs a couple of
- * kilobytes, and the result is indistinguishable from a Gaussian blur at this size.
+ * This used to be the same image fetched at 48 pixels wide and stretched, standing in
+ * for a blur the hardware cannot do — Compose's blur is RenderEffect, API 31, and Fire
+ * OS stops at 30. At a fortyfold upscale there is not enough left of the picture to read
+ * as a blur: it comes out as mottled blobs and banding. A real backdrop under a heavy
+ * scrim is both better looking and what every television app of this kind actually does.
  */
 @Composable
-fun BlurredBackdrop(
+fun HeroBackdrop(
     url: String?,
     modifier: Modifier = Modifier,
     scrimFromLeft: Boolean = true,
@@ -66,17 +67,19 @@ fun BlurredBackdrop(
                 modifier = Modifier.fillMaxSize(),
             )
         }
+        // A flat dim first, so a bright poster cannot overpower the text on top of it.
+        Box(modifier = Modifier.fillMaxSize().background(Ink.copy(alpha = 0.45f)))
+
         if (scrimFromLeft) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(
                         Brush.horizontalGradient(
-                            listOf(
-                                Ink.copy(alpha = 0.95f),
-                                Ink.copy(alpha = 0.72f),
-                                Ink.copy(alpha = 0.18f),
-                            )
+                            0f to Ink.copy(alpha = 0.92f),
+                            0.42f to Ink.copy(alpha = 0.62f),
+                            0.78f to Ink.copy(alpha = 0.12f),
+                            1f to Color.Transparent,
                         )
                     )
             )
@@ -86,8 +89,9 @@ fun BlurredBackdrop(
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        0f to Ink.copy(alpha = 0.55f),
-                        0.55f to Ink.copy(alpha = 0.62f),
+                        0f to Ink.copy(alpha = 0.6f),
+                        0.3f to Ink.copy(alpha = 0.25f),
+                        0.72f to Ink.copy(alpha = 0.88f),
                         1f to Ink,
                     )
                 )

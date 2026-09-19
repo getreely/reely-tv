@@ -17,7 +17,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import tv.reely.plex.PlexItem
 import tv.reely.ui.SearchState
-import tv.reely.ui.components.BlurredBackdrop
+import tv.reely.ui.components.HeroBackdrop
 import tv.reely.ui.components.EmptyNote
 import tv.reely.ui.components.PosterCard
 import tv.reely.ui.components.TvTextField
@@ -27,7 +27,7 @@ fun SearchScreen(
     search: SearchState,
     focused: PlexItem?,
     imageUrl: (String?, Int, Int) -> String?,
-    blurredUrl: (String?) -> String?,
+    backdropUrl: (String?) -> String?,
     onQueryChange: (String) -> Unit,
     onFocusItem: (PlexItem?) -> Unit,
     onOpenDetail: (String) -> Unit,
@@ -35,8 +35,8 @@ fun SearchScreen(
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.fillMaxSize()) {
-        BlurredBackdrop(
-            url = blurredUrl(focused?.art ?: focused?.thumb),
+        HeroBackdrop(
+            url = backdropUrl(focused?.art ?: focused?.thumb),
             modifier = Modifier.fillMaxSize(),
         )
 

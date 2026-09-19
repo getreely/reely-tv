@@ -26,7 +26,7 @@ import androidx.tv.material3.Text
 import tv.reely.plex.PlexItem
 import tv.reely.plex.formatDuration
 import tv.reely.ui.DetailState
-import tv.reely.ui.components.BlurredBackdrop
+import tv.reely.ui.components.HeroBackdrop
 import tv.reely.ui.components.CastCircle
 import tv.reely.ui.components.CheckGlyph
 import tv.reely.ui.components.EmptyNote
@@ -45,7 +45,7 @@ import tv.reely.ui.theme.Muted
 fun DetailScreen(
     state: DetailState,
     imageUrl: (String?, Int, Int) -> String?,
-    blurredUrl: (String?) -> String?,
+    backdropUrl: (String?) -> String?,
     onPlay: (PlexItem) -> Unit,
     onPlayDetail: () -> Unit,
     onPlayTrailer: () -> Unit,
@@ -67,10 +67,10 @@ fun DetailScreen(
     val episode = state.focusedEpisode
 
     // The block of text always describes whatever has focus: the show, or an episode.
-    val backdrop = blurredUrl(episode?.thumb ?: detail.art ?: detail.thumb)
+    val backdrop = backdropUrl(episode?.thumb ?: detail.art ?: detail.thumb)
 
     Box(modifier = modifier.fillMaxSize()) {
-        BlurredBackdrop(url = backdrop, modifier = Modifier.fillMaxSize())
+        HeroBackdrop(url = backdrop, modifier = Modifier.fillMaxSize())
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),

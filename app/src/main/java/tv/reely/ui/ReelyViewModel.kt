@@ -371,12 +371,16 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(plex = PlexState(), home = HomeState(), detail = null) }
     }
 
-    /** The stretched-thumbnail stand-in for a blur; see BlurredBackdrop. */
-    fun plexBlurredUrl(path: String?): String? {
+    /**
+     * Full-screen artwork for a hero. Asked for at 720 wide rather than 1920: it is drawn
+     * behind a heavy scrim, so the extra detail would cost megabytes of bitmap on a stick
+     * and never be seen.
+     */
+    fun plexBackdropUrl(path: String?): String? {
         val plex = _state.value.plex
         val base = plex.baseUrl ?: return null
         val token = plex.serverToken ?: return null
-        return PlexApi.blurredUrl(base, token, path)
+        return PlexApi.imageUrl(base, token, path, width = 720, height = 405)
     }
 
     fun toggleWatchedDetail() {

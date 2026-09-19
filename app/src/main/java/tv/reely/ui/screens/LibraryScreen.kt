@@ -29,7 +29,7 @@ import tv.reely.ui.BrowseState
 import tv.reely.ui.HomeState
 import tv.reely.ui.LibraryKind
 import tv.reely.ui.PlexState
-import tv.reely.ui.components.BlurredBackdrop
+import tv.reely.ui.components.HeroBackdrop
 import tv.reely.ui.components.EmptyNote
 import tv.reely.ui.components.ErrorNote
 import tv.reely.ui.components.HeroText
@@ -50,7 +50,7 @@ fun LibraryScreen(
     home: HomeState,
     focused: PlexItem?,
     imageUrl: (String?, Int, Int) -> String?,
-    blurredUrl: (String?) -> String?,
+    backdropUrl: (String?) -> String?,
     onFocusItem: (PlexItem?) -> Unit,
     onPlay: (PlexItem) -> Unit,
     onOpenDetail: (String) -> Unit,
@@ -79,8 +79,8 @@ fun LibraryScreen(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        BlurredBackdrop(
-            url = blurredUrl(focused?.art ?: focused?.thumb),
+        HeroBackdrop(
+            url = backdropUrl(focused?.art ?: focused?.thumb),
             modifier = Modifier.fillMaxSize(),
         )
 

@@ -480,15 +480,6 @@ object PlexApi {
      * A stick has about 1.5 GB of RAM, and a screen of full-size posters is the quickest
      * way to spend it.
      */
-    /**
-     * A deliberately tiny version of the same artwork. Stretched across the screen it is
-     * indistinguishable from a Gaussian blur — which matters because a Firestick cannot
-     * do a real one: Compose's blur is backed by RenderEffect, which is API 31, and Fire
-     * OS tops out at API 30. The server does the work and the bitmap costs a few KB.
-     */
-    fun blurredUrl(base: String, token: String, path: String?): String? =
-        imageUrl(base, token, path, width = 48, height = 27)
-
     fun imageUrl(
         base: String,
         token: String,
