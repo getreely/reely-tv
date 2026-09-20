@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
+import tv.reely.BuildConfig
 import tv.reely.core.Settings
 import tv.reely.plex.PlexServer
 import tv.reely.ui.GuideState
@@ -33,6 +34,7 @@ import tv.reely.ui.GuideStatus
 import tv.reely.ui.LiveState
 import tv.reely.ui.PlayerPrefs
 import tv.reely.ui.PlexState
+import tv.reely.ui.UpdateStatus
 import tv.reely.ui.components.ErrorNote
 import tv.reely.ui.components.FactLine
 import tv.reely.ui.components.SectionHeading
@@ -51,6 +53,7 @@ private enum class Section(val title: String) {
     VIDEO("Video"),
     LIVE_TV("Live TV"),
     PLEX("Plex"),
+    UPDATES("Updates"),
     ABOUT("About"),
 }
 
@@ -77,6 +80,10 @@ fun SettingsScreen(
     onCycleMaxBitrate: () -> Unit,
     onRefreshChannels: () -> Unit,
     onRefreshGuide: () -> Unit,
+    update: UpdateStatus,
+    updateUrl: String,
+    onCheckForUpdate: () -> Unit,
+    onInstallUpdate: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var section by remember { mutableStateOf(Section.VIDEO) }
@@ -138,6 +145,13 @@ fun SettingsScreen(
                     plex = plex,
                     onSwitchServer = onSwitchServer,
                     onSignOutPlex = onSignOutPlex,
+                )
+
+                Section.UPDATES -> UpdatesSection(
+                    update = update,
+                    updateUrl = updateUrl,
+                    onCheck = onCheckForUpdate,
+                    onInstall = onInstallUpdate,
                 )
 
                 Section.ABOUT -> AboutSection()
@@ -334,6 +348,111 @@ private fun PlexSection(
                         emphasised = server.name == plex.serverName,
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UpdatesSection(
+    update: UpdateStatus,
+    updateUrl: String,
+    onCheck: () -> Unit,
+    onInstall: () -> Unit,
+) {
+    Panel(title = "This build") {
+        FactLine("Version", "${BuildConfig.VERSION_NAME}  (build ${BuildConfig.VERSION_CODE})")
+        FactLine("Update address", updateUrl)
+    }
+
+    Panel(title = "Check") {
+        when (update) {
+            is UpdateStatus.Idle -> Text(
+                text = "Nothing checked yet.",
+                color = Muted,
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+            )
+
+            is UpdateStatus.Checking -> Text(
+                text = "Asking the server what it is holding…",
+                color = Muted,
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+            )
+
+            is UpdateStatus.UpToDate -> Text(
+                text = "This is the build published there. Nothing to download.",
+                color = Muted,
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+            )
+
+            is UpdateStatus.Available -> {
+                FactLine(
+                    "Published",
+                    "${update.info.versionName ?: "?"}  (build ${update.info.versionCode})",
+                )
+                if (update.info.sizeBytes > 0) {
+                    FactLine("Size", "${update.info.sizeBytes / 1_048_576} MB")
+                }
+                update.info.published?.let { FactLine("Dated", it) }
+                update.info.notes?.let {
+                    Text(text = it, color = Muted, fontSize = 13.sp, lineHeight = 19.sp)
+                }
+            }
+
+            is UpdateStatus.Unlabelled -> {
+                Text(
+                    text = "There is a build at that address, but nothing saying which one. " +
+                        "Whether it is newer than this one cannot be known without " +
+                        "downloading it, so installing it is a decision rather than an " +
+                        "upgrade. Publishing reely-tv.json beside the APK fixes that — " +
+                        "the release build writes one.",
+                    color = Muted,
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp,
+                )
+                if (update.info.sizeBytes > 0) {
+                    FactLine("Size", "${update.info.sizeBytes / 1_048_576} MB")
+                }
+                update.info.published?.let { FactLine("Dated", it) }
+            }
+
+            is UpdateStatus.Downloading -> {
+                val total = update.total.takeIf { it > 0 } ?: 1
+                FactLine("Downloading", "${update.read * 100 / total}%")
+            }
+
+            is UpdateStatus.Handed -> Text(
+                text = "Handed to the installer. Fire OS asks once for permission to install " +
+                    "from Reely before it will go ahead.",
+                color = Muted,
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+            )
+
+            is UpdateStatus.Failed -> ErrorNote(update.message)
+        }
+
+        Buttons {
+            TvActionButton(
+                label = if (update is UpdateStatus.Checking) "Checking…" else "Check for update",
+                onClick = onCheck,
+            )
+            when (update) {
+                is UpdateStatus.Available -> TvActionButton(
+                    label = "Download and install",
+                    onClick = onInstall,
+                    emphasised = true,
+                )
+
+                is UpdateStatus.Unlabelled -> TvActionButton(
+                    label = "Install it anyway",
+                    onClick = onInstall,
+                )
+
+                else -> Unit
             }
         }
     }

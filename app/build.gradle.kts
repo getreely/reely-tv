@@ -1,3 +1,5 @@
+import java.time.Instant
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -18,8 +20,8 @@ android {
         // Keystore-backed credential store needs API 23 and Compose is painful below it.
         minSdk = 23
         targetSdk = 34
-        versionCode = 25
-        versionName = "0.12.0"
+        versionCode = 26
+        versionName = "0.12.1"
     }
 
     signingConfigs {
@@ -55,6 +57,9 @@ android {
 
     buildFeatures {
         compose = true
+        // The update check compares the published build against this one, which means
+        // the running app has to know its own version number.
+        buildConfig = true
     }
 
     packaging {
@@ -86,4 +91,38 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.7.0")
 
     testImplementation("junit:junit:4.13.2")
+}
+
+/**
+ * Writes the manifest the update check reads, next to the APK it describes.
+ *
+ * Without it the app can only ask the server how big the file is and when it changed,
+ * which cannot tell a new build from the one already running. Generating it here means
+ * the two are always published together and can never disagree.
+ */
+val writeUpdateManifest by tasks.registering {
+    val outputDir = layout.buildDirectory.dir("outputs/apk/release")
+    val versionCode = android.defaultConfig.versionCode
+    val versionName = android.defaultConfig.versionName
+    outputs.upToDateWhen { false }
+    doLast {
+        val published = Instant.now().toString()
+        val folder = outputDir.get().asFile
+        val apk = folder.resolve("app-release.apk")
+        if (!apk.exists()) return@doLast
+        folder.resolve("reely-tv.json").writeText(
+            """
+            {
+              "versionCode": $versionCode,
+              "versionName": "$versionName",
+              "sizeBytes": ${apk.length()},
+              "published": "$published"
+            }
+            """.trimIndent()
+        )
+    }
+}
+
+tasks.matching { it.name == "assembleRelease" }.configureEach {
+    finalizedBy(writeUpdateManifest)
 }

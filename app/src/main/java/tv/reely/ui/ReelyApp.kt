@@ -303,6 +303,10 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onCycleMaxBitrate = viewModel::cycleMaxBitrate,
                 onRefreshChannels = viewModel::refreshLiveChannels,
                 onRefreshGuide = { viewModel.refreshGuide(force = true) },
+                update = state.update,
+                updateUrl = viewModel.updateUrl,
+                onCheckForUpdate = viewModel::checkForUpdate,
+                onInstallUpdate = viewModel::installUpdate,
             )
         }
         }

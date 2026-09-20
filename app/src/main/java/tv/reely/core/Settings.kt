@@ -37,6 +37,11 @@ class Settings(context: Context) {
         get() = prefs.getInt(MAX_BITRATE, 0)
         set(value) = prefs.edit().putInt(MAX_BITRATE, value).apply()
 
+    /** Where a newer build is published. Changeable, but there is a sensible default. */
+    var updateUrl: String
+        get() = prefs.getString(UPDATE_URL, DEFAULT_UPDATE_URL) ?: DEFAULT_UPDATE_URL
+        set(value) = prefs.edit().putString(UPDATE_URL, value).apply()
+
     /** Seconds before the next episode starts by itself. Zero switches that off. */
     var upNextSeconds: Int
         get() = prefs.getInt(UP_NEXT_SECONDS, DEFAULT_UP_NEXT).coerceIn(0, MAX_UP_NEXT)
@@ -49,6 +54,9 @@ class Settings(context: Context) {
         private const val GUIDE_PREVIEW = "guide.preview"
         private const val PLAYBACK_MODE = "playback.mode"
         private const val MAX_BITRATE = "playback.maxBitrate"
+        private const val UPDATE_URL = "update.url"
+
+        const val DEFAULT_UPDATE_URL = "http://192.168.68.80:5555/stuff/reely-tv.apk"
 
         // A multiplier on ExoPlayer's standard caption size, so 1.0 is "normal".
         const val DEFAULT_SCALE = 0.9f

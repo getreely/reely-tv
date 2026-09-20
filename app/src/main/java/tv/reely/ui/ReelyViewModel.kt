@@ -13,7 +13,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.reely.core.SecureStore
+import tv.reely.core.UpdateInfo
+import tv.reely.core.Updater
 import tv.reely.core.Settings
+import tv.reely.BuildConfig
 import tv.reely.core.wrapIndex
 import tv.reely.plex.PlexApi
 import tv.reely.plex.PlexDetail
@@ -217,6 +220,22 @@ data class PlayerPrefs(
     val maxBitrateKbps: Int = 0,
 )
 
+/** Where a check for a newer build has got to. */
+sealed interface UpdateStatus {
+    data object Idle : UpdateStatus
+    data object Checking : UpdateStatus
+
+    /** Published and newer than this build, by its own account. */
+    data class Available(val info: UpdateInfo) : UpdateStatus
+
+    /** Published, but with no manifest saying what it is. */
+    data class Unlabelled(val info: UpdateInfo) : UpdateStatus
+    data object UpToDate : UpdateStatus
+    data class Downloading(val read: Long, val total: Long) : UpdateStatus
+    data object Handed : UpdateStatus
+    data class Failed(val message: String) : UpdateStatus
+}
+
 data class ReelyState(
     val restoring: Boolean = true,
     val stack: List<Route> = listOf(Route.Home),
@@ -237,6 +256,7 @@ data class ReelyState(
     val multiview: List<XtreamChannel> = emptyList(),
     val upNext: PlexItem? = null,
     val prefs: PlayerPrefs = PlayerPrefs(),
+    val update: UpdateStatus = UpdateStatus.Idle,
 ) {
     val route: Route get() = stack.last()
 }
@@ -271,6 +291,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     private var searchJob: Job? = null
     private var channelsJob: Job? = null
     private val browseJobs = mutableMapOf<LibraryKind, Job>()
+    private var updateJob: Job? = null
 
     /** Every live channel the account carries, fetched once and reused by search. */
     private var allChannels: List<XtreamChannel>? = null
@@ -1604,6 +1625,65 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         channelsJob?.cancel()
         allChannels = null
         _state.update { it.copy(live = LiveState(), search = it.search.copy(channels = emptyList())) }
+    }
+
+    // ---------------------------------------------------------------- Updates
+
+    val updateUrl: String get() = settings.updateUrl
+
+    /**
+     * Asks what is published and whether it is newer than what is running.
+     *
+     * The version comparison is the whole point: downloading the build already installed
+     * is worse than useless. That needs the server to say what it is holding, which is
+     * what the manifest beside the APK is for. Without one nothing here will claim an
+     * update exists — it reports what it found and leaves the decision alone.
+     */
+    fun checkForUpdate() {
+        if (_state.value.update is UpdateStatus.Checking) return
+        updateJob?.cancel()
+        updateJob = viewModelScope.launch {
+            _state.update { it.copy(update = UpdateStatus.Checking) }
+            val info = runCatching { Updater.check(settings.updateUrl) }.getOrElse { failure ->
+                _state.update { it.copy(update = UpdateStatus.Failed(failure.readable())) }
+                return@launch
+            }
+            _state.update {
+                it.copy(
+                    update = when {
+                        !info.describesItself -> UpdateStatus.Unlabelled(info)
+                        info.isNewerThan(BuildConfig.VERSION_CODE) -> UpdateStatus.Available(info)
+                        else -> UpdateStatus.UpToDate
+                    }
+                )
+            }
+        }
+    }
+
+    /** Fetches the published build and hands it to the system installer. */
+    fun installUpdate() {
+        val info = when (val status = _state.value.update) {
+            is UpdateStatus.Available -> status.info
+            is UpdateStatus.Unlabelled -> status.info
+            else -> return
+        }
+        updateJob?.cancel()
+        updateJob = viewModelScope.launch {
+            _state.update { it.copy(update = UpdateStatus.Downloading(0, info.sizeBytes)) }
+            val file = runCatching {
+                Updater.download(getApplication(), info.url) { read, total ->
+                    _state.update { it.copy(update = UpdateStatus.Downloading(read, total)) }
+                }
+            }.getOrElse { failure ->
+                _state.update { it.copy(update = UpdateStatus.Failed(failure.readable())) }
+                return@launch
+            }
+            runCatching { Updater.install(getApplication(), file) }.onFailure { failure ->
+                _state.update { it.copy(update = UpdateStatus.Failed(failure.readable())) }
+                return@launch
+            }
+            _state.update { it.copy(update = UpdateStatus.Handed) }
+        }
     }
 
     fun dismissPlexError() = updatePlex { it.copy(error = null) }
