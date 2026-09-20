@@ -641,7 +641,7 @@ private fun Controls(
         // saying so there was no telling a server that sends no markers apart from a bug.
         val markerNote = when {
             playback.isLive -> null
-            playback.markers.isEmpty() -> "No intro or credits markers on this file"
+            playback.markers.isEmpty() -> playback.markerProbe.ifEmpty { "No markers on this file" }
             else -> playback.markers.joinToString("  ·  ") { marker ->
                 val name = marker.type.replaceFirstChar { it.uppercaseChar() }
                 "$name ${clock(marker.startMs)}–${clock(marker.endMs)}"
@@ -659,6 +659,8 @@ private fun Controls(
             color = Faint,
             fontSize = 11.sp,
             lineHeight = 14.sp,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

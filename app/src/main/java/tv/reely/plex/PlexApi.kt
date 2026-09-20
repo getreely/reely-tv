@@ -64,6 +64,8 @@ data class PlexPlayback(
     val url: String,
     val subtitles: List<PlexSubtitle>,
     val markers: List<PlexMarker> = emptyList(),
+    /** What the metadata response held where markers were expected. For diagnosis. */
+    val markerProbe: String = "",
 )
 
 /** A person in the cast, as Plex records them. */
@@ -192,6 +194,13 @@ fun formatDuration(millis: Long): String {
  * plain JSON read: the hard streaming work stays on the server.
  */
 object PlexApi {
+
+    /**
+     * Set once at startup. A Plex server tailors what it returns to who is asking, and a
+     * request with no client identifier is not something any real client sends.
+     */
+    @Volatile
+    var clientId: String = ""
 
     private const val PLEX_TV = "https://plex.tv"
     private const val PRODUCT = "Reely TV"
@@ -428,6 +437,7 @@ object PlexApi {
                 url = "$base$key?X-Plex-Token=$token",
                 subtitles = subtitlesOf(part, base, token),
                 markers = markersOf(metadata),
+                markerProbe = probeMarkers(metadata),
             )
         }
 
@@ -626,8 +636,31 @@ object PlexApi {
             }
     }
 
+    /**
+     * Says what the response held where markers were expected, so a server that sends
+     * none can be told apart from a response this app is reading wrongly. Without it
+     * there is nothing to go on but guesses.
+     */
+    private fun probeMarkers(metadata: JSONObject): String {
+        val array = markerArray(metadata)
+            ?: return "no Marker field · fields: " +
+                metadata.keys().asSequence().joinToString(",")
+
+        if (array.length() == 0) return "Marker field is empty"
+        return "Marker[${array.length()}] " + (0 until array.length()).joinToString(", ") { index ->
+            val marker = array.optJSONObject(index) ?: return@joinToString "?"
+            val type = marker.optString("type").ifEmpty { "untyped" }
+            "$type ${marker.optLong("startTimeOffset", -1)}–${marker.optLong("endTimeOffset", -1)}"
+        }
+    }
+
+    /** Plex has been known to collapse a one-element collection to a bare object. */
+    private fun markerArray(metadata: JSONObject): JSONArray? =
+        metadata.optJSONArray("Marker")
+            ?: metadata.optJSONObject("Marker")?.let { JSONArray().put(it) }
+
     private fun markersOf(metadata: JSONObject): List<PlexMarker> {
-        val markers = metadata.optJSONArray("Marker") ?: return emptyList()
+        val markers = markerArray(metadata) ?: return emptyList()
         return (0 until markers.length())
             .map { markers.getJSONObject(it) }
             .mapNotNull { marker ->
@@ -679,6 +712,7 @@ object PlexApi {
             .header("X-Plex-Platform", "Android")
             .header("X-Plex-Device", "Android TV")
             .header("X-Plex-Device-Name", "Reely TV")
+            .apply { if (clientId.isNotEmpty()) header("X-Plex-Client-Identifier", clientId) }
             .header("X-Plex-Token", token)
             .build()
         Http.client.newCall(request).execute().use { response ->
