@@ -320,10 +320,18 @@ fun PlayerScreen(
             .focusable()
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                // This is the first thing in the composition to see a key, so closing a
+                // panel here is the one way to be sure it takes a single press. Leaving
+                // it to the back dispatcher took two, because something between the two
+                // was eating the first. Consuming the key-down also stops the activity
+                // tracking the press, so the key-up cannot then exit the player as well.
+                if (event.key == Key.Back) {
+                    if (panel == Panel.NONE) return@onPreviewKeyEvent false
+                    panel = Panel.NONE
+                    interaction++
+                    return@onPreviewKeyEvent true
+                }
                 if (panel != Panel.NONE) return@onPreviewKeyEvent false
-                // Back belongs to the handler above; counting it here would keep the
-                // controls awake and swallow the press.
-                if (event.key == Key.Back) return@onPreviewKeyEvent false
                 interaction++
                 when (event.key) {
                     Key.DirectionUp -> if (playback.isLive) {
@@ -474,7 +482,7 @@ fun PlayerScreen(
                 emphasised = true,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(end = 44.dp, bottom = if (controlsVisible) 210.dp else 44.dp)
+                    .padding(end = 40.dp, bottom = if (controlsVisible) 168.dp else 40.dp)
                     .focusRequester(skipFocus),
             )
         }
@@ -520,14 +528,14 @@ private fun Controls(
                     listOf(Color.Transparent, Ink.copy(alpha = 0.85f), Ink.copy(alpha = 0.97f))
                 )
             )
-            .padding(horizontal = 44.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+            .padding(horizontal = 40.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(
             text = playback.title,
             color = Parchment,
-            fontSize = 22.sp,
-            lineHeight = 28.sp,
+            fontSize = 17.sp,
+            lineHeight = 22.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -536,8 +544,8 @@ private fun Controls(
             Text(
                 text = it,
                 color = Muted,
-                fontSize = 13.sp,
-                lineHeight = 17.sp,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -547,8 +555,8 @@ private fun Controls(
             Text(
                 text = "LIVE",
                 color = Accent,
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
+                fontSize = 11.sp,
+                lineHeight = 14.sp,
                 letterSpacing = 1.6.sp,
                 fontWeight = FontWeight.Medium,
             )
@@ -574,21 +582,23 @@ private fun Controls(
                 TransportButton(
                     onClick = { onSkip(-1) },
                     enabled = canSkipBack,
-                    glyph = { SkipGlyph(it, forward = false, size = 21.dp) },
+                    diameter = 36.dp,
+                    glyph = { SkipGlyph(it, forward = false, size = 17.dp) },
                 )
                 TransportButton(
                     onClick = onTogglePlay,
                     filled = true,
-                    diameter = 58.dp,
+                    diameter = 46.dp,
                     modifier = Modifier.focusRequester(playFocus),
                     glyph = {
-                        if (playing) PauseGlyph(it, 26.dp) else PlayGlyph(it, 26.dp)
+                        if (playing) PauseGlyph(it, 21.dp) else PlayGlyph(it, 21.dp)
                     },
                 )
                 TransportButton(
                     onClick = { onSkip(1) },
                     enabled = canSkipForward,
-                    glyph = { SkipGlyph(it, forward = true, size = 21.dp) },
+                    diameter = 36.dp,
+                    glyph = { SkipGlyph(it, forward = true, size = 17.dp) },
                 )
             }
 
@@ -599,11 +609,13 @@ private fun Controls(
             ) {
                 TransportButton(
                     onClick = onOpenSubtitles,
-                    glyph = { SubtitleGlyph(it, 20.dp) },
+                    diameter = 36.dp,
+                    glyph = { SubtitleGlyph(it, 17.dp) },
                 )
                 TransportButton(
                     onClick = onOpenAudio,
-                    glyph = { SpeakerGlyph(it, 20.dp) },
+                    diameter = 36.dp,
+                    glyph = { SpeakerGlyph(it, 17.dp) },
                 )
                 if (playback.isLive) {
                     TvActionButton(
@@ -620,8 +632,8 @@ private fun Controls(
             else
                 "Up to the bar, then left and right to seek · Back leaves",
             color = Faint,
-            fontSize = 12.sp,
-            lineHeight = 16.sp,
+            fontSize = 11.sp,
+            lineHeight = 14.sp,
         )
     }
 }
@@ -642,11 +654,11 @@ private fun Scrubber(
     var focused by remember { mutableStateOf(false) }
     val total = durationMs.coerceAtLeast(1)
 
-    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(if (focused) 10.dp else 6.dp)
+                .height(if (focused) 8.dp else 5.dp)
                 .clip(RoundedCornerShape(5.dp))
                 .background(Parchment.copy(alpha = if (focused) 0.3f else 0.22f))
                 .focusRequester(focusRequester)
@@ -676,19 +688,19 @@ private fun Scrubber(
             )
         }
         Row(modifier = Modifier.fillMaxWidth()) {
-            Text(text = clock(positionMs), color = Parchment, fontSize = 13.sp, lineHeight = 17.sp)
+            Text(text = clock(positionMs), color = Parchment, fontSize = 12.sp, lineHeight = 16.sp)
             Box(modifier = Modifier.weight(1f))
             Text(
                 text = "-" + clock((durationMs - positionMs).coerceAtLeast(0)),
                 color = Muted,
-                fontSize = 13.sp,
-                lineHeight = 17.sp,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
             )
             Text(
                 text = "   /   " + clock(durationMs),
                 color = Faint,
-                fontSize = 13.sp,
-                lineHeight = 17.sp,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
             )
         }
     }

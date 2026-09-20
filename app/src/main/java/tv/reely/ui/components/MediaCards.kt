@@ -412,9 +412,16 @@ fun EpisodeTile(
     onFocus: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * This is the episode the page's buttons act on. It keeps a marker even when focus
+     * has gone up to those buttons, so it is never a mystery which episode is about to
+     * be restarted or marked watched.
+     */
+    selected: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (focused) 1.05f else 1f, label = "episode-scale")
+    val marked = focused || selected
 
     Column(
         modifier = modifier
@@ -434,8 +441,13 @@ fun EpisodeTile(
                 .clip(RoundedCornerShape(8.dp))
                 .background(SurfaceHigh)
                 .border(
-                    width = 2.dp,
-                    color = if (focused) Accent else Color.Transparent,
+                    width = if (focused) 2.dp else 3.dp,
+                    color = when {
+                        focused -> Accent
+                        // Dimmer and thicker, so a held selection never reads as focus.
+                        selected -> Accent.copy(alpha = 0.55f)
+                        else -> Color.Transparent
+                    },
                     shape = RoundedCornerShape(8.dp),
                 ),
         ) {
@@ -472,7 +484,7 @@ fun EpisodeTile(
         ) {
             Text(
                 text = listOfNotNull(number.takeIf { it.isNotBlank() }, title).joinToString(". "),
-                color = if (focused) Parchment else Muted,
+                color = if (marked) Parchment else Muted,
                 fontSize = 14.sp,
                 lineHeight = 18.sp,
                 maxLines = 1,

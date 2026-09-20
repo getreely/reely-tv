@@ -21,6 +21,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -75,12 +77,22 @@ fun DetailScreen(
     // off the left edge. The rail is brought to it once, when the season's episodes
     // arrive — not on every focus change, which would fight the rail's own scrolling.
     val episodeRail = rememberLazyListState()
+    val landingFocus = remember { FocusRequester() }
     var railBroughtTo by remember(state.ratingKey) { mutableStateOf<String?>(null) }
     LaunchedEffect(state.episodes) {
         val key = state.focusedEpisode?.ratingKey ?: return@LaunchedEffect
         if (railBroughtTo == key) return@LaunchedEffect
         val index = state.episodes.indexOfFirst { it.ratingKey == key }
-        if (index > 0) runCatching { episodeRail.scrollToItem(index) }
+        if (index >= 0) {
+            if (index > 0) runCatching { episodeRail.scrollToItem(index) }
+            // Arriving here from a row means arriving at this episode, so it should be
+            // what the remote is already pointed at. The tile is composed in this same
+            // pass, so its requester needs a few frames before it will take focus.
+            repeat(FOCUS_ATTEMPTS) {
+                if (runCatching { landingFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+                kotlinx.coroutines.delay(FOCUS_RETRY_MS)
+            }
+        }
         railBroughtTo = key
     }
 
@@ -235,6 +247,7 @@ fun DetailScreen(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             items(state.episodes, key = { it.ratingKey }) { entry ->
+                                val isTarget = state.focusedEpisode?.ratingKey == entry.ratingKey
                                 EpisodeTile(
                                     number = entry.index?.toString().orEmpty(),
                                     title = entry.title,
@@ -242,8 +255,14 @@ fun DetailScreen(
                                     imageUrl = imageUrl(entry.thumb, 320, 180),
                                     progress = entry.resumeFraction,
                                     watched = entry.isWatched,
+                                    selected = isTarget,
                                     onFocus = { onFocusEpisode(entry) },
                                     onClick = { onPlay(entry) },
+                                    modifier = if (isTarget) {
+                                        Modifier.focusRequester(landingFocus)
+                                    } else {
+                                        Modifier
+                                    },
                                 )
                             }
                         }
@@ -285,3 +304,7 @@ fun DetailScreen(
         }
     }
 }
+
+/** Long enough for a tile to be laid out; a single request would land before it exists. */
+private const val FOCUS_ATTEMPTS = 16
+private const val FOCUS_RETRY_MS = 32L

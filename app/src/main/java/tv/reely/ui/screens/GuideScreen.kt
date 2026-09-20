@@ -1,6 +1,7 @@
 package tv.reely.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
@@ -84,6 +85,12 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 private val MINUTE_WIDTH = 5.dp
+
+/** The spacing between blocks in a row, which the label maths has to account for. */
+private val CARD_GAP = 5.dp
+
+/** How much of a block stays reserved for its label before it is pushed off the end. */
+private val LABEL_MIN_WIDTH = 130.dp
 private val CHANNEL_COLUMN = 132.dp
 private val ROW_HEIGHT = 78.dp
 private const val PREVIEW_DELAY_MS = 1_200L
@@ -418,10 +425,24 @@ private fun GuideRow(
                     title = "No guide data",
                     slot = null,
                     width = widthFor(guide.windowEnd - guide.windowStart),
+                    startsAt = 0.dp,
+                    scroll = scroll,
                     selected = false,
                     past = true,
                 )
                 return@Row
+            }
+
+            // Each block's own left edge inside the scrolling row, so a block that began
+            // before the window can still work out where its label should sit.
+            var nextEdge = 0.dp
+            var anyPlaced = false
+            fun place(childWidth: Dp): Dp {
+                if (anyPlaced) nextEdge += CARD_GAP
+                anyPlaced = true
+                val edge = nextEdge
+                nextEdge += childWidth
+                return edge
             }
 
             var cursor = guide.windowStart
@@ -429,11 +450,18 @@ private fun GuideRow(
                 val start = programme.start.coerceAtLeast(guide.windowStart)
                 val stop = programme.stop.coerceAtMost(guide.windowEnd)
                 if (stop <= start) return@forEach
-                if (start > cursor) Spacer(modifier = Modifier.width(widthFor(start - cursor)))
+                if (start > cursor) {
+                    val gap = widthFor(start - cursor)
+                    place(gap)
+                    Spacer(modifier = Modifier.width(gap))
+                }
+                val cardWidth = widthFor(stop - start)
                 ProgrammeCard(
                     title = programme.title,
                     slot = timeRange(programme),
-                    width = widthFor(stop - start),
+                    width = cardWidth,
+                    startsAt = place(cardWidth),
+                    scroll = scroll,
                     selected = isCurrent && programme.isOnAt(guide.focusTime),
                     past = programme.stop <= now,
                 )
@@ -446,16 +474,25 @@ private fun GuideRow(
     }
 }
 
-/** A block carries its own time, so nobody has to count along the ruler. */
+/**
+ * A block carries its own time, so nobody has to count along the ruler.
+ *
+ * A three-hour programme with twenty minutes left begins far to the left of the window,
+ * and its label went with it: the block on screen was a blank stripe that said nothing
+ * about what was on. The label now rides the viewport's left edge while the block is
+ * still under it, and is let go once the block's own start scrolls into view.
+ */
 @Composable
 private fun ProgrammeCard(
     title: String,
     slot: String?,
     width: Dp,
+    startsAt: Dp,
+    scroll: ScrollState,
     selected: Boolean,
     past: Boolean,
 ) {
-    Column(
+    Box(
         modifier = Modifier
             .width(width)
             .fillMaxHeight()
@@ -471,7 +508,17 @@ private fun ProgrammeCard(
                 width = if (selected) 2.dp else 0.dp,
                 color = if (selected) Accent else Color.Transparent,
                 shape = RoundedCornerShape(14.dp),
-            )
+            ),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+    Column(
+        modifier = Modifier
+            // Read in the layout pass, so scrolling the guide re-places the label
+            // without recomposing every block in it.
+            .offset {
+                val slack = (width.roundToPx() - LABEL_MIN_WIDTH.roundToPx()).coerceAtLeast(0)
+                IntOffset((scroll.value - startsAt.roundToPx()).coerceIn(0, slack), 0)
+            }
             .padding(horizontal = 14.dp),
         verticalArrangement = Arrangement.Center,
     ) {
@@ -494,6 +541,7 @@ private fun ProgrammeCard(
                 overflow = TextOverflow.Ellipsis,
             )
         }
+    }
     }
 }
 

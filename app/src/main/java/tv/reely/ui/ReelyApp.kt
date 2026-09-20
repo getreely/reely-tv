@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.delay
 import androidx.tv.material3.Text
 import tv.reely.plex.PlexItem
 import tv.reely.ui.components.EmptyNote
@@ -60,6 +61,10 @@ import tv.reely.ui.theme.Muted
 import tv.reely.ui.theme.Parchment
 
 private data class Destination(val label: String, val route: Route, val isSearch: Boolean = false)
+
+/** Roughly half a second of frames, far longer than a layout pass needs. */
+private const val CONTENT_FOCUS_ATTEMPTS = 16
+private const val CONTENT_FOCUS_RETRY_MS = 32L
 
 private val destinations = listOf(
     Destination("Search", Route.Search, isSearch = true),
@@ -116,9 +121,15 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     var tabRowHasFocus by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) { runCatching { selectedTab.requestFocus() } }
+    // The content of a screen is composed in the same pass that asks for its focus, so a
+    // single request throws and is lost — and focus then falls back to the first thing in
+    // the window, which is the search tab. That is why opening an episode left the cursor
+    // up in the tab row. Keep asking for a few frames instead.
     LaunchedEffect(routeKey(state.route), contentReady(state)) {
-        if (!tabRowHasFocus && contentReady(state)) {
-            runCatching { contentFocus.requestFocus() }
+        if (tabRowHasFocus || !contentReady(state)) return@LaunchedEffect
+        repeat(CONTENT_FOCUS_ATTEMPTS) {
+            if (runCatching { contentFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+            delay(CONTENT_FOCUS_RETRY_MS)
         }
     }
 
