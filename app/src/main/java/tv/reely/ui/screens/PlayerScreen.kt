@@ -473,8 +473,8 @@ fun PlayerScreen(
                 },
                 emphasised = true,
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(start = 44.dp, bottom = if (controlsVisible) 210.dp else 44.dp)
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 44.dp, bottom = if (controlsVisible) 210.dp else 44.dp)
                     .focusRequester(skipFocus),
             )
         }
