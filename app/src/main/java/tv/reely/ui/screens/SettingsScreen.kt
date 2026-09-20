@@ -1,0 +1,429 @@
+package tv.reely.ui.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.tv.material3.Text
+import tv.reely.core.Settings
+import tv.reely.plex.PlexServer
+import tv.reely.ui.GuideState
+import tv.reely.ui.GuideStatus
+import tv.reely.ui.LiveState
+import tv.reely.ui.PlayerPrefs
+import tv.reely.ui.PlexState
+import tv.reely.ui.components.ErrorNote
+import tv.reely.ui.components.FactLine
+import tv.reely.ui.components.SectionHeading
+import tv.reely.ui.components.TvActionButton
+import tv.reely.ui.components.TvChip
+import tv.reely.ui.theme.Line
+import tv.reely.ui.theme.Muted
+import tv.reely.ui.theme.Parchment
+import tv.reely.ui.theme.SurfaceRaised
+import tv.reely.xtream.StreamFormat
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+private enum class Section(val title: String) {
+    VIDEO("Video"),
+    LIVE_TV("Live TV"),
+    PLEX("Plex"),
+    ABOUT("About"),
+}
+
+/**
+ * A rail of sections down the left and their contents on the right, which is how a
+ * television expects settings to be laid out: one press to change subject rather than a
+ * single column somebody has to scroll to the bottom of.
+ */
+@Composable
+fun SettingsScreen(
+    plex: PlexState,
+    live: LiveState,
+    guide: GuideState,
+    prefs: PlayerPrefs,
+    onSignOutPlex: () -> Unit,
+    onSignOutXtream: () -> Unit,
+    onSwitchServer: (PlexServer) -> Unit,
+    onToggleFormat: () -> Unit,
+    onNudgeSubtitleScale: (Float) -> Unit,
+    onToggleSubtitleBackground: () -> Unit,
+    onNudgeUpNext: (Int) -> Unit,
+    onToggleGuidePreview: () -> Unit,
+    onCyclePlaybackMode: () -> Unit,
+    onCycleMaxBitrate: () -> Unit,
+    onRefreshChannels: () -> Unit,
+    onRefreshGuide: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var section by remember { mutableStateOf(Section.VIDEO) }
+
+    Row(modifier = modifier.fillMaxSize().padding(horizontal = 36.dp, vertical = 14.dp)) {
+        Column(
+            modifier = Modifier.width(180.dp).fillMaxHeight().focusGroup(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "Settings",
+                color = Parchment,
+                fontSize = 22.sp,
+                lineHeight = 28.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+            Section.entries.forEach { entry ->
+                TvChip(
+                    label = entry.title,
+                    selected = section == entry,
+                    onClick = { section = entry },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .padding(start = 26.dp)
+                .verticalScroll(rememberScrollState())
+                .focusGroup(),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            when (section) {
+                Section.VIDEO -> VideoSection(
+                    prefs = prefs,
+                    onNudgeSubtitleScale = onNudgeSubtitleScale,
+                    onToggleSubtitleBackground = onToggleSubtitleBackground,
+                    onNudgeUpNext = onNudgeUpNext,
+                    onCyclePlaybackMode = onCyclePlaybackMode,
+                    onCycleMaxBitrate = onCycleMaxBitrate,
+                )
+
+                Section.LIVE_TV -> LiveSection(
+                    live = live,
+                    guide = guide,
+                    prefs = prefs,
+                    onRefreshChannels = onRefreshChannels,
+                    onRefreshGuide = onRefreshGuide,
+                    onToggleFormat = onToggleFormat,
+                    onToggleGuidePreview = onToggleGuidePreview,
+                    onSignOutXtream = onSignOutXtream,
+                )
+
+                Section.PLEX -> PlexSection(
+                    plex = plex,
+                    onSwitchServer = onSwitchServer,
+                    onSignOutPlex = onSignOutPlex,
+                )
+
+                Section.ABOUT -> AboutSection()
+            }
+        }
+    }
+}
+
+@Composable
+private fun VideoSection(
+    prefs: PlayerPrefs,
+    onNudgeSubtitleScale: (Float) -> Unit,
+    onToggleSubtitleBackground: () -> Unit,
+    onNudgeUpNext: (Int) -> Unit,
+    onCyclePlaybackMode: () -> Unit,
+    onCycleMaxBitrate: () -> Unit,
+) {
+    Panel(title = "Playback") {
+        FactLine("Mode", playbackModeLabel(prefs.playbackMode))
+        FactLine("Transcode ceiling", bitrateLabel(prefs.maxBitrateKbps))
+        Buttons {
+            TvActionButton(label = "Change mode", onClick = onCyclePlaybackMode)
+            TvActionButton(label = "Change ceiling", onClick = onCycleMaxBitrate)
+        }
+    }
+
+    Panel(title = "Subtitles") {
+        FactLine("Size", "${(prefs.subtitleScale * 100).toInt()}%")
+        FactLine("Background", if (prefs.subtitleBackground) "On" else "Off (outlined)")
+        Text(
+            text = "Subtitles start off on everything. Choosing a track in the player turns " +
+                "them on and that choice carries to whatever is played next.",
+            color = Muted,
+            fontSize = 13.sp,
+            lineHeight = 19.sp,
+        )
+        Buttons {
+            TvActionButton(
+                label = "Smaller",
+                onClick = { onNudgeSubtitleScale(-Settings.SCALE_STEP) },
+            )
+            TvActionButton(
+                label = "Bigger",
+                onClick = { onNudgeSubtitleScale(Settings.SCALE_STEP) },
+            )
+            TvActionButton(
+                label = if (prefs.subtitleBackground) "Background off" else "Background on",
+                onClick = onToggleSubtitleBackground,
+            )
+        }
+    }
+
+    Panel(title = "Up Next") {
+        FactLine(
+            "Countdown",
+            if (prefs.upNextSeconds > 0) "${prefs.upNextSeconds} seconds" else "Off — waits for you",
+        )
+        Buttons {
+            TvActionButton(label = "Shorter", onClick = { onNudgeUpNext(-Settings.UP_NEXT_STEP) })
+            TvActionButton(label = "Longer", onClick = { onNudgeUpNext(Settings.UP_NEXT_STEP) })
+        }
+    }
+}
+
+@Composable
+private fun LiveSection(
+    live: LiveState,
+    guide: GuideState,
+    prefs: PlayerPrefs,
+    onRefreshChannels: () -> Unit,
+    onRefreshGuide: () -> Unit,
+    onToggleFormat: () -> Unit,
+    onToggleGuidePreview: () -> Unit,
+    onSignOutXtream: () -> Unit,
+) {
+    if (!live.isConnected) {
+        Panel(title = "Live TV") {
+            Text(
+                text = "No provider configured. The Live TV tab will ask for a panel address.",
+                color = Muted,
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+            )
+        }
+        return
+    }
+
+    Panel(title = "Refresh") {
+        FactLine("Channels", "${live.categories.size} categories")
+        FactLine("Guide", guide.status.describe())
+        FactLine("Guide last imported", relativeTime(guide.importedAt))
+        Text(
+            text = "Providers add and drop channels without notice, and the guide goes stale " +
+                "on its own. Neither is refetched unless asked.",
+            color = Muted,
+            fontSize = 13.sp,
+            lineHeight = 19.sp,
+        )
+        Buttons {
+            TvActionButton(
+                label = if (live.busy) "Refreshing…" else "Refresh channels",
+                onClick = onRefreshChannels,
+            )
+            TvActionButton(
+                label = if (guide.status is GuideStatus.Importing) "Importing…" else "Refresh guide",
+                onClick = onRefreshGuide,
+            )
+        }
+    }
+
+    Panel(title = "Provider") {
+        if (live.error != null) ErrorNote(live.error)
+        FactLine("Panel", live.credentials?.base ?: "—")
+        FactLine("Account", live.account?.status ?: "—")
+        FactLine(
+            "Connections",
+            "${live.account?.activeConnections ?: "?"} of ${live.account?.maxConnections ?: "?"} in use",
+        )
+        FactLine("Expires", live.account?.expiresAt?.let { epochLabel(it) } ?: "—")
+        FactLine("Stream container", live.format.label)
+        FactLine(
+            "Guide preview",
+            if (prefs.guidePreview) "On — uses one connection while browsing" else "Off",
+        )
+        Text(
+            text = "Multiview opens one connection per channel, so four tiles needs four of them.",
+            color = Muted,
+            fontSize = 13.sp,
+            lineHeight = 19.sp,
+        )
+        Buttons {
+            TvActionButton(
+                label = "Use ${if (live.format == StreamFormat.TS) "HLS" else "MPEG-TS"}",
+                onClick = onToggleFormat,
+            )
+            TvActionButton(
+                label = if (prefs.guidePreview) "Preview off" else "Preview on",
+                onClick = onToggleGuidePreview,
+            )
+            TvActionButton(label = "Sign out", onClick = onSignOutXtream)
+        }
+    }
+}
+
+@Composable
+private fun PlexSection(
+    plex: PlexState,
+    onSwitchServer: (PlexServer) -> Unit,
+    onSignOutPlex: () -> Unit,
+) {
+    if (!plex.isConnected) {
+        Panel(title = "Plex") {
+            Text(
+                text = "Not signed in. The Home, Movies and TV Shows tabs will offer to link an account.",
+                color = Muted,
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+            )
+        }
+        return
+    }
+
+    Panel(title = "Server") {
+        if (plex.error != null) ErrorNote(plex.error)
+        FactLine("Connected to", plex.serverName ?: "unknown")
+        FactLine("Address", plex.baseUrl ?: "—")
+        FactLine(
+            "Libraries",
+            plex.sections.joinToString(", ") { "${it.title} (${it.type})" }.ifEmpty { "none" },
+        )
+        Buttons {
+            TvActionButton(label = "Sign out of Plex", onClick = onSignOutPlex)
+        }
+    }
+
+    if (plex.servers.size > 1) {
+        Panel(title = "Other servers") {
+            Text(
+                text = "This account can reach ${plex.servers.size} servers. Switching replaces " +
+                    "every library, row and page with that server's own.",
+                color = Muted,
+                fontSize = 13.sp,
+                lineHeight = 19.sp,
+            )
+            Column(
+                modifier = Modifier.padding(top = 8.dp).focusGroup(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                plex.servers.forEach { server ->
+                    TvActionButton(
+                        label = if (server.name == plex.serverName) "${server.name} — in use"
+                        else "Switch to ${server.name}",
+                        onClick = { onSwitchServer(server) },
+                        emphasised = server.name == plex.serverName,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AboutSection() {
+    Panel(title = "Playback") {
+        Text(
+            text = "Direct play streams the file as it sits on the server and asks this device " +
+                "to decode it, which is the best picture and no work for the server. When the " +
+                "device cannot decode something, the server re-encodes it on the fly — which " +
+                "is what Auto falls back to, and what Always transcode does from the start. " +
+                "A transcode burns subtitles into the picture, so image subtitles play too.",
+            color = Muted,
+            fontSize = 14.sp,
+            lineHeight = 21.sp,
+        )
+    }
+    Panel(title = "The guide") {
+        Text(
+            text = "The provider's whole XMLTV guide is read straight into a local database as " +
+                "it downloads, so a guide of several hundred thousand programmes never has to " +
+                "fit in memory at once. Only the stretch on screen is held.",
+            color = Muted,
+            fontSize = 14.sp,
+            lineHeight = 21.sp,
+        )
+    }
+}
+
+@Composable
+private fun Panel(title: String, content: @Composable () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(SurfaceRaised)
+            .border(1.dp, Line, RoundedCornerShape(12.dp))
+            .padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        SectionHeading(title, modifier = Modifier.padding(bottom = 6.dp))
+        content()
+    }
+}
+
+@Composable
+private fun Buttons(content: @Composable () -> Unit) {
+    Row(
+        modifier = Modifier.padding(top = 8.dp).focusGroup(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        content()
+    }
+}
+
+private fun GuideStatus.describe(): String = when (this) {
+    is GuideStatus.Idle -> "Not loaded yet"
+    is GuideStatus.Importing ->
+        if (written == 0 && scanned == 0) "Downloading…"
+        else "Importing… $written kept of $scanned read"
+
+    is GuideStatus.Ready -> "$count programmes"
+    is GuideStatus.Failed -> message
+}
+
+private fun playbackModeLabel(mode: String): String = when (mode) {
+    Settings.MODE_DIRECT -> "Direct play only"
+    Settings.MODE_TRANSCODE -> "Always transcode"
+    else -> "Auto — transcode only if direct play fails"
+}
+
+private fun bitrateLabel(kbps: Int): String =
+    if (kbps <= 0) "Original quality" else "${kbps / 1_000} Mbps"
+
+private val dayFormat = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
+
+private fun epochLabel(raw: String): String {
+    val seconds = raw.toLongOrNull() ?: return raw
+    return dayFormat.format(Date(seconds * 1_000))
+}
+
+private fun relativeTime(epochSeconds: Long): String {
+    if (epochSeconds <= 0) return "never"
+    val ago = System.currentTimeMillis() / 1_000 - epochSeconds
+    return when {
+        ago < 90 -> "just now"
+        ago < 3_600 -> "${ago / 60} minutes ago"
+        ago < 86_400 -> "${ago / 3_600} hours ago"
+        else -> "${ago / 86_400} days ago"
+    }
+}

@@ -22,6 +22,7 @@ import tv.reely.plex.PlexExtra
 import tv.reely.plex.PlexItem
 import tv.reely.plex.PlexMarker
 import tv.reely.plex.PlexSection
+import tv.reely.plex.PlexServer
 import tv.reely.plex.PlexSubtitle
 import tv.reely.xtream.StreamFormat
 import tv.reely.xtream.XtreamAccount
@@ -50,7 +51,7 @@ sealed interface Route {
     data class Library(val kind: LibraryKind) : Route
     data object Live : Route
     data object Search : Route
-    data object Status : Route
+    data object Settings : Route
     /**
      * A page for one thing. An episode has no page of its own: it is a place inside its
      * show's, so the season to open and the episode to land on travel with the route.
@@ -128,6 +129,8 @@ data class PlexState(
     val baseUrl: String? = null,
     val serverToken: String? = null,
     val sections: List<PlexSection> = emptyList(),
+    /** Every server the account can see, so one of several can be chosen. */
+    val servers: List<PlexServer> = emptyList(),
     val browse: Map<LibraryKind, BrowseState> = LibraryKind.entries.associateWith { BrowseState() },
     val linkCode: String? = null,
     val busy: Boolean = false,
@@ -321,6 +324,52 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         if (base != null && serverToken != null) loadSections() else connectServer(token)
+        // Only the chosen server was ever stored, so the rest have to be asked for again
+        // before anything can offer to switch to them.
+        loadServerList(token)
+    }
+
+    private fun loadServerList(token: String) {
+        viewModelScope.launch {
+            val servers = runCatching { PlexApi.servers(clientId, token) }.getOrElse { return@launch }
+            updatePlex { it.copy(servers = servers) }
+        }
+    }
+
+    /**
+     * Moves to another of the account's servers. Everything read from the old one goes:
+     * its libraries, its rows and whatever was on screen all belong to it.
+     */
+    fun switchServer(server: PlexServer) {
+        viewModelScope.launch {
+            updatePlex { it.copy(busy = true, error = null) }
+            val base = PlexApi.firstReachable(server)
+            if (base == null) {
+                updatePlex {
+                    it.copy(busy = false, error = "${server.name} did not answer. Is it awake?")
+                }
+                return@launch
+            }
+            store.put(SecureStore.PLEX_SERVER_URI, base)
+            store.put(SecureStore.PLEX_SERVER_TOKEN, server.accessToken)
+            store.put(SecureStore.PLEX_SERVER_NAME, server.name)
+            _state.update {
+                it.copy(
+                    home = HomeState(),
+                    detail = null,
+                    focused = null,
+                    plex = it.plex.copy(
+                        baseUrl = base,
+                        serverToken = server.accessToken,
+                        serverName = server.name,
+                        sections = emptyList(),
+                        browse = LibraryKind.entries.associateWith { _ -> BrowseState() },
+                        busy = false,
+                    ),
+                )
+            }
+            loadSections()
+        }
     }
 
     fun startPlexLink() {
@@ -369,6 +418,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             }
             return
         }
+        updatePlex { it.copy(servers = servers) }
         for (server in servers) {
             val base = PlexApi.firstReachable(server) ?: continue
             store.put(SecureStore.PLEX_SERVER_URI, base)
@@ -1241,6 +1291,26 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 categories = categories,
                 error = null,
             )
+        }
+    }
+
+    /**
+     * Asks the panel for its category and channel list again. Providers add and drop
+     * channels without warning, and nothing else in the app ever refetches them.
+     */
+    fun refreshLiveChannels() {
+        val credentials = _state.value.live.credentials ?: return
+        channelsJob?.cancel()
+        allChannels = null
+        viewModelScope.launch {
+            updateLive { it.copy(busy = true, error = null) }
+            val categories = runCatching { XtreamApi.liveCategories(credentials) }
+                .getOrElse { failure ->
+                    updateLive { it.copy(busy = false, error = failure.readable()) }
+                    return@launch
+                }
+            updateLive { it.copy(busy = false, categories = categories, guide = emptyMap()) }
+            _state.value.live.selectedCategory?.let { openCategory(it) }
         }
     }
 

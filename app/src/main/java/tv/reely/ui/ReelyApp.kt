@@ -44,6 +44,7 @@ import kotlinx.coroutines.delay
 import androidx.tv.material3.Text
 import tv.reely.plex.PlexItem
 import tv.reely.ui.components.EmptyNote
+import tv.reely.ui.components.GearGlyph
 import tv.reely.ui.components.SearchGlyph
 import tv.reely.ui.screens.DetailScreen
 import tv.reely.ui.screens.GuideScreen
@@ -52,7 +53,7 @@ import tv.reely.ui.screens.LiveCategoriesScreen
 import tv.reely.ui.screens.SearchScreen
 import tv.reely.ui.screens.LibraryScreen
 import tv.reely.ui.screens.PlayerScreen
-import tv.reely.ui.screens.StatusScreen
+import tv.reely.ui.screens.SettingsScreen
 import tv.reely.ui.theme.Accent
 import tv.reely.ui.theme.Faint
 import tv.reely.ui.theme.Ink
@@ -60,20 +61,28 @@ import tv.reely.ui.theme.Line
 import tv.reely.ui.theme.Muted
 import tv.reely.ui.theme.Parchment
 
-private data class Destination(val label: String, val route: Route, val isSearch: Boolean = false)
+private enum class TabIcon { NONE, SEARCH, GEAR }
+
+private data class Destination(
+    val label: String,
+    val route: Route,
+    val icon: TabIcon = TabIcon.NONE,
+)
 
 /** Roughly half a second of frames, far longer than a layout pass needs. */
 private const val CONTENT_FOCUS_ATTEMPTS = 16
 private const val CONTENT_FOCUS_RETRY_MS = 32L
 
 private val destinations = listOf(
-    Destination("Search", Route.Search, isSearch = true),
+    Destination("Search", Route.Search, icon = TabIcon.SEARCH),
     Destination("Home", Route.Home),
     Destination("Movies", Route.Library(LibraryKind.MOVIES)),
     Destination("TV Shows", Route.Library(LibraryKind.SHOWS)),
     Destination("Live TV", Route.Live),
-    Destination("Status", Route.Status),
 )
+
+/** Settings sits apart from the destinations, over on the right where a gear belongs. */
+private val settingsDestination = Destination("Settings", Route.Settings, icon = TabIcon.GEAR)
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -277,12 +286,14 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 )
             }
 
-            is Route.Status -> StatusScreen(
+            is Route.Settings -> SettingsScreen(
                 plex = state.plex,
                 live = state.live,
+                guide = state.guide,
                 prefs = state.prefs,
                 onSignOutPlex = viewModel::signOutPlex,
                 onSignOutXtream = viewModel::signOutXtream,
+                onSwitchServer = viewModel::switchServer,
                 onToggleFormat = viewModel::toggleFormat,
                 onNudgeSubtitleScale = viewModel::nudgeSubtitleScale,
                 onToggleSubtitleBackground = viewModel::toggleSubtitleBackground,
@@ -290,6 +301,8 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onToggleGuidePreview = viewModel::toggleGuidePreview,
                 onCyclePlaybackMode = viewModel::cyclePlaybackMode,
                 onCycleMaxBitrate = viewModel::cycleMaxBitrate,
+                onRefreshChannels = viewModel::refreshLiveChannels,
+                onRefreshGuide = { viewModel.refreshGuide(force = true) },
             )
         }
         }
@@ -317,7 +330,7 @@ private fun routeKey(route: Route): String = when (route) {
     is Route.Detail -> "detail:${route.ratingKey}:${route.episodeKey}"
     is Route.Live -> "live"
     is Route.Search -> "search"
-    is Route.Status -> "status"
+    is Route.Settings -> "settings"
 }
 
 /** Whether the current screen has anything focusable in it yet. */
@@ -327,7 +340,7 @@ private fun contentReady(state: ReelyState): Boolean = when (val route = state.r
     is Route.Detail -> state.detail?.detail != null
     is Route.Live -> true
     is Route.Search -> true
-    is Route.Status -> true
+    is Route.Settings -> true
 }
 
 @Composable
@@ -360,7 +373,7 @@ private fun TopBar(
             NavTab(
                 label = destination.label,
                 selected = isSelected,
-                iconOnly = destination.isSearch,
+                icon = destination.icon,
                 onSelect = { onSelect(destination.route) },
                 onFocused = onTabFocused,
                 canSelectOnFocus = canSelectOnFocus,
@@ -371,8 +384,25 @@ private fun TopBar(
         Box(modifier = Modifier.weight(1f))
 
         if (serverName != null) {
-            Text(text = serverName, color = Faint, fontSize = 12.sp, lineHeight = 16.sp)
+            Text(
+                text = serverName,
+                color = Faint,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+                modifier = Modifier.padding(end = 12.dp),
+            )
         }
+
+        val settingsSelected = settingsDestination.route == current
+        NavTab(
+            label = settingsDestination.label,
+            selected = settingsSelected,
+            icon = TabIcon.GEAR,
+            onSelect = { onSelect(settingsDestination.route) },
+            onFocused = onTabFocused,
+            canSelectOnFocus = canSelectOnFocus,
+            modifier = if (settingsSelected) Modifier.focusRequester(selectedTab) else Modifier,
+        )
     }
 }
 
@@ -381,7 +411,7 @@ private fun TopBar(
 private fun NavTab(
     label: String,
     selected: Boolean,
-    iconOnly: Boolean = false,
+    icon: TabIcon = TabIcon.NONE,
     onSelect: () -> Unit,
     onFocused: () -> Unit,
     canSelectOnFocus: () -> Boolean,
@@ -411,13 +441,13 @@ private fun NavTab(
                 shape = RoundedCornerShape(99.dp),
             )
             .clickable(onClick = onSelect)
-            .padding(horizontal = if (iconOnly) 13.dp else 18.dp, vertical = 9.dp),
+            .padding(horizontal = if (icon == TabIcon.NONE) 18.dp else 13.dp, vertical = 9.dp),
     ) {
         val tint = if (selected || focused) Parchment else Muted
-        if (iconOnly) {
-            SearchGlyph(color = tint, size = 20.dp)
-        } else {
-            Text(
+        when (icon) {
+            TabIcon.SEARCH -> SearchGlyph(color = tint, size = 20.dp)
+            TabIcon.GEAR -> GearGlyph(color = tint, size = 20.dp)
+            TabIcon.NONE -> Text(
                 text = label,
                 color = tint,
                 fontSize = 16.sp,

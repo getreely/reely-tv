@@ -247,3 +247,27 @@ fun RestartGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) 
         drawPath(head, color)
     }
 }
+
+/** A toothed ring: settings. */
+@Composable
+fun GearGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(size)) {
+        val s = size.toPx()
+        val rim = s * 0.27f
+        drawCircle(color, radius = rim, style = Stroke(width = s * 0.13f))
+        // Eight teeth, placed on the rim rather than drawn as rotated boxes: at this
+        // size a spoke and a tooth are the same handful of pixels.
+        repeat(8) { index ->
+            val angle = index * (Math.PI / 4)
+            val dx = kotlin.math.cos(angle).toFloat()
+            val dy = kotlin.math.sin(angle).toFloat()
+            drawLine(
+                color,
+                start = center + androidx.compose.ui.geometry.Offset(dx * rim, dy * rim),
+                end = center + androidx.compose.ui.geometry.Offset(dx * s * 0.45f, dy * s * 0.45f),
+                strokeWidth = s * 0.12f,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round,
+            )
+        }
+    }
+}
