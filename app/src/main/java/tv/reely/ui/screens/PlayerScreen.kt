@@ -140,7 +140,17 @@ fun PlayerScreen(
                 /* handleAudioFocus = */ true,
             )
             .build()
-            .apply { setWakeMode(C.WAKE_MODE_NETWORK) }
+            .apply {
+                setWakeMode(C.WAKE_MODE_NETWORK)
+                // Subtitles start off. Left alone, the track selector turns them on by
+                // itself whenever a track matches the device language or is flagged
+                // default or forced, which is not what anyone asked for. Choosing one in
+                // the panel re-enables them, and that choice then carries to whatever is
+                // played next, which is what a client should do.
+                trackSelectionParameters = trackSelectionParameters.buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                    .build()
+            }
     }
 
     var playing by remember { mutableStateOf(false) }
