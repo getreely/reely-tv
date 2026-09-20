@@ -447,9 +447,20 @@ fun PlayerScreen(
             else -> null
         }
 
-        LaunchedEffect(skipLabel) {
-            runCatching {
-                if (skipLabel != null) skipFocus.requestFocus() else rootFocus.requestFocus()
+        // Same trap as the transport controls: the button is composed in this pass and
+        // its requester is not attached yet, so one attempt would fail silently and leave
+        // a Skip Intro that cannot be pressed. When it goes, focus has to land somewhere
+        // or the remote does nothing at all.
+        LaunchedEffect(skipLabel, controlsVisible) {
+            if (skipLabel != null) {
+                repeat(FOCUS_ATTEMPTS) {
+                    if (runCatching { skipFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+                    delay(FOCUS_RETRY_MS)
+                }
+            } else {
+                runCatching {
+                    if (controlsVisible) playFocus.requestFocus() else rootFocus.requestFocus()
+                }
             }
         }
 
@@ -462,8 +473,8 @@ fun PlayerScreen(
                 },
                 emphasised = true,
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 44.dp, bottom = if (controlsVisible) 210.dp else 44.dp)
+                    .align(Alignment.BottomStart)
+                    .padding(start = 44.dp, bottom = if (controlsVisible) 210.dp else 44.dp)
                     .focusRequester(skipFocus),
             )
         }
