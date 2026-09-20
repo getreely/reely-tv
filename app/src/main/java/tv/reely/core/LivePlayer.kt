@@ -63,9 +63,9 @@ class LivePlayer(context: Context) {
                     error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW ->
                         rejoin()
 
-                    // Anything else the network did. Worth a few goes before giving up:
-                    // a provider hiccup should not end an evening's viewing.
-                    error.errorCode in NETWORK_ERRORS && retries < MAX_RETRIES -> {
+                    // Anything else that can be retried. Worth a few goes before giving
+                    // up: a provider hiccup should not end an evening's viewing.
+                    RECOVERABLE.any { error.errorCode in it } && retries < MAX_RETRIES -> {
                         retries++
                         scope.launch {
                             delay(RETRY_DELAY_MS * retries)
@@ -119,8 +119,13 @@ class LivePlayer(context: Context) {
     }
 
     private companion object {
-        /** Media3's network and IO range. Decode failures are a different matter. */
-        val NETWORK_ERRORS = 2_000..2_999
+        /**
+         * Media3's miscellaneous and IO ranges: timeouts, dropped connections, refused
+         * requests, and whatever a provider does when it is having a bad minute. Decode
+         * failures live in 3000 and above and are a different matter — retrying a stream
+         * this device cannot decode would only fail again, slower.
+         */
+        val RECOVERABLE = listOf(1_000..1_004, 2_000..2_999)
         const val MAX_RETRIES = 4
         const val RETRY_DELAY_MS = 1_500L
     }
