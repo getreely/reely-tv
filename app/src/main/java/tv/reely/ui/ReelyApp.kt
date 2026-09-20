@@ -196,8 +196,8 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     // single request throws and is lost — and focus then falls back to the first thing in
     // the window, which is the search tab. That is why opening an episode left the cursor
     // up in the tab row. Keep asking for a few frames instead.
-    LaunchedEffect(routeKey(state.route), contentReady(state)) {
-        if (tabRowHasFocus || !contentReady(state)) return@LaunchedEffect
+    LaunchedEffect(routeKey(state.route), contentReady(state), menuFor) {
+        if (menuFor != null || tabRowHasFocus || !contentReady(state)) return@LaunchedEffect
         contentFocus.requestWhenReady()
     }
 
@@ -217,9 +217,19 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     ) {
         TopBar(
             current = state.stack.first(),
-            onSelect = { route ->
-                // Movies and TV Shows drop a menu instead of simply going there again.
-                if (route is Route.Library && state.stack.first() == route) {
+            // Arriving at a tab and choosing a tab are not the same act. The cursor
+            // reaching Movies on its way up out of the content must not drop the menu,
+            // which is what it was doing — and with the menu then taking focus back off
+            // the content, the two spent the rest of the afternoon passing it between
+            // them. Only a press opens a menu.
+            onNavigate = { route ->
+                if (route != state.stack.first()) {
+                    menuFor = null
+                    viewModel.navigate(route)
+                }
+            },
+            onActivate = { route ->
+                if (route is Route.Library) {
                     menuFor = route.kind
                 } else {
                     menuFor = null
@@ -485,7 +495,8 @@ private fun contentReady(state: ReelyState): Boolean = when (val route = state.r
 @Composable
 private fun TopBar(
     current: Route,
-    onSelect: (Route) -> Unit,
+    onNavigate: (Route) -> Unit,
+    onActivate: (Route) -> Unit,
     onTabFocused: () -> Unit,
     onTabPositioned: (Route, Int) -> Unit,
     tabFocus: List<FocusRequester>,
@@ -515,7 +526,8 @@ private fun TopBar(
                 label = destination.label,
                 selected = isSelected,
                 icon = destination.icon,
-                onSelect = { onSelect(destination.route) },
+                onNavigate = { onNavigate(destination.route) },
+                onActivate = { onActivate(destination.route) },
                 onFocused = onTabFocused,
                 canSelectOnFocus = canSelectOnFocus,
                 modifier = Modifier
@@ -543,7 +555,8 @@ private fun TopBar(
             label = settingsDestination.label,
             selected = settingsSelected,
             icon = TabIcon.GEAR,
-            onSelect = { onSelect(settingsDestination.route) },
+            onNavigate = { onNavigate(settingsDestination.route) },
+            onActivate = { onActivate(settingsDestination.route) },
             onFocused = onTabFocused,
             canSelectOnFocus = canSelectOnFocus,
             modifier = Modifier.focusRequester(settingsFocus),
@@ -557,7 +570,8 @@ private fun NavTab(
     label: String,
     selected: Boolean,
     icon: TabIcon = TabIcon.NONE,
-    onSelect: () -> Unit,
+    onNavigate: () -> Unit,
+    onActivate: () -> Unit,
     onFocused: () -> Unit,
     canSelectOnFocus: () -> Boolean,
     modifier: Modifier = Modifier,
@@ -569,7 +583,7 @@ private fun NavTab(
                 focused = it.isFocused
                 if (it.isFocused) {
                     onFocused()
-                    if (canSelectOnFocus()) onSelect()
+                    if (canSelectOnFocus()) onNavigate()
                 }
             }
             .clip(RoundedCornerShape(99.dp))
@@ -585,7 +599,7 @@ private fun NavTab(
                 color = if (focused) Accent else Color.Transparent,
                 shape = RoundedCornerShape(99.dp),
             )
-            .clickable(onClick = onSelect)
+            .clickable(onClick = onActivate)
             .padding(horizontal = if (icon == TabIcon.NONE) 18.dp else 13.dp, vertical = 9.dp),
     ) {
         val tint = if (selected || focused) Parchment else Muted
