@@ -28,8 +28,8 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import tv.reely.BuildConfig
 import tv.reely.core.Settings
-import tv.reely.plex.PlexSection
 import tv.reely.plex.PlexServer
+import tv.reely.ui.LibraryChoice
 import tv.reely.ui.GuideState
 import tv.reely.ui.GuideStatus
 import tv.reely.ui.LiveState
@@ -72,7 +72,7 @@ fun SettingsScreen(
     onSignOutPlex: () -> Unit,
     onSignOutXtream: () -> Unit,
     onSwitchServer: (PlexServer) -> Unit,
-    onToggleFavourite: (PlexSection) -> Unit,
+    onToggleFavourite: (LibraryChoice) -> Unit,
     onToggleFormat: () -> Unit,
     onNudgeSubtitleScale: (Float) -> Unit,
     onToggleSubtitleBackground: () -> Unit,
@@ -303,7 +303,7 @@ private fun LiveSection(
 private fun PlexPanel(
     plex: PlexState,
     onSwitchServer: (PlexServer) -> Unit,
-    onToggleFavourite: (PlexSection) -> Unit,
+    onToggleFavourite: (LibraryChoice) -> Unit,
     onSignOutPlex: () -> Unit,
 ) {
     if (!plex.isConnected) {
@@ -331,11 +331,11 @@ private fun PlexPanel(
         }
     }
 
-    if (plex.sections.size > 1) {
+    if (plex.libraryChoices.size > 1) {
         Panel(title = "Libraries in the tab menu") {
             Text(
                 text = if (plex.favouriteSections.isEmpty())
-                    "Every library is offered. Pick some and only those will be."
+                    "Every library on every server is offered. Pick some and only those will be."
                 else
                     "Only the picked libraries are offered. Clear them all to go back to " +
                         "offering every one.",
@@ -347,11 +347,16 @@ private fun PlexPanel(
                 modifier = Modifier.padding(top = 8.dp).focusGroup(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                plex.sections.forEach { section ->
-                    val picked = section.key in plex.favouriteSections
+                plex.libraryChoices.forEach { choice ->
+                    val picked = choice.id in plex.favouriteSections
+                    val name = if (plex.namesNeedServer) {
+                        "${choice.section.title} — ${choice.serverName}"
+                    } else {
+                        choice.section.title
+                    }
                     TvActionButton(
-                        label = "${if (picked) "★" else "☆"}  ${section.title}  (${section.type})",
-                        onClick = { onToggleFavourite(section) },
+                        label = "${if (picked) "★" else "☆"}  $name",
+                        onClick = { onToggleFavourite(choice) },
                         emphasised = picked,
                     )
                 }
@@ -362,10 +367,10 @@ private fun PlexPanel(
     if (plex.servers.size > 1) {
         Panel(title = "Other servers") {
             Text(
-                text = "This account can reach ${plex.servers.size} servers. They are offered in " +
-                    "the Movies and TV Shows menus too, which is where switching usually " +
-                    "belongs. Switching replaces every library, row and page with that " +
-                    "server's own.",
+                text = "This account can reach ${plex.servers.size} servers. Their libraries are " +
+                    "offered together in the Movies and TV Shows menus, so picking a library " +
+                    "is usually all that is needed and this is the long way round. Switching " +
+                    "replaces every library, row and page with that server's own.",
                 color = Muted,
                 fontSize = 13.sp,
                 lineHeight = 19.sp,

@@ -84,6 +84,7 @@ data class EpisodeGroup(
     val newest: PlexItem,
     val count: Int,
     val addedAt: Long,
+    val librarySectionId: String?,
 )
 
 data class HomeState(
@@ -138,6 +139,21 @@ data class DetailState(
     val error: String? = null,
 )
 
+/**
+ * One library, on one server. An account with two servers has two sets of libraries and
+ * no reason to care which server a library lives on beyond telling two "Movies" apart,
+ * so they are offered as one list rather than making somebody pick a server first.
+ */
+data class LibraryChoice(
+    val serverName: String,
+    val baseUrl: String,
+    val token: String,
+    val section: PlexSection,
+) {
+    /** Section keys are only unique within a server, so the server has to be in this. */
+    val id: String get() = "$serverName|${section.key}"
+}
+
 data class PlexState(
     val token: String? = null,
     val serverName: String? = null,
@@ -146,6 +162,8 @@ data class PlexState(
     val sections: List<PlexSection> = emptyList(),
     /** Every server the account can see, so one of several can be chosen. */
     val servers: List<PlexServer> = emptyList(),
+    /** Every library on every server the account can reach. */
+    val libraryChoices: List<LibraryChoice> = emptyList(),
     val browse: Map<LibraryKind, BrowseState> = LibraryKind.entries.associateWith { BrowseState() },
     val linkCode: String? = null,
     val busy: Boolean = false,
@@ -156,12 +174,18 @@ data class PlexState(
 
     fun sectionsFor(kind: LibraryKind): List<PlexSection> = sections.filter { it.type == kind.plexType }
 
+    fun choicesFor(kind: LibraryKind): List<LibraryChoice> =
+        libraryChoices.filter { it.section.type == kind.plexType }
+
     /** What the tab menu offers: the chosen few, or everything when none are chosen. */
-    fun menuSectionsFor(kind: LibraryKind): List<PlexSection> {
-        val all = sectionsFor(kind)
+    fun menuChoicesFor(kind: LibraryKind): List<LibraryChoice> {
+        val all = choicesFor(kind)
         if (favouriteSections.isEmpty()) return all
-        return all.filter { it.key in favouriteSections }.ifEmpty { all }
+        return all.filter { it.id in favouriteSections }.ifEmpty { all }
     }
+
+    /** Only worth naming the server when there is more than one to confuse. */
+    val namesNeedServer: Boolean get() = servers.size > 1
 
     fun browseFor(kind: LibraryKind): BrowseState = browse[kind] ?: BrowseState()
 }
@@ -312,6 +336,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     private var channelsJob: Job? = null
     private val browseJobs = mutableMapOf<LibraryKind, Job>()
     private var updateJob: Job? = null
+    private var libraryScanJob: Job? = null
 
     /** Every live channel the account carries, fetched once and reused by search. */
     private var allChannels: List<XtreamChannel>? = null
@@ -375,7 +400,78 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val servers = runCatching { PlexApi.servers(clientId, token) }.getOrElse { return@launch }
             updatePlex { it.copy(servers = servers) }
+            scanLibraries()
         }
+    }
+
+    /**
+     * Asks every server the account can reach what libraries it has, so the tab menu can
+     * offer them all at once. Done in the background and once: it costs a reachability
+     * probe and one read per server, which is a lot to do while somebody waits and
+     * nothing at all to do while they are looking at the screen that is already loaded.
+     */
+    private fun scanLibraries() {
+        if (libraryScanJob?.isActive == true) return
+        libraryScanJob = viewModelScope.launch {
+            val plex = _state.value.plex
+            val found = mutableListOf<LibraryChoice>()
+            for (server in plex.servers) {
+                // The one in use has already been probed and answered.
+                val base = if (server.name == plex.serverName && plex.baseUrl != null) plex.baseUrl
+                else PlexApi.firstReachable(server) ?: continue
+                val token = server.accessToken
+                val sections = runCatching { PlexApi.sections(base, token) }.getOrNull() ?: continue
+                sections.forEach { section ->
+                    found += LibraryChoice(
+                        serverName = server.name,
+                        baseUrl = base,
+                        token = token,
+                        section = section,
+                    )
+                }
+                // Published as each server answers, so a slow one does not hold up the rest.
+                updatePlex { it.copy(libraryChoices = found.toList()) }
+            }
+        }
+    }
+
+    /**
+     * Opens a library wherever it lives, moving to its server first when that is not the
+     * one in use. Picking a library is the whole gesture; which server it happens to be
+     * on is an implementation detail of somebody's setup.
+     */
+    fun openLibrary(kind: LibraryKind, choice: LibraryChoice) {
+        if (choice.baseUrl == _state.value.plex.baseUrl) {
+            openSection(kind, choice.section)
+            return
+        }
+        viewModelScope.launch {
+            useServer(choice.serverName, choice.baseUrl, choice.token)
+            openSection(kind, choice.section)
+        }
+    }
+
+    /** Moves everything over to one server and reloads what belongs to it. */
+    private suspend fun useServer(name: String, base: String, token: String) {
+        store.put(SecureStore.PLEX_SERVER_URI, base)
+        store.put(SecureStore.PLEX_SERVER_TOKEN, token)
+        store.put(SecureStore.PLEX_SERVER_NAME, name)
+        _state.update {
+            it.copy(
+                home = HomeState(),
+                detail = null,
+                focused = null,
+                plex = it.plex.copy(
+                    baseUrl = base,
+                    serverToken = token,
+                    serverName = name,
+                    sections = emptyList(),
+                    browse = LibraryKind.entries.associateWith { _ -> BrowseState() },
+                    busy = false,
+                ),
+            )
+        }
+        loadSections()
     }
 
     /**
@@ -392,25 +488,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 return@launch
             }
-            store.put(SecureStore.PLEX_SERVER_URI, base)
-            store.put(SecureStore.PLEX_SERVER_TOKEN, server.accessToken)
-            store.put(SecureStore.PLEX_SERVER_NAME, server.name)
-            _state.update {
-                it.copy(
-                    home = HomeState(),
-                    detail = null,
-                    focused = null,
-                    plex = it.plex.copy(
-                        baseUrl = base,
-                        serverToken = server.accessToken,
-                        serverName = server.name,
-                        sections = emptyList(),
-                        browse = LibraryKind.entries.associateWith { _ -> BrowseState() },
-                        busy = false,
-                    ),
-                )
-            }
-            loadSections()
+            useServer(server.name, base, server.accessToken)
         }
     }
 
@@ -461,6 +539,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         updatePlex { it.copy(servers = servers) }
+        scanLibraries()
         for (server in servers) {
             val base = PlexApi.firstReachable(server) ?: continue
             store.put(SecureStore.PLEX_SERVER_URI, base)
@@ -616,6 +695,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                             newest = episode,
                             count = 1,
                             addedAt = episode.addedAt,
+                            librarySectionId = episode.librarySectionId ?: section.key,
                         )
                     } else {
                         // Only the newest episode is kept; the rest are just a tally.
@@ -666,9 +746,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Which libraries the tab menu offers. */
-    fun toggleFavouriteSection(section: PlexSection) {
+    fun toggleFavouriteLibrary(choice: LibraryChoice) {
         val next = settings.favouriteSections.toMutableSet()
-        if (!next.remove(section.key)) next.add(section.key)
+        if (!next.remove(choice.id)) next.add(choice.id)
         settings.favouriteSections = next
         updatePlex { it.copy(favouriteSections = next) }
     }
@@ -1805,6 +1885,7 @@ private fun PlexDetail.asItem(): PlexItem = PlexItem(
     viewedLeafCount = 0,
     viewCount = viewCount,
     addedAt = 0,
+    librarySectionId = null,
 )
 
 private fun Throwable.readable(): String =

@@ -20,6 +20,9 @@ import androidx.tv.material3.Text
 import tv.reely.ui.theme.Ink
 import tv.reely.ui.theme.Line
 
+/** The panel's width, which the caller needs to keep it on screen. */
+val TAB_MENU_WIDTH = 300.dp
+
 /** One thing a tab's menu can do. */
 data class TabMenuItem(
     val label: String,
@@ -42,7 +45,7 @@ fun TabMenu(
 ) {
     Column(
         modifier = modifier
-            .width(280.dp)
+            .width(TAB_MENU_WIDTH)
             .clip(RoundedCornerShape(14.dp))
             .background(Ink.copy(alpha = 0.97f))
             .border(1.dp, Line, RoundedCornerShape(14.dp))

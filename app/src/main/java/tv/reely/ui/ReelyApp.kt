@@ -17,12 +17,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -37,6 +41,8 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -47,6 +53,7 @@ import tv.reely.ui.components.EmptyNote
 import tv.reely.ui.components.GearGlyph
 import tv.reely.ui.components.SearchGlyph
 import tv.reely.ui.components.TabMenu
+import tv.reely.ui.components.TAB_MENU_WIDTH
 import tv.reely.ui.components.TabMenuItem
 import tv.reely.ui.screens.DetailScreen
 import tv.reely.ui.screens.GuideScreen
@@ -125,6 +132,10 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     // rather than re-navigating to where you already are.
     var menuFor by remember { mutableStateOf<LibraryKind?>(null) }
     val menuFocus = remember { FocusRequester() }
+    // Where the tab that opened the menu sits, so the panel can hang under it.
+    var menuAnchorPx by remember { mutableIntStateOf(0) }
+    var constraintsWidth by remember { mutableIntStateOf(0) }
+    val menuWidthPx = with(LocalDensity.current) { TAB_MENU_WIDTH.roundToPx() }
 
     // Back walks the stack: out of a season, off a detail page, and only then out of the app.
     BackHandler(enabled = menuFor != null) { menuFor = null }
@@ -192,6 +203,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 }
             },
             onTabFocused = { tabRowHasFocus = true },
+            onTabPositioned = { route, x -> if (route is Route.Library) menuAnchorPx = x },
             selectedTab = selectedTab,
             canSelectOnFocus = { arrivedByDirectionKey.also { arrivedByDirectionKey = false } },
             serverName = state.plex.serverName,
@@ -213,6 +225,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                         if (direction == FocusDirection.Up) selectedTab else FocusRequester.Default
                     }
                 }
+                .onGloballyPositioned { constraintsWidth = it.size.width }
                 .onFocusChanged {
                     if (it.hasFocus) {
                         tabRowHasFocus = false
@@ -318,7 +331,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onSignOutPlex = viewModel::signOutPlex,
                 onSignOutXtream = viewModel::signOutXtream,
                 onSwitchServer = viewModel::switchServer,
-                onToggleFavourite = viewModel::toggleFavouriteSection,
+                onToggleFavourite = viewModel::toggleFavouriteLibrary,
                 onToggleFormat = viewModel::toggleFormat,
                 onNudgeSubtitleScale = viewModel::nudgeSubtitleScale,
                 onToggleSubtitleBackground = viewModel::toggleSubtitleBackground,
@@ -338,6 +351,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             if (menuFor != null) {
                 val kind = menuFor!!
                 val browse = state.plex.browseFor(kind)
+                val choices = state.plex.menuChoicesFor(kind)
                 TabMenu(
                     groups = listOf(
                         "In ${kind.title}" to listOf(
@@ -356,36 +370,36 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                                 viewModel.navigate(Route.Library(kind, LibraryView.GRID))
                             },
                         ),
-                        "Libraries" to state.plex.menuSectionsFor(kind)
+                        // One list. Which server a library sits on is only worth saying
+                        // when there is more than one server to tell apart.
+                        "Libraries" to choices
                             .takeIf { it.size > 1 }
                             .orEmpty()
-                            .map { section ->
+                            .map { choice ->
                                 TabMenuItem(
-                                    label = section.title,
-                                    selected = browse.section?.key == section.key,
+                                    label = if (state.plex.namesNeedServer) {
+                                        "${choice.section.title} — ${choice.serverName}"
+                                    } else {
+                                        choice.section.title
+                                    },
+                                    selected = choice.baseUrl == state.plex.baseUrl &&
+                                        choice.section.key == browse.section?.key,
                                 ) {
                                     menuFor = null
-                                    viewModel.openSection(kind, section)
+                                    viewModel.openLibrary(kind, choice)
                                     viewModel.navigate(Route.Library(kind, LibraryView.GRID))
-                                }
-                            },
-                        "Servers" to state.plex.servers
-                            .takeIf { it.size > 1 }
-                            .orEmpty()
-                            .map { server ->
-                                TabMenuItem(
-                                    label = server.name,
-                                    selected = server.name == state.plex.serverName,
-                                ) {
-                                    menuFor = null
-                                    if (server.name != state.plex.serverName) {
-                                        viewModel.switchServer(server)
-                                    }
                                 }
                             },
                     ),
                     focusRequester = menuFocus,
-                    modifier = Modifier.padding(start = 40.dp, top = 4.dp),
+                    // Sits under the tab it belongs to, pulled back from the right edge
+                    // when a tab near the end of the bar would push it off screen.
+                    modifier = Modifier
+                        .offset {
+                            val limit = (constraintsWidth - menuWidthPx).coerceAtLeast(0)
+                            IntOffset(menuAnchorPx.coerceIn(0, limit), 0)
+                        }
+                        .padding(top = 4.dp),
                 )
             }
         }
@@ -431,6 +445,7 @@ private fun TopBar(
     current: Route,
     onSelect: (Route) -> Unit,
     onTabFocused: () -> Unit,
+    onTabPositioned: (Route, Int) -> Unit,
     selectedTab: FocusRequester,
     canSelectOnFocus: () -> Boolean,
     serverName: String?,
@@ -460,7 +475,10 @@ private fun TopBar(
                 onSelect = { onSelect(destination.route) },
                 onFocused = onTabFocused,
                 canSelectOnFocus = canSelectOnFocus,
-                modifier = if (isSelected) Modifier.focusRequester(selectedTab) else Modifier,
+                modifier = (if (isSelected) Modifier.focusRequester(selectedTab) else Modifier)
+                    .onGloballyPositioned {
+                        onTabPositioned(destination.route, it.positionInRoot().x.toInt())
+                    },
             )
         }
 

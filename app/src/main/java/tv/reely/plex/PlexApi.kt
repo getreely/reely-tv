@@ -94,6 +94,8 @@ data class PlexItem(
     val viewedLeafCount: Int,
     val viewCount: Int,
     val addedAt: Long,
+    /** Which library this came from, so a tab can show only its own library's things. */
+    val librarySectionId: String?,
 ) {
     val isPlayable: Boolean get() = type == "movie" || type == "episode"
 
@@ -611,6 +613,7 @@ object PlexApi {
         viewedLeafCount = entry.optInt("viewedLeafCount"),
         viewCount = entry.optInt("viewCount"),
         addedAt = entry.optLong("addedAt"),
+        librarySectionId = entry.optString("librarySectionID").takeIf(String::isNotBlank),
     )
 
     private fun tags(entry: JSONObject, field: String): List<String> {

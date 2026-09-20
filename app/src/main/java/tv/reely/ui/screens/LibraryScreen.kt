@@ -78,9 +78,19 @@ fun LibraryScreen(
 
     val sections = plex.sectionsFor(kind)
     val browse: BrowseState = plex.browseFor(kind)
+
+    // These rows belong to the library the tab is showing, not to every library of that
+    // kind on the server. Picking a library from the tab menu has to change them, or the
+    // page would claim a different library's things are in this one.
+    val sectionKey = browse.section?.key
+    fun inThisLibrary(id: String?): Boolean = sectionKey == null || id == null || id == sectionKey
+
     val resumable = home.continueWatching.filter {
-        if (kind == LibraryKind.MOVIES) it.type == "movie" else it.type == "episode"
+        val rightKind = if (kind == LibraryKind.MOVIES) it.type == "movie" else it.type == "episode"
+        rightKind && inThisLibrary(it.librarySectionId)
     }
+    val recentMovies = home.recentMovies.filter { inThisLibrary(it.librarySectionId) }
+    val recentEpisodes = home.recentEpisodes.filter { inThisLibrary(it.librarySectionId) }
 
     Box(modifier = modifier.fillMaxSize()) {
         HeroBackdrop(
@@ -151,7 +161,7 @@ fun LibraryScreen(
                 }
 
                 if (view == LibraryView.HOME && kind == LibraryKind.MOVIES &&
-                    home.recentMovies.isNotEmpty()
+                    recentMovies.isNotEmpty()
                 ) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         RowBlock("Recently Added") {
@@ -159,7 +169,7 @@ fun LibraryScreen(
                                 modifier = Modifier.focusGroup(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                items(home.recentMovies, key = { it.ratingKey }) { movie ->
+                                items(recentMovies, key = { it.ratingKey }) { movie ->
                                     PosterCard(
                                         title = movie.title,
                                         subtitle = movie.caption,
@@ -176,7 +186,7 @@ fun LibraryScreen(
                 }
 
                 if (view == LibraryView.HOME && kind == LibraryKind.SHOWS &&
-                    home.recentEpisodes.isNotEmpty()
+                    recentEpisodes.isNotEmpty()
                 ) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         RowBlock("Recently Added") {
@@ -185,7 +195,7 @@ fun LibraryScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 items(
-                                    home.recentEpisodes,
+                                    recentEpisodes,
                                     key = { it.showRatingKey ?: it.showTitle },
                                 ) { group ->
                                     PosterCard(
