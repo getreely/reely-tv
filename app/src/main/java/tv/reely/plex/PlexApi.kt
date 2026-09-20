@@ -64,8 +64,6 @@ data class PlexPlayback(
     val url: String,
     val subtitles: List<PlexSubtitle>,
     val markers: List<PlexMarker> = emptyList(),
-    /** What the metadata response held where markers were expected. For diagnosis. */
-    val markerProbe: String = "",
 )
 
 /** A person in the cast, as Plex records them. */
@@ -437,7 +435,6 @@ object PlexApi {
                 url = "$base$key?X-Plex-Token=$token",
                 subtitles = subtitlesOf(part, base, token),
                 markers = markersOf(metadata),
-                markerProbe = probeMarkers(metadata),
             )
         }
 
@@ -634,24 +631,6 @@ object PlexApi {
                     thumb = role.optString("thumb").takeIf(String::isNotEmpty),
                 )
             }
-    }
-
-    /**
-     * Says what the response held where markers were expected, so a server that sends
-     * none can be told apart from a response this app is reading wrongly. Without it
-     * there is nothing to go on but guesses.
-     */
-    private fun probeMarkers(metadata: JSONObject): String {
-        val array = markerArray(metadata)
-            ?: return "no Marker field · fields: " +
-                metadata.keys().asSequence().joinToString(",")
-
-        if (array.length() == 0) return "Marker field is empty"
-        return "Marker[${array.length()}] " + (0 until array.length()).joinToString(", ") { index ->
-            val marker = array.optJSONObject(index) ?: return@joinToString "?"
-            val type = marker.optString("type").ifEmpty { "untyped" }
-            "$type ${marker.optLong("startTimeOffset", -1)}–${marker.optLong("endTimeOffset", -1)}"
-        }
     }
 
     /** Plex has been known to collapse a one-element collection to a bare object. */

@@ -200,8 +200,6 @@ data class Playback(
     val queue: List<PlexItem> = emptyList(),
     val queueIndex: Int = -1,
     val markers: List<PlexMarker> = emptyList(),
-    /** What the server said where markers were expected. Shown in the player. */
-    val markerProbe: String = "",
     /** True when the server is encoding this rather than handing over the file. */
     val transcoding: Boolean = false,
     val transcodeSession: String? = null,
@@ -765,7 +763,6 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                         durationMs = item.durationMs,
                         subtitles = if (transcode) emptyList() else resolved.subtitles,
                         markers = resolved.markers,
-                        markerProbe = resolved.markerProbe,
                         queue = effectiveQueue,
                         queueIndex = effectiveQueue.indexOfFirst { entry -> entry.ratingKey == item.ratingKey },
                         transcoding = transcode,
