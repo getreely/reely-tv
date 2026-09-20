@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -27,6 +28,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.SpanStyle
@@ -267,20 +274,62 @@ fun TvTextField(
     imeAction: ImeAction = ImeAction.Next,
 ) {
     var focused by remember { mutableStateOf(false) }
+    /*
+     * A field on a television is somewhere the cursor passes through on its way to the
+     * next one. Compose opens the keyboard the moment a text field takes focus, which on
+     * a remote means the keyboard covering the screen because somebody pressed down.
+     *
+     * So the field is read-only until it is chosen. Read-only is what actually suppresses
+     * the keyboard — focus alone no longer opens it — and OK turns typing on.
+     */
+    var editing by remember { mutableStateOf(false) }
+    val keyboard = LocalSoftwareKeyboardController.current
+
     Column(modifier = modifier) {
         Text(text = label, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
             singleLine = true,
+            readOnly = !editing,
             textStyle = TextStyle(color = Parchment, fontSize = 16.sp),
             cursorBrush = androidx.compose.ui.graphics.SolidColor(Accent),
             visualTransformation = if (password) PasswordVisualTransformation() else
                 androidx.compose.ui.text.input.VisualTransformation.None,
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
+            keyboardActions = KeyboardActions {
+                editing = false
+                keyboard?.hide()
+            },
             modifier = Modifier
                 .fillMaxWidth()
-                .onFocusChanged { focused = it.isFocused },
+                .onFocusChanged {
+                    focused = it.isFocused
+                    // Walking away from a field stops typing in it.
+                    if (!it.isFocused && editing) {
+                        editing = false
+                        keyboard?.hide()
+                    }
+                }
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    val select = event.key == Key.DirectionCenter || event.key == Key.Enter
+                    when {
+                        select && !editing -> {
+                            editing = true
+                            keyboard?.show()
+                            true
+                        }
+                        // Back closes the keyboard before it leaves the screen.
+                        event.key == Key.Back && editing -> {
+                            editing = false
+                            keyboard?.hide()
+                            true
+                        }
+
+                        else -> false
+                    }
+                },
             decorationBox = { inner ->
                 Box(
                     modifier = Modifier
@@ -289,7 +338,11 @@ fun TvTextField(
                         .background(SurfaceRaised)
                         .border(
                             width = 2.dp,
-                            color = if (focused) Accent else Line,
+                            color = when {
+                                editing -> Parchment
+                                focused -> Accent
+                                else -> Line
+                            },
                             shape = RoundedCornerShape(8.dp),
                         )
                         .padding(horizontal = 14.dp, vertical = 12.dp),
@@ -298,6 +351,14 @@ fun TvTextField(
                         Text(text = placeholder, color = Faint, fontSize = 16.sp)
                     }
                     inner()
+                    if (focused && !editing) {
+                        Text(
+                            text = "OK to type",
+                            color = Faint,
+                            fontSize = 12.sp,
+                            modifier = Modifier.align(Alignment.CenterEnd),
+                        )
+                    }
                 }
             },
         )
