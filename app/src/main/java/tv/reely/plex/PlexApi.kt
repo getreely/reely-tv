@@ -415,7 +415,10 @@ object PlexApi {
     suspend fun playback(base: String, token: String, ratingKey: String): PlexPlayback? =
         withContext(Dispatchers.IO) {
             // includeMarkers asks the server for its intro and credits detection.
-            val metadata = container("$base/library/metadata/$ratingKey?includeMarkers=1", token)
+            val metadata = container(
+                "$base/library/metadata/$ratingKey?includeMarkers=1&includeChapters=1",
+                token,
+            )
                 .optJSONArray("Metadata")?.optJSONObject(0) ?: return@withContext null
             val media = metadata.optJSONArray("Media")?.optJSONObject(0) ?: return@withContext null
             val part = media.optJSONArray("Part")?.optJSONObject(0) ?: return@withContext null
@@ -665,9 +668,17 @@ object PlexApi {
     }
 
     private fun container(url: String, token: String): JSONObject {
+        // Identify as a client on every read, not just on the plex.tv calls. Some server
+        // responses vary by what the caller says it is, and an anonymous request is not
+        // something a real Plex client ever sends.
         val request = Request.Builder()
             .url(url)
             .header("accept", "application/json")
+            .header("X-Plex-Product", PRODUCT)
+            .header("X-Plex-Version", VERSION)
+            .header("X-Plex-Platform", "Android")
+            .header("X-Plex-Device", "Android TV")
+            .header("X-Plex-Device-Name", "Reely TV")
             .header("X-Plex-Token", token)
             .build()
         Http.client.newCall(request).execute().use { response ->

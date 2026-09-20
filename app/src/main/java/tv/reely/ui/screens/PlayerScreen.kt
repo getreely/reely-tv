@@ -636,11 +636,26 @@ private fun Controls(
             }
         }
 
+        // What the server said about intros and credits, stated plainly. Whether a skip
+        // prompt can ever appear is decided entirely by this, and with nothing on screen
+        // saying so there was no telling a server that sends no markers apart from a bug.
+        val markerNote = when {
+            playback.isLive -> null
+            playback.markers.isEmpty() -> "No intro or credits markers on this file"
+            else -> playback.markers.joinToString("  ·  ") { marker ->
+                val name = marker.type.replaceFirstChar { it.uppercaseChar() }
+                "$name ${clock(marker.startMs)}–${clock(marker.endMs)}"
+            }
+        }
+
         Text(
-            text = if (playback.isLive)
-                "Up and down change channel · Back leaves"
-            else
-                "Up to the bar, then left and right to seek · Back leaves",
+            text = listOfNotNull(
+                if (playback.isLive)
+                    "Up and down change channel · Back leaves"
+                else
+                    "Up to the bar, then left and right to seek · Back leaves",
+                markerNote,
+            ).joinToString("  ·  "),
             color = Faint,
             fontSize = 11.sp,
             lineHeight = 14.sp,
