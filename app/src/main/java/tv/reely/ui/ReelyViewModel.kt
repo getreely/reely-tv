@@ -224,7 +224,7 @@ data class LiveState(
     val channels: List<XtreamChannel> = emptyList(),
     val guide: Map<Int, List<XtreamProgramme>> = emptyMap(),
     val focusedChannel: XtreamChannel? = null,
-    val format: StreamFormat = StreamFormat.TS,
+    val format: StreamFormat = StreamFormat.HLS,
     val busy: Boolean = false,
     val error: String? = null,
 ) {
@@ -1492,8 +1492,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun restoreLive() {
         updateLive {
             it.copy(
-                format = if (settings.streamFormat == Settings.FORMAT_HLS) StreamFormat.HLS
-                else StreamFormat.TS
+                format = if (settings.streamFormat == Settings.FORMAT_TS) StreamFormat.TS
+                else StreamFormat.HLS
             )
         }
         val host = store.get(SecureStore.XTREAM_HOST) ?: return

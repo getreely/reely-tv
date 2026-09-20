@@ -38,12 +38,15 @@ class Settings(context: Context) {
         set(value) = prefs.edit().putInt(MAX_BITRATE, value).apply()
 
     /**
-     * Which container live television is asked for: "ts" or "m3u8". Kept, because it was
-     * a per-session choice that reset on every launch — which makes it useless for
-     * anybody who has decided one of them works better on their provider.
+     * Which container live television is asked for: "ts" or "m3u8".
+     *
+     * HLS by default. A continuous MPEG-TS connection starts faster and sits closer to
+     * live, but any interruption ends it and there is nothing to rejoin. HLS fetches
+     * segments one at a time, so a blip costs a segment rather than the stream, and
+     * falling behind has a defined cure the player can apply by itself.
      */
     var streamFormat: String
-        get() = prefs.getString(STREAM_FORMAT, FORMAT_TS) ?: FORMAT_TS
+        get() = prefs.getString(STREAM_FORMAT, FORMAT_HLS) ?: FORMAT_HLS
         set(value) = prefs.edit().putString(STREAM_FORMAT, value).apply()
 
     /**

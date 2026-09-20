@@ -316,7 +316,19 @@ private fun LiveSection(
             if (prefs.guidePreview) "On — uses one connection while browsing" else "Off",
         )
         Text(
-            text = "Multiview opens one connection per channel, so four tiles needs four of them.",
+            text = "HLS fetches the stream a segment at a time, so a moment's trouble costs a " +
+                "segment rather than the whole connection, and a player that falls behind " +
+                "can rejoin by itself. The cost is a slower start and sitting further " +
+                "behind live. MPEG-TS is one continuous connection: quicker onto a channel " +
+                "and closer to the action, with nothing to rejoin when it breaks.",
+            color = Muted,
+            fontSize = 13.sp,
+            lineHeight = 19.sp,
+        )
+        Text(
+            text = "Multiview opens one connection per channel, so four tiles needs four of " +
+                "them — and this account allows " +
+                "${live.account?.maxConnections ?: "?"}.",
             color = Muted,
             fontSize = 13.sp,
             lineHeight = 19.sp,
