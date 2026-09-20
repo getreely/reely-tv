@@ -66,6 +66,7 @@ import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
 import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
+import tv.reely.core.LivePlayer
 import tv.reely.core.Settings
 import tv.reely.plex.PlexItem
 import tv.reely.ui.GuideState
@@ -115,6 +116,7 @@ fun PlayerScreen(
     onDismissUpNext: () -> Unit,
     onStepChannel: (Int) -> Unit,
     onSelectChannel: (Int) -> Unit,
+    livePlayer: LivePlayer,
     multiview: List<XtreamChannel>,
     onAddToMultiview: (XtreamChannel) -> Unit,
     onRemoveTile: (Int) -> Unit,
@@ -131,7 +133,7 @@ fun PlayerScreen(
     val context = LocalContext.current
     val view = LocalView.current
 
-    val exoPlayer = remember {
+    val ownPlayer = remember {
         ExoPlayer.Builder(context)
             .setLoadControl(
                 // A small start buffer: channel-switch latency is what separates good from bad.
@@ -161,6 +163,12 @@ fun PlayerScreen(
                     .build()
             }
     }
+
+    // Live television plays on the shared player the guide was already previewing on, so
+    // arriving here from the guide does not restart the stream. Everything else gets its
+    // own, which is released with this screen.
+    val exoPlayer = if (playback.isLive) livePlayer.player else ownPlayer
+    DisposableEffect(Unit) { onDispose { ownPlayer.release() } }
 
     var playing by remember { mutableStateOf(false) }
     var positionMs by remember { mutableLongStateOf(0L) }
@@ -271,10 +279,7 @@ fun PlayerScreen(
             }
         }
         exoPlayer.addListener(listener)
-        onDispose {
-            exoPlayer.removeListener(listener)
-            exoPlayer.release()
-        }
+        onDispose { exoPlayer.removeListener(listener) }
     }
 
     LaunchedEffect(playback.url) {
@@ -284,9 +289,14 @@ fun PlayerScreen(
         // starting is not: this fires on every channel change, and it was the third and
         // last way the controls kept reappearing while somebody was surfing.
         if (!playback.isLive) interaction++
-        exoPlayer.setMediaItem(buildMediaItem(playback), playback.startPositionMs)
-        exoPlayer.prepare()
-        exoPlayer.playWhenReady = true
+        if (playback.isLive) {
+            // No-op when this is the channel already running, which is the whole point.
+            livePlayer.play(playback.url)
+        } else {
+            exoPlayer.setMediaItem(buildMediaItem(playback), playback.startPositionMs)
+            exoPlayer.prepare()
+            exoPlayer.playWhenReady = true
+        }
     }
 
     LaunchedEffect(exoPlayer) {

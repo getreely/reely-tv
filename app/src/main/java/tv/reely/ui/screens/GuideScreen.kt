@@ -64,6 +64,7 @@ import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
+import tv.reely.core.LivePlayer
 import tv.reely.ui.GuideState
 import tv.reely.ui.GuideStatus
 import tv.reely.ui.LiveState
@@ -102,6 +103,7 @@ fun GuideScreen(
     onRefresh: () -> Unit,
     onPlaySelected: () -> Unit,
     onBackToCategories: () -> Unit,
+    livePlayer: LivePlayer,
     modifier: Modifier = Modifier,
 ) {
     var now by remember { mutableLongStateOf(System.currentTimeMillis() / 1000) }
@@ -126,15 +128,9 @@ fun GuideScreen(
         channel?.let { XtreamApi.streamUrl(credentials, it, live.format) }
     }
 
-    val preview = remember {
-        ExoPlayer.Builder(context)
-            .setLoadControl(
-                DefaultLoadControl.Builder()
-                    .setBufferDurationsMs(1_500, 12_000, 700, 1_500)
-                    .build()
-            )
-            .build()
-    }
+    // The same player the full-screen view uses, so choosing this channel is a change of
+    // where the picture is drawn rather than a new connection to the provider.
+    val preview = livePlayer.player
     var previewFailed by remember { mutableStateOf(false) }
 
     DisposableEffect(preview) {
@@ -144,22 +140,20 @@ fun GuideScreen(
             }
         }
         preview.addListener(listener)
-        onDispose {
-            preview.removeListener(listener)
-            preview.release()
-        }
+        onDispose { preview.removeListener(listener) }
     }
 
     LaunchedEffect(previewUrl, previewEnabled) {
-        preview.stop()
-        preview.clearMediaItems()
         previewFailed = false
-        if (!previewEnabled || previewUrl == null) return@LaunchedEffect
+        if (!previewEnabled || previewUrl == null) {
+            livePlayer.stop()
+            return@LaunchedEffect
+        }
+        if (livePlayer.isShowing(previewUrl)) return@LaunchedEffect
+        livePlayer.stop()
         // Long enough that walking past channels does not open a connection for each.
         delay(PREVIEW_DELAY_MS)
-        preview.setMediaItem(MediaItem.fromUri(previewUrl))
-        preview.prepare()
-        preview.playWhenReady = true
+        livePlayer.play(previewUrl)
     }
 
     LaunchedEffect(guide.focusTime, guide.windowStart) {
@@ -176,7 +170,7 @@ fun GuideScreen(
     }
 
     BackHandler {
-        preview.stop()
+        livePlayer.stop()
         onBackToCategories()
     }
 
@@ -289,8 +283,7 @@ fun GuideScreen(
                         Key.DirectionLeft -> { onMoveTime(-1); true }
                         Key.DirectionRight -> { onMoveTime(1); true }
                         Key.DirectionCenter, Key.Enter -> {
-                            preview.stop()
-                            preview.clearMediaItems()
+                            // The stream stays exactly as it is; only the view changes.
                             onPlaySelected()
                             true
                         }

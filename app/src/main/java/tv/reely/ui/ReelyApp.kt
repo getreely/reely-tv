@@ -107,6 +107,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             onEnded = viewModel::onPlaybackEnded,
             onPlayUpNext = viewModel::playUpNext,
             onDismissUpNext = viewModel::dismissUpNext,
+            livePlayer = viewModel.livePlayer,
             onStepChannel = viewModel::stepChannel,
             onSelectChannel = viewModel::playChannel,
             multiview = state.multiview,
@@ -355,6 +356,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                     onRefresh = { viewModel.refreshGuide(force = true) },
                     onPlaySelected = viewModel::guidePlaySelected,
                     onBackToCategories = viewModel::clearCategory,
+                    livePlayer = viewModel.livePlayer,
                 )
             }
 

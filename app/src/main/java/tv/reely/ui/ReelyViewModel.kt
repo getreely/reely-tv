@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.reely.core.LivePlayer
 import tv.reely.core.SecureStore
 import tv.reely.core.UpdateInfo
 import tv.reely.core.Updater
@@ -336,6 +337,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     private val settings = Settings(application)
     private val epgStore = EpgStore(application)
 
+    /** Shared by the guide's preview and the full-screen player, so one becomes the other. */
+    val livePlayer = LivePlayer(application)
+
     private val _state = MutableStateFlow(
         ReelyState(
             prefs = PlayerPrefs(
@@ -384,6 +388,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             val stack = if (route is Route.Detail) current.stack + route else listOf(route)
             current.copy(stack = stack, focused = null)
         }
+        // The guide's preview is the shared player, and nothing else on screen would
+        // account for the sound if it were left running.
+        if (route !is Route.Live && _state.value.playback == null) livePlayer.stop()
         if (route is Route.Detail) loadDetail(route)
         if (route is Route.Home) refreshHome()
         if (route is Route.Live) openGuide()
@@ -999,7 +1006,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             val effectiveQueue = queue.ifEmpty { siblingQueue(item) }
-            // Anything from the library is a single picture; the live grid does not survive it.
+            // Anything from the library is a single picture; the live grid does not survive
+            // it, and neither does the connection live television was holding.
+            livePlayer.stop()
             _state.update { it.copy(multiview = emptyList()) }
             val startAt = if (resume) item.viewOffsetMs else 0
             val transcode = _state.value.prefs.playbackMode == Settings.MODE_TRANSCODE
@@ -1220,6 +1229,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
     fun stopPlayback(positionMs: Long = 0) {
         releaseTranscode()
+        if (_state.value.playback?.isLive == true) livePlayer.stop()
         _state.update { it.copy(multiview = emptyList()) }
         val playback = _state.value.playback
         val ratingKey = playback?.ratingKey
@@ -1536,6 +1546,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     /** Backing out of the grid returns to the category picker. */
     fun clearCategory() {
         guideJob?.cancel()
+        livePlayer.stop()
         updateLive { it.copy(selectedCategory = null, channels = emptyList(), focusedChannel = null) }
     }
 
@@ -1819,6 +1830,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun signOutXtream() {
+        livePlayer.stop()
         store.remove(SecureStore.XTREAM_HOST, SecureStore.XTREAM_USERNAME, SecureStore.XTREAM_PASSWORD)
         channelsJob?.cancel()
         allChannels = null
@@ -1902,6 +1914,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         super.onCleared()
+        livePlayer.release()
         epgStore.close()
     }
 
