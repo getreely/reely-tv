@@ -4,9 +4,16 @@ import android.content.Context
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
+import androidx.media3.common.PlaybackException
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * The one player live television uses, wherever it is being shown.
@@ -18,6 +25,8 @@ import androidx.media3.exoplayer.ExoPlayer
  * stream never notices.
  */
 class LivePlayer(context: Context) {
+
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     val player: ExoPlayer = ExoPlayer.Builder(context)
         .setLoadControl(
@@ -37,6 +46,48 @@ class LivePlayer(context: Context) {
         .apply { setWakeMode(C.WAKE_MODE_NETWORK) }
 
     private var loaded: String? = null
+    private var retries = 0
+
+    init {
+        player.addListener(object : Player.Listener {
+            override fun onPlayerError(error: PlaybackException) {
+                when {
+                    /*
+                     * The stream carried on without us. A live playlist only advertises
+                     * the last handful of segments, so a stall, a pause, or the stick
+                     * being slow for a moment can leave the next segment we want already
+                     * expired — and then nothing plays again until somebody rejoins at
+                     * the live edge, which is what this does. It is the documented
+                     * recovery for this error, not a workaround.
+                     */
+                    error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW ->
+                        rejoin()
+
+                    // Anything else the network did. Worth a few goes before giving up:
+                    // a provider hiccup should not end an evening's viewing.
+                    error.errorCode in NETWORK_ERRORS && retries < MAX_RETRIES -> {
+                        retries++
+                        scope.launch {
+                            delay(RETRY_DELAY_MS * retries)
+                            rejoin()
+                        }
+                    }
+                }
+            }
+
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_READY) retries = 0
+            }
+        })
+    }
+
+    /** Jumps back to the live edge and starts again from there. */
+    fun rejoin() {
+        if (loaded == null) return
+        player.seekToDefaultPosition()
+        player.prepare()
+        player.playWhenReady = true
+    }
 
     /** Starts a channel, or leaves the one already running alone. */
     fun play(url: String) {
@@ -56,12 +107,21 @@ class LivePlayer(context: Context) {
 
     fun stop() {
         loaded = null
+        retries = 0
         player.stop()
         player.clearMediaItems()
     }
 
     fun release() {
         loaded = null
+        scope.cancel()
         player.release()
+    }
+
+    private companion object {
+        /** Media3's network and IO range. Decode failures are a different matter. */
+        val NETWORK_ERRORS = 2_000..2_999
+        const val MAX_RETRIES = 4
+        const val RETRY_DELAY_MS = 1_500L
     }
 }

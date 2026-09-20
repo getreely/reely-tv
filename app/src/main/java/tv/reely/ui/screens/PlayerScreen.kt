@@ -259,6 +259,9 @@ fun PlayerScreen(
 
             override fun onPlaybackStateChanged(state: Int) {
                 buffering = state == Player.STATE_BUFFERING
+                // Something is playing again, so whatever the last complaint was, it is
+                // no longer true. Live recovers itself; the message should not outlive it.
+                if (state == Player.STATE_READY) error = null
                 if (state == Player.STATE_ENDED) onEnded()
             }
 
@@ -267,6 +270,12 @@ fun PlayerScreen(
             }
 
             override fun onPlayerError(playbackError: PlaybackException) {
+                // The live player rejoins the stream by itself when it falls off the end
+                // of the playlist, which is the normal fate of a long-running channel.
+                // Saying so on screen would be reporting a fault that is already fixed.
+                if (playbackError.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
+                    return
+                }
                 // Anything in the parsing, decoding or audio-output ranges means this
                 // device could not handle the file — which is what the server's
                 // transcoder is for. Network errors are not that, and stay errors.
@@ -494,7 +503,9 @@ fun PlayerScreen(
                     Key.DirectionDown -> { controlsVisible = true; false }
 
                     Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
-                        togglePlay(exoPlayer); true
+                        if (playback.isLive && !exoPlayer.isPlaying) livePlayer.rejoin()
+                        else togglePlay(exoPlayer)
+                        true
                     }
 
                     Key.MediaFastForward -> {
@@ -599,7 +610,14 @@ fun PlayerScreen(
                     exoPlayer.seekTo(target)
                     positionMs = target
                 },
-                onTogglePlay = { interaction++; togglePlay(exoPlayer) },
+                onTogglePlay = {
+                    interaction++
+                    // Coming back from a pause on live television means coming back to
+                    // now, not to the moment it was paused — which is behind the live
+                    // window by definition and would only fail.
+                    if (playback.isLive && !exoPlayer.isPlaying) livePlayer.rejoin()
+                    else togglePlay(exoPlayer)
+                },
                 onOpenSubtitles = { panel = Panel.SUBTITLES },
                 onOpenAudio = { panel = Panel.AUDIO },
                 onToggleFormat = onToggleFormat,
