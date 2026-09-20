@@ -38,6 +38,15 @@ class Settings(context: Context) {
         set(value) = prefs.edit().putInt(MAX_BITRATE, value).apply()
 
     /**
+     * Which container live television is asked for: "ts" or "m3u8". Kept, because it was
+     * a per-session choice that reset on every launch — which makes it useless for
+     * anybody who has decided one of them works better on their provider.
+     */
+    var streamFormat: String
+        get() = prefs.getString(STREAM_FORMAT, FORMAT_TS) ?: FORMAT_TS
+        set(value) = prefs.edit().putString(STREAM_FORMAT, value).apply()
+
+    /**
      * A show's theme tune under its page. Off unless asked for: something that makes
      * noise on its own should be chosen rather than discovered.
      */
@@ -81,10 +90,14 @@ class Settings(context: Context) {
         private const val MAX_BITRATE = "playback.maxBitrate"
         private const val UPDATE_URL = "update.url"
         private const val FAVOURITE_SECTIONS = "library.favourites"
+        private const val STREAM_FORMAT = "live.format"
         private const val THEME_MUSIC = "theme.music"
         // Renamed when the default came down from a level that turned out to be four
         // times too loud, so an install that had already nudged it starts again.
         private const val THEME_VOLUME = "theme.volume.quiet"
+
+        const val FORMAT_TS = "ts"
+        const val FORMAT_HLS = "m3u8"
 
         const val DEFAULT_THEME_VOLUME = 0.10f
         const val MIN_THEME_VOLUME = 0.05f

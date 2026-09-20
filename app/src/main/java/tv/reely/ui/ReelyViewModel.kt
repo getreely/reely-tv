@@ -1490,6 +1490,12 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     // ---------------------------------------------------------------- Live TV
 
     private suspend fun restoreLive() {
+        updateLive {
+            it.copy(
+                format = if (settings.streamFormat == Settings.FORMAT_HLS) StreamFormat.HLS
+                else StreamFormat.TS
+            )
+        }
         val host = store.get(SecureStore.XTREAM_HOST) ?: return
         val username = store.get(SecureStore.XTREAM_USERNAME) ?: return
         val password = store.get(SecureStore.XTREAM_PASSWORD) ?: return
@@ -1698,6 +1704,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     /** TS and HLS behave differently on recovery; worth being able to switch on the spot. */
     fun toggleFormat() {
         val next = if (_state.value.live.format == StreamFormat.TS) StreamFormat.HLS else StreamFormat.TS
+        settings.streamFormat = next.extension
+        livePlayer.stop()
         updateLive { it.copy(format = next) }
         val playback = _state.value.playback ?: return
         if (playback.isLive) playChannel(playback.channelIndex)
