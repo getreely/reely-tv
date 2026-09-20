@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -27,6 +28,8 @@ import tv.reely.ui.components.HeroBackdrop
 import tv.reely.ui.components.EmptyNote
 import tv.reely.ui.components.ChannelCard
 import tv.reely.ui.components.PosterCard
+import tv.reely.ui.components.rememberRowFocus
+import tv.reely.ui.components.restoreFocusTo
 import tv.reely.ui.components.TvTextField
 import tv.reely.ui.theme.Parchment
 import tv.reely.xtream.XtreamChannel
@@ -43,6 +46,9 @@ fun SearchScreen(
     onPlayChannel: (XtreamChannel) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val channelFocus = rememberRowFocus()
+    val resultFocus = rememberRowFocus()
+
     Box(modifier = modifier.fillMaxSize()) {
         HeroBackdrop(
             url = backdropUrl(focused?.serverBase, focused?.art ?: focused?.thumb),
@@ -103,7 +109,7 @@ fun SearchScreen(
                             fontWeight = FontWeight.SemiBold,
                         )
                         LazyRow(
-                            modifier = Modifier.focusGroup(),
+                            modifier = Modifier.restoreFocusTo(channelFocus).focusGroup(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             items(search.channels, key = { it.streamId }) { channel ->
@@ -112,6 +118,9 @@ fun SearchScreen(
                                     number = channel.number,
                                     logoUrl = channel.icon,
                                     onClick = { onPlayChannel(channel) },
+                                    modifier = Modifier.focusRequester(
+                                        channelFocus.requesterFor(channel.streamId.toString())
+                                    ),
                                 )
                             }
                         }
@@ -119,15 +128,19 @@ fun SearchScreen(
                 }
             }
 
-            items(search.results, key = { it.ratingKey }) { item ->
+            items(search.results, key = { it.listKey }) { item ->
                 PosterCard(
                     title = item.rowTitle,
                     subtitle = episodeLine(item),
                     imageUrl = imageUrl(item.serverBase, posterArt(item), 300, 450),
                     progress = item.resumeFraction,
                     watched = item.isWatched,
-                    onFocus = { onFocusItem(item) },
+                    onFocus = {
+                        resultFocus.onFocused(item.listKey)
+                        onFocusItem(item)
+                    },
                     onClick = { onOpenItem(item) },
+                    modifier = Modifier.focusRequester(resultFocus.requesterFor(item.listKey)),
                 )
             }
         }

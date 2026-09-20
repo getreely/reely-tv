@@ -20,8 +20,8 @@ android {
         // Keystore-backed credential store needs API 23 and Compose is painful below it.
         minSdk = 23
         targetSdk = 34
-        versionCode = 29
-        versionName = "0.14.0"
+        versionCode = 30
+        versionName = "0.15.0"
     }
 
     signingConfigs {
@@ -52,6 +52,9 @@ android {
         freeCompilerArgs = freeCompilerArgs + listOf(
             "-opt-in=androidx.tv.material3.ExperimentalTvMaterial3Api",
             "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi",
+            // focusProperties { enter = ... }, which is how a row remembers where the
+            // cursor was. Nothing else in this app needs it.
+            "-opt-in=androidx.compose.ui.ExperimentalComposeUiApi",
         )
     }
 

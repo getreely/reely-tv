@@ -75,6 +75,7 @@ import tv.reely.ui.components.TvActionButton
 import tv.reely.ui.components.glass
 import tv.reely.ui.components.guideTimeRange
 import tv.reely.ui.components.guideWidthFor
+import tv.reely.ui.components.requestWhenReady
 import tv.reely.ui.theme.Accent
 import tv.reely.ui.theme.Faint
 import tv.reely.ui.theme.GlassEdge
@@ -171,7 +172,7 @@ fun GuideScreen(
         rows.animateScrollToItem(guide.channelIndex.coerceAtLeast(0))
     }
     LaunchedEffect(live.channels.size) {
-        if (live.channels.isNotEmpty()) runCatching { gridFocus.requestFocus() }
+        if (live.channels.isNotEmpty()) gridFocus.requestWhenReady()
     }
 
     BackHandler {

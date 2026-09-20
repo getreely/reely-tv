@@ -88,7 +88,10 @@ data class EpisodeGroup(
     val addedAt: Long,
     val librarySectionId: String?,
     val serverBase: String?,
-)
+) {
+    /** As with an item: unique across servers, which a show's rating key is not. */
+    val listKey: String get() = (serverBase ?: "") + "|" + (showRatingKey ?: showTitle)
+}
 
 data class HomeState(
     val continueWatching: List<PlexItem> = emptyList(),

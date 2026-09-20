@@ -55,6 +55,7 @@ import tv.reely.ui.components.SearchGlyph
 import tv.reely.ui.components.TabMenu
 import tv.reely.ui.components.TAB_MENU_WIDTH
 import tv.reely.ui.components.TabMenuItem
+import tv.reely.ui.components.requestWhenReady
 import tv.reely.ui.screens.DetailScreen
 import tv.reely.ui.screens.GuideScreen
 import tv.reely.ui.screens.HomeScreen
@@ -77,10 +78,6 @@ private data class Destination(
     val route: Route,
     val icon: TabIcon = TabIcon.NONE,
 )
-
-/** Roughly half a second of frames, far longer than a layout pass needs. */
-private const val CONTENT_FOCUS_ATTEMPTS = 16
-private const val CONTENT_FOCUS_RETRY_MS = 32L
 
 private val destinations = listOf(
     Destination("Search", Route.Search, icon = TabIcon.SEARCH),
@@ -140,11 +137,29 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     // Back walks the stack: out of a season, off a detail page, and only then out of the app.
     BackHandler(enabled = menuFor != null) { menuFor = null }
     BackHandler(enabled = menuFor == null && state.stack.size > 1) { viewModel.goBack() }
+    // A library grid is reached from that library's home, so back belongs there and not
+    // out of the application. Top-level routes replace the stack, so there is nothing in
+    // it to walk back through.
+    val gridRoute = state.route as? Route.Library
+    BackHandler(
+        enabled = menuFor == null && state.stack.size == 1 &&
+            gridRoute != null && gridRoute.view == LibraryView.GRID,
+    ) {
+        gridRoute?.let { viewModel.navigate(Route.Library(it.kind, LibraryView.HOME)) }
+    }
 
     val contentFocus = remember { FocusRequester() }
-    // Always attached to whichever tab is currently selected, so leaving the content
-    // upwards returns to the tab you are actually on rather than the nearest one.
-    val selectedTab = remember { FocusRequester() }
+    /*
+     * One requester per tab, attached for the whole life of the row.
+     *
+     * A single requester moved onto whichever tab was selected, which meant every
+     * navigation changed the shape of two tabs' modifier chains. Compose rebuilds a focus
+     * node when that happens, the node holding focus went with it, and focus fell back to
+     * the first thing in the window — the search tab. That is why choosing anything sent
+     * the cursor to Search.
+     */
+    val tabFocus = remember { List(destinations.size) { FocusRequester() } }
+    val settingsFocus = remember { FocusRequester() }
     // Focus landing on a tab only counts as choosing it when a direction key put it
     // there. Focus that arrives any other way — most often the fallback when a screen
     // replaces itself and briefly has nothing focusable — must not navigate.
@@ -156,25 +171,34 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     // not own focus, focus is put back into the content as soon as it has something in it.
     var tabRowHasFocus by remember { mutableStateOf(true) }
 
+
+
+    val topRoute = state.stack.first()
+    val selectedIndex = destinations.indexOfFirst { it.route.sameTabAs(topRoute) }
+    // Where "up, out of the content" leads: the tab you are actually on.
+    val currentTabFocus = tabFocus.getOrNull(selectedIndex) ?: settingsFocus
+
+    LaunchedEffect(Unit) { tabFocus[1].requestWhenReady() }
+
+    // Closing a tab's menu gives the cursor back to the tab that opened it. Guarded on
+    // having actually opened one, so this does not fight the effect above at startup.
+    var menuWasOpen by remember { mutableStateOf(false) }
     LaunchedEffect(menuFor) {
-        if (menuFor == null) return@LaunchedEffect
-        repeat(CONTENT_FOCUS_ATTEMPTS) {
-            if (runCatching { menuFocus.requestFocus() }.isSuccess) return@LaunchedEffect
-            delay(CONTENT_FOCUS_RETRY_MS)
+        if (menuFor != null) {
+            menuWasOpen = true
+            menuFocus.requestWhenReady()
+        } else if (menuWasOpen) {
+            menuWasOpen = false
+            currentTabFocus.requestWhenReady()
         }
     }
-
-    LaunchedEffect(Unit) { runCatching { selectedTab.requestFocus() } }
     // The content of a screen is composed in the same pass that asks for its focus, so a
     // single request throws and is lost — and focus then falls back to the first thing in
     // the window, which is the search tab. That is why opening an episode left the cursor
     // up in the tab row. Keep asking for a few frames instead.
     LaunchedEffect(routeKey(state.route), contentReady(state)) {
         if (tabRowHasFocus || !contentReady(state)) return@LaunchedEffect
-        repeat(CONTENT_FOCUS_ATTEMPTS) {
-            if (runCatching { contentFocus.requestFocus() }.isSuccess) return@LaunchedEffect
-            delay(CONTENT_FOCUS_RETRY_MS)
-        }
+        contentFocus.requestWhenReady()
     }
 
     Column(
@@ -204,7 +228,8 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             },
             onTabFocused = { tabRowHasFocus = true },
             onTabPositioned = { route, x -> if (route is Route.Library) menuAnchorPx = x },
-            selectedTab = selectedTab,
+            tabFocus = tabFocus,
+            settingsFocus = settingsFocus,
             canSelectOnFocus = { arrivedByDirectionKey.also { arrivedByDirectionKey = false } },
             serverName = state.plex.serverName,
         )
@@ -222,7 +247,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 .focusGroup()
                 .focusProperties {
                     exit = { direction ->
-                        if (direction == FocusDirection.Up) selectedTab else FocusRequester.Default
+                        if (direction == FocusDirection.Up) currentTabFocus else FocusRequester.Default
                     }
                 }
                 .onGloballyPositioned { constraintsWidth = it.size.width }
@@ -427,6 +452,16 @@ private fun detailRouteFor(item: PlexItem): Route.Detail {
     }
 }
 
+/**
+ * Whether two routes belong to the same tab. A library's home and its grid are one tab,
+ * so comparing the routes outright would leave the tab unhighlighted on the grid and
+ * lose track of where "up out of the content" should land.
+ */
+private fun Route.sameTabAs(other: Route): Boolean = when {
+    this is Route.Library && other is Route.Library -> kind == other.kind
+    else -> this == other
+}
+
 /** Identifies a destination for focus bookkeeping, ignoring data that arrives later. */
 private fun routeKey(route: Route): String = when (route) {
     is Route.Home -> "home"
@@ -453,7 +488,8 @@ private fun TopBar(
     onSelect: (Route) -> Unit,
     onTabFocused: () -> Unit,
     onTabPositioned: (Route, Int) -> Unit,
-    selectedTab: FocusRequester,
+    tabFocus: List<FocusRequester>,
+    settingsFocus: FocusRequester,
     canSelectOnFocus: () -> Boolean,
     serverName: String?,
 ) {
@@ -473,8 +509,8 @@ private fun TopBar(
             modifier = Modifier.padding(end = 18.dp),
         )
 
-        destinations.forEach { destination ->
-            val isSelected = destination.route == current
+        destinations.forEachIndexed { index, destination ->
+            val isSelected = destination.route.sameTabAs(current)
             NavTab(
                 label = destination.label,
                 selected = isSelected,
@@ -482,7 +518,8 @@ private fun TopBar(
                 onSelect = { onSelect(destination.route) },
                 onFocused = onTabFocused,
                 canSelectOnFocus = canSelectOnFocus,
-                modifier = (if (isSelected) Modifier.focusRequester(selectedTab) else Modifier)
+                modifier = Modifier
+                    .focusRequester(tabFocus[index])
                     .onGloballyPositioned {
                         onTabPositioned(destination.route, it.positionInRoot().x.toInt())
                     },
@@ -509,7 +546,7 @@ private fun TopBar(
             onSelect = { onSelect(settingsDestination.route) },
             onFocused = onTabFocused,
             canSelectOnFocus = canSelectOnFocus,
-            modifier = if (settingsSelected) Modifier.focusRequester(selectedTab) else Modifier,
+            modifier = Modifier.focusRequester(settingsFocus),
         )
     }
 }

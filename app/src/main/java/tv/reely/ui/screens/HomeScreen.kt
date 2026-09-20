@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -29,6 +30,8 @@ import tv.reely.ui.components.EmptyNote
 import tv.reely.ui.components.ErrorNote
 import tv.reely.ui.components.HeroText
 import tv.reely.ui.components.PosterCard
+import tv.reely.ui.components.rememberRowFocus
+import tv.reely.ui.components.restoreFocusTo
 import tv.reely.ui.theme.Parchment
 
 private val HERO_HEIGHT = 168.dp
@@ -57,6 +60,12 @@ fun HomeScreen(
         )
         return
     }
+
+    // One per row, held at screen level so scrolling a row out of view does not lose
+    // where the cursor was in it.
+    val resumeFocus = rememberRowFocus()
+    val episodeFocus = rememberRowFocus()
+    val movieFocus = rememberRowFocus()
 
     Box(modifier = modifier.fillMaxSize()) {
         HeroBackdrop(
@@ -107,16 +116,21 @@ fun HomeScreen(
 
                 if (home.continueWatching.isNotEmpty()) {
                     item {
-                        PosterRow(title = "Continue Watching") {
-                            items(home.continueWatching, key = { it.ratingKey }) { item ->
+                        PosterRow(title = "Continue Watching", rowFocus = resumeFocus) {
+                            items(home.continueWatching, key = { it.listKey }) { item ->
                                 PosterCard(
                                     title = item.rowTitle,
                                     subtitle = episodeLine(item),
                                     imageUrl = imageUrl(item.serverBase, posterArt(item), 300, 450),
                                     progress = item.resumeFraction,
                                     watched = item.isWatched,
-                                    onFocus = { onFocusItem(item) },
+                                    onFocus = {
+                                        resumeFocus.onFocused(item.listKey)
+                                        onFocusItem(item)
+                                    },
                                     onClick = { onOpenItem(item) },
+                                    modifier = Modifier
+                                        .focusRequester(resumeFocus.requesterFor(item.listKey)),
                                 )
                             }
                         }
@@ -125,9 +139,9 @@ fun HomeScreen(
 
                 if (home.recentEpisodes.isNotEmpty()) {
                     item {
-                        PosterRow(title = "Recently Added Episodes") {
-                            items(home.recentEpisodes, key = { it.showRatingKey ?: it.showTitle }) { group ->
-                                EpisodeGroupCard(group, imageUrl, onFocusItem, onOpenItem)
+                        PosterRow(title = "Recently Added Episodes", rowFocus = episodeFocus) {
+                            items(home.recentEpisodes, key = { it.listKey }) { group ->
+                                EpisodeGroupCard(group, imageUrl, episodeFocus, onFocusItem, onOpenItem)
                             }
                         }
                     }
@@ -135,16 +149,21 @@ fun HomeScreen(
 
                 if (home.recentMovies.isNotEmpty()) {
                     item {
-                        PosterRow(title = "Recently Added Movies") {
-                            items(home.recentMovies, key = { it.ratingKey }) { movie ->
+                        PosterRow(title = "Recently Added Movies", rowFocus = movieFocus) {
+                            items(home.recentMovies, key = { it.listKey }) { movie ->
                                 PosterCard(
                                     title = movie.title,
                                     subtitle = movie.caption,
                                     imageUrl = imageUrl(movie.serverBase, movie.thumb, 300, 450),
                                     progress = movie.resumeFraction,
                                     watched = movie.isWatched,
-                                    onFocus = { onFocusItem(movie) },
+                                    onFocus = {
+                                        movieFocus.onFocused(movie.listKey)
+                                        onFocusItem(movie)
+                                    },
                                     onClick = { onOpenItem(movie) },
+                                    modifier = Modifier
+                                        .focusRequester(movieFocus.requesterFor(movie.listKey)),
                                 )
                             }
                         }
@@ -178,6 +197,7 @@ internal fun episodeLine(item: PlexItem): String? = when (item.type) {
 private fun EpisodeGroupCard(
     group: EpisodeGroup,
     imageUrl: (String?, String?, Int, Int) -> String?,
+    rowFocus: tv.reely.ui.components.RowFocus,
     onFocusItem: (PlexItem?) -> Unit,
     onOpenItem: (PlexItem) -> Unit,
 ) {
@@ -187,15 +207,20 @@ private fun EpisodeGroupCard(
         subtitle = if (group.count > 1) "${group.count} new episodes" else newest.caption,
         imageUrl = imageUrl(group.serverBase, group.thumb, 300, 450),
         badge = group.count,
-        onFocus = { onFocusItem(newest) },
+        onFocus = {
+            rowFocus.onFocused(group.listKey)
+            onFocusItem(newest)
+        },
         // Whether one episode arrived or twelve, this opens the show at the newest one.
         onClick = { onOpenItem(newest) },
+        modifier = Modifier.focusRequester(rowFocus.requesterFor(group.listKey)),
     )
 }
 
 @Composable
 private fun PosterRow(
     title: String,
+    rowFocus: tv.reely.ui.components.RowFocus,
     content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -208,7 +233,7 @@ private fun PosterRow(
             modifier = Modifier.padding(horizontal = 40.dp),
         )
         LazyRow(
-            modifier = Modifier.focusGroup(),
+            modifier = Modifier.restoreFocusTo(rowFocus).focusGroup(),
             contentPadding = PaddingValues(horizontal = 36.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             content = content,

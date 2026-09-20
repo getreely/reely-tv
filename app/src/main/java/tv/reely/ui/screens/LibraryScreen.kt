@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,6 +36,8 @@ import tv.reely.ui.components.EmptyNote
 import tv.reely.ui.components.ErrorNote
 import tv.reely.ui.components.HeroText
 import tv.reely.ui.components.PosterCard
+import tv.reely.ui.components.rememberRowFocus
+import tv.reely.ui.components.restoreFocusTo
 import tv.reely.ui.components.TvChip
 import tv.reely.ui.theme.Parchment
 
@@ -97,6 +100,12 @@ fun LibraryScreen(
     val recentMovies = home.recentMovies.filter { here(it.serverBase, it.librarySectionId) }
     val recentEpisodes = home.recentEpisodes.filter { here(it.serverBase, it.librarySectionId) }
 
+    // Held at screen level so a row scrolling out of view does not forget its place.
+    val resumeFocus = rememberRowFocus()
+    val recentFocus = rememberRowFocus()
+    val releasedFocus = rememberRowFocus()
+    val gridFocus = rememberRowFocus()
+
     Box(modifier = modifier.fillMaxSize()) {
         HeroBackdrop(
             url = backdropUrl(focused?.serverBase, focused?.art ?: focused?.thumb),
@@ -146,18 +155,23 @@ fun LibraryScreen(
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         RowBlock("Continue Watching") {
                             LazyRow(
-                                modifier = Modifier.focusGroup(),
+                                modifier = Modifier.restoreFocusTo(resumeFocus).focusGroup(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                items(resumable, key = { it.ratingKey }) { item ->
+                                items(resumable, key = { it.listKey }) { item ->
                                     PosterCard(
                                         title = item.rowTitle,
                                         subtitle = episodeLine(item),
                                         imageUrl = imageUrl(item.serverBase, posterArt(item), 300, 450),
                                         progress = item.resumeFraction,
                                         watched = item.isWatched,
-                                        onFocus = { onFocusItem(item) },
+                                        onFocus = {
+                                            resumeFocus.onFocused(item.listKey)
+                                            onFocusItem(item)
+                                        },
                                         onClick = { onOpenItem(item) },
+                                        modifier = Modifier
+                                            .focusRequester(resumeFocus.requesterFor(item.listKey)),
                                     )
                                 }
                             }
@@ -171,18 +185,23 @@ fun LibraryScreen(
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         RowBlock("Recently Added") {
                             LazyRow(
-                                modifier = Modifier.focusGroup(),
+                                modifier = Modifier.restoreFocusTo(recentFocus).focusGroup(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                items(recentMovies, key = { it.ratingKey }) { movie ->
+                                items(recentMovies, key = { it.listKey }) { movie ->
                                     PosterCard(
                                         title = movie.title,
                                         subtitle = movie.caption,
                                         imageUrl = imageUrl(movie.serverBase, movie.thumb, 300, 450),
                                         progress = movie.resumeFraction,
                                         watched = movie.isWatched,
-                                        onFocus = { onFocusItem(movie) },
+                                        onFocus = {
+                                            recentFocus.onFocused(movie.listKey)
+                                            onFocusItem(movie)
+                                        },
                                         onClick = { onOpenItem(movie) },
+                                        modifier = Modifier
+                                            .focusRequester(recentFocus.requesterFor(movie.listKey)),
                                     )
                                 }
                             }
@@ -196,12 +215,12 @@ fun LibraryScreen(
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         RowBlock("Recently Added") {
                             LazyRow(
-                                modifier = Modifier.focusGroup(),
+                                modifier = Modifier.restoreFocusTo(recentFocus).focusGroup(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 items(
                                     recentEpisodes,
-                                    key = { it.showRatingKey ?: it.showTitle },
+                                    key = { it.listKey },
                                 ) { group ->
                                     PosterCard(
                                         title = group.showTitle,
@@ -209,8 +228,13 @@ fun LibraryScreen(
                                         else group.newest.caption,
                                         imageUrl = imageUrl(group.serverBase, group.thumb, 300, 450),
                                         badge = group.count,
-                                        onFocus = { onFocusItem(group.newest) },
+                                        onFocus = {
+                                            recentFocus.onFocused(group.listKey)
+                                            onFocusItem(group.newest)
+                                        },
                                         onClick = { onOpenItem(group.newest) },
+                                        modifier = Modifier
+                                            .focusRequester(recentFocus.requesterFor(group.listKey)),
                                     )
                                 }
                             }
@@ -222,18 +246,23 @@ fun LibraryScreen(
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         RowBlock("Recently Released") {
                             LazyRow(
-                                modifier = Modifier.focusGroup(),
+                                modifier = Modifier.restoreFocusTo(releasedFocus).focusGroup(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                items(browse.released, key = { it.ratingKey }) { item ->
+                                items(browse.released, key = { it.listKey }) { item ->
                                     PosterCard(
                                         title = item.title,
                                         subtitle = item.caption,
                                         imageUrl = imageUrl(item.serverBase, item.thumb, 300, 450),
                                         progress = item.resumeFraction,
                                         watched = item.isWatched,
-                                        onFocus = { onFocusItem(item) },
+                                        onFocus = {
+                                            releasedFocus.onFocused(item.listKey)
+                                            onFocusItem(item)
+                                        },
                                         onClick = { onOpenItem(item) },
+                                        modifier = Modifier
+                                            .focusRequester(releasedFocus.requesterFor(item.listKey)),
                                     )
                                 }
                             }
@@ -267,7 +296,7 @@ fun LibraryScreen(
                         // off to the right, so a library with forty genres still fits.
                         if (sections.isNotEmpty()) {
                             LazyRow(
-                                modifier = Modifier.focusGroup(),
+                                modifier = Modifier.restoreFocusTo(recentFocus).focusGroup(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 item {
@@ -319,15 +348,19 @@ fun LibraryScreen(
                     }
                 }
 
-                items(browse.items, key = { it.ratingKey }) { item ->
+                items(browse.items, key = { it.listKey }) { item ->
                     PosterCard(
                         title = item.title,
                         subtitle = item.caption,
                         imageUrl = imageUrl(item.serverBase, item.thumb, 300, 450),
                         progress = item.resumeFraction,
                         watched = item.isWatched,
-                        onFocus = { onFocusItem(item) },
+                        onFocus = {
+                            gridFocus.onFocused(item.listKey)
+                            onFocusItem(item)
+                        },
                         onClick = { onOpenItem(item) },
+                        modifier = Modifier.focusRequester(gridFocus.requesterFor(item.listKey)),
                     )
                 }
             }

@@ -138,6 +138,12 @@ data class PlexItem(
             else -> year?.toString()
         }
 
+    /**
+     * Unique across servers, which a rating key is not. Rows merged from several servers
+     * would otherwise hand a lazy list the same key twice, which it treats as a fault.
+     */
+    val listKey: String get() = (serverBase ?: "") + "|" + ratingKey
+
     /** What to put under a poster in a home row: the show for an episode, else the title. */
     val rowTitle: String get() = if (type == "episode") grandparentTitle ?: title else title
 }

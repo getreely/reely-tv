@@ -80,6 +80,7 @@ import tv.reely.ui.components.SubtitleGlyph
 import tv.reely.ui.components.TransportButton
 import tv.reely.ui.components.TvActionButton
 import tv.reely.ui.components.TvListRow
+import tv.reely.ui.components.requestWhenReady
 import tv.reely.xtream.XtreamApi
 import tv.reely.xtream.XtreamChannel
 import tv.reely.ui.theme.Accent
@@ -92,10 +93,6 @@ import tv.reely.ui.theme.SurfaceRaised
 
 private const val SEEK_STEP_MS = 10_000L
 private const val CONTROLS_TIMEOUT_MS = 6_000L
-
-/** Roughly half a second of frames, which is far longer than a layout pass needs. */
-private const val FOCUS_ATTEMPTS = 16
-private const val FOCUS_RETRY_MS = 32L
 
 private enum class Panel { NONE, SUBTITLES, AUDIO }
 
@@ -283,7 +280,10 @@ fun PlayerScreen(
     LaunchedEffect(playback.url) {
         error = null
         panel = Panel.NONE
-        interaction++
+        // A film or episode starting is worth showing the controls for. A channel
+        // starting is not: this fires on every channel change, and it was the third and
+        // last way the controls kept reappearing while somebody was surfing.
+        if (!playback.isLive) interaction++
         exoPlayer.setMediaItem(buildMediaItem(playback), playback.startPositionMs)
         exoPlayer.prepare()
         exoPlayer.playWhenReady = true
@@ -307,9 +307,18 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(interaction, playing, panel) {
-        controlsVisible = true
-        if (panel != Panel.NONE || !playing) return@LaunchedEffect
+    /*
+     * Pressing something shows the controls. Nothing else does — and in particular not
+     * playback starting, which is what made them appear on every channel change: this
+     * used to be keyed on `playing`, which flips each time a new stream comes up.
+     */
+    LaunchedEffect(interaction) {
+        if (interaction > 0) controlsVisible = true
+    }
+
+    /* They go away again after a quiet spell, but only while something is playing. */
+    LaunchedEffect(interaction, controlsVisible, playing, panel) {
+        if (!controlsVisible || panel != Panel.NONE || !playing) return@LaunchedEffect
         delay(CONTROLS_TIMEOUT_MS)
         controlsVisible = false
     }
@@ -328,16 +337,10 @@ fun PlayerScreen(
      */
     LaunchedEffect(controlsVisible, panel, guideOpen, playback.isLive, playback.url) {
         if (guideOpen) return@LaunchedEffect
-        repeat(FOCUS_ATTEMPTS) {
-            val placed = runCatching {
-                when {
-                    panel != Panel.NONE -> panelFocus.requestFocus()
-                    controlsVisible -> playFocus.requestFocus()
-                    else -> rootFocus.requestFocus()
-                }
-            }.isSuccess
-            if (placed) return@LaunchedEffect
-            delay(FOCUS_RETRY_MS)
+        when {
+            panel != Panel.NONE -> panelFocus.requestWhenReady()
+            controlsVisible -> playFocus.requestWhenReady()
+            else -> rootFocus.requestWhenReady()
         }
     }
 
@@ -450,29 +453,35 @@ fun PlayerScreen(
                     if (chosen != null) onCollapseToChannel(chosen) else onClearTiles()
                     return@onPreviewKeyEvent true
                 }
+                // Steering live television is not an interaction. Counting it raised the
+                // controls on every channel change, and with them up the next press of
+                // left or right went to the transport instead of the next channel — so
+                // changing channel twice in a row was impossible.
+                if (playback.isLive && !controlsVisible) {
+                    when (event.key) {
+                        Key.DirectionLeft -> {
+                            onStepChannel(-1)
+                            return@onPreviewKeyEvent true
+                        }
+
+                        Key.DirectionRight -> {
+                            onStepChannel(1)
+                            return@onPreviewKeyEvent true
+                        }
+
+                        Key.DirectionDown -> {
+                            guideOpen = live.channels.isNotEmpty()
+                            return@onPreviewKeyEvent true
+                        }
+
+                        else -> Unit
+                    }
+                }
                 interaction++
                 when (event.key) {
-                    // Live steers sideways, the way a television does, and down opens
-                    // the guide over the picture. Up is left to the controls.
-                    Key.DirectionLeft -> if (playback.isLive && !controlsVisible) {
-                        onStepChannel(-1); true
-                    } else {
-                        false
-                    }
-
-                    Key.DirectionRight -> if (playback.isLive && !controlsVisible) {
-                        onStepChannel(1); true
-                    } else {
-                        false
-                    }
-
                     Key.DirectionUp -> { controlsVisible = true; false }
 
-                    Key.DirectionDown -> if (playback.isLive && !controlsVisible) {
-                        guideOpen = live.channels.isNotEmpty(); true
-                    } else {
-                        controlsVisible = true; false
-                    }
+                    Key.DirectionDown -> { controlsVisible = true; false }
 
                     Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
                         togglePlay(exoPlayer); true
@@ -618,14 +627,11 @@ fun PlayerScreen(
         // or the remote does nothing at all.
         LaunchedEffect(skipLabel, controlsVisible) {
             if (skipLabel != null) {
-                repeat(FOCUS_ATTEMPTS) {
-                    if (runCatching { skipFocus.requestFocus() }.isSuccess) return@LaunchedEffect
-                    delay(FOCUS_RETRY_MS)
-                }
+                skipFocus.requestWhenReady()
+            } else if (controlsVisible) {
+                playFocus.requestWhenReady()
             } else {
-                runCatching {
-                    if (controlsVisible) playFocus.requestFocus() else rootFocus.requestFocus()
-                }
+                rootFocus.requestWhenReady()
             }
         }
 
@@ -1020,7 +1026,7 @@ private fun UpNextCard(
     val focus = remember { FocusRequester() }
 
     LaunchedEffect(item.ratingKey, countdownSeconds) {
-        runCatching { focus.requestFocus() }
+        focus.requestWhenReady()
         // Zero means the countdown is switched off: the card waits to be chosen.
         if (countdownSeconds <= 0) return@LaunchedEffect
         remaining = countdownSeconds

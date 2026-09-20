@@ -123,9 +123,9 @@ fun GuideRow(
                 .background(
                     channelTint(channelId).copy(
                         alpha = when {
-                            isCurrent && translucent -> 0.78f
+                            isCurrent && translucent -> 0.92f
                             isCurrent -> 0.95f
-                            translucent -> 0.5f
+                            translucent -> 0.7f
                             else -> 0.7f
                         }
                     )

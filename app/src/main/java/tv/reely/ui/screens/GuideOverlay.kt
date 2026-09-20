@@ -1,6 +1,7 @@
 package tv.reely.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
@@ -49,6 +50,7 @@ import tv.reely.ui.components.GuideRuler
 import tv.reely.ui.components.guideTimeRange
 import tv.reely.ui.components.TvActionButton
 import tv.reely.ui.components.guideWidthFor
+import tv.reely.ui.components.requestWhenReady
 import tv.reely.ui.theme.Faint
 import tv.reely.ui.theme.Line
 import tv.reely.ui.theme.Ink
@@ -56,9 +58,6 @@ import tv.reely.ui.theme.Parchment
 import tv.reely.xtream.EpgProgramme
 import tv.reely.xtream.XtreamChannel
 import kotlin.math.roundToInt
-
-private const val FOCUS_ATTEMPTS = 16
-private const val FOCUS_RETRY_MS = 32L
 
 /** Half an hour per press of left or right, which is how a guide is read. */
 private const val TIME_STEP_SECONDS = 1_800L
@@ -107,10 +106,7 @@ fun GuideOverlay(
 
     LaunchedEffect(Unit) {
         rows.scrollToItem(cursor)
-        repeat(FOCUS_ATTEMPTS) {
-            if (runCatching { grabFocus.requestFocus() }.isSuccess) return@LaunchedEffect
-            delay(FOCUS_RETRY_MS)
-        }
+        grabFocus.requestWhenReady()
     }
     LaunchedEffect(cursor) { rows.animateScrollToItem(cursor) }
     LaunchedEffect(focusTime) {
@@ -126,12 +122,10 @@ fun GuideOverlay(
     var longPressFired by remember { mutableStateOf(false) }
     val menuFocus = remember { FocusRequester() }
 
+    // Focus follows the menu both ways. The grid stops being focusable while the menu is
+    // up, so without handing focus back when it closes the guide would be left dead.
     LaunchedEffect(menuFor) {
-        if (menuFor == null) return@LaunchedEffect
-        repeat(FOCUS_ATTEMPTS) {
-            if (runCatching { menuFocus.requestFocus() }.isSuccess) return@LaunchedEffect
-            delay(FOCUS_RETRY_MS)
-        }
+        if (menuFor != null) menuFocus.requestWhenReady() else grabFocus.requestWhenReady()
     }
 
     val channel = channels.getOrNull(cursor)
@@ -142,7 +136,7 @@ fun GuideOverlay(
         modifier = modifier
             .fillMaxSize()
             .focusRequester(grabFocus)
-            .focusable()
+            .focusable(enabled = menuFor == null)
             .onPreviewKeyEvent { event ->
                 // The menu owns everything while it is up.
                 if (menuFor != null) {
@@ -214,8 +208,8 @@ fun GuideOverlay(
                     Brush.verticalGradient(
                         listOf(
                             Color.Transparent,
-                            Ink.copy(alpha = 0.55f),
-                            Ink.copy(alpha = 0.78f),
+                            Ink.copy(alpha = 0.82f),
+                            Ink.copy(alpha = 0.94f),
                         )
                     )
                 )
@@ -306,9 +300,12 @@ private fun ChannelMenu(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(Ink.copy(alpha = 0.95f))
+            .background(Ink.copy(alpha = 0.97f))
             .border(1.dp, Line, RoundedCornerShape(14.dp))
             .padding(20.dp)
+            // Without this the requester has nothing focusable of its own to give focus
+            // to, so the request quietly did nothing and every button here was dead.
+            .focusGroup()
             .focusRequester(focusRequester),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {

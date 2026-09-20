@@ -21,7 +21,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -40,6 +39,8 @@ import tv.reely.ui.components.IconAction
 import tv.reely.ui.components.InfoGlyph
 import tv.reely.ui.components.PlayGlyph
 import tv.reely.ui.components.RestartGlyph
+import tv.reely.ui.components.rememberRowFocus
+import tv.reely.ui.components.restoreFocusTo
 import tv.reely.ui.components.SectionHeading
 import tv.reely.ui.components.TrailerGlyph
 import tv.reely.ui.components.TvChip
@@ -77,7 +78,7 @@ fun DetailScreen(
     // off the left edge. The rail is brought to it once, when the season's episodes
     // arrive — not on every focus change, which would fight the rail's own scrolling.
     val episodeRail = rememberLazyListState()
-    val landingFocus = remember { FocusRequester() }
+    val railFocus = rememberRowFocus()
     var railBroughtTo by remember(state.ratingKey) { mutableStateOf<String?>(null) }
     LaunchedEffect(state.episodes) {
         val key = state.focusedEpisode?.ratingKey ?: return@LaunchedEffect
@@ -85,13 +86,9 @@ fun DetailScreen(
         val index = state.episodes.indexOfFirst { it.ratingKey == key }
         if (index >= 0) {
             if (index > 0) runCatching { episodeRail.scrollToItem(index) }
-            // Arriving here from a row means arriving at this episode, so it should be
-            // what the remote is already pointed at. The tile is composed in this same
-            // pass, so its requester needs a few frames before it will take focus.
-            repeat(FOCUS_ATTEMPTS) {
-                if (runCatching { landingFocus.requestFocus() }.isSuccess) return@LaunchedEffect
-                kotlinx.coroutines.delay(FOCUS_RETRY_MS)
-            }
+            // Arriving from a row means arriving at this episode, so it is what the
+            // remote should already be pointed at.
+            railFocus.land(key)
         }
         railBroughtTo = key
     }
@@ -242,7 +239,10 @@ fun DetailScreen(
                     item {
                         LazyRow(
                             state = episodeRail,
-                            modifier = Modifier.focusGroup(),
+                            // Coming back down from Play or Watched returns to the
+                            // episode those buttons were acting on, rather than whichever
+                            // tile happens to be nearest the cursor.
+                            modifier = Modifier.restoreFocusTo(railFocus).focusGroup(),
                             contentPadding = PaddingValues(horizontal = 36.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
@@ -256,13 +256,13 @@ fun DetailScreen(
                                     progress = entry.resumeFraction,
                                     watched = entry.isWatched,
                                     selected = isTarget,
-                                    onFocus = { onFocusEpisode(entry) },
-                                    onClick = { onPlay(entry) },
-                                    modifier = if (isTarget) {
-                                        Modifier.focusRequester(landingFocus)
-                                    } else {
-                                        Modifier
+                                    onFocus = {
+                                        railFocus.onFocused(entry.ratingKey)
+                                        onFocusEpisode(entry)
                                     },
+                                    onClick = { onPlay(entry) },
+                                    modifier = Modifier
+                                        .focusRequester(railFocus.requesterFor(entry.ratingKey)),
                                 )
                             }
                         }
@@ -304,7 +304,3 @@ fun DetailScreen(
         }
     }
 }
-
-/** Long enough for a tile to be laid out; a single request would land before it exists. */
-private const val FOCUS_ATTEMPTS = 16
-private const val FOCUS_RETRY_MS = 32L
