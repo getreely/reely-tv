@@ -140,6 +140,18 @@ fun GuideOverlay(
             .onPreviewKeyEvent { event ->
                 // The menu owns everything while it is up.
                 if (menuFor != null) {
+                    /*
+                     * Except the rest of the press that opened it. A long press fires on
+                     * a key-down repeat, so the finger is still on the button; Compose
+                     * acts on key-up, and the menu has taken focus by then — so letting
+                     * go pressed whatever button the menu had just focused. The remainder
+                     * of that press is swallowed here.
+                     */
+                    val selectKey = event.key == Key.DirectionCenter || event.key == Key.Enter
+                    if (longPressFired && selectKey) {
+                        if (event.type == KeyEventType.KeyUp) longPressFired = false
+                        return@onPreviewKeyEvent true
+                    }
                     if (event.key == Key.Back && event.type == KeyEventType.KeyDown) {
                         menuFor = null
                         return@onPreviewKeyEvent true
