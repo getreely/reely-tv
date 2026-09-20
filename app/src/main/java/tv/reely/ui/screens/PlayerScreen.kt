@@ -80,6 +80,8 @@ import tv.reely.ui.components.SubtitleGlyph
 import tv.reely.ui.components.TransportButton
 import tv.reely.ui.components.TvActionButton
 import tv.reely.ui.components.TvListRow
+import tv.reely.xtream.XtreamApi
+import tv.reely.xtream.XtreamChannel
 import tv.reely.ui.theme.Accent
 import tv.reely.ui.theme.Faint
 import tv.reely.ui.theme.Ink
@@ -116,6 +118,11 @@ fun PlayerScreen(
     onDismissUpNext: () -> Unit,
     onStepChannel: (Int) -> Unit,
     onSelectChannel: (Int) -> Unit,
+    multiview: List<XtreamChannel>,
+    onAddToMultiview: (XtreamChannel) -> Unit,
+    onRemoveTile: (Int) -> Unit,
+    onClearTiles: () -> Unit,
+    onCollapseToChannel: (XtreamChannel) -> Unit,
     onStepEpisode: (Int) -> Unit,
     onDecodeFailure: (Long) -> Unit,
     onToggleFormat: () -> Unit,
@@ -172,6 +179,18 @@ fun PlayerScreen(
     var atTopOfControls by remember { mutableStateOf(false) }
     // The guide, raised over a playing channel. Mutually exclusive with the controls.
     var guideOpen by remember { mutableStateOf(false) }
+
+    // Tile 0 is the channel in `playback`, drawn by the player that is already running.
+    // With nothing beside it this is all inert and the screen behaves exactly as before.
+    val tiles = if (playback.isLive) multiview else emptyList()
+    val tileCount = tiles.size + 1
+    var focusedTile by remember { mutableIntStateOf(0) }
+    if (focusedTile > tiles.size) focusedTile = 0
+
+    // Only the tile with the cursor on it is heard.
+    LaunchedEffect(focusedTile, tileCount) {
+        exoPlayer.volume = if (focusedTile == 0) 1f else 0f
+    }
     var interaction by remember { mutableIntStateOf(0) }
     var panel by remember { mutableStateOf(Panel.NONE) }
 
@@ -355,6 +374,13 @@ fun PlayerScreen(
                             guideOpen = false
                             true
                         }
+                        // A tile beside the main one is the first thing back takes away.
+                        focusedTile > 0 -> {
+                            val index = focusedTile - 1
+                            focusedTile = 0
+                            onRemoveTile(index)
+                            true
+                        }
                         // Up Next owns the press while it is showing.
                         upNext != null -> false
                         // Back closes what is open before it closes the player. Note the
@@ -380,6 +406,48 @@ fun PlayerScreen(
                     atTopOfControls
                 ) {
                     controlsVisible = false
+                    return@onPreviewKeyEvent true
+                }
+                // With a grid up, the direction keys walk it. Only a press that runs off
+                // the edge falls through to what that key means with one channel on
+                // screen, which is why a single tile behaves exactly as it always has.
+                if (tileCount > 1 && !controlsVisible) {
+                    val dx = when (event.key) {
+                        Key.DirectionLeft -> -1
+                        Key.DirectionRight -> 1
+                        else -> 0
+                    }
+                    val dy = when (event.key) {
+                        Key.DirectionUp -> -1
+                        Key.DirectionDown -> 1
+                        else -> 0
+                    }
+                    if (dx != 0 || dy != 0) {
+                        val next = tileNeighbour(tileCount, focusedTile, dx, dy)
+                        if (next != null) {
+                            interaction++
+                            focusedTile = next
+                            return@onPreviewKeyEvent true
+                        }
+                        // Off the edge: up still summons the controls, down still opens
+                        // the guide, and sideways does nothing rather than surprising
+                        // somebody by retuning a tile they were only walking past.
+                        interaction++
+                        return@onPreviewKeyEvent when {
+                            dy < 0 -> { controlsVisible = true; true }
+                            dy > 0 -> { guideOpen = live.channels.isNotEmpty(); true }
+                            else -> true
+                        }
+                    }
+                }
+                // OK on a tile gives that channel the whole screen.
+                if (
+                    tileCount > 1 && !controlsVisible &&
+                    (event.key == Key.DirectionCenter || event.key == Key.Enter)
+                ) {
+                    val chosen = if (focusedTile == 0) null else tiles.getOrNull(focusedTile - 1)
+                    focusedTile = 0
+                    if (chosen != null) onCollapseToChannel(chosen) else onClearTiles()
                     return@onPreviewKeyEvent true
                 }
                 interaction++
@@ -422,19 +490,47 @@ fun PlayerScreen(
                 }
             },
     ) {
-        AndroidView(
-            factory = { viewContext ->
-                PlayerView(viewContext).apply {
-                    useController = false
-                    setShutterBackgroundColor(android.graphics.Color.BLACK)
-                    player = exoPlayer
+        val mainSurface: @Composable () -> Unit = {
+            AndroidView(
+                factory = { viewContext ->
+                    PlayerView(viewContext).apply {
+                        useController = false
+                        setShutterBackgroundColor(android.graphics.Color.BLACK)
+                        player = exoPlayer
+                    }
+                },
+                update = { playerView ->
+                    playerView.subtitleView?.applyStyle(prefs)
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        if (tileCount == 1) {
+            mainSurface()
+        } else {
+            MultiViewGrid(count = tileCount, modifier = Modifier.fillMaxSize()) { index ->
+                if (index == 0) {
+                    TileFrame(
+                        name = playback.title,
+                        focused = focusedTile == 0,
+                        content = mainSurface,
+                    )
+                } else {
+                    val extra = tiles[index - 1]
+                    val credentials = live.credentials
+                    if (credentials == null) {
+                        TileFrame(name = extra.name, focused = focusedTile == index) {}
+                    } else {
+                        ExtraTile(
+                            url = XtreamApi.streamUrl(credentials, extra, live.format),
+                            name = extra.name,
+                            focused = focusedTile == index,
+                        )
+                    }
                 }
-            },
-            update = { playerView ->
-                playerView.subtitleView?.applyStyle(prefs)
-            },
-            modifier = Modifier.fillMaxSize(),
-        )
+            }
+        }
 
         if (buffering && error == null) {
             Text(
@@ -557,8 +653,14 @@ fun PlayerScreen(
                 playingIndex = playback.channelIndex,
                 onSelect = { index ->
                     guideOpen = false
+                    focusedTile = 0
                     onSelectChannel(index)
                 },
+                onAddToMultiview = { channel ->
+                    guideOpen = false
+                    onAddToMultiview(channel)
+                },
+                canAddTile = tileCount < 4,
                 onDismiss = { guideOpen = false },
                 modifier = Modifier.fillMaxSize(),
             )

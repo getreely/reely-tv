@@ -226,6 +226,12 @@ data class ReelyState(
     /** Whatever the cursor is on. The hero at the top of a browse screen describes it. */
     val focused: PlexItem? = null,
     val playback: Playback? = null,
+    /**
+     * Extra live channels shown alongside the one playing. The channel in [playback] is
+     * always the first tile; these are the rest, so an empty list is the ordinary
+     * single-channel player and nothing about it changes.
+     */
+    val multiview: List<XtreamChannel> = emptyList(),
     val upNext: PlexItem? = null,
     val prefs: PlayerPrefs = PlayerPrefs(),
 ) {
@@ -730,6 +736,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             val effectiveQueue = queue.ifEmpty { siblingQueue(item) }
+            // Anything from the library is a single picture; the live grid does not survive it.
+            _state.update { it.copy(multiview = emptyList()) }
             val startAt = if (resume) item.viewOffsetMs else 0
             val transcode = _state.value.prefs.playbackMode == Settings.MODE_TRANSCODE
             val session = UUID.randomUUID().toString()
@@ -948,6 +956,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
     fun stopPlayback(positionMs: Long = 0) {
         releaseTranscode()
+        _state.update { it.copy(multiview = emptyList()) }
         val playback = _state.value.playback
         val ratingKey = playback?.ratingKey
         val plex = _state.value.plex
@@ -1327,6 +1336,42 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Adds a channel beside the one playing. Four tiles is the ceiling — not because the
+     * hardware was asked what it can manage, but because a 2x2 grid is where the screen
+     * runs out. Whether a stick can decode four streams at once, and whether the provider
+     * will serve four connections, is left to find out.
+     */
+    fun addToMultiview(channel: XtreamChannel) {
+        val playback = _state.value.playback ?: return
+        if (!playback.isLive) return
+        _state.update { current ->
+            val already = current.multiview.any { it.streamId == channel.streamId }
+            val playing = current.live.channels
+                .getOrNull(playback.channelIndex)?.streamId == channel.streamId
+            if (already || playing || current.multiview.size >= MAX_EXTRA_TILES) current
+            else current.copy(multiview = current.multiview + channel)
+        }
+    }
+
+    fun removeFromMultiview(index: Int) {
+        _state.update { current ->
+            if (index !in current.multiview.indices) current
+            else current.copy(
+                multiview = current.multiview.toMutableList().apply { removeAt(index) }
+            )
+        }
+    }
+
+    fun clearMultiview() = _state.update { it.copy(multiview = emptyList()) }
+
+    /** Going full screen on one tile: everything else goes away. */
+    fun collapseToChannel(channel: XtreamChannel) {
+        val index = _state.value.live.channels.indexOfFirst { it.streamId == channel.streamId }
+        _state.update { it.copy(multiview = emptyList()) }
+        if (index >= 0) playChannel(index)
+    }
+
     /** Channel surfing from the player — the thing that decides whether this feels like a TV app. */
     fun stepChannel(delta: Int) {
         val playback = _state.value.playback ?: return
@@ -1531,6 +1576,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
         /** A search for "sports" on a big panel matches thousands; a screenful is plenty. */
         const val CHANNEL_RESULTS = 40
+
+        /** Three beside the one playing, which fills a 2x2 grid. */
+        const val MAX_EXTRA_TILES = 3
     }
 }
 

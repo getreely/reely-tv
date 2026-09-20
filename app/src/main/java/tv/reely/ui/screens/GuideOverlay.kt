@@ -18,6 +18,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -39,12 +40,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import tv.reely.ui.components.GuideNowLine
 import tv.reely.ui.components.GuideRow
 import tv.reely.ui.components.GuideRuler
 import tv.reely.ui.components.guideTimeRange
+import tv.reely.ui.components.TvActionButton
 import tv.reely.ui.components.guideWidthFor
 import tv.reely.ui.theme.Faint
+import tv.reely.ui.theme.Line
 import tv.reely.ui.theme.Ink
 import tv.reely.ui.theme.Parchment
 import tv.reely.xtream.EpgProgramme
@@ -72,6 +78,8 @@ fun GuideOverlay(
     windowEnd: Long,
     playingIndex: Int,
     onSelect: (Int) -> Unit,
+    onAddToMultiview: (XtreamChannel) -> Unit,
+    canAddTile: Boolean,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -112,6 +120,20 @@ fun GuideOverlay(
         scroll.animateScrollTo(target.coerceAtLeast(0f).roundToInt())
     }
 
+    // A held OK opens this instead of switching channel, which is the only way to reach
+    // multiview without giving the grid a second set of buttons.
+    var menuFor by remember { mutableStateOf<XtreamChannel?>(null) }
+    var longPressFired by remember { mutableStateOf(false) }
+    val menuFocus = remember { FocusRequester() }
+
+    LaunchedEffect(menuFor) {
+        if (menuFor == null) return@LaunchedEffect
+        repeat(FOCUS_ATTEMPTS) {
+            if (runCatching { menuFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+            delay(FOCUS_RETRY_MS)
+        }
+    }
+
     val channel = channels.getOrNull(cursor)
     val listing = channel?.epgChannelId?.let { programmes[it] }.orEmpty()
     val onNow = listing.firstOrNull { it.isOnAt(focusTime) }
@@ -122,6 +144,41 @@ fun GuideOverlay(
             .focusRequester(grabFocus)
             .focusable()
             .onPreviewKeyEvent { event ->
+                // The menu owns everything while it is up.
+                if (menuFor != null) {
+                    if (event.key == Key.Back && event.type == KeyEventType.KeyDown) {
+                        menuFor = null
+                        return@onPreviewKeyEvent true
+                    }
+                    return@onPreviewKeyEvent false
+                }
+
+                val selectKey = event.key == Key.DirectionCenter || event.key == Key.Enter
+                if (selectKey) {
+                    // Android repeats a held key once the long-press timeout elapses, so
+                    // the first repeat is the signal. The short press then has to wait for
+                    // the key to come up, or holding it would switch channel on the way
+                    // down and open the menu immediately afterwards.
+                    return@onPreviewKeyEvent when {
+                        event.type == KeyEventType.KeyDown &&
+                            event.nativeKeyEvent.repeatCount >= 1 -> {
+                            if (!longPressFired) {
+                                longPressFired = true
+                                menuFor = channels.getOrNull(cursor)
+                            }
+                            true
+                        }
+
+                        event.type == KeyEventType.KeyUp -> {
+                            if (!longPressFired) onSelect(cursor)
+                            longPressFired = false
+                            true
+                        }
+
+                        else -> true
+                    }
+                }
+
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (event.key) {
                     Key.DirectionUp -> {
@@ -141,11 +198,6 @@ fun GuideOverlay(
 
                     Key.DirectionRight -> {
                         focusTime = (focusTime + TIME_STEP_SECONDS).coerceAtMost(end)
-                        true
-                    }
-
-                    Key.DirectionCenter, Key.Enter -> {
-                        onSelect(cursor)
                         true
                     }
 
@@ -181,7 +233,7 @@ fun GuideOverlay(
             )
             Text(
                 text = onNow?.let { "${it.title}  ·  ${guideTimeRange(it)}" }
-                    ?: "Up and down for channels · left and right for later · OK to watch",
+                    ?: "OK to watch · hold OK for more",
                 color = Faint,
                 fontSize = 12.sp,
                 lineHeight = 16.sp,
@@ -220,5 +272,66 @@ fun GuideOverlay(
                 GuideNowLine(windowStart = start, now = now, scroll = scroll)
             }
         }
+
+        menuFor?.let { target ->
+            ChannelMenu(
+                channel = target,
+                canAddTile = canAddTile,
+                focusRequester = menuFocus,
+                onWatch = {
+                    menuFor = null
+                    onSelect(channels.indexOfFirst { it.streamId == target.streamId })
+                },
+                onAdd = {
+                    menuFor = null
+                    onAddToMultiview(target)
+                },
+                onCancel = { menuFor = null },
+                modifier = Modifier.align(Alignment.Center),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChannelMenu(
+    channel: XtreamChannel,
+    canAddTile: Boolean,
+    focusRequester: FocusRequester,
+    onWatch: () -> Unit,
+    onAdd: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(Ink.copy(alpha = 0.95f))
+            .border(1.dp, Line, RoundedCornerShape(14.dp))
+            .padding(20.dp)
+            .focusRequester(focusRequester),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = channel.name,
+            color = Parchment,
+            fontSize = 16.sp,
+            lineHeight = 21.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        TvActionButton(label = "Watch this channel", onClick = onWatch, emphasised = true)
+        if (canAddTile) {
+            TvActionButton(label = "Add beside what is playing", onClick = onAdd)
+        } else {
+            Text(
+                text = "Four channels is the most that fit.",
+                color = Faint,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            )
+        }
+        TvActionButton(label = "Cancel", onClick = onCancel)
     }
 }
