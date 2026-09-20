@@ -46,6 +46,8 @@ import tv.reely.plex.PlexItem
 import tv.reely.ui.components.EmptyNote
 import tv.reely.ui.components.GearGlyph
 import tv.reely.ui.components.SearchGlyph
+import tv.reely.ui.components.TabMenu
+import tv.reely.ui.components.TabMenuItem
 import tv.reely.ui.screens.DetailScreen
 import tv.reely.ui.screens.GuideScreen
 import tv.reely.ui.screens.HomeScreen
@@ -119,8 +121,14 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
         return
     }
 
+    // Which tab has dropped its menu, if any. Choosing a tab that has one opens it
+    // rather than re-navigating to where you already are.
+    var menuFor by remember { mutableStateOf<LibraryKind?>(null) }
+    val menuFocus = remember { FocusRequester() }
+
     // Back walks the stack: out of a season, off a detail page, and only then out of the app.
-    BackHandler(enabled = state.stack.size > 1) { viewModel.goBack() }
+    BackHandler(enabled = menuFor != null) { menuFor = null }
+    BackHandler(enabled = menuFor == null && state.stack.size > 1) { viewModel.goBack() }
 
     val contentFocus = remember { FocusRequester() }
     // Always attached to whichever tab is currently selected, so leaving the content
@@ -136,6 +144,14 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     // tabs, silently navigating somewhere nobody asked for. So whenever the tab row does
     // not own focus, focus is put back into the content as soon as it has something in it.
     var tabRowHasFocus by remember { mutableStateOf(true) }
+
+    LaunchedEffect(menuFor) {
+        if (menuFor == null) return@LaunchedEffect
+        repeat(CONTENT_FOCUS_ATTEMPTS) {
+            if (runCatching { menuFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+            delay(CONTENT_FOCUS_RETRY_MS)
+        }
+    }
 
     LaunchedEffect(Unit) { runCatching { selectedTab.requestFocus() } }
     // The content of a screen is composed in the same pass that asks for its focus, so a
@@ -166,7 +182,15 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     ) {
         TopBar(
             current = state.stack.first(),
-            onSelect = viewModel::navigate,
+            onSelect = { route ->
+                // Movies and TV Shows drop a menu instead of simply going there again.
+                if (route is Route.Library && state.stack.first() == route) {
+                    menuFor = route.kind
+                } else {
+                    menuFor = null
+                    viewModel.navigate(route)
+                }
+            },
             onTabFocused = { tabRowHasFocus = true },
             selectedTab = selectedTab,
             canSelectOnFocus = { arrivedByDirectionKey.also { arrivedByDirectionKey = false } },
@@ -212,6 +236,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
 
             is Route.Library -> LibraryScreen(
                 kind = route.kind,
+                view = route.view,
                 plex = state.plex,
                 home = state.home,
                 focused = state.focused,
@@ -222,7 +247,6 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onStartLink = viewModel::startPlexLink,
                 onCancelLink = viewModel::cancelPlexLink,
                 onDismissPlexError = viewModel::dismissPlexError,
-                onSelectSection = { viewModel.openSection(route.kind, it) },
                 onCycleSort = { viewModel.cycleSort(route.kind) },
                 onToggleUnwatched = { viewModel.toggleUnwatchedOnly(route.kind) },
                 onSelectGenre = { viewModel.selectGenre(route.kind, it) },
@@ -294,6 +318,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onSignOutPlex = viewModel::signOutPlex,
                 onSignOutXtream = viewModel::signOutXtream,
                 onSwitchServer = viewModel::switchServer,
+                onToggleFavourite = viewModel::toggleFavouriteSection,
                 onToggleFormat = viewModel::toggleFormat,
                 onNudgeSubtitleScale = viewModel::nudgeSubtitleScale,
                 onToggleSubtitleBackground = viewModel::toggleSubtitleBackground,
@@ -309,6 +334,60 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onInstallUpdate = viewModel::installUpdate,
             )
         }
+
+            if (menuFor != null) {
+                val kind = menuFor!!
+                val browse = state.plex.browseFor(kind)
+                TabMenu(
+                    groups = listOf(
+                        "In ${kind.title}" to listOf(
+                            TabMenuItem(
+                                label = "Home",
+                                selected = state.route == Route.Library(kind, LibraryView.HOME),
+                            ) {
+                                menuFor = null
+                                viewModel.navigate(Route.Library(kind, LibraryView.HOME))
+                            },
+                            TabMenuItem(
+                                label = "Library",
+                                selected = state.route == Route.Library(kind, LibraryView.GRID),
+                            ) {
+                                menuFor = null
+                                viewModel.navigate(Route.Library(kind, LibraryView.GRID))
+                            },
+                        ),
+                        "Libraries" to state.plex.menuSectionsFor(kind)
+                            .takeIf { it.size > 1 }
+                            .orEmpty()
+                            .map { section ->
+                                TabMenuItem(
+                                    label = section.title,
+                                    selected = browse.section?.key == section.key,
+                                ) {
+                                    menuFor = null
+                                    viewModel.openSection(kind, section)
+                                    viewModel.navigate(Route.Library(kind, LibraryView.GRID))
+                                }
+                            },
+                        "Servers" to state.plex.servers
+                            .takeIf { it.size > 1 }
+                            .orEmpty()
+                            .map { server ->
+                                TabMenuItem(
+                                    label = server.name,
+                                    selected = server.name == state.plex.serverName,
+                                ) {
+                                    menuFor = null
+                                    if (server.name != state.plex.serverName) {
+                                        viewModel.switchServer(server)
+                                    }
+                                }
+                            },
+                    ),
+                    focusRequester = menuFocus,
+                    modifier = Modifier.padding(start = 40.dp, top = 4.dp),
+                )
+            }
         }
     }
 }
@@ -330,7 +409,7 @@ private fun detailRouteFor(item: PlexItem): Route.Detail {
 /** Identifies a destination for focus bookkeeping, ignoring data that arrives later. */
 private fun routeKey(route: Route): String = when (route) {
     is Route.Home -> "home"
-    is Route.Library -> "library:${route.kind}"
+    is Route.Library -> "library:${route.kind}:${route.view}"
     is Route.Detail -> "detail:${route.ratingKey}:${route.episodeKey}"
     is Route.Live -> "live"
     is Route.Search -> "search"

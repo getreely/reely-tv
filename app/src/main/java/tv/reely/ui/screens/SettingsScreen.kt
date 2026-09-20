@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import tv.reely.BuildConfig
 import tv.reely.core.Settings
+import tv.reely.plex.PlexSection
 import tv.reely.plex.PlexServer
 import tv.reely.ui.GuideState
 import tv.reely.ui.GuideStatus
@@ -71,6 +72,7 @@ fun SettingsScreen(
     onSignOutPlex: () -> Unit,
     onSignOutXtream: () -> Unit,
     onSwitchServer: (PlexServer) -> Unit,
+    onToggleFavourite: (PlexSection) -> Unit,
     onToggleFormat: () -> Unit,
     onNudgeSubtitleScale: (Float) -> Unit,
     onToggleSubtitleBackground: () -> Unit,
@@ -141,9 +143,10 @@ fun SettingsScreen(
                     onSignOutXtream = onSignOutXtream,
                 )
 
-                Section.PLEX -> PlexSection(
+                Section.PLEX -> PlexPanel(
                     plex = plex,
                     onSwitchServer = onSwitchServer,
+                    onToggleFavourite = onToggleFavourite,
                     onSignOutPlex = onSignOutPlex,
                 )
 
@@ -297,9 +300,10 @@ private fun LiveSection(
 }
 
 @Composable
-private fun PlexSection(
+private fun PlexPanel(
     plex: PlexState,
     onSwitchServer: (PlexServer) -> Unit,
+    onToggleFavourite: (PlexSection) -> Unit,
     onSignOutPlex: () -> Unit,
 ) {
     if (!plex.isConnected) {
@@ -327,11 +331,41 @@ private fun PlexSection(
         }
     }
 
+    if (plex.sections.size > 1) {
+        Panel(title = "Libraries in the tab menu") {
+            Text(
+                text = if (plex.favouriteSections.isEmpty())
+                    "Every library is offered. Pick some and only those will be."
+                else
+                    "Only the picked libraries are offered. Clear them all to go back to " +
+                        "offering every one.",
+                color = Muted,
+                fontSize = 13.sp,
+                lineHeight = 19.sp,
+            )
+            Column(
+                modifier = Modifier.padding(top = 8.dp).focusGroup(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                plex.sections.forEach { section ->
+                    val picked = section.key in plex.favouriteSections
+                    TvActionButton(
+                        label = "${if (picked) "★" else "☆"}  ${section.title}  (${section.type})",
+                        onClick = { onToggleFavourite(section) },
+                        emphasised = picked,
+                    )
+                }
+            }
+        }
+    }
+
     if (plex.servers.size > 1) {
         Panel(title = "Other servers") {
             Text(
-                text = "This account can reach ${plex.servers.size} servers. Switching replaces " +
-                    "every library, row and page with that server's own.",
+                text = "This account can reach ${plex.servers.size} servers. They are offered in " +
+                    "the Movies and TV Shows menus too, which is where switching usually " +
+                    "belongs. Switching replaces every library, row and page with that " +
+                    "server's own.",
                 color = Muted,
                 fontSize = 13.sp,
                 lineHeight = 19.sp,

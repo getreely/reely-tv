@@ -37,6 +37,14 @@ class Settings(context: Context) {
         get() = prefs.getInt(MAX_BITRATE, 0)
         set(value) = prefs.edit().putInt(MAX_BITRATE, value).apply()
 
+    /**
+     * Section keys the tab menu offers. Empty means every library is offered, which is
+     * right until somebody with eight of them says otherwise.
+     */
+    var favouriteSections: Set<String>
+        get() = prefs.getStringSet(FAVOURITE_SECTIONS, emptySet()) ?: emptySet()
+        set(value) = prefs.edit().putStringSet(FAVOURITE_SECTIONS, value).apply()
+
     /** Where a newer build is published. Changeable, but there is a sensible default. */
     var updateUrl: String
         get() = prefs.getString(UPDATE_URL, DEFAULT_UPDATE_URL) ?: DEFAULT_UPDATE_URL
@@ -55,6 +63,7 @@ class Settings(context: Context) {
         private const val PLAYBACK_MODE = "playback.mode"
         private const val MAX_BITRATE = "playback.maxBitrate"
         private const val UPDATE_URL = "update.url"
+        private const val FAVOURITE_SECTIONS = "library.favourites"
 
         const val DEFAULT_UPDATE_URL = "http://192.168.68.80:5555/stuff/reely-tv.apk"
 

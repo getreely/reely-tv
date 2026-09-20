@@ -23,12 +23,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import tv.reely.plex.PlexItem
-import tv.reely.plex.PlexSection
 import tv.reely.plex.formatDuration
 import tv.reely.ui.BrowseState
 import tv.reely.ui.HomeState
 import tv.reely.ui.LibraryKind
 import tv.reely.ui.LibrarySort
+import tv.reely.ui.LibraryView
 import tv.reely.ui.PlexState
 import tv.reely.ui.components.HeroBackdrop
 import tv.reely.ui.components.EmptyNote
@@ -41,12 +41,14 @@ import tv.reely.ui.theme.Parchment
 private val HERO_HEIGHT = 150.dp
 
 /**
- * A library tab is its own small home: what you are part-way through and what just
- * arrived, with everything else underneath, all on one scrolling surface.
+ * A library tab is its own small home — what you are part-way through, what arrived and
+ * what is newly out — or the whole library as a grid. The two used to share one scrolling
+ * surface, which meant scrolling past the rows every time to reach the library itself.
  */
 @Composable
 fun LibraryScreen(
     kind: LibraryKind,
+    view: LibraryView,
     plex: PlexState,
     home: HomeState,
     focused: PlexItem?,
@@ -57,7 +59,6 @@ fun LibraryScreen(
     onStartLink: () -> Unit,
     onCancelLink: () -> Unit,
     onDismissPlexError: () -> Unit,
-    onSelectSection: (PlexSection) -> Unit,
     onCycleSort: () -> Unit,
     onToggleUnwatched: () -> Unit,
     onSelectGenre: (String?) -> Unit,
@@ -126,7 +127,7 @@ fun LibraryScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                if (resumable.isNotEmpty()) {
+                if (view == LibraryView.HOME && resumable.isNotEmpty()) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         RowBlock("Continue Watching") {
                             LazyRow(
@@ -149,7 +150,9 @@ fun LibraryScreen(
                     }
                 }
 
-                if (kind == LibraryKind.MOVIES && home.recentMovies.isNotEmpty()) {
+                if (view == LibraryView.HOME && kind == LibraryKind.MOVIES &&
+                    home.recentMovies.isNotEmpty()
+                ) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         RowBlock("Recently Added") {
                             LazyRow(
@@ -172,7 +175,9 @@ fun LibraryScreen(
                     }
                 }
 
-                if (kind == LibraryKind.SHOWS && home.recentEpisodes.isNotEmpty()) {
+                if (view == LibraryView.HOME && kind == LibraryKind.SHOWS &&
+                    home.recentEpisodes.isNotEmpty()
+                ) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         RowBlock("Recently Added") {
                             LazyRow(
@@ -198,6 +203,38 @@ fun LibraryScreen(
                     }
                 }
 
+                if (view == LibraryView.HOME && browse.released.isNotEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        RowBlock("Recently Released") {
+                            LazyRow(
+                                modifier = Modifier.focusGroup(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                items(browse.released, key = { it.ratingKey }) { item ->
+                                    PosterCard(
+                                        title = item.title,
+                                        subtitle = item.caption,
+                                        imageUrl = imageUrl(item.thumb, 300, 450),
+                                        progress = item.resumeFraction,
+                                        watched = item.isWatched,
+                                        onFocus = { onFocusItem(item) },
+                                        onClick = { onOpenItem(item) },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (view == LibraryView.HOME) {
+                    if (home.busy && resumable.isEmpty() && browse.released.isEmpty()) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            EmptyNote("Reading your library…")
+                        }
+                    }
+                    return@LazyVerticalGrid
+                }
+
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     Column(
                         modifier = Modifier.padding(top = 12.dp, bottom = 2.dp),
@@ -211,20 +248,6 @@ fun LibraryScreen(
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.padding(horizontal = 4.dp),
                         )
-                        if (sections.size > 1) {
-                            LazyRow(
-                                modifier = Modifier.focusGroup(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            ) {
-                                items(sections, key = { it.key }) { section ->
-                                    TvChip(
-                                        label = section.title,
-                                        selected = browse.section?.key == section.key,
-                                        onClick = { onSelectSection(section) },
-                                    )
-                                }
-                            }
-                        }
                         // Sort, then the watched filter, then genres. One row that runs
                         // off to the right, so a library with forty genres still fits.
                         if (sections.isNotEmpty()) {

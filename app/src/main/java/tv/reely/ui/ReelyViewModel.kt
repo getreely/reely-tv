@@ -48,10 +48,20 @@ enum class LibraryKind(val plexType: String, val title: String, val filter: Int)
     SHOWS("show", "TV Shows", PlexApi.TYPE_SHOW),
 }
 
+/**
+ * A library tab shows one of two things: the rows that say what you were watching and
+ * what has arrived, or the whole library as a grid. They used to be stacked on one
+ * surface, which meant scrolling past the rows to reach the library.
+ */
+enum class LibraryView { HOME, GRID }
+
 /** Where the app is. A back stack rather than a tab index, so details can be left. */
 sealed interface Route {
     data object Home : Route
-    data class Library(val kind: LibraryKind) : Route
+    data class Library(
+        val kind: LibraryKind,
+        val view: LibraryView = LibraryView.HOME,
+    ) : Route
     data object Live : Route
     data object Search : Route
     data object Settings : Route
@@ -102,6 +112,8 @@ enum class LibrarySort(val key: String, val label: String) {
 data class BrowseState(
     val section: PlexSection? = null,
     val items: List<PlexItem> = emptyList(),
+    /** Newest by release date, which is not the same as newest to the library. */
+    val released: List<PlexItem> = emptyList(),
     val genres: List<PlexGenre> = emptyList(),
     val sort: LibrarySort = LibrarySort.TITLE,
     val genreId: String? = null,
@@ -138,10 +150,18 @@ data class PlexState(
     val linkCode: String? = null,
     val busy: Boolean = false,
     val error: String? = null,
+    val favouriteSections: Set<String> = emptySet(),
 ) {
     val isConnected: Boolean get() = baseUrl != null && serverToken != null
 
     fun sectionsFor(kind: LibraryKind): List<PlexSection> = sections.filter { it.type == kind.plexType }
+
+    /** What the tab menu offers: the chosen few, or everything when none are chosen. */
+    fun menuSectionsFor(kind: LibraryKind): List<PlexSection> {
+        val all = sectionsFor(kind)
+        if (favouriteSections.isEmpty()) return all
+        return all.filter { it.key in favouriteSections }.ifEmpty { all }
+    }
 
     fun browseFor(kind: LibraryKind): BrowseState = browse[kind] ?: BrowseState()
 }
@@ -298,6 +318,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         PlexApi.clientId = clientId
+        updatePlex { it.copy(favouriteSections = settings.favouriteSections) }
         viewModelScope.launch {
             restorePlex()
             restoreLive()
@@ -614,12 +635,42 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     // ---------------------------------------------------------------- Library grids
 
     fun openSection(kind: LibraryKind, section: PlexSection) {
+        if (_state.value.plex.browseFor(kind).section?.key == section.key) return
         // A different library is a clean slate: the old library's genres do not apply.
         updateBrowse(kind) {
             BrowseState(section = section, sort = it.sort, busy = true)
         }
         loadBrowse(kind)
         loadGenres(kind, section)
+        loadReleased(kind, section)
+    }
+
+    /**
+     * Newest by release date. Plex's own Recently Added answers a different question —
+     * when a file arrived, which for a back catalogue import is today for a film from
+     * 1974 — so this is asked for separately rather than reordered from that.
+     */
+    private fun loadReleased(kind: LibraryKind, section: PlexSection) {
+        val plex = _state.value.plex
+        val base = plex.baseUrl ?: return
+        val token = plex.serverToken ?: return
+        viewModelScope.launch {
+            val path = "/library/sections/${section.key}/all" +
+                "?type=${kind.filter}&sort=originallyAvailableAt:desc"
+            val items = runCatching { PlexApi.items(base, token, path, limit = 40) }
+                .getOrElse { emptyList() }
+            updateBrowse(kind) {
+                if (it.section?.key != section.key) it else it.copy(released = items)
+            }
+        }
+    }
+
+    /** Which libraries the tab menu offers. */
+    fun toggleFavouriteSection(section: PlexSection) {
+        val next = settings.favouriteSections.toMutableSet()
+        if (!next.remove(section.key)) next.add(section.key)
+        settings.favouriteSections = next
+        updatePlex { it.copy(favouriteSections = next) }
     }
 
     /** Cycles the grid through the orderings a library client actually offers. */
