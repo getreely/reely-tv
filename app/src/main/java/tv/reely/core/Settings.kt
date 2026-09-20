@@ -45,7 +45,11 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(THEME_MUSIC, false)
         set(value) = prefs.edit().putBoolean(THEME_MUSIC, value).apply()
 
-    /** Themes are mastered loud; this sits well under the volume content plays at. */
+    /**
+     * Themes are mastered loud, and this is a linear gain rather than anything the ear
+     * reads as a percentage: a tenth is about where a title tune sits under a page
+     * without competing with it. Tested on a television rather than guessed at.
+     */
     var themeVolume: Float
         get() = prefs.getFloat(THEME_VOLUME, DEFAULT_THEME_VOLUME).coerceIn(MIN_THEME_VOLUME, 1f)
         set(value) = prefs.edit().putFloat(THEME_VOLUME, value.coerceIn(MIN_THEME_VOLUME, 1f)).apply()
@@ -78,11 +82,13 @@ class Settings(context: Context) {
         private const val UPDATE_URL = "update.url"
         private const val FAVOURITE_SECTIONS = "library.favourites"
         private const val THEME_MUSIC = "theme.music"
-        private const val THEME_VOLUME = "theme.volume"
+        // Renamed when the default came down from a level that turned out to be four
+        // times too loud, so an install that had already nudged it starts again.
+        private const val THEME_VOLUME = "theme.volume.quiet"
 
-        const val DEFAULT_THEME_VOLUME = 0.45f
-        const val MIN_THEME_VOLUME = 0.1f
-        const val THEME_VOLUME_STEP = 0.1f
+        const val DEFAULT_THEME_VOLUME = 0.10f
+        const val MIN_THEME_VOLUME = 0.05f
+        const val THEME_VOLUME_STEP = 0.05f
 
         const val DEFAULT_UPDATE_URL = "http://192.168.68.80:5555/stuff/reely-tv.apk"
 

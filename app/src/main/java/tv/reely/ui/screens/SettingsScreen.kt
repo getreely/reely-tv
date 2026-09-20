@@ -49,6 +49,7 @@ import tv.reely.xtream.StreamFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 private enum class Section(val title: String) {
     VIDEO("Video"),
@@ -215,11 +216,12 @@ private fun VideoSection(
 
     Panel(title = "Theme music") {
         FactLine("Show themes", if (prefs.themeMusic) "On" else "Off")
-        FactLine("Volume", "${(prefs.themeVolume * 100).toInt()}%")
+        FactLine("Volume", "${(prefs.themeVolume * 100).roundToInt()}%")
         Text(
             text = "A show's title music plays quietly under its page, where the server has " +
                 "one. It stops the moment anything is played, and never takes sound away " +
-                "from whatever else the television is doing.",
+                "from whatever else the television is doing. A tenth is about right; this " +
+                "is a raw gain, so twice the number is a great deal more than twice as loud.",
             color = Muted,
             fontSize = 13.sp,
             lineHeight = 19.sp,
