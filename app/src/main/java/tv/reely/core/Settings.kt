@@ -38,6 +38,19 @@ class Settings(context: Context) {
         set(value) = prefs.edit().putInt(MAX_BITRATE, value).apply()
 
     /**
+     * A show's theme tune under its page. Off unless asked for: something that makes
+     * noise on its own should be chosen rather than discovered.
+     */
+    var themeMusic: Boolean
+        get() = prefs.getBoolean(THEME_MUSIC, false)
+        set(value) = prefs.edit().putBoolean(THEME_MUSIC, value).apply()
+
+    /** Themes are mastered loud; this sits well under the volume content plays at. */
+    var themeVolume: Float
+        get() = prefs.getFloat(THEME_VOLUME, DEFAULT_THEME_VOLUME).coerceIn(MIN_THEME_VOLUME, 1f)
+        set(value) = prefs.edit().putFloat(THEME_VOLUME, value.coerceIn(MIN_THEME_VOLUME, 1f)).apply()
+
+    /**
      * Section keys the tab menu offers. Empty means every library is offered, which is
      * right until somebody with eight of them says otherwise.
      */
@@ -64,6 +77,12 @@ class Settings(context: Context) {
         private const val MAX_BITRATE = "playback.maxBitrate"
         private const val UPDATE_URL = "update.url"
         private const val FAVOURITE_SECTIONS = "library.favourites"
+        private const val THEME_MUSIC = "theme.music"
+        private const val THEME_VOLUME = "theme.volume"
+
+        const val DEFAULT_THEME_VOLUME = 0.45f
+        const val MIN_THEME_VOLUME = 0.1f
+        const val THEME_VOLUME_STEP = 0.1f
 
         const val DEFAULT_UPDATE_URL = "http://192.168.68.80:5555/stuff/reely-tv.apk"
 

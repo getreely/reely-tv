@@ -165,6 +165,8 @@ data class PlexDetail(
     val studio: String?,
     val thumb: String?,
     val art: String?,
+    /** A show's title music, when the server has it. Films do not carry one. */
+    val theme: String?,
     val genres: List<String>,
     val directors: List<String>,
     val roles: List<PlexRole>,
@@ -419,6 +421,7 @@ object PlexApi {
                 studio = entry.optString("studio").takeIf(String::isNotBlank),
                 thumb = entry.optString("thumb").takeIf(String::isNotEmpty),
                 art = entry.optString("art").takeIf(String::isNotEmpty),
+                theme = entry.optString("theme").takeIf(String::isNotEmpty),
                 genres = tags(entry, "Genre"),
                 directors = tags(entry, "Director"),
                 roles = roles(entry),

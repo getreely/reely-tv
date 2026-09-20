@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.reely.core.LivePlayer
 import tv.reely.core.SecureStore
+import tv.reely.core.ThemePlayer
 import tv.reely.core.UpdateInfo
 import tv.reely.core.Updater
 import tv.reely.core.Settings
@@ -288,6 +289,8 @@ data class PlayerPrefs(
     val guidePreview: Boolean = true,
     val playbackMode: String = Settings.MODE_AUTO,
     val maxBitrateKbps: Int = 0,
+    val themeMusic: Boolean = false,
+    val themeVolume: Float = Settings.DEFAULT_THEME_VOLUME,
 )
 
 /** Where a check for a newer build has got to. */
@@ -340,6 +343,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     /** Shared by the guide's preview and the full-screen player, so one becomes the other. */
     val livePlayer = LivePlayer(application)
 
+    /** A show's title music, under its page. */
+    private val themePlayer = ThemePlayer(application)
+
     private val _state = MutableStateFlow(
         ReelyState(
             prefs = PlayerPrefs(
@@ -349,6 +355,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 guidePreview = settings.guidePreview,
                 playbackMode = settings.playbackMode,
                 maxBitrateKbps = settings.maxBitrateKbps,
+                themeMusic = settings.themeMusic,
+                themeVolume = settings.themeVolume,
             )
         )
     )
@@ -366,6 +374,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     private val browseJobs = mutableMapOf<LibraryKind, Job>()
     private var updateJob: Job? = null
     private var libraryScanJob: Job? = null
+    private var themeJob: Job? = null
 
     /** Every live channel the account carries, fetched once and reused by search. */
     private var allChannels: List<XtreamChannel>? = null
@@ -391,6 +400,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         // The guide's preview is the shared player, and nothing else on screen would
         // account for the sound if it were left running.
         if (route !is Route.Live && _state.value.playback == null) livePlayer.stop()
+        if (route !is Route.Detail) stopTheme()
         if (route is Route.Detail) loadDetail(route)
         if (route is Route.Home) refreshHome()
         if (route is Route.Live) openGuide()
@@ -405,7 +415,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             else current.copy(stack = current.stack.dropLast(1), detail = null)
         }
         val route = _state.value.route
-        if (route is Route.Detail) loadDetail(route)
+        if (route is Route.Detail) loadDetail(route) else stopTheme()
     }
 
     // ---------------------------------------------------------------- Plex connection
@@ -908,6 +918,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             _state.update { it.copy(detail = it.detail?.copy(detail = detail, busy = detail.isShow)) }
+            startTheme()
 
             launch {
                 val trailers = runCatching { PlexApi.trailers(base, token, ratingKey) }
@@ -1009,6 +1020,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             // Anything from the library is a single picture; the live grid does not survive
             // it, and neither does the connection live television was holding.
             livePlayer.stop()
+            silenceTheme()
             _state.update { it.copy(multiview = emptyList()) }
             val startAt = if (resume) item.viewOffsetMs else 0
             val transcode = _state.value.prefs.playbackMode == Settings.MODE_TRANSCODE
@@ -1447,6 +1459,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val title = detail.detail?.title ?: "Trailer"
         val session = UUID.randomUUID().toString()
 
+        silenceTheme()
         releaseTranscode()
         _state.update {
             it.copy(
@@ -1594,6 +1607,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun playChannel(index: Int) {
+        silenceTheme()
         val live = _state.value.live
         val credentials = live.credentials ?: return
         val channel = live.channels.getOrNull(index) ?: return
@@ -1896,6 +1910,52 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // ---------------------------------------------------------------- Theme music
+
+    fun toggleThemeMusic() {
+        val next = !settings.themeMusic
+        settings.themeMusic = next
+        _state.update { it.copy(prefs = it.prefs.copy(themeMusic = next)) }
+        if (!next) themePlayer.silence() else startTheme()
+    }
+
+    fun nudgeThemeVolume(delta: Float) {
+        val next = (settings.themeVolume + delta).coerceIn(Settings.MIN_THEME_VOLUME, 1f)
+        settings.themeVolume = next
+        _state.update { it.copy(prefs = it.prefs.copy(themeVolume = next)) }
+    }
+
+    /**
+     * Starts the theme for whatever page is open, after a pause. The pause is there so
+     * that opening a show and immediately pressing play does not fire a title tune at
+     * somebody on their way into an episode.
+     */
+    private fun startTheme() {
+        themeJob?.cancel()
+        if (!settings.themeMusic) return
+        val detail = _state.value.detail ?: return
+        val theme = detail.detail?.theme ?: return
+        val plex = _state.value.plex
+        val base = detail.serverBase ?: plex.baseUrl ?: return
+        val token = plex.tokenFor(detail.serverBase) ?: return
+        themeJob = viewModelScope.launch {
+            delay(THEME_DELAY_MS)
+            themePlayer.play("$base$theme?X-Plex-Token=$token", settings.themeVolume)
+        }
+    }
+
+    /** Leaving a page. Fades, because stopping a tune mid-bar sounds like a fault. */
+    private fun stopTheme() {
+        themeJob?.cancel()
+        themePlayer.fadeOut()
+    }
+
+    /** The app went away, or something is about to play. No fade. */
+    fun silenceTheme() {
+        themeJob?.cancel()
+        themePlayer.silence()
+    }
+
     fun dismissPlexError() = updatePlex { it.copy(error = null) }
 
     fun dismissLiveError() = updateLive { it.copy(error = null) }
@@ -1914,6 +1974,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         super.onCleared()
+        themePlayer.release()
         livePlayer.release()
         epgStore.close()
     }
@@ -1937,6 +1998,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
         /** A search for "sports" on a big panel matches thousands; a screenful is plenty. */
         const val CHANNEL_RESULTS = 40
+
+        /** Long enough that opening a show and pressing play never starts a tune. */
+        const val THEME_DELAY_MS = 900L
 
         /** Three beside the one playing, which fills a 2x2 grid. */
         const val MAX_EXTRA_TILES = 3

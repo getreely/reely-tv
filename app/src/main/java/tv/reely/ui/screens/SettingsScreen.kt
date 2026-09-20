@@ -80,6 +80,8 @@ fun SettingsScreen(
     onToggleGuidePreview: () -> Unit,
     onCyclePlaybackMode: () -> Unit,
     onCycleMaxBitrate: () -> Unit,
+    onToggleThemeMusic: () -> Unit,
+    onNudgeThemeVolume: (Float) -> Unit,
     onRefreshChannels: () -> Unit,
     onRefreshGuide: () -> Unit,
     update: UpdateStatus,
@@ -130,6 +132,8 @@ fun SettingsScreen(
                     onNudgeUpNext = onNudgeUpNext,
                     onCyclePlaybackMode = onCyclePlaybackMode,
                     onCycleMaxBitrate = onCycleMaxBitrate,
+                    onToggleThemeMusic = onToggleThemeMusic,
+                    onNudgeThemeVolume = onNudgeThemeVolume,
                 )
 
                 Section.LIVE_TV -> LiveSection(
@@ -171,6 +175,8 @@ private fun VideoSection(
     onNudgeUpNext: (Int) -> Unit,
     onCyclePlaybackMode: () -> Unit,
     onCycleMaxBitrate: () -> Unit,
+    onToggleThemeMusic: () -> Unit,
+    onNudgeThemeVolume: (Float) -> Unit,
 ) {
     Panel(title = "Playback") {
         FactLine("Mode", playbackModeLabel(prefs.playbackMode))
@@ -203,6 +209,34 @@ private fun VideoSection(
             TvActionButton(
                 label = if (prefs.subtitleBackground) "Background off" else "Background on",
                 onClick = onToggleSubtitleBackground,
+            )
+        }
+    }
+
+    Panel(title = "Theme music") {
+        FactLine("Show themes", if (prefs.themeMusic) "On" else "Off")
+        FactLine("Volume", "${(prefs.themeVolume * 100).toInt()}%")
+        Text(
+            text = "A show's title music plays quietly under its page, where the server has " +
+                "one. It stops the moment anything is played, and never takes sound away " +
+                "from whatever else the television is doing.",
+            color = Muted,
+            fontSize = 13.sp,
+            lineHeight = 19.sp,
+        )
+        Buttons {
+            TvActionButton(
+                label = if (prefs.themeMusic) "Turn off" else "Turn on",
+                onClick = onToggleThemeMusic,
+                emphasised = prefs.themeMusic,
+            )
+            TvActionButton(
+                label = "Quieter",
+                onClick = { onNudgeThemeVolume(-Settings.THEME_VOLUME_STEP) },
+            )
+            TvActionButton(
+                label = "Louder",
+                onClick = { onNudgeThemeVolume(Settings.THEME_VOLUME_STEP) },
             )
         }
     }

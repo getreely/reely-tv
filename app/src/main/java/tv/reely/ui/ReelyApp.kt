@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -45,6 +46,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
 import androidx.tv.material3.Text
@@ -147,6 +151,17 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             gridRoute != null && gridRoute.view == LibraryView.GRID,
     ) {
         gridRoute?.let { viewModel.navigate(Route.Library(it.kind, LibraryView.HOME)) }
+    }
+
+    // An audio player that outlives the screen is the bug this app has already shipped
+    // once. Backgrounding kills the theme outright.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) viewModel.silenceTheme()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     val contentFocus = remember { FocusRequester() }
@@ -374,6 +389,8 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onToggleSubtitleBackground = viewModel::toggleSubtitleBackground,
                 onNudgeUpNext = viewModel::nudgeUpNextSeconds,
                 onToggleGuidePreview = viewModel::toggleGuidePreview,
+                onToggleThemeMusic = viewModel::toggleThemeMusic,
+                onNudgeThemeVolume = viewModel::nudgeThemeVolume,
                 onCyclePlaybackMode = viewModel::cyclePlaybackMode,
                 onCycleMaxBitrate = viewModel::cycleMaxBitrate,
                 onRefreshChannels = viewModel::refreshLiveChannels,
