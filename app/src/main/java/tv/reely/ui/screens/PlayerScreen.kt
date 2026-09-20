@@ -68,6 +68,8 @@ import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
 import tv.reely.core.Settings
 import tv.reely.plex.PlexItem
+import tv.reely.ui.GuideState
+import tv.reely.ui.LiveState
 import tv.reely.ui.PlayerPrefs
 import tv.reely.ui.Playback
 import tv.reely.ui.components.PauseGlyph
@@ -105,12 +107,15 @@ private data class TrackChoice(
 fun PlayerScreen(
     playback: Playback,
     prefs: PlayerPrefs,
+    live: LiveState,
+    guide: GuideState,
     upNext: PlexItem?,
     onExit: (Long) -> Unit,
     onEnded: () -> Unit,
     onPlayUpNext: () -> Unit,
     onDismissUpNext: () -> Unit,
     onStepChannel: (Int) -> Unit,
+    onSelectChannel: (Int) -> Unit,
     onStepEpisode: (Int) -> Unit,
     onDecodeFailure: (Long) -> Unit,
     onToggleFormat: () -> Unit,
@@ -165,6 +170,8 @@ fun PlayerScreen(
     // The scrubber is the top of the control bar, so this is "there is nothing above
     // here to move to" — which is what makes another press of up mean "put these away".
     var atTopOfControls by remember { mutableStateOf(false) }
+    // The guide, raised over a playing channel. Mutually exclusive with the controls.
+    var guideOpen by remember { mutableStateOf(false) }
     var interaction by remember { mutableIntStateOf(0) }
     var panel by remember { mutableStateOf(Panel.NONE) }
 
@@ -300,7 +307,8 @@ fun PlayerScreen(
      * after they timed out and were summoned back, which re-ran this against nodes that
      * existed by then. So keep asking for a few frames instead of giving up on the first.
      */
-    LaunchedEffect(controlsVisible, panel, playback.isLive, playback.url) {
+    LaunchedEffect(controlsVisible, panel, guideOpen, playback.isLive, playback.url) {
+        if (guideOpen) return@LaunchedEffect
         repeat(FOCUS_ATTEMPTS) {
             val placed = runCatching {
                 when {
@@ -343,6 +351,10 @@ fun PlayerScreen(
                             interaction++
                             true
                         }
+                        guideOpen -> {
+                            guideOpen = false
+                            true
+                        }
                         // Up Next owns the press while it is showing.
                         upNext != null -> false
                         // Back closes what is open before it closes the player. Note the
@@ -357,6 +369,8 @@ fun PlayerScreen(
                     }
                 }
                 if (panel != Panel.NONE) return@onPreviewKeyEvent false
+                // The guide owns every key while it is up, bar the Back handled above.
+                if (guideOpen) return@onPreviewKeyEvent false
                 // Up from the top of the controls dismisses them, rather than leaving
                 // somebody to wait out the timeout. Same reason for not counting it.
                 if (
@@ -370,14 +384,24 @@ fun PlayerScreen(
                 }
                 interaction++
                 when (event.key) {
-                    Key.DirectionUp -> if (playback.isLive) {
+                    // Live steers sideways, the way a television does, and down opens
+                    // the guide over the picture. Up is left to the controls.
+                    Key.DirectionLeft -> if (playback.isLive && !controlsVisible) {
                         onStepChannel(-1); true
                     } else {
-                        controlsVisible = true; false
+                        false
                     }
 
-                    Key.DirectionDown -> if (playback.isLive) {
+                    Key.DirectionRight -> if (playback.isLive && !controlsVisible) {
                         onStepChannel(1); true
+                    } else {
+                        false
+                    }
+
+                    Key.DirectionUp -> { controlsVisible = true; false }
+
+                    Key.DirectionDown -> if (playback.isLive && !controlsVisible) {
+                        guideOpen = live.channels.isNotEmpty(); true
                     } else {
                         controlsVisible = true; false
                     }
@@ -436,7 +460,7 @@ fun PlayerScreen(
             }
         }
 
-        if (controlsVisible) {
+        if (controlsVisible && !guideOpen) {
             Controls(
                 playback = playback,
                 playing = playing,
@@ -521,6 +545,22 @@ fun PlayerScreen(
                     .align(Alignment.BottomEnd)
                     .padding(end = 40.dp, bottom = if (controlsVisible) 168.dp else 40.dp)
                     .focusRequester(skipFocus),
+            )
+        }
+
+        if (guideOpen) {
+            GuideOverlay(
+                channels = live.channels,
+                programmes = guide.programmes,
+                windowStart = guide.windowStart,
+                windowEnd = guide.windowEnd,
+                playingIndex = playback.channelIndex,
+                onSelect = { index ->
+                    guideOpen = false
+                    onSelectChannel(index)
+                },
+                onDismiss = { guideOpen = false },
+                modifier = Modifier.fillMaxSize(),
             )
         }
 

@@ -68,9 +68,13 @@ import tv.reely.ui.GuideState
 import tv.reely.ui.GuideStatus
 import tv.reely.ui.LiveState
 import tv.reely.ui.components.EmptyNote
+import tv.reely.ui.components.GuideNowLine
+import tv.reely.ui.components.GuideRow
+import tv.reely.ui.components.GuideRuler
 import tv.reely.ui.components.TvActionButton
-import tv.reely.ui.components.channelTint
 import tv.reely.ui.components.glass
+import tv.reely.ui.components.guideTimeRange
+import tv.reely.ui.components.guideWidthFor
 import tv.reely.ui.theme.Accent
 import tv.reely.ui.theme.Faint
 import tv.reely.ui.theme.GlassEdge
@@ -84,15 +88,6 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
-private val MINUTE_WIDTH = 5.dp
-
-/** The spacing between blocks in a row, which the label maths has to account for. */
-private val CARD_GAP = 5.dp
-
-/** How much of a block stays reserved for its label before it is pushed off the end. */
-private val LABEL_MIN_WIDTH = 130.dp
-private val CHANNEL_COLUMN = 132.dp
-private val ROW_HEIGHT = 78.dp
 private const val PREVIEW_DELAY_MS = 1_200L
 
 @Composable
@@ -168,7 +163,7 @@ fun GuideScreen(
 
     LaunchedEffect(guide.focusTime, guide.windowStart) {
         val target = with(density) {
-            widthFor(guide.focusTime - guide.windowStart).toPx() - 150.dp.toPx()
+            guideWidthFor(guide.focusTime - guide.windowStart).toPx() - 150.dp.toPx()
         }
         scroll.animateScrollTo(target.coerceAtLeast(0f).roundToInt())
     }
@@ -208,7 +203,7 @@ fun GuideScreen(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = selected?.let { "${channel?.name}  ·  ${timeRange(it)}" }
+                    text = selected?.let { "${channel?.name}  ·  ${guideTimeRange(it)}" }
                         ?: guide.status.describe(),
                     color = Muted,
                     fontSize = 13.sp,
@@ -304,24 +299,11 @@ fun GuideScreen(
                 },
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                Row(modifier = Modifier.fillMaxWidth().height(22.dp)) {
-                    Spacer(modifier = Modifier.width(CHANNEL_COLUMN))
-                    Row(modifier = Modifier.horizontalScroll(scroll, enabled = false)) {
-                        var tick = guide.windowStart
-                        while (tick < guide.windowEnd) {
-                            Box(modifier = Modifier.width(widthFor(1_800))) {
-                                Text(
-                                    text = clock(tick),
-                                    color = Faint,
-                                    fontSize = 12.sp,
-                                    lineHeight = 15.sp,
-                                    modifier = Modifier.padding(start = 8.dp),
-                                )
-                            }
-                            tick += 1_800
-                        }
-                    }
-                }
+                GuideRuler(
+                    windowStart = guide.windowStart,
+                    windowEnd = guide.windowEnd,
+                    scroll = scroll,
+                )
 
                 LazyColumn(
                     state = rows,
@@ -337,8 +319,10 @@ fun GuideScreen(
                             name = entry.name,
                             logo = entry.icon,
                             listing = entry.epgChannelId?.let { guide.programmes[it] }.orEmpty(),
-                            guide = guide,
+                            windowStart = guide.windowStart,
+                            windowEnd = guide.windowEnd,
                             now = now,
+                            focusTime = guide.focusTime,
                             isCurrent = index == guide.channelIndex,
                             scroll = scroll,
                         )
@@ -346,202 +330,8 @@ fun GuideScreen(
                 }
             }
 
-            // The line marking this instant, with the dot that makes a grid read as a guide.
-            val nowX = with(density) {
-                widthFor(now - guide.windowStart).toPx() - scroll.value + CHANNEL_COLUMN.toPx()
-            }
-            if (nowX >= with(density) { CHANNEL_COLUMN.toPx() }) {
-                Box(
-                    modifier = Modifier
-                        .offset { IntOffset(nowX.roundToInt(), 0) }
-                        .width(2.dp)
-                        .fillMaxHeight()
-                        .background(Parchment.copy(alpha = 0.8f)),
-                )
-                Box(
-                    modifier = Modifier
-                        .offset { IntOffset((nowX - with(density) { 4.dp.toPx() }).roundToInt(), 0) }
-                        .size(10.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(Parchment),
-                )
-            }
+            GuideNowLine(windowStart = guide.windowStart, now = now, scroll = scroll)
         }
-    }
-}
-
-@Composable
-private fun GuideRow(
-    channelId: String,
-    name: String,
-    logo: String?,
-    listing: List<EpgProgramme>,
-    guide: GuideState,
-    now: Long,
-    isCurrent: Boolean,
-    scroll: androidx.compose.foundation.ScrollState,
-) {
-    Row(modifier = Modifier.fillMaxWidth().height(ROW_HEIGHT)) {
-        Box(
-            modifier = Modifier
-                .width(CHANNEL_COLUMN - 6.dp)
-                .fillMaxHeight()
-                .clip(RoundedCornerShape(14.dp))
-                .background(channelTint(channelId).copy(alpha = if (isCurrent) 0.95f else 0.7f))
-                .border(
-                    width = if (isCurrent) 2.dp else 0.dp,
-                    color = if (isCurrent) Parchment else Color.Transparent,
-                    shape = RoundedCornerShape(14.dp),
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (logo != null) {
-                AsyncImage(
-                    model = logo,
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .size(54.dp)
-                        .clip(RoundedCornerShape(8.dp)),
-                )
-            } else {
-                Text(
-                    text = name.take(3).uppercase(),
-                    color = Parchment,
-                    fontSize = 14.sp,
-                    lineHeight = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-        }
-        Spacer(modifier = Modifier.width(6.dp))
-
-        Row(
-            modifier = Modifier.fillMaxHeight().horizontalScroll(scroll, enabled = false),
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
-            if (listing.isEmpty()) {
-                ProgrammeCard(
-                    title = "No guide data",
-                    slot = null,
-                    width = widthFor(guide.windowEnd - guide.windowStart),
-                    startsAt = 0.dp,
-                    scroll = scroll,
-                    selected = false,
-                    past = true,
-                )
-                return@Row
-            }
-
-            // Each block's own left edge inside the scrolling row, so a block that began
-            // before the window can still work out where its label should sit.
-            var nextEdge = 0.dp
-            var anyPlaced = false
-            fun place(childWidth: Dp): Dp {
-                if (anyPlaced) nextEdge += CARD_GAP
-                anyPlaced = true
-                val edge = nextEdge
-                nextEdge += childWidth
-                return edge
-            }
-
-            var cursor = guide.windowStart
-            listing.forEach { programme ->
-                val start = programme.start.coerceAtLeast(guide.windowStart)
-                val stop = programme.stop.coerceAtMost(guide.windowEnd)
-                if (stop <= start) return@forEach
-                if (start > cursor) {
-                    val gap = widthFor(start - cursor)
-                    place(gap)
-                    Spacer(modifier = Modifier.width(gap))
-                }
-                val cardWidth = widthFor(stop - start)
-                ProgrammeCard(
-                    title = programme.title,
-                    slot = timeRange(programme),
-                    width = cardWidth,
-                    startsAt = place(cardWidth),
-                    scroll = scroll,
-                    selected = isCurrent && programme.isOnAt(guide.focusTime),
-                    past = programme.stop <= now,
-                )
-                cursor = stop
-            }
-            if (cursor < guide.windowEnd) {
-                Spacer(modifier = Modifier.width(widthFor(guide.windowEnd - cursor)))
-            }
-        }
-    }
-}
-
-/**
- * A block carries its own time, so nobody has to count along the ruler.
- *
- * A three-hour programme with twenty minutes left begins far to the left of the window,
- * and its label went with it: the block on screen was a blank stripe that said nothing
- * about what was on. The label now rides the viewport's left edge while the block is
- * still under it, and is let go once the block's own start scrolls into view.
- */
-@Composable
-private fun ProgrammeCard(
-    title: String,
-    slot: String?,
-    width: Dp,
-    startsAt: Dp,
-    scroll: ScrollState,
-    selected: Boolean,
-    past: Boolean,
-) {
-    Box(
-        modifier = Modifier
-            .width(width)
-            .fillMaxHeight()
-            .clip(RoundedCornerShape(14.dp))
-            .background(
-                when {
-                    selected -> Accent.copy(alpha = 0.3f)
-                    past -> Parchment.copy(alpha = 0.05f)
-                    else -> Parchment.copy(alpha = 0.1f)
-                }
-            )
-            .border(
-                width = if (selected) 2.dp else 0.dp,
-                color = if (selected) Accent else Color.Transparent,
-                shape = RoundedCornerShape(14.dp),
-            ),
-        contentAlignment = Alignment.CenterStart,
-    ) {
-    Column(
-        modifier = Modifier
-            // Read in the layout pass, so scrolling the guide re-places the label
-            // without recomposing every block in it.
-            .offset {
-                val slack = (width.roundToPx() - LABEL_MIN_WIDTH.roundToPx()).coerceAtLeast(0)
-                IntOffset((scroll.value - startsAt.roundToPx()).coerceIn(0, slack), 0)
-            }
-            .padding(horizontal = 14.dp),
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text(
-            text = title,
-            color = if (past && !selected) Parchment.copy(alpha = 0.55f) else Parchment,
-            fontSize = 15.sp,
-            lineHeight = 19.sp,
-            fontWeight = if (past && !selected) FontWeight.Normal else FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        if (slot != null) {
-            Text(
-                text = slot,
-                color = Parchment.copy(alpha = 0.45f),
-                fontSize = 13.sp,
-                lineHeight = 17.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
     }
 }
 
@@ -554,13 +344,3 @@ private fun GuideStatus.describe(): String = when (this) {
     is GuideStatus.Ready -> "$count programmes in the guide"
     is GuideStatus.Failed -> message
 }
-
-private fun widthFor(seconds: Long): Dp =
-    (seconds.coerceAtLeast(0) / 60f * MINUTE_WIDTH.value).dp
-
-private val clockFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
-
-private fun clock(epochSeconds: Long): String = clockFormat.format(Date(epochSeconds * 1000))
-
-private fun timeRange(programme: EpgProgramme): String =
-    "${clock(programme.start)} – ${clock(programme.stop)}"
