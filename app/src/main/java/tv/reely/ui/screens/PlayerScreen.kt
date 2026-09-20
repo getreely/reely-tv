@@ -162,6 +162,9 @@ fun PlayerScreen(
     var tracksVersion by remember { mutableIntStateOf(0) }
 
     var controlsVisible by remember { mutableStateOf(true) }
+    // The scrubber is the top of the control bar, so this is "there is nothing above
+    // here to move to" — which is what makes another press of up mean "put these away".
+    var atTopOfControls by remember { mutableStateOf(false) }
     var interaction by remember { mutableIntStateOf(0) }
     var panel by remember { mutableStateOf(Panel.NONE) }
 
@@ -311,12 +314,10 @@ fun PlayerScreen(
         }
     }
 
-    // Back leaves. It used to hide the controls first, but the key also counted as an
-    // interaction, which re-showed them on the same press — so Back never got past step
-    // one and the player could not be left at all.
+    // Only reached once the preview handler below has declined the press, which it does
+    // when there is nothing left on screen to put away.
     BackHandler {
         when {
-            panel != Panel.NONE -> panel = Panel.NONE
             upNext != null -> onDismissUpNext()
             else -> onExit(exoPlayer.currentPosition.coerceAtLeast(0))
         }
@@ -336,12 +337,37 @@ fun PlayerScreen(
                 // was eating the first. Consuming the key-down also stops the activity
                 // tracking the press, so the key-up cannot then exit the player as well.
                 if (event.key == Key.Back) {
-                    if (panel == Panel.NONE) return@onPreviewKeyEvent false
-                    panel = Panel.NONE
-                    interaction++
-                    return@onPreviewKeyEvent true
+                    return@onPreviewKeyEvent when {
+                        panel != Panel.NONE -> {
+                            panel = Panel.NONE
+                            interaction++
+                            true
+                        }
+                        // Up Next owns the press while it is showing.
+                        upNext != null -> false
+                        // Back closes what is open before it closes the player. Note the
+                        // absence of interaction++: counting this as activity would fire
+                        // the timer that puts the controls straight back up.
+                        controlsVisible -> {
+                            controlsVisible = false
+                            true
+                        }
+
+                        else -> false
+                    }
                 }
                 if (panel != Panel.NONE) return@onPreviewKeyEvent false
+                // Up from the top of the controls dismisses them, rather than leaving
+                // somebody to wait out the timeout. Same reason for not counting it.
+                if (
+                    event.key == Key.DirectionUp &&
+                    !playback.isLive &&
+                    controlsVisible &&
+                    atTopOfControls
+                ) {
+                    controlsVisible = false
+                    return@onPreviewKeyEvent true
+                }
                 interaction++
                 when (event.key) {
                     Key.DirectionUp -> if (playback.isLive) {
@@ -421,6 +447,7 @@ fun PlayerScreen(
                 canSkipForward = canSkipForward,
                 playFocus = playFocus,
                 scrubberFocus = scrubberFocus,
+                onScrubberFocus = { atTopOfControls = it },
                 onSkip = { delta ->
                     interaction++
                     // The same pair of buttons: a channel when live, an episode when not.
@@ -522,6 +549,7 @@ private fun Controls(
     canSkipForward: Boolean,
     playFocus: FocusRequester,
     scrubberFocus: FocusRequester,
+    onScrubberFocus: (Boolean) -> Unit,
     onSeek: (Long) -> Unit,
     onSkip: (Int) -> Unit,
     onTogglePlay: () -> Unit,
@@ -576,6 +604,7 @@ private fun Controls(
                 durationMs = durationMs,
                 bufferedMs = bufferedMs,
                 focusRequester = scrubberFocus,
+                onFocusState = onScrubberFocus,
                 onSeek = onSeek,
                 onTogglePlay = onTogglePlay,
             )
@@ -636,32 +665,6 @@ private fun Controls(
             }
         }
 
-        // What the server said about intros and credits, stated plainly. Whether a skip
-        // prompt can ever appear is decided entirely by this, and with nothing on screen
-        // saying so there was no telling a server that sends no markers apart from a bug.
-        val markerNote = when {
-            playback.isLive -> null
-            playback.markers.isEmpty() -> "No intro or credits markers on this episode"
-            else -> playback.markers.joinToString("  ·  ") { marker ->
-                val name = marker.type.replaceFirstChar { it.uppercaseChar() }
-                "$name ${clock(marker.startMs)}–${clock(marker.endMs)}"
-            }
-        }
-
-        Text(
-            text = listOfNotNull(
-                if (playback.isLive)
-                    "Up and down change channel · Back leaves"
-                else
-                    "Up to the bar, then left and right to seek · Back leaves",
-                markerNote,
-            ).joinToString("  ·  "),
-            color = Faint,
-            fontSize = 11.sp,
-            lineHeight = 14.sp,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
     }
 }
 
@@ -675,6 +678,7 @@ private fun Scrubber(
     durationMs: Long,
     bufferedMs: Long,
     focusRequester: FocusRequester,
+    onFocusState: (Boolean) -> Unit,
     onSeek: (Long) -> Unit,
     onTogglePlay: () -> Unit,
 ) {
@@ -689,7 +693,10 @@ private fun Scrubber(
                 .clip(RoundedCornerShape(5.dp))
                 .background(Parchment.copy(alpha = if (focused) 0.3f else 0.22f))
                 .focusRequester(focusRequester)
-                .onFocusChanged { focused = it.isFocused }
+                .onFocusChanged {
+                    focused = it.isFocused
+                    onFocusState(it.isFocused)
+                }
                 .focusable()
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
