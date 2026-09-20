@@ -413,10 +413,17 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
  */
 private fun detailRouteFor(item: PlexItem): Route.Detail {
     val show = item.grandparentRatingKey
+    // The server travels with it: a row can hold things from several, and a rating key
+    // means nothing anywhere but the server that issued it.
     return if (item.type == "episode" && show != null) {
-        Route.Detail(ratingKey = show, seasonKey = item.parentRatingKey, episodeKey = item.ratingKey)
+        Route.Detail(
+            ratingKey = show,
+            seasonKey = item.parentRatingKey,
+            episodeKey = item.ratingKey,
+            serverBase = item.serverBase,
+        )
     } else {
-        Route.Detail(item.ratingKey)
+        Route.Detail(item.ratingKey, serverBase = item.serverBase)
     }
 }
 
@@ -424,7 +431,7 @@ private fun detailRouteFor(item: PlexItem): Route.Detail {
 private fun routeKey(route: Route): String = when (route) {
     is Route.Home -> "home"
     is Route.Library -> "library:${route.kind}:${route.view}"
-    is Route.Detail -> "detail:${route.ratingKey}:${route.episodeKey}"
+    is Route.Detail -> "detail:${route.serverBase}:${route.ratingKey}:${route.episodeKey}"
     is Route.Live -> "live"
     is Route.Search -> "search"
     is Route.Settings -> "settings"

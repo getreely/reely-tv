@@ -73,6 +73,8 @@ sealed interface Route {
         val ratingKey: String,
         val seasonKey: String? = null,
         val episodeKey: String? = null,
+        /** Which server holds it. Null means the one connected. */
+        val serverBase: String? = null,
     ) : Route
 }
 
@@ -85,6 +87,7 @@ data class EpisodeGroup(
     val count: Int,
     val addedAt: Long,
     val librarySectionId: String?,
+    val serverBase: String?,
 )
 
 data class HomeState(
@@ -128,6 +131,7 @@ data class BrowseState(
 
 data class DetailState(
     val ratingKey: String,
+    val serverBase: String? = null,
     val detail: PlexDetail? = null,
     val seasons: List<PlexItem> = emptyList(),
     val selectedSeason: PlexItem? = null,
@@ -173,6 +177,23 @@ data class PlexState(
     val isConnected: Boolean get() = baseUrl != null && serverToken != null
 
     fun sectionsFor(kind: LibraryKind): List<PlexSection> = sections.filter { it.type == kind.plexType }
+
+    /** The token for a server, by its address. Null base means the one connected. */
+    fun tokenFor(base: String?): String? = when {
+        base == null || base == baseUrl -> serverToken
+        else -> libraryChoices.firstOrNull { it.baseUrl == base }?.token
+    }
+
+    /**
+     * The servers Home draws from: those holding a pinned library, or every one of them
+     * when nothing is pinned. This is what makes Home the account's rather than one
+     * machine's, which is how a Plex client behaves.
+     */
+    fun homeSources(): List<LibraryChoice> {
+        val pinned = if (favouriteSections.isEmpty()) libraryChoices
+        else libraryChoices.filter { it.id in favouriteSections }
+        return pinned.ifEmpty { libraryChoices }
+    }
 
     fun choicesFor(kind: LibraryKind): List<LibraryChoice> =
         libraryChoices.filter { it.section.type == kind.plexType }
@@ -247,6 +268,7 @@ data class Playback(
     val channelIndex: Int = -1,
     val format: StreamFormat = StreamFormat.TS,
     val subtitles: List<PlexSubtitle> = emptyList(),
+    val serverBase: String? = null,
     val queue: List<PlexItem> = emptyList(),
     val queueIndex: Int = -1,
     val markers: List<PlexMarker> = emptyList(),
@@ -597,48 +619,73 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
      * behind a heavy scrim, so the extra detail would cost megabytes of bitmap on a stick
      * and never be seen.
      */
-    fun plexBackdropUrl(path: String?): String? {
-        val plex = _state.value.plex
-        val base = plex.baseUrl ?: return null
-        val token = plex.serverToken ?: return null
-        return PlexApi.imageUrl(base, token, path, width = 720, height = 405)
-    }
+    fun plexBackdropUrl(serverBase: String?, path: String?): String? =
+        plexImageUrl(serverBase, path, width = 720, height = 405)
 
     fun toggleWatchedDetail() {
         val detail = _state.value.detail?.detail ?: return
         toggleWatched(detail.asItem())
     }
 
-    fun plexImageUrl(path: String?, width: Int, height: Int): String? {
+    /**
+     * Artwork has to be asked of the server that holds it, with that server's token. A row
+     * merged from several servers would otherwise draw everything against whichever one
+     * happens to be connected, and the rest would come back unauthorised.
+     */
+    fun plexImageUrl(serverBase: String?, path: String?, width: Int, height: Int): String? {
         val plex = _state.value.plex
-        val base = plex.baseUrl ?: return null
-        val token = plex.serverToken ?: return null
+        val base = serverBase ?: plex.baseUrl ?: return null
+        val token = plex.tokenFor(serverBase) ?: return null
         return PlexApi.imageUrl(base, token, path, width, height)
     }
 
     // ---------------------------------------------------------------- Home
 
+    /**
+     * Home belongs to the account, not to whichever server happens to be connected. Every
+     * server holding a pinned library is asked, and the answers are merged — which is what
+     * a Plex client shows and what makes two servers feel like one library.
+     *
+     * Browsing a library is still that library's server's business. It is only the rows
+     * that span them.
+     */
     fun refreshHome() {
         val plex = _state.value.plex
-        val base = plex.baseUrl ?: return
-        val token = plex.serverToken ?: return
+        val sources = plex.homeSources().ifEmpty {
+            val base = plex.baseUrl ?: return
+            val token = plex.serverToken ?: return
+            plex.sections.map { LibraryChoice(plex.serverName.orEmpty(), base, token, it) }
+        }
+        if (sources.isEmpty()) return
 
         viewModelScope.launch {
             _state.update { it.copy(home = it.home.copy(busy = true, error = null)) }
 
-            // On Deck is rendered exactly as the server composes it: no re-sorting here.
-            val onDeck = runCatching { PlexApi.onDeck(base, token) }.getOrElse { emptyList() }
+            val servers = sources.map { it.baseUrl to it.token }.distinct()
 
-            val movieSections = plex.sectionsFor(LibraryKind.MOVIES)
-            val showSections = plex.sectionsFor(LibraryKind.SHOWS)
+            // On Deck is rendered as each server composes it. The servers share no notion
+            // of recency, so the merge falls back to the only thing they agree on: how
+            // far through something is and when it was added.
+            val onDeck = servers.flatMap { (base, token) ->
+                runCatching { PlexApi.onDeck(base, token) }.getOrElse { emptyList() }
+            }.sortedByDescending { it.addedAt }
 
-            val recentMovies = movieSections.flatMap { section ->
+            val movieSources = sources.filter { it.section.type == LibraryKind.MOVIES.plexType }
+            val showSources = sources.filter { it.section.type == LibraryKind.SHOWS.plexType }
+
+            val recentMovies = movieSources.flatMap { source ->
                 runCatching {
-                    PlexApi.recentlyAdded(base, token, section.key, PlexApi.TYPE_MOVIE, limit = 40)
+                    PlexApi.recentlyAdded(
+                        source.baseUrl,
+                        source.token,
+                        source.section.key,
+                        PlexApi.TYPE_MOVIE,
+                        limit = 40,
+                    )
                 }.getOrElse { emptyList() }
             }.sortedByDescending { it.addedAt }.take(40)
 
-            val recentEpisodes = recentEpisodeGroups(base, token, showSections)
+            val recentEpisodes = recentEpisodeGroups(showSources)
 
             _state.update {
                 it.copy(
@@ -661,14 +708,13 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
      * of them. Asking for a fixed number of episodes does not work: importing one series
      * with eighty episodes would fill the whole row with a single show.
      */
-    private suspend fun recentEpisodeGroups(
-        base: String,
-        token: String,
-        sections: List<PlexSection>,
-    ): List<EpisodeGroup> {
+    private suspend fun recentEpisodeGroups(sources: List<LibraryChoice>): List<EpisodeGroup> {
         val groups = LinkedHashMap<String, EpisodeGroup>()
 
-        for (section in sections) {
+        for (source in sources) {
+            val base = source.baseUrl
+            val token = source.token
+            val section = source.section
             var offset = 0
             var scanned = 0
             while (groups.size < TARGET_SHOW_COUNT && scanned < MAX_EPISODE_SCAN) {
@@ -685,17 +731,19 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 if (page.isEmpty()) break
 
                 for (episode in page) {
-                    val key = episode.grandparentRatingKey ?: episode.ratingKey
+                    // A rating key is only unique within a server.
+                    val key = base + "|" + (episode.grandparentRatingKey ?: episode.ratingKey)
                     val existing = groups[key]
                     if (existing == null) {
                         groups[key] = EpisodeGroup(
                             showTitle = episode.grandparentTitle ?: episode.title,
-                            showRatingKey = episode.grandparentRatingKey ?: key,
+                            showRatingKey = episode.grandparentRatingKey ?: episode.ratingKey,
                             thumb = episode.grandparentThumb ?: episode.thumb,
                             newest = episode,
                             count = 1,
                             addedAt = episode.addedAt,
                             librarySectionId = episode.librarySectionId ?: section.key,
+                            serverBase = episode.serverBase,
                         )
                     } else {
                         // Only the newest episode is kept; the rest are just a tally.
@@ -822,10 +870,18 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     private fun loadDetail(route: Route.Detail) {
         val ratingKey = route.ratingKey
         val plex = _state.value.plex
-        val base = plex.baseUrl ?: return
-        val token = plex.serverToken ?: return
+        val base = route.serverBase ?: plex.baseUrl ?: return
+        val token = plex.tokenFor(route.serverBase) ?: return
 
-        _state.update { it.copy(detail = DetailState(ratingKey = ratingKey, busy = true)) }
+        _state.update {
+            it.copy(
+                detail = DetailState(
+                    ratingKey = ratingKey,
+                    serverBase = route.serverBase,
+                    busy = true,
+                )
+            )
+        }
 
         viewModelScope.launch {
             val detail = runCatching { PlexApi.detail(base, token, ratingKey) }.getOrElse { failure ->
@@ -872,8 +928,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectSeason(season: PlexItem, focusEpisodeKey: String? = null) {
         val plex = _state.value.plex
-        val base = plex.baseUrl ?: return
-        val token = plex.serverToken ?: return
+        val on = season.serverBase ?: _state.value.detail?.serverBase
+        val base = on ?: plex.baseUrl ?: return
+        val token = plex.tokenFor(on) ?: return
         viewModelScope.launch {
             _state.update {
                 it.copy(
@@ -923,8 +980,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     /** Play a library item, resuming where Plex says it was left. */
     fun play(item: PlexItem, queue: List<PlexItem> = emptyList(), resume: Boolean = true) {
         val plex = _state.value.plex
-        val base = plex.baseUrl ?: return
-        val token = plex.serverToken ?: return
+        val on = item.serverBase
+        val base = on ?: plex.baseUrl ?: return
+        val token = plex.tokenFor(on) ?: return
 
         viewModelScope.launch {
             val resolved = runCatching { PlexApi.playback(base, token, item.ratingKey) }
@@ -973,6 +1031,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                         durationMs = item.durationMs,
                         subtitles = if (transcode) emptyList() else resolved.subtitles,
                         markers = resolved.markers,
+                        serverBase = on,
                         queue = effectiveQueue,
                         queueIndex = effectiveQueue.indexOfFirst { entry -> entry.ratingKey == item.ratingKey },
                         transcoding = transcode,
@@ -1009,8 +1068,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     /** Started from Continue Watching, so the season's other episodes are not loaded yet. */
     private fun primeQueue(item: PlexItem) {
         val plex = _state.value.plex
-        val base = plex.baseUrl ?: return
-        val token = plex.serverToken ?: return
+        val base = item.serverBase ?: plex.baseUrl ?: return
+        val token = plex.tokenFor(item.serverBase) ?: return
         val seasonKey = item.parentRatingKey ?: return
         viewModelScope.launch {
             val episodes = runCatching { PlexApi.children(base, token, seasonKey) }.getOrElse { return@launch }
@@ -1039,9 +1098,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun firstOfNextSeason(): PlexItem? {
         val plex = _state.value.plex
-        val base = plex.baseUrl ?: return null
-        val token = plex.serverToken ?: return null
         val playback = _state.value.playback ?: return null
+        val base = playback.serverBase ?: plex.baseUrl ?: return null
+        val token = plex.tokenFor(playback.serverBase) ?: return null
         val current = playback.queue.getOrNull(playback.queueIndex)
             ?: playback.queue.lastOrNull()
             ?: return null
@@ -1074,8 +1133,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val playback = _state.value.playback ?: return
         val ratingKey = playback.ratingKey ?: return
         val plex = _state.value.plex
-        val base = plex.baseUrl ?: return
-        val token = plex.serverToken ?: return
+        val base = playback.serverBase ?: plex.baseUrl ?: return
+        val token = plex.tokenFor(playback.serverBase) ?: return
         timelineJob?.cancel()
         timelineJob = viewModelScope.launch {
             runCatching {
@@ -1101,8 +1160,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         if (_state.value.prefs.playbackMode == Settings.MODE_DIRECT) return
         val ratingKey = playback.ratingKey ?: return
         val plex = _state.value.plex
-        val base = plex.baseUrl ?: return
-        val token = plex.serverToken ?: return
+        val base = playback.serverBase ?: plex.baseUrl ?: return
+        val token = plex.tokenFor(playback.serverBase) ?: return
 
         val session = UUID.randomUUID().toString()
         _state.update {
@@ -1132,8 +1191,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val playback = _state.value.playback ?: return
         val session = playback.transcodeSession ?: return
         val plex = _state.value.plex
-        val base = plex.baseUrl ?: return
-        val token = plex.serverToken ?: return
+        val base = playback.serverBase ?: plex.baseUrl ?: return
+        val token = plex.tokenFor(playback.serverBase) ?: return
         viewModelScope.launch { PlexApi.stopTranscode(base, token, session) }
     }
 
@@ -1162,8 +1221,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val playback = _state.value.playback
         val ratingKey = playback?.ratingKey
         val plex = _state.value.plex
-        val base = plex.baseUrl
-        val token = plex.serverToken
+        val base = playback?.serverBase ?: plex.baseUrl
+        val token = plex.tokenFor(playback?.serverBase)
         if (ratingKey != null && base != null && token != null && positionMs > 0) {
             viewModelScope.launch {
                 runCatching {
@@ -1215,17 +1274,21 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         }
         primeChannelIndex()
         val plex = _state.value.plex
-        val base = plex.baseUrl
-        val token = plex.serverToken
+        val servers = plex.homeSources().map { it.baseUrl to it.token }.distinct()
+            .ifEmpty {
+                val base = plex.baseUrl
+                val token = plex.serverToken
+                if (base != null && token != null) listOf(base to token) else emptyList()
+            }
 
         searchJob = viewModelScope.launch {
             _state.update { it.copy(search = it.search.copy(busy = true)) }
             // Typing on a remote is slow; wait for a pause rather than asking per letter.
             delay(400)
-            val results = if (base != null && token != null) {
+            // Every pinned server, merged. Searching one of two libraries and calling it
+            // "your library" is the thing this whole change is about.
+            val results = servers.flatMap { (base, token) ->
                 runCatching { PlexApi.search(base, token, query) }.getOrElse { emptyList() }
-            } else {
-                emptyList()
             }
             // Channels are matched here rather than asked of the panel: the panel has no
             // search, and the whole list is already in hand.
@@ -1304,8 +1367,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun toggleWatched(item: PlexItem) {
         val plex = _state.value.plex
-        val base = plex.baseUrl ?: return
-        val token = plex.serverToken ?: return
+        val base = item.serverBase ?: plex.baseUrl ?: return
+        val token = plex.tokenFor(item.serverBase) ?: return
         val watched = !item.isWatched
 
         applyWatched(item.ratingKey, watched)
@@ -1364,9 +1427,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun playTrailer() {
         val plex = _state.value.plex
-        val base = plex.baseUrl ?: return
-        val token = plex.serverToken ?: return
         val detail = _state.value.detail ?: return
+        val base = detail.serverBase ?: plex.baseUrl ?: return
+        val token = plex.tokenFor(detail.serverBase) ?: return
         val trailer = detail.trailers.firstOrNull() ?: return
         val title = detail.detail?.title ?: "Trailer"
         val session = UUID.randomUUID().toString()
@@ -1390,6 +1453,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                     ),
                     isLive = false,
                     durationMs = trailer.durationMs,
+                    serverBase = detail.serverBase,
                     transcoding = true,
                     transcodeSession = session,
                 ),

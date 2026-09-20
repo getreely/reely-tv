@@ -52,8 +52,8 @@ fun LibraryScreen(
     plex: PlexState,
     home: HomeState,
     focused: PlexItem?,
-    imageUrl: (String?, Int, Int) -> String?,
-    backdropUrl: (String?) -> String?,
+    imageUrl: (String?, String?, Int, Int) -> String?,
+    backdropUrl: (String?, String?) -> String?,
     onFocusItem: (PlexItem?) -> Unit,
     onOpenItem: (PlexItem) -> Unit,
     onStartLink: () -> Unit,
@@ -83,18 +83,23 @@ fun LibraryScreen(
     // kind on the server. Picking a library from the tab menu has to change them, or the
     // page would claim a different library's things are in this one.
     val sectionKey = browse.section?.key
-    fun inThisLibrary(id: String?): Boolean = sectionKey == null || id == null || id == sectionKey
+    // Section keys repeat across servers, so the server has to match as well or another
+    // machine's library number two would pass for this one.
+    fun here(serverBase: String?, id: String?): Boolean {
+        if (serverBase != null && serverBase != plex.baseUrl) return false
+        return sectionKey == null || id == null || id == sectionKey
+    }
 
     val resumable = home.continueWatching.filter {
         val rightKind = if (kind == LibraryKind.MOVIES) it.type == "movie" else it.type == "episode"
-        rightKind && inThisLibrary(it.librarySectionId)
+        rightKind && here(it.serverBase, it.librarySectionId)
     }
-    val recentMovies = home.recentMovies.filter { inThisLibrary(it.librarySectionId) }
-    val recentEpisodes = home.recentEpisodes.filter { inThisLibrary(it.librarySectionId) }
+    val recentMovies = home.recentMovies.filter { here(it.serverBase, it.librarySectionId) }
+    val recentEpisodes = home.recentEpisodes.filter { here(it.serverBase, it.librarySectionId) }
 
     Box(modifier = modifier.fillMaxSize()) {
         HeroBackdrop(
-            url = backdropUrl(focused?.art ?: focused?.thumb),
+            url = backdropUrl(focused?.serverBase, focused?.art ?: focused?.thumb),
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -148,7 +153,7 @@ fun LibraryScreen(
                                     PosterCard(
                                         title = item.rowTitle,
                                         subtitle = episodeLine(item),
-                                        imageUrl = imageUrl(posterArt(item), 300, 450),
+                                        imageUrl = imageUrl(item.serverBase, posterArt(item), 300, 450),
                                         progress = item.resumeFraction,
                                         watched = item.isWatched,
                                         onFocus = { onFocusItem(item) },
@@ -173,7 +178,7 @@ fun LibraryScreen(
                                     PosterCard(
                                         title = movie.title,
                                         subtitle = movie.caption,
-                                        imageUrl = imageUrl(movie.thumb, 300, 450),
+                                        imageUrl = imageUrl(movie.serverBase, movie.thumb, 300, 450),
                                         progress = movie.resumeFraction,
                                         watched = movie.isWatched,
                                         onFocus = { onFocusItem(movie) },
@@ -202,7 +207,7 @@ fun LibraryScreen(
                                         title = group.showTitle,
                                         subtitle = if (group.count > 1) "${group.count} new episodes"
                                         else group.newest.caption,
-                                        imageUrl = imageUrl(group.thumb, 300, 450),
+                                        imageUrl = imageUrl(group.serverBase, group.thumb, 300, 450),
                                         badge = group.count,
                                         onFocus = { onFocusItem(group.newest) },
                                         onClick = { onOpenItem(group.newest) },
@@ -224,7 +229,7 @@ fun LibraryScreen(
                                     PosterCard(
                                         title = item.title,
                                         subtitle = item.caption,
-                                        imageUrl = imageUrl(item.thumb, 300, 450),
+                                        imageUrl = imageUrl(item.serverBase, item.thumb, 300, 450),
                                         progress = item.resumeFraction,
                                         watched = item.isWatched,
                                         onFocus = { onFocusItem(item) },
@@ -318,7 +323,7 @@ fun LibraryScreen(
                     PosterCard(
                         title = item.title,
                         subtitle = item.caption,
-                        imageUrl = imageUrl(item.thumb, 300, 450),
+                        imageUrl = imageUrl(item.serverBase, item.thumb, 300, 450),
                         progress = item.resumeFraction,
                         watched = item.isWatched,
                         onFocus = { onFocusItem(item) },

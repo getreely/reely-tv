@@ -35,8 +35,8 @@ import tv.reely.xtream.XtreamChannel
 fun SearchScreen(
     search: SearchState,
     focused: PlexItem?,
-    imageUrl: (String?, Int, Int) -> String?,
-    backdropUrl: (String?) -> String?,
+    imageUrl: (String?, String?, Int, Int) -> String?,
+    backdropUrl: (String?, String?) -> String?,
     onQueryChange: (String) -> Unit,
     onFocusItem: (PlexItem?) -> Unit,
     onOpenItem: (PlexItem) -> Unit,
@@ -45,7 +45,7 @@ fun SearchScreen(
 ) {
     Box(modifier = modifier.fillMaxSize()) {
         HeroBackdrop(
-            url = backdropUrl(focused?.art ?: focused?.thumb),
+            url = backdropUrl(focused?.serverBase, focused?.art ?: focused?.thumb),
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -123,7 +123,7 @@ fun SearchScreen(
                 PosterCard(
                     title = item.rowTitle,
                     subtitle = episodeLine(item),
-                    imageUrl = imageUrl(posterArt(item), 300, 450),
+                    imageUrl = imageUrl(item.serverBase, posterArt(item), 300, 450),
                     progress = item.resumeFraction,
                     watched = item.isWatched,
                     onFocus = { onFocusItem(item) },

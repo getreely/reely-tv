@@ -96,6 +96,12 @@ data class PlexItem(
     val addedAt: Long,
     /** Which library this came from, so a tab can show only its own library's things. */
     val librarySectionId: String?,
+    /**
+     * Which server served it. Rows can hold things from several at once, and an item has
+     * to be fetched, drawn and played against the server it actually lives on. Null means
+     * whichever server is currently connected.
+     */
+    val serverBase: String? = null,
 ) {
     val isPlayable: Boolean get() = type == "movie" || type == "episode"
 
@@ -360,7 +366,9 @@ object PlexApi {
         val separator = if (path.contains('?')) "&" else "?"
         val url = "$base$path${separator}X-Plex-Container-Start=$offset&X-Plex-Container-Size=$limit"
         val metadata = container(url, token).optJSONArray("Metadata") ?: JSONArray()
-        (0 until metadata.length()).map { parseItem(metadata.getJSONObject(it)) }
+        (0 until metadata.length()).map {
+            parseItem(metadata.getJSONObject(it)).copy(serverBase = base)
+        }
     }
 
     /**
@@ -516,7 +524,7 @@ object PlexApi {
                 for (index in 0 until hubs.length()) {
                     val metadata = hubs.getJSONObject(index).optJSONArray("Metadata") ?: continue
                     for (entry in 0 until metadata.length()) {
-                        val item = parseItem(metadata.getJSONObject(entry))
+                        val item = parseItem(metadata.getJSONObject(entry)).copy(serverBase = base)
                         if (item.type in wanted && item.ratingKey.isNotEmpty()) add(item)
                     }
                 }

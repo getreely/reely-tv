@@ -49,8 +49,8 @@ import tv.reely.ui.theme.Muted
 @Composable
 fun DetailScreen(
     state: DetailState,
-    imageUrl: (String?, Int, Int) -> String?,
-    backdropUrl: (String?) -> String?,
+    imageUrl: (String?, String?, Int, Int) -> String?,
+    backdropUrl: (String?, String?) -> String?,
     onPlay: (PlexItem) -> Unit,
     onPlayFromStart: (PlexItem) -> Unit,
     onPlayDetail: () -> Unit,
@@ -97,7 +97,7 @@ fun DetailScreen(
     }
 
     // The block of text always describes whatever has focus: the show, or an episode.
-    val backdrop = backdropUrl(episode?.thumb ?: detail.art ?: detail.thumb)
+    val backdrop = backdropUrl(state.serverBase, episode?.thumb ?: detail.art ?: detail.thumb)
 
     Box(modifier = modifier.fillMaxSize()) {
         HeroBackdrop(url = backdrop, modifier = Modifier.fillMaxSize())
@@ -252,7 +252,7 @@ fun DetailScreen(
                                     number = entry.index?.toString().orEmpty(),
                                     title = entry.title,
                                     duration = formatDuration(entry.durationMs).takeIf { it.isNotEmpty() },
-                                    imageUrl = imageUrl(entry.thumb, 320, 180),
+                                    imageUrl = imageUrl(state.serverBase, entry.thumb, 320, 180),
                                     progress = entry.resumeFraction,
                                     watched = entry.isWatched,
                                     selected = isTarget,
@@ -282,7 +282,7 @@ fun DetailScreen(
                                 CastCircle(
                                     name = role.name,
                                     role = role.role,
-                                    imageUrl = imageUrl(role.thumb, 160, 160),
+                                    imageUrl = imageUrl(state.serverBase, role.thumb, 160, 160),
                                 )
                             }
                         }

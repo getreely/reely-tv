@@ -38,8 +38,8 @@ fun HomeScreen(
     plex: PlexState,
     home: HomeState,
     focused: PlexItem?,
-    imageUrl: (String?, Int, Int) -> String?,
-    backdropUrl: (String?) -> String?,
+    imageUrl: (String?, String?, Int, Int) -> String?,
+    backdropUrl: (String?, String?) -> String?,
     onFocusItem: (PlexItem?) -> Unit,
     onOpenItem: (PlexItem) -> Unit,
     onStartLink: () -> Unit,
@@ -60,7 +60,7 @@ fun HomeScreen(
 
     Box(modifier = modifier.fillMaxSize()) {
         HeroBackdrop(
-            url = backdropUrl(focused?.art ?: focused?.thumb),
+            url = backdropUrl(focused?.serverBase, focused?.art ?: focused?.thumb),
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -112,7 +112,7 @@ fun HomeScreen(
                                 PosterCard(
                                     title = item.rowTitle,
                                     subtitle = episodeLine(item),
-                                    imageUrl = imageUrl(posterArt(item), 300, 450),
+                                    imageUrl = imageUrl(item.serverBase, posterArt(item), 300, 450),
                                     progress = item.resumeFraction,
                                     watched = item.isWatched,
                                     onFocus = { onFocusItem(item) },
@@ -140,7 +140,7 @@ fun HomeScreen(
                                 PosterCard(
                                     title = movie.title,
                                     subtitle = movie.caption,
-                                    imageUrl = imageUrl(movie.thumb, 300, 450),
+                                    imageUrl = imageUrl(movie.serverBase, movie.thumb, 300, 450),
                                     progress = movie.resumeFraction,
                                     watched = movie.isWatched,
                                     onFocus = { onFocusItem(movie) },
@@ -177,7 +177,7 @@ internal fun episodeLine(item: PlexItem): String? = when (item.type) {
 @Composable
 private fun EpisodeGroupCard(
     group: EpisodeGroup,
-    imageUrl: (String?, Int, Int) -> String?,
+    imageUrl: (String?, String?, Int, Int) -> String?,
     onFocusItem: (PlexItem?) -> Unit,
     onOpenItem: (PlexItem) -> Unit,
 ) {
@@ -185,7 +185,7 @@ private fun EpisodeGroupCard(
     PosterCard(
         title = group.showTitle,
         subtitle = if (group.count > 1) "${group.count} new episodes" else newest.caption,
-        imageUrl = imageUrl(group.thumb, 300, 450),
+        imageUrl = imageUrl(group.serverBase, group.thumb, 300, 450),
         badge = group.count,
         onFocus = { onFocusItem(newest) },
         // Whether one episode arrived or twelve, this opens the show at the newest one.
