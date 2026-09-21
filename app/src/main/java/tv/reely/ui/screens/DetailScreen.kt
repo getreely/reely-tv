@@ -86,7 +86,9 @@ fun DetailScreen(
         if (railBroughtTo == key) return@LaunchedEffect
         val index = state.episodes.indexOfFirst { it.ratingKey == key }
         if (index >= 0) {
-            if (index > 0) runCatching { episodeRail.scrollToItem(index) }
+            // Always, not only past the first: a new season inherits the old one's scroll
+            // offset, so landing on episode one still needed the rail wound back to it.
+            runCatching { episodeRail.scrollToItem(index) }
             // Arriving from a row means arriving at this episode, so it is what the
             // remote should already be pointed at.
             railFocus.land(key)
@@ -168,6 +170,7 @@ fun DetailScreen(
                             color = Muted,
                             fontSize = 15.sp,
                             lineHeight = 22.sp,
+                                minLines = if (expanded) 1 else 3,
                             maxLines = if (expanded) 12 else 3,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.widthIn(max = 780.dp),

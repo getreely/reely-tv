@@ -12,8 +12,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -23,13 +31,21 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.font.FontWeight
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Text
 import tv.reely.ui.components.PlusGlyph
+import tv.reely.ui.components.TvActionButton
 import tv.reely.ui.theme.Ink
+import tv.reely.ui.theme.Line
 import tv.reely.ui.theme.Parchment
 
 /**
@@ -169,7 +185,12 @@ fun ExtraTile(
 ) {
     LaunchedEffect(player, focused) { player.volume = if (focused) 1f else 0f }
 
-    TileFrame(name = name, focused = focused, modifier = modifier) {
+    TileFrame(
+        name = name,
+        focused = focused,
+        modifier = modifier,
+        aspectRatio = rememberVideoAspect(player),
+    ) {
         AndroidView(
             factory = { viewContext ->
                 PlayerView(viewContext).apply {
@@ -184,40 +205,131 @@ fun ExtraTile(
     }
 }
 
-/** The border and name plate every tile wears once there is more than one of them. */
+/**
+ * The border and name plate every tile wears once there is more than one of them.
+ *
+ * The outline follows the picture rather than the cell. A player letterboxes to keep the
+ * source's shape, so in a two-way split — where each cell is half the width but the full
+ * height — the picture fills a band across the middle and a ring drawn on the cell stood
+ * a long way off it on all four sides. A quartered screen only looked right because those
+ * cells happen to be about sixteen by nine already.
+ */
 @Composable
 fun TileFrame(
     name: String,
     focused: Boolean,
     modifier: Modifier = Modifier,
+    aspectRatio: Float = 16f / 9f,
     content: @Composable () -> Unit,
 ) {
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            // Only the tile you are hearing is outlined. A ring on every one of them said
-            // nothing, and the whole point of moving the cursor is to see which is live.
-            .border(
-                width = if (focused) 3.dp else 0.dp,
-                color = if (focused) Parchment else Color.Transparent,
-            ),
+        modifier = modifier.fillMaxSize().background(Color.Black),
+        contentAlignment = Alignment.Center,
     ) {
         content()
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            // Whichever edge runs out first is the one the picture is bounded by.
+            val ratio = if (aspectRatio.isFinite() && aspectRatio > 0f) aspectRatio else 16f / 9f
+            val byWidth = maxWidth / ratio <= maxHeight
+            val pictureWidth = if (byWidth) maxWidth else maxHeight * ratio
+            val pictureHeight = if (byWidth) maxWidth / ratio else maxHeight
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .width(pictureWidth)
+                    .height(pictureHeight)
+                    // Only the tile you are hearing is outlined. A ring on every one of
+                    // them said nothing, and the whole point of moving the cursor is to
+                    // see which is live.
+                    .border(
+                        width = if (focused) 3.dp else 0.dp,
+                        color = if (focused) Parchment else Color.Transparent,
+                    ),
+            ) {
+                Text(
+                    text = name,
+                    color = if (focused) Parchment else Parchment.copy(alpha = 0.7f),
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(6.dp)
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(Ink.copy(alpha = 0.72f))
+                        .padding(horizontal = 7.dp, vertical = 3.dp),
+                )
+            }
+        }
+    }
+}
+
+/** The shape of what a player is actually showing, so a tile can be drawn around it. */
+@Composable
+fun rememberVideoAspect(player: Player?): Float {
+    var ratio by remember(player) { mutableStateOf(aspectOf(player?.videoSize)) }
+    DisposableEffect(player) {
+        if (player == null) return@DisposableEffect onDispose {}
+        val listener = object : Player.Listener {
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                ratio = aspectOf(videoSize)
+            }
+        }
+        player.addListener(listener)
+        onDispose { player.removeListener(listener) }
+    }
+    return ratio
+}
+
+/** Sixteen by nine until a stream says otherwise, which it cannot before its first frame. */
+private fun aspectOf(size: VideoSize?): Float {
+    if (size == null || size.width <= 0 || size.height <= 0) return 16f / 9f
+    return size.width * size.pixelWidthHeightRatio / size.height
+}
+
+/**
+ * What holding OK on a tile offers. Going straight to the guide made replacing the only
+ * thing a held press could do, so there was no way to make one tile full screen or to
+ * drop one without walking back to it and pressing back.
+ */
+@Composable
+fun TileMenu(
+    name: String,
+    focusRequester: FocusRequester,
+    canClose: Boolean,
+    onMaximize: () -> Unit,
+    onReplace: () -> Unit,
+    onClose: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(Ink.copy(alpha = 0.97f))
+            .border(1.dp, Line, RoundedCornerShape(14.dp))
+            .padding(20.dp)
+            // Without this the requester has nothing focusable of its own to hand focus
+            // to, and every button here would be dead.
+            .focusGroup()
+            .focusRequester(focusRequester),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         Text(
             text = name,
-            color = if (focused) Parchment else Parchment.copy(alpha = 0.7f),
-            fontSize = 12.sp,
-            lineHeight = 16.sp,
+            color = Parchment,
+            fontSize = 16.sp,
+            lineHeight = 21.sp,
+            fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(6.dp)
-                .clip(RoundedCornerShape(5.dp))
-                .background(Ink.copy(alpha = 0.72f))
-                .padding(horizontal = 7.dp, vertical = 3.dp),
         )
+        TvActionButton(label = "Maximise", onClick = onMaximize, emphasised = true)
+        TvActionButton(label = "Replace channel", onClick = onReplace)
+        // The main tile is the player itself; closing it would be closing the screen.
+        if (canClose) TvActionButton(label = "Close channel", onClick = onClose)
+        TvActionButton(label = "Cancel", onClick = onCancel)
     }
 }
 

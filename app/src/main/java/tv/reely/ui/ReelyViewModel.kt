@@ -974,7 +974,11 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             }
             val episodes = runCatching { PlexApi.children(base, token, season.ratingKey) }
                 .getOrElse { emptyList() }
+            // Arriving from a row lands on the episode that row was about. Choosing a
+            // season by hand has no such episode in mind, and leaving it on nothing meant
+            // the rail kept the previous season's scroll and the cursor had nowhere to go.
             val landOn = focusEpisodeKey?.let { key -> episodes.firstOrNull { it.ratingKey == key } }
+                ?: episodes.firstOrNull()
             _state.update { current ->
                 current.copy(
                     detail = current.detail?.copy(

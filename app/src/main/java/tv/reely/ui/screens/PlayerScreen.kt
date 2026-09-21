@@ -181,7 +181,9 @@ fun PlayerScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var tracksVersion by remember { mutableIntStateOf(0) }
 
-    var controlsVisible by remember { mutableStateOf(true) }
+    // A film or episode opening is worth showing the transport for; a channel is not,
+    // and raising it there cost six seconds of a dead d-pad before the timeout cleared it.
+    var controlsVisible by remember { mutableStateOf(!playback.isLive) }
     // The scrubber is the top of the control bar, so this is "there is nothing above
     // here to move to" — which is what makes another press of up mean "put these away".
     var atTopOfControls by remember { mutableStateOf(false) }
@@ -191,6 +193,8 @@ fun PlayerScreen(
     // Which tile the guide is about to replace, if it was opened to do that.
     var guideReplaces by remember { mutableStateOf<Int?>(null) }
     var tileLongPress by remember { mutableStateOf(false) }
+    // Which tile the held-OK menu is open over, if any.
+    var tileMenu by remember { mutableStateOf<Int?>(null) }
 
     // Tile 0 is the channel in `playback`, drawn by the player that is already running.
     // With nothing beside it this is all inert and the screen behaves exactly as before.
@@ -383,7 +387,17 @@ fun PlayerScreen(
      * used to be keyed on `playing`, which flips each time a new stream comes up.
      */
     LaunchedEffect(interaction) {
-        if (interaction > 0) controlsVisible = true
+        if (interaction > 0 && tileCount == 1) controlsVisible = true
+    }
+
+    /*
+     * The transport belongs to one picture, so a grid never has it. It is not enough to
+     * stop drawing it: every direction key is gated on it being down, so leaving the flag
+     * set left the d-pad dead until the timeout cleared it. Walking between tiles counts
+     * as interaction, which set it again on every press.
+     */
+    LaunchedEffect(tileCount) {
+        if (tileCount > 1) controlsVisible = false
     }
 
     /* They go away again after a quiet spell, but only while something is playing. */
@@ -397,6 +411,7 @@ fun PlayerScreen(
     val scrubberFocus = remember { FocusRequester() }
     val rootFocus = remember { FocusRequester() }
     val panelFocus = remember { FocusRequester() }
+    val tileMenuFocus = remember { FocusRequester() }
 
     /*
      * A FocusRequester throws until the node it is attached to has been laid out, and on
@@ -405,9 +420,10 @@ fun PlayerScreen(
      * after they timed out and were summoned back, which re-ran this against nodes that
      * existed by then. So keep asking for a few frames instead of giving up on the first.
      */
-    LaunchedEffect(controlsVisible, panel, guideOpen, playback.isLive, playback.url) {
+    LaunchedEffect(controlsVisible, panel, guideOpen, tileMenu, playback.isLive, playback.url) {
         if (guideOpen) return@LaunchedEffect
         when {
+            tileMenu != null -> tileMenuFocus.requestWhenReady()
             panel != Panel.NONE -> panelFocus.requestWhenReady()
             controlsVisible -> playFocus.requestWhenReady()
             else -> rootFocus.requestWhenReady()
@@ -446,6 +462,10 @@ fun PlayerScreen(
                 // tracking the press, so the key-up cannot then exit the player as well.
                 if (event.key == Key.Back) {
                     return@onPreviewKeyEvent when {
+                        tileMenu != null -> {
+                            tileMenu = null
+                            true
+                        }
                         panel != Panel.NONE -> {
                             panel = Panel.NONE
                             interaction++
@@ -482,6 +502,7 @@ fun PlayerScreen(
                         else -> false
                     }
                 }
+                if (tileMenu != null) return@onPreviewKeyEvent false
                 if (panel != Panel.NONE) return@onPreviewKeyEvent false
                 // The guide owns every key while it is up, bar the Back handled above.
                 if (guideOpen) return@onPreviewKeyEvent false
@@ -560,9 +581,7 @@ fun PlayerScreen(
                     if (event.nativeKeyEvent.repeatCount >= 1) {
                         if (!tileLongPress) {
                             tileLongPress = true
-                            guideReplaces = focusedTile
-                            guideAdds = true
-                            guideOpen = live.channels.isNotEmpty()
+                            tileMenu = focusedTile
                         }
                         return@onPreviewKeyEvent true
                     }
@@ -643,6 +662,7 @@ fun PlayerScreen(
                 index == 0 -> TileFrame(
                     name = playback.title,
                     focused = focusedTile == 0,
+                    aspectRatio = rememberVideoAspect(exoPlayer),
                     content = mainSurface,
                 )
 
@@ -701,6 +721,82 @@ fun PlayerScreen(
                 canAddTile = tileCount < 4,
                 onDismiss = { guideOpen = false },
                 modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        /*
+         * The transport. This block was deleted wholesale by the split-view rework, which
+         * meant to suppress it in a grid and instead stopped it ever being drawn at all —
+         * so a film had no controls, and the flag that gates the direction keys ran on
+         * regardless. Hence the tileCount test rather than another deletion.
+         */
+        if (controlsVisible && !guideOpen && tileCount == 1) {
+            Controls(
+                playback = playback,
+                playing = playing,
+                positionMs = positionMs,
+                durationMs = durationMs,
+                bufferedMs = bufferedMs,
+                canSkipBack = canSkipBack,
+                canSkipForward = canSkipForward,
+                playFocus = playFocus,
+                scrubberFocus = scrubberFocus,
+                onScrubberFocus = { atTopOfControls = it },
+                onSkip = { delta ->
+                    interaction++
+                    // The same pair of buttons: a channel when live, an episode when not.
+                    if (playback.isLive) onStepChannel(delta) else onStepEpisode(delta)
+                },
+                onSeek = { delta ->
+                    interaction++
+                    val target = (exoPlayer.currentPosition + delta)
+                        .coerceIn(0, (durationMs - 1_000).coerceAtLeast(0))
+                    exoPlayer.seekTo(target)
+                    positionMs = target
+                },
+                onTogglePlay = {
+                    interaction++
+                    // Coming back from a pause on live television means coming back to
+                    // now, not to the moment it was paused — which is behind the live
+                    // window by definition and would only fail.
+                    if (playback.isLive && !exoPlayer.isPlaying) livePlayer.rejoin()
+                    else togglePlay(exoPlayer)
+                },
+                onAddChannel = {
+                    guideAdds = true
+                    guideOpen = live.channels.isNotEmpty()
+                },
+                onOpenSubtitles = { panel = Panel.SUBTITLES },
+                onOpenAudio = { panel = Panel.AUDIO },
+                onToggleFormat = onToggleFormat,
+                modifier = Modifier.align(Alignment.BottomStart),
+            )
+        }
+
+        tileMenu?.let { slot ->
+            TileMenu(
+                name = if (slot == 0) playback.title
+                else tiles.getOrNull(slot - 1)?.name.orEmpty(),
+                focusRequester = tileMenuFocus,
+                canClose = slot in 1..tiles.size,
+                onMaximize = {
+                    tileMenu = null
+                    zoomed = slot
+                },
+                onReplace = {
+                    tileMenu = null
+                    guideReplaces = slot
+                    guideAdds = true
+                    guideOpen = live.channels.isNotEmpty()
+                },
+                onClose = {
+                    tileMenu = null
+                    val index = slot - 1
+                    focusedTile = 0
+                    onRemoveTile(index)
+                },
+                onCancel = { tileMenu = null },
+                modifier = Modifier.align(Alignment.Center),
             )
         }
 
