@@ -28,6 +28,9 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      - name: Validate the Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
@@ -36,6 +39,23 @@ jobs:
             ~/.gradle/wrapper
           key: gradle-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: gradle-
+
+      # A release labelled v0.21.0 holding a 0.20.0 build would never be offered as an
+      # update: the app compares the versionCode in the manifest, not the name on the
+      # release page. Catch that here rather than after publishing it.
+      - name: Check the tag matches the build
+        id: version
+        run: |
+          VERSION=$(grep -o 'versionName = "[^"]*"' app/build.gradle.kts | head -1 | cut -d'"' -f2)
+          CODE=$(grep -o 'versionCode = [0-9]*' app/build.gradle.kts | head -1 | awk '{print $3}')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building $VERSION (versionCode $CODE)."
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$GITHUB_REF_NAME" != "v$VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match versionName $VERSION." \
+                 "Publishing it would label the release with a version the app never reports," \
+                 "so the update check would disagree with the release page. Fix one or the other."
+            exit 1
+          fi
 
       # Without a keystore the build falls back to a debug key, and a debug key is
       # generated per machine. Android refuses to update an app whose package is signed
@@ -74,13 +94,10 @@ jobs:
       # manifest's address from the APK's by swapping the extension, so the two must sit
       # together under the same name.
       - name: Collect artefacts
-        id: collect
         run: |
           mkdir -p out
           cp app/build/outputs/apk/release/app-release.apk out/reely-tv.apk
           cp app/build/outputs/apk/release/reely-tv.json out/reely-tv.json
-          VERSION=$(grep -o 'versionName = "[^"]*"' app/build.gradle.kts | head -1 | cut -d'"' -f2)
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       # What changed, from the commits since the last release. Two audiences: the release
       # page gets all of it, and the manifest gets a sentence, because the update check
@@ -117,11 +134,12 @@ jobs:
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.collect.outputs.version }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then TAG="$GITHUB_REF_NAME"; else TAG="v$VERSION"; fi
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$TAG" \
+            --target "$GITHUB_SHA" \
             --title "Reely TV $VERSION" \
             --notes-file notes.md \
             out/reely-tv.apk out/reely-tv.json

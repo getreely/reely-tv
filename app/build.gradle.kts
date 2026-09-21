@@ -65,6 +65,16 @@ android {
         buildConfig = true
     }
 
+    lint {
+        // Nearly the whole of ExoPlayer's surface is marked @UnstableApi in media3 1.x —
+        // PlayerView, DefaultLoadControl, the shutter colour, the lot. This app is a video
+        // player, so it uses that surface everywhere on purpose, and the version is pinned.
+        // Flagging each of those 25 call sites tells us nothing we do not already know and
+        // would bury a real finding. Every other check stays an error.
+        disable += "UnsafeOptInUsageError"
+        abortOnError = true
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"

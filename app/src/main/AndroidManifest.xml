@@ -21,6 +21,14 @@
     <uses-feature
         android:name="android.hardware.touchscreen"
         android:required="false" />
+    <!--
+      Asking for ACCESS_WIFI_STATE implies a required wifi radio, which would rule the app
+      out on a television wired to ethernet and nothing else. The lock is an optimisation,
+      not a dependency.
+    -->
+    <uses-feature
+        android:name="android.hardware.wifi"
+        android:required="false" />
 
     <application
         android:allowBackup="false"
