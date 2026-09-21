@@ -288,8 +288,10 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 .focusRequester(contentFocus)
                 .focusGroup()
                 .focusProperties {
-                    exit = { direction ->
-                        if (direction == FocusDirection.Up) currentTabFocus else FocusRequester.Default
+                    onExit = {
+                        if (requestedFocusDirection == FocusDirection.Up) {
+                            currentTabFocus.requestFocus()
+                        }
                     }
                 }
                 .onGloballyPositioned { constraintsWidth = it.size.width }
@@ -679,7 +681,7 @@ private fun ConfirmExit(
             .padding(24.dp)
             // Nothing leaves this while it is up. A question with two answers should not
             // be escapable by pressing a direction key at the screen behind it.
-            .focusProperties { exit = { FocusRequester.Cancel } }
+            .focusProperties { onExit = { cancelFocusChange() } }
             .focusGroup(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp),

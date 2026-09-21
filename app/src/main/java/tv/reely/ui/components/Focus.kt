@@ -108,13 +108,14 @@ fun rowItem(row: RowFocus, key: String): Modifier {
 /**
  * Applied to a row, sends focus back to the item it was last on.
  *
- * `enter` is deprecated in favour of `onEnter`, which reports where focus should go by
- * calling into a scope rather than by returning a requester. The two do not map onto each
- * other cleanly — there is no obvious equivalent of returning FocusRequester.Default to
- * mean "do the ordinary thing" — and every focus regression in this app has been found by
- * using it on a television rather than by reading it. So this stays on the old call until
- * somebody can watch the change happen on a screen.
+ * The scope's three outcomes are what the old `enter` expressed by what it returned:
+ * requesting focus on a requester is returning one, doing nothing is FocusRequester.Default
+ * asking for the ordinary focus search, and cancelFocusChange() is FocusRequester.Cancel.
  */
-@Suppress("DEPRECATION")
 fun Modifier.restoreFocusTo(row: RowFocus): Modifier =
-    this.focusProperties { enter = { row.entry() } }
+    this.focusProperties {
+        onEnter = {
+            val remembered = row.entry()
+            if (remembered != FocusRequester.Default) remembered.requestFocus()
+        }
+    }
