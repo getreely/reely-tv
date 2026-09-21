@@ -2,7 +2,6 @@ import java.time.Instant
 
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
@@ -12,7 +11,7 @@ val releaseStoreFile = providers.gradleProperty("RELEASE_STORE_FILE").orNull
 
 android {
     namespace = "tv.reely"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "tv.reely"
@@ -20,8 +19,8 @@ android {
         // Keystore-backed credential store needs API 23 and Compose is painful below it.
         minSdk = 23
         targetSdk = 34
-        versionCode = 46
-        versionName = "0.21.0"
+        versionCode = 47
+        versionName = "0.22.0"
     }
 
     signingConfigs {
@@ -47,15 +46,17 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-        freeCompilerArgs = freeCompilerArgs + listOf(
-            "-opt-in=androidx.tv.material3.ExperimentalTvMaterial3Api",
-            "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi",
-            // focusProperties { enter = ... }, which is how a row remembers where the
-            // cursor was. Nothing else in this app needs it.
-            "-opt-in=androidx.compose.ui.ExperimentalComposeUiApi",
-        )
+    kotlin {
+        compilerOptions {
+            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+            optIn.addAll(
+                "androidx.tv.material3.ExperimentalTvMaterial3Api",
+                "androidx.compose.foundation.ExperimentalFoundationApi",
+                // focusProperties { enter = ... }, which is how a row remembers where the
+                // cursor was. Nothing else in this app needs it.
+                "androidx.compose.ui.ExperimentalComposeUiApi",
+            )
+        }
     }
 
     buildFeatures {
@@ -83,24 +84,24 @@ android {
 }
 
 dependencies {
-    implementation(platform("androidx.compose:compose-bom:2024.12.01"))
+    implementation(platform("androidx.compose:compose-bom:2026.09.00"))
 
-    implementation("androidx.core:core-ktx:1.15.0")
-    implementation("androidx.activity:activity-compose:1.9.3")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+    implementation("androidx.core:core-ktx:1.19.0")
+    implementation("androidx.activity:activity-compose:1.13.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
 
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.foundation:foundation")
-    implementation("androidx.tv:tv-material:1.0.0")
+    implementation("androidx.tv:tv-material:1.1.0")
 
     implementation("androidx.media3:media3-exoplayer:1.11.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.11.1")
     implementation("androidx.media3:media3-ui:1.11.1")
 
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
+    implementation("com.squareup.okhttp3:okhttp:5.5.0")
     implementation("io.coil-kt:coil-compose:2.7.0")
 
     testImplementation("junit:junit:4.13.2")
@@ -113,7 +114,7 @@ dependencies {
  * which cannot tell a new build from the one already running. Generating it here means
  * the two are always published together and can never disagree.
  */
-val writeUpdateManifest by tasks.registering {
+val writeUpdateManifest = tasks.register("writeUpdateManifest") {
     val outputDir = layout.buildDirectory.dir("outputs/apk/release")
     val versionCode = android.defaultConfig.versionCode
     val versionName = android.defaultConfig.versionName

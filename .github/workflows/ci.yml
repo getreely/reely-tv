@@ -33,6 +33,16 @@ jobs:
       - name: Validate the Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
 
+      # compileSdk is newer than the runner image ships with. A here-string rather than
+      # `yes |` on purpose: the pipe leaves sdkmanager on the wrong end of a SIGPIPE, and
+      # Actions runs bash with pipefail, so that would fail the step.
+      - name: Install the compile SDK
+        run: |
+          if [ ! -d "$ANDROID_HOME/platforms/android-37.0" ]; then
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+              --install "platforms;android-37.0" <<< "y" > /dev/null
+          fi
+
       - name: Cache Gradle
         uses: actions/cache@v4
         with:

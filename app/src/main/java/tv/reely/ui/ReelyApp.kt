@@ -1,6 +1,7 @@
 package tv.reely.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -12,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import android.app.Activity
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -43,7 +43,6 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -149,7 +148,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     // it to walk back through.
     val gridRoute = state.route as? Route.Library
     var confirmExit by remember { mutableStateOf(false) }
-    val activity = LocalContext.current as? Activity
+    val activity = LocalActivity.current
 
     /*
      * One handler, in order, rather than several fighting over which is enabled. The last
