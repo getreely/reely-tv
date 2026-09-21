@@ -271,3 +271,26 @@ fun GearGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) {
         }
     }
 }
+
+/** A cross: add another of whatever this is beside. */
+@Composable
+fun PlusGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(size)) {
+        val s = size.toPx()
+        val arm = s * 0.3f
+        drawLine(
+            color,
+            start = center.copy(x = center.x - arm),
+            end = center.copy(x = center.x + arm),
+            strokeWidth = s * 0.12f,
+            cap = androidx.compose.ui.graphics.StrokeCap.Round,
+        )
+        drawLine(
+            color,
+            start = center.copy(y = center.y - arm),
+            end = center.copy(y = center.y + arm),
+            strokeWidth = s * 0.12f,
+            cap = androidx.compose.ui.graphics.StrokeCap.Round,
+        )
+    }
+}

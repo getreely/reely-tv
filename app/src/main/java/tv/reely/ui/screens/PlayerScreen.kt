@@ -26,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -75,6 +76,7 @@ import tv.reely.ui.PlayerPrefs
 import tv.reely.ui.Playback
 import tv.reely.ui.components.PauseGlyph
 import tv.reely.ui.components.PlayGlyph
+import tv.reely.ui.components.PlusGlyph
 import tv.reely.ui.components.SkipGlyph
 import tv.reely.ui.components.SpeakerGlyph
 import tv.reely.ui.components.SubtitleGlyph
@@ -184,13 +186,47 @@ fun PlayerScreen(
     var atTopOfControls by remember { mutableStateOf(false) }
     // The guide, raised over a playing channel. Mutually exclusive with the controls.
     var guideOpen by remember { mutableStateOf(false) }
+    var guideAdds by remember { mutableStateOf(false) }
 
     // Tile 0 is the channel in `playback`, drawn by the player that is already running.
     // With nothing beside it this is all inert and the screen behaves exactly as before.
     val tiles = if (playback.isLive) multiview else emptyList()
     val tileCount = tiles.size + 1
+    // A grid with room left over offers the spare cell as somewhere to put another
+    // channel. Two side by side is a deliberate exception: filling half the screen with
+    // an invitation is worse than not having one.
+    val hasSpare = tileCount == 3
+    val slotCount = tileCount + if (hasSpare) 1 else 0
+    val addSlot = if (hasSpare) tileCount else -1
     var focusedTile by remember { mutableIntStateOf(0) }
-    if (focusedTile > tiles.size) focusedTile = 0
+    if (focusedTile >= slotCount) focusedTile = 0
+
+    // One tile filling the screen without the others being torn down. Choosing a tile
+    // used to collapse the grid to that channel, which meant the only way back was
+    // building it again — and rebuilding it costs the provider connections it had
+    // already granted.
+    var zoomed by remember { mutableStateOf<Int?>(null) }
+    if (zoomed != null && (tileCount == 1 || zoomed!! > tiles.size)) zoomed = null
+
+    // The extra channels' players, kept by the screen rather than by the tiles that draw
+    // them, so a tile can move between the grid and full screen without its stream being
+    // torn down and dialled again.
+    val extraUrls = live.credentials?.let { credentials ->
+        tiles.map { XtreamApi.streamUrl(credentials, it, live.format) }
+    }.orEmpty()
+    val extraPlayers = remember { mutableStateMapOf<String, ExoPlayer>() }
+    LaunchedEffect(extraUrls) {
+        extraUrls.forEach { url ->
+            if (url !in extraPlayers) extraPlayers[url] = buildExtraPlayer(context, url)
+        }
+        (extraPlayers.keys - extraUrls.toSet()).forEach { extraPlayers.remove(it)?.release() }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            extraPlayers.values.forEach { it.release() }
+            extraPlayers.clear()
+        }
+    }
 
     // Only the tile with the cursor on it is heard.
     LaunchedEffect(focusedTile, tileCount) {
@@ -394,10 +430,16 @@ fun PlayerScreen(
                         }
                         guideOpen -> {
                             guideOpen = false
+                            guideAdds = false
+                            true
+                        }
+                        // Coming out of a zoomed tile returns to the grid it came from.
+                        zoomed != null -> {
+                            zoomed = null
                             true
                         }
                         // A tile beside the main one is the first thing back takes away.
-                        focusedTile > 0 -> {
+                        focusedTile in 1..tiles.size -> {
                             val index = focusedTile - 1
                             focusedTile = 0
                             onRemoveTile(index)
@@ -433,7 +475,7 @@ fun PlayerScreen(
                 // With a grid up, the direction keys walk it. Only a press that runs off
                 // the edge falls through to what that key means with one channel on
                 // screen, which is why a single tile behaves exactly as it always has.
-                if (tileCount > 1 && !controlsVisible) {
+                if (slotCount > 1 && !controlsVisible) {
                     val dx = when (event.key) {
                         Key.DirectionLeft -> -1
                         Key.DirectionRight -> 1
@@ -445,31 +487,35 @@ fun PlayerScreen(
                         else -> 0
                     }
                     if (dx != 0 || dy != 0) {
-                        val next = tileNeighbour(tileCount, focusedTile, dx, dy)
+                        val next = tileNeighbour(slotCount, focusedTile, dx, dy)
                         if (next != null) {
                             interaction++
                             focusedTile = next
                             return@onPreviewKeyEvent true
                         }
-                        // Off the edge: up still summons the controls, down still opens
-                        // the guide, and sideways does nothing rather than surprising
+                        // Off the edge: down still opens the guide. Up does nothing,
+                        // because the transport belongs to one picture and there is no
+                        // one picture here. Sideways does nothing rather than surprising
                         // somebody by retuning a tile they were only walking past.
                         interaction++
-                        return@onPreviewKeyEvent when {
-                            dy < 0 -> { controlsVisible = true; true }
-                            dy > 0 -> { guideOpen = live.channels.isNotEmpty(); true }
-                            else -> true
-                        }
+                        if (dy > 0) guideOpen = live.channels.isNotEmpty()
+                        return@onPreviewKeyEvent true
                     }
                 }
-                // OK on a tile gives that channel the whole screen.
+                // OK on a tile gives that channel the whole screen; on the spare cell it
+                // asks which channel to put there.
                 if (
-                    tileCount > 1 && !controlsVisible &&
+                    slotCount > 1 && !controlsVisible &&
                     (event.key == Key.DirectionCenter || event.key == Key.Enter)
                 ) {
-                    val chosen = if (focusedTile == 0) null else tiles.getOrNull(focusedTile - 1)
-                    focusedTile = 0
-                    if (chosen != null) onCollapseToChannel(chosen) else onClearTiles()
+                    if (focusedTile == addSlot) {
+                        guideAdds = true
+                        guideOpen = live.channels.isNotEmpty()
+                        return@onPreviewKeyEvent true
+                    }
+                    // Fills the screen with this one and leaves the rest running behind
+                    // it. Back returns to the grid.
+                    zoomed = focusedTile
                     return@onPreviewKeyEvent true
                 }
                 // Steering live television is not an interaction. Counting it raised the
@@ -536,24 +582,25 @@ fun PlayerScreen(
             )
         }
 
-        if (tileCount == 1) {
-            mainSurface()
-        } else {
-            MultiViewGrid(count = tileCount, modifier = Modifier.fillMaxSize()) { index ->
-                if (index == 0) {
-                    TileFrame(
-                        name = playback.title,
-                        focused = focusedTile == 0,
-                        content = mainSurface,
-                    )
-                } else {
+        // One description of a tile, drawn either into the grid or over the whole screen.
+        val tileAt: @Composable (Int) -> Unit = { index ->
+            when {
+                index == addSlot -> AddTile(focused = focusedTile == index)
+
+                index == 0 -> TileFrame(
+                    name = playback.title,
+                    focused = focusedTile == 0,
+                    content = mainSurface,
+                )
+
+                else -> {
                     val extra = tiles[index - 1]
-                    val credentials = live.credentials
-                    if (credentials == null) {
+                    val player = extraUrls.getOrNull(index - 1)?.let { extraPlayers[it] }
+                    if (player == null) {
                         TileFrame(name = extra.name, focused = focusedTile == index) {}
                     } else {
                         ExtraTile(
-                            url = XtreamApi.streamUrl(credentials, extra, live.format),
+                            player = player,
                             name = extra.name,
                             focused = focusedTile == index,
                         )
@@ -562,120 +609,12 @@ fun PlayerScreen(
             }
         }
 
-        if (buffering && error == null) {
-            Text(
-                text = "Loading…",
-                color = Parchment,
-                fontSize = 15.sp,
-                lineHeight = 20.sp,
-                modifier = Modifier.align(Alignment.Center),
-            )
-        }
-
-        error?.let { message ->
-            Box(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .widthIn(max = 820.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Ink.copy(alpha = 0.92f))
-                    .border(1.dp, Accent.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
-                    .padding(20.dp),
-            ) {
-                Text(text = message, color = Parchment, fontSize = 15.sp, lineHeight = 22.sp)
-            }
-        }
-
-        if (controlsVisible && !guideOpen) {
-            Controls(
-                playback = playback,
-                playing = playing,
-                positionMs = positionMs,
-                durationMs = durationMs,
-                bufferedMs = bufferedMs,
-                canSkipBack = canSkipBack,
-                canSkipForward = canSkipForward,
-                playFocus = playFocus,
-                scrubberFocus = scrubberFocus,
-                onScrubberFocus = { atTopOfControls = it },
-                onSkip = { delta ->
-                    interaction++
-                    // The same pair of buttons: a channel when live, an episode when not.
-                    if (playback.isLive) onStepChannel(delta) else onStepEpisode(delta)
-                },
-                onSeek = { delta ->
-                    interaction++
-                    val target = (exoPlayer.currentPosition + delta)
-                        .coerceIn(0, (durationMs - 1_000).coerceAtLeast(0))
-                    exoPlayer.seekTo(target)
-                    positionMs = target
-                },
-                onTogglePlay = {
-                    interaction++
-                    // Coming back from a pause on live television means coming back to
-                    // now, not to the moment it was paused — which is behind the live
-                    // window by definition and would only fail.
-                    if (playback.isLive && !exoPlayer.isPlaying) livePlayer.rejoin()
-                    else togglePlay(exoPlayer)
-                },
-                onOpenSubtitles = { panel = Panel.SUBTITLES },
-                onOpenAudio = { panel = Panel.AUDIO },
-                onToggleFormat = onToggleFormat,
-                modifier = Modifier.align(Alignment.BottomStart),
-            )
-        }
-
-        if (panel != Panel.NONE) {
-            TrackPanel(
-                panel = panel,
-                player = exoPlayer,
-                prefs = prefs,
-                tracksVersion = tracksVersion,
-                focusRequester = panelFocus,
-                onClose = { panel = Panel.NONE },
-                onNudgeScale = onNudgeSubtitleScale,
-                onToggleBackground = onToggleSubtitleBackground,
-                modifier = Modifier.align(Alignment.CenterEnd),
-            )
-        }
-
-        // A skip prompt only while the marker is actually under the playhead. It takes
-        // focus so OK reaches it without hunting, and hands focus back when it goes.
-        val inIntro = intro != null && positionMs >= intro.startMs && positionMs < intro.endMs - 500
-        val inCredits = credits != null && positionMs >= credits.startMs && canSkipForward
-        val skipLabel = when {
-            inIntro -> "Skip Intro"
-            inCredits && upNext == null -> "Next Episode"
-            else -> null
-        }
-
-        // Same trap as the transport controls: the button is composed in this pass and
-        // its requester is not attached yet, so one attempt would fail silently and leave
-        // a Skip Intro that cannot be pressed. When it goes, focus has to land somewhere
-        // or the remote does nothing at all.
-        LaunchedEffect(skipLabel, controlsVisible) {
-            if (skipLabel != null) {
-                skipFocus.requestWhenReady()
-            } else if (controlsVisible) {
-                playFocus.requestWhenReady()
-            } else {
-                rootFocus.requestWhenReady()
-            }
-        }
-
-        if (skipLabel != null) {
-            TvActionButton(
-                label = skipLabel,
-                onClick = {
-                    interaction++
-                    if (inIntro && intro != null) exoPlayer.seekTo(intro.endMs) else onStepEpisode(1)
-                },
-                emphasised = true,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 40.dp, bottom = if (controlsVisible) 168.dp else 40.dp)
-                    .focusRequester(skipFocus),
-            )
+        if (tileCount == 1) {
+            mainSurface()
+        } else if (zoomed != null) {
+            Box(modifier = Modifier.fillMaxSize()) { tileAt(zoomed!!) }
+        } else {
+            MultiViewGrid(slots = slotCount, modifier = Modifier.fillMaxSize()) { tileAt(it) }
         }
 
         if (guideOpen) {
@@ -685,13 +624,16 @@ fun PlayerScreen(
                 windowStart = guide.windowStart,
                 windowEnd = guide.windowEnd,
                 playingIndex = playback.channelIndex,
+                addMode = guideAdds,
                 onSelect = { index ->
                     guideOpen = false
+                    guideAdds = false
                     focusedTile = 0
                     onSelectChannel(index)
                 },
                 onAddToMultiview = { channel ->
                     guideOpen = false
+                    guideAdds = false
                     onAddToMultiview(channel)
                 },
                 canAddTile = tileCount < 4,
@@ -729,6 +671,7 @@ private fun Controls(
     onSeek: (Long) -> Unit,
     onSkip: (Int) -> Unit,
     onTogglePlay: () -> Unit,
+    onAddChannel: () -> Unit,
     onOpenSubtitles: () -> Unit,
     onOpenAudio: () -> Unit,
     onToggleFormat: () -> Unit,
@@ -822,6 +765,13 @@ private fun Controls(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (playback.isLive) {
+                    TransportButton(
+                        onClick = onAddChannel,
+                        diameter = 36.dp,
+                        glyph = { PlusGlyph(it, 17.dp) },
+                    )
+                }
                 TransportButton(
                     onClick = onOpenSubtitles,
                     diameter = 36.dp,

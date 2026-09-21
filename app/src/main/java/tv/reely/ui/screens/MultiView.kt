@@ -1,5 +1,6 @@
 package tv.reely.ui.screens
 
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -12,9 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,6 +28,7 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Text
+import tv.reely.ui.components.PlusGlyph
 import tv.reely.ui.theme.Ink
 import tv.reely.ui.theme.Parchment
 
@@ -43,8 +43,8 @@ import tv.reely.ui.theme.Parchment
 enum class TileSlot { FULL, LEFT, RIGHT, TOP_RIGHT, BOTTOM_RIGHT, TOP_LEFT, BOTTOM_LEFT }
 
 /** Which neighbour a direction leads to, or null when the grid has no tile that way. */
-fun tileNeighbour(count: Int, from: Int, dx: Int, dy: Int): Int? {
-    val target = when (count) {
+fun tileNeighbour(slots: Int, from: Int, dx: Int, dy: Int): Int? {
+    val target = when (slots) {
         2 -> when {
             dx < 0 && from == 1 -> 0
             dx > 0 && from == 0 -> 1
@@ -70,7 +70,7 @@ fun tileNeighbour(count: Int, from: Int, dx: Int, dy: Int): Int? {
 
         else -> null
     }
-    return target?.takeIf { it in 0 until count }
+    return target?.takeIf { it in 0 until slots }
 }
 
 /**
@@ -80,11 +80,11 @@ fun tileNeighbour(count: Int, from: Int, dx: Int, dy: Int): Int? {
  */
 @Composable
 fun MultiViewGrid(
-    count: Int,
+    slots: Int,
     modifier: Modifier = Modifier,
     tile: @Composable (index: Int) -> Unit,
 ) {
-    when (count) {
+    when (slots) {
         2 -> Row(
             modifier = modifier.fillMaxSize(),
             horizontalArrangement = Arrangement.spacedBy(3.dp),
@@ -132,41 +132,42 @@ fun MultiViewGrid(
 }
 
 /**
- * One of the extra channels. It owns its player outright: created when the tile appears,
- * released when it goes. Only the tile with the cursor on it is audible, which is the
+ * A player for one of the extra channels.
+ *
+ * Built here but owned by the screen, because a tile moves: going full screen on one and
+ * coming back puts it in a different place in the composition, and a player created by
+ * the tile itself would be torn down and reconnected each time. The provider is not
+ * handing out connections freely enough for that.
+ */
+fun buildExtraPlayer(context: Context, url: String): ExoPlayer =
+    ExoPlayer.Builder(context)
+        .setLoadControl(
+            DefaultLoadControl.Builder()
+                .setBufferDurationsMs(2_000, 30_000, 1_000, 2_000)
+                .build()
+        )
+        .build()
+        .apply {
+            // No audio focus handling. The main player already holds it, and a second
+            // claimant would spend its time taking it back off the first.
+            volume = 0f
+            setMediaItem(MediaItem.fromUri(url))
+            prepare()
+            playWhenReady = true
+        }
+
+/**
+ * One of the extra channels. Only the tile with the cursor on it is audible, which is the
  * whole point of moving the cursor around.
  */
 @Composable
 fun ExtraTile(
-    url: String,
+    player: ExoPlayer,
     name: String,
     focused: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
-    val player = remember(url) {
-        ExoPlayer.Builder(context)
-            .setLoadControl(
-                DefaultLoadControl.Builder()
-                    .setBufferDurationsMs(2_000, 30_000, 1_000, 2_000)
-                    .build()
-            )
-            .build()
-            .apply {
-                // No audio focus handling here. The main player already holds it, and a
-                // second claimant would spend its time taking it back off the first.
-                volume = 0f
-                setMediaItem(MediaItem.fromUri(url))
-                prepare()
-                playWhenReady = true
-            }
-    }
-
-    DisposableEffect(player) {
-        onDispose { player.release() }
-    }
-
-    LaunchedEffect(focused) { player.volume = if (focused) 1f else 0f }
+    LaunchedEffect(player, focused) { player.volume = if (focused) 1f else 0f }
 
     TileFrame(name = name, focused = focused, modifier = modifier) {
         AndroidView(
@@ -177,6 +178,7 @@ fun ExtraTile(
                     this.player = player
                 }
             },
+            update = { it.player = player },
             modifier = Modifier.fillMaxSize(),
         )
     }
@@ -194,9 +196,11 @@ fun TileFrame(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
+            // Only the tile you are hearing is outlined. A ring on every one of them said
+            // nothing, and the whole point of moving the cursor is to see which is live.
             .border(
-                width = if (focused) 3.dp else 1.dp,
-                color = if (focused) Parchment else Parchment.copy(alpha = 0.18f),
+                width = if (focused) 3.dp else 0.dp,
+                color = if (focused) Parchment else Color.Transparent,
             ),
     ) {
         content()
@@ -214,5 +218,38 @@ fun TileFrame(
                 .background(Ink.copy(alpha = 0.72f))
                 .padding(horizontal = 7.dp, vertical = 3.dp),
         )
+    }
+}
+
+/**
+ * The spare cell in a grid that is not full: somewhere obvious to put another channel.
+ * Adding one otherwise meant knowing that a channel in the guide can be held down, which
+ * is not a thing anybody would guess.
+ */
+@Composable
+fun AddTile(focused: Boolean, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Ink.copy(alpha = 0.6f))
+            .border(
+                width = if (focused) 3.dp else 1.dp,
+                color = if (focused) Parchment else Parchment.copy(alpha = 0.22f),
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            PlusGlyph(
+                color = if (focused) Parchment else Parchment.copy(alpha = 0.5f),
+                size = 34.dp,
+            )
+            Text(
+                text = "Add a channel",
+                color = if (focused) Parchment else Parchment.copy(alpha = 0.5f),
+                fontSize = 13.sp,
+                lineHeight = 17.sp,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
     }
 }

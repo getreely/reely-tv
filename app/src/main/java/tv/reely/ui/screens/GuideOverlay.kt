@@ -76,6 +76,8 @@ fun GuideOverlay(
     windowStart: Long,
     windowEnd: Long,
     playingIndex: Int,
+    /** Opened to put a channel beside the one playing rather than to change channel. */
+    addMode: Boolean = false,
     onSelect: (Int) -> Unit,
     onAddToMultiview: (XtreamChannel) -> Unit,
     canAddTile: Boolean,
@@ -176,7 +178,11 @@ fun GuideOverlay(
                         }
 
                         event.type == KeyEventType.KeyUp -> {
-                            if (!longPressFired) onSelect(cursor)
+                            if (!longPressFired) {
+                                val channel = channels.getOrNull(cursor)
+                                if (addMode && channel != null) onAddToMultiview(channel)
+                                else onSelect(cursor)
+                            }
                             longPressFired = false
                             true
                         }
@@ -229,7 +235,8 @@ fun GuideOverlay(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                text = channel?.name.orEmpty(),
+                text = if (addMode) "Add a channel — ${channel?.name.orEmpty()}"
+                else channel?.name.orEmpty(),
                 color = Parchment,
                 fontSize = 17.sp,
                 lineHeight = 22.sp,
@@ -238,8 +245,11 @@ fun GuideOverlay(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = onNow?.let { "${it.title}  ·  ${guideTimeRange(it)}" }
-                    ?: "OK to watch · hold OK for more",
+                text = when {
+                    addMode -> "OK adds this channel beside what is playing"
+                    onNow != null -> "${onNow.title}  ·  ${guideTimeRange(onNow)}"
+                    else -> "OK to watch · hold OK for more"
+                },
                 color = Faint,
                 fontSize = 12.sp,
                 lineHeight = 16.sp,
