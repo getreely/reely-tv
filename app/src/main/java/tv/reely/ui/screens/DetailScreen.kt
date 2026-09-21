@@ -40,6 +40,7 @@ import tv.reely.ui.components.InfoGlyph
 import tv.reely.ui.components.PlayGlyph
 import tv.reely.ui.components.RestartGlyph
 import tv.reely.ui.components.rememberRowFocus
+import tv.reely.ui.components.rowItem
 import tv.reely.ui.components.restoreFocusTo
 import tv.reely.ui.components.SectionHeading
 import tv.reely.ui.components.TrailerGlyph
@@ -261,8 +262,7 @@ fun DetailScreen(
                                         onFocusEpisode(entry)
                                     },
                                     onClick = { onPlay(entry) },
-                                    modifier = Modifier
-                                        .focusRequester(railFocus.requesterFor(entry.ratingKey)),
+                                    modifier = rowItem(railFocus, entry.ratingKey),
                                 )
                             }
                         }

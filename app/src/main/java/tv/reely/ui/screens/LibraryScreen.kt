@@ -37,6 +37,7 @@ import tv.reely.ui.components.ErrorNote
 import tv.reely.ui.components.HeroText
 import tv.reely.ui.components.PosterCard
 import tv.reely.ui.components.rememberRowFocus
+import tv.reely.ui.components.rowItem
 import tv.reely.ui.components.restoreFocusTo
 import tv.reely.ui.components.TvChip
 import tv.reely.ui.theme.Parchment
@@ -170,8 +171,7 @@ fun LibraryScreen(
                                             onFocusItem(item)
                                         },
                                         onClick = { onOpenItem(item) },
-                                        modifier = Modifier
-                                            .focusRequester(resumeFocus.requesterFor(item.listKey)),
+                                        modifier = rowItem(resumeFocus, item.listKey),
                                     )
                                 }
                             }
@@ -200,8 +200,7 @@ fun LibraryScreen(
                                             onFocusItem(movie)
                                         },
                                         onClick = { onOpenItem(movie) },
-                                        modifier = Modifier
-                                            .focusRequester(recentFocus.requesterFor(movie.listKey)),
+                                        modifier = rowItem(recentFocus, movie.listKey),
                                     )
                                 }
                             }
@@ -233,8 +232,7 @@ fun LibraryScreen(
                                             onFocusItem(group.newest)
                                         },
                                         onClick = { onOpenItem(group.newest) },
-                                        modifier = Modifier
-                                            .focusRequester(recentFocus.requesterFor(group.listKey)),
+                                        modifier = rowItem(recentFocus, group.listKey),
                                     )
                                 }
                             }
@@ -261,8 +259,7 @@ fun LibraryScreen(
                                             onFocusItem(item)
                                         },
                                         onClick = { onOpenItem(item) },
-                                        modifier = Modifier
-                                            .focusRequester(releasedFocus.requesterFor(item.listKey)),
+                                        modifier = rowItem(releasedFocus, item.listKey),
                                     )
                                 }
                             }
@@ -360,7 +357,7 @@ fun LibraryScreen(
                             onFocusItem(item)
                         },
                         onClick = { onOpenItem(item) },
-                        modifier = Modifier.focusRequester(gridFocus.requesterFor(item.listKey)),
+                        modifier = rowItem(gridFocus, item.listKey),
                     )
                 }
             }

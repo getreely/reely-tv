@@ -1,11 +1,13 @@
 package tv.reely.ui.components
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import kotlinx.coroutines.delay
 
 /**
@@ -46,6 +48,15 @@ suspend fun FocusRequester.requestWhenReady(
 @Stable
 class RowFocus {
     private val requesters = mutableMapOf<String, FocusRequester>()
+
+    /**
+     * The keys currently on screen. A requester for an item that has gone is not merely
+     * useless — handing one to Compose's focus machinery throws, and it throws from
+     * inside the focus search rather than anywhere that can catch it. Changing season
+     * emptied the rail and left the old episode remembered, so pressing down into it
+     * brought the whole app down.
+     */
+    private val present = mutableSetOf<String>()
     private var remembered: String? = null
 
     fun requesterFor(key: String): FocusRequester = requesters.getOrPut(key) { FocusRequester() }
@@ -54,8 +65,21 @@ class RowFocus {
         remembered = key
     }
 
-    /** Where focus should land on the way in, or nowhere in particular the first time. */
-    fun entry(): FocusRequester = remembered?.let { requesters[it] } ?: FocusRequester.Default
+    fun onPresent(key: String) {
+        present += key
+    }
+
+    fun onGone(key: String) {
+        present -= key
+        if (remembered == key) remembered = null
+    }
+
+    /**
+     * Where focus should land on the way in. Only ever an item that is still there;
+     * anything else defers to the ordinary focus search.
+     */
+    fun entry(): FocusRequester =
+        remembered?.takeIf { it in present }?.let { requesters[it] } ?: FocusRequester.Default
 
     /** Puts the cursor on one item directly, for arriving at a row from somewhere else. */
     suspend fun land(key: String) {
@@ -66,6 +90,20 @@ class RowFocus {
 
 @Composable
 fun rememberRowFocus(): RowFocus = remember { RowFocus() }
+
+/**
+ * What an item in a row wears: its own requester, and a note to the row that it exists
+ * for as long as it is composed. The second half is what stops a row pointing focus at
+ * something that has since been scrolled away or replaced.
+ */
+@Composable
+fun rowItem(row: RowFocus, key: String): Modifier {
+    DisposableEffect(row, key) {
+        row.onPresent(key)
+        onDispose { row.onGone(key) }
+    }
+    return Modifier.focusRequester(row.requesterFor(key))
+}
 
 /** Applied to a row, sends focus back to the item it was last on. */
 fun Modifier.restoreFocusTo(row: RowFocus): Modifier =

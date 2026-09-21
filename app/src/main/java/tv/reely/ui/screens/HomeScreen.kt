@@ -31,6 +31,7 @@ import tv.reely.ui.components.ErrorNote
 import tv.reely.ui.components.HeroText
 import tv.reely.ui.components.PosterCard
 import tv.reely.ui.components.rememberRowFocus
+import tv.reely.ui.components.rowItem
 import tv.reely.ui.components.restoreFocusTo
 import tv.reely.ui.theme.Parchment
 
@@ -129,8 +130,7 @@ fun HomeScreen(
                                         onFocusItem(item)
                                     },
                                     onClick = { onOpenItem(item) },
-                                    modifier = Modifier
-                                        .focusRequester(resumeFocus.requesterFor(item.listKey)),
+                                    modifier = rowItem(resumeFocus, item.listKey),
                                 )
                             }
                         }
@@ -162,8 +162,7 @@ fun HomeScreen(
                                         onFocusItem(movie)
                                     },
                                     onClick = { onOpenItem(movie) },
-                                    modifier = Modifier
-                                        .focusRequester(movieFocus.requesterFor(movie.listKey)),
+                                    modifier = rowItem(movieFocus, movie.listKey),
                                 )
                             }
                         }
@@ -213,7 +212,7 @@ private fun EpisodeGroupCard(
         },
         // Whether one episode arrived or twelve, this opens the show at the newest one.
         onClick = { onOpenItem(newest) },
-        modifier = Modifier.focusRequester(rowFocus.requesterFor(group.listKey)),
+        modifier = rowItem(rowFocus, group.listKey),
     )
 }
 

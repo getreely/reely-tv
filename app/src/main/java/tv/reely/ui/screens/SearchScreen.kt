@@ -29,6 +29,7 @@ import tv.reely.ui.components.EmptyNote
 import tv.reely.ui.components.ChannelCard
 import tv.reely.ui.components.PosterCard
 import tv.reely.ui.components.rememberRowFocus
+import tv.reely.ui.components.rowItem
 import tv.reely.ui.components.restoreFocusTo
 import tv.reely.ui.components.TvTextField
 import tv.reely.ui.theme.Parchment
@@ -118,9 +119,7 @@ fun SearchScreen(
                                     number = channel.number,
                                     logoUrl = channel.icon,
                                     onClick = { onPlayChannel(channel) },
-                                    modifier = Modifier.focusRequester(
-                                        channelFocus.requesterFor(channel.streamId.toString())
-                                    ),
+                                    modifier = rowItem(channelFocus, channel.streamId.toString()),
                                 )
                             }
                         }
@@ -140,7 +139,7 @@ fun SearchScreen(
                         onFocusItem(item)
                     },
                     onClick = { onOpenItem(item) },
-                    modifier = Modifier.focusRequester(resultFocus.requesterFor(item.listKey)),
+                    modifier = rowItem(resultFocus, item.listKey),
                 )
             }
         }
