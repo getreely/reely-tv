@@ -118,7 +118,13 @@ class Settings(context: Context) {
         const val MIN_THEME_VOLUME = 0.05f
         const val THEME_VOLUME_STEP = 0.05f
 
-        const val DEFAULT_UPDATE_URL = "http://192.168.68.80:5555/stuff/reely-tv.apk"
+        /**
+         * GitHub keeps this address pointing at whatever the newest release is, so it
+         * never has to change. The manifest beside it is found by swapping the extension,
+         * which is why both are published under these exact names.
+         */
+        const val DEFAULT_UPDATE_URL =
+            "https://github.com/getreely/reely-tv/releases/latest/download/reely-tv.apk"
 
         // A multiplier on ExoPlayer's standard caption size, so 1.0 is "normal".
         const val DEFAULT_SCALE = 0.9f

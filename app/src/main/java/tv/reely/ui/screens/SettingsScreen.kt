@@ -468,6 +468,13 @@ private fun UpdatesSection(
     Panel(title = "This build") {
         FactLine("Version", "${BuildConfig.VERSION_NAME}  (build ${BuildConfig.VERSION_CODE})")
         FactLine("Update address", updateUrl)
+        Text(
+            text = "Releases are built and published by GitHub, so this address always " +
+                "points at the newest one.",
+            color = Muted,
+            fontSize = 13.sp,
+            lineHeight = 19.sp,
+        )
     }
 
     Panel(title = "Check") {
