@@ -396,7 +396,14 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     fun navigate(route: Route) {
         _state.update { current ->
             // Switching top-level destination replaces the stack rather than growing it.
-            val stack = if (route is Route.Detail) current.stack + route else listOf(route)
+            // Settings is not one of those: it is somewhere you step into from wherever
+            // you were and expect to come back from, so it grows the stack like a page.
+            val stack = when {
+                route is Route.Detail -> current.stack + route
+                route !is Route.Settings -> listOf(route)
+                current.route is Route.Settings -> current.stack
+                else -> current.stack + route
+            }
             current.copy(stack = stack, focused = null)
         }
         // The guide's preview is the shared player, and nothing else on screen would

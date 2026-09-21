@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import android.app.Activity
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -42,6 +43,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -59,6 +61,7 @@ import tv.reely.ui.components.SearchGlyph
 import tv.reely.ui.components.TabMenu
 import tv.reely.ui.components.TAB_MENU_WIDTH
 import tv.reely.ui.components.TabMenuItem
+import tv.reely.ui.components.TvActionButton
 import tv.reely.ui.components.requestWhenReady
 import tv.reely.ui.screens.DetailScreen
 import tv.reely.ui.screens.GuideScreen
@@ -141,17 +144,28 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     val menuWidthPx = with(LocalDensity.current) { TAB_MENU_WIDTH.roundToPx() }
 
     // Back walks the stack: out of a season, off a detail page, and only then out of the app.
-    BackHandler(enabled = menuFor != null) { menuFor = null }
-    BackHandler(enabled = menuFor == null && state.stack.size > 1) { viewModel.goBack() }
     // A library grid is reached from that library's home, so back belongs there and not
     // out of the application. Top-level routes replace the stack, so there is nothing in
     // it to walk back through.
     val gridRoute = state.route as? Route.Library
-    BackHandler(
-        enabled = menuFor == null && state.stack.size == 1 &&
-            gridRoute != null && gridRoute.view == LibraryView.GRID,
-    ) {
-        gridRoute?.let { viewModel.navigate(Route.Library(it.kind, LibraryView.HOME)) }
+    var confirmExit by remember { mutableStateOf(false) }
+    val activity = LocalContext.current as? Activity
+
+    /*
+     * One handler, in order, rather than several fighting over which is enabled. The last
+     * step asks instead of leaving: closing the whole application on a single press of
+     * back, from a screen somebody only wandered into, is not something to do quietly.
+     */
+    BackHandler {
+        when {
+            confirmExit -> confirmExit = false
+            menuFor != null -> menuFor = null
+            state.stack.size > 1 -> viewModel.goBack()
+            gridRoute != null && gridRoute.view == LibraryView.GRID ->
+                viewModel.navigate(Route.Library(gridRoute.kind, LibraryView.HOME))
+
+            else -> confirmExit = true
+        }
     }
 
     // An audio player that outlives the screen is the bug this app has already shipped
@@ -190,7 +204,9 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
 
 
 
-    val topRoute = state.stack.first()
+    // Settings sits on top of wherever it was opened from, so it is the thing to
+    // highlight while it is showing rather than the tab underneath it.
+    val topRoute = if (state.route is Route.Settings) Route.Settings else state.stack.first()
     val selectedIndex = destinations.indexOfFirst { it.route.sameTabAs(topRoute) }
     // Where "up, out of the content" leads: the tab you are actually on.
     val currentTabFocus = tabFocus.getOrNull(selectedIndex) ?: settingsFocus
@@ -233,7 +249,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             },
     ) {
         TopBar(
-            current = state.stack.first(),
+            current = topRoute,
             // Arriving at a tab and choosing a tab are not the same act. The cursor
             // reaching Movies on its way up out of the content must not drop the menu,
             // which is what it was doing — and with the menu then taking focus back off
@@ -403,6 +419,14 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onInstallUpdate = viewModel::installUpdate,
             )
         }
+
+            if (confirmExit) {
+                ConfirmExit(
+                    onLeave = { activity?.finish() },
+                    onStay = { confirmExit = false },
+                    modifier = Modifier.align(Alignment.Center),
+                )
+            }
 
             if (menuFor != null) {
                 val kind = menuFor!!
@@ -634,6 +658,48 @@ private fun NavTab(
                 lineHeight = 21.sp,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             )
+        }
+    }
+}
+
+/** Asked before the application closes, which a single press of back should not do. */
+@Composable
+private fun ConfirmExit(
+    onLeave: () -> Unit,
+    onStay: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val stay = remember { FocusRequester() }
+    LaunchedEffect(Unit) { stay.requestWhenReady() }
+
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(Ink.copy(alpha = 0.97f))
+            .border(1.dp, Line, RoundedCornerShape(14.dp))
+            .padding(24.dp)
+            // Nothing leaves this while it is up. A question with two answers should not
+            // be escapable by pressing a direction key at the screen behind it.
+            .focusProperties { exit = { FocusRequester.Cancel } }
+            .focusGroup(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            text = "Close Reely?",
+            color = Parchment,
+            fontSize = 18.sp,
+            lineHeight = 23.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            TvActionButton(
+                label = "Stay",
+                onClick = onStay,
+                emphasised = true,
+                modifier = Modifier.focusRequester(stay),
+            )
+            TvActionButton(label = "Close", onClick = onLeave)
         }
     }
 }
