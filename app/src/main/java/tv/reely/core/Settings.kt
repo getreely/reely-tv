@@ -50,6 +50,14 @@ class Settings(context: Context) {
         set(value) = prefs.edit().putString(STREAM_FORMAT, value).apply()
 
     /**
+     * How several channels share the screen: "grid" gives them equal room, "focus" gives
+     * the one you are listening to most of it and lines the rest up beside it.
+     */
+    var multiviewLayout: String
+        get() = prefs.getString(MULTIVIEW_LAYOUT, LAYOUT_GRID) ?: LAYOUT_GRID
+        set(value) = prefs.edit().putString(MULTIVIEW_LAYOUT, value).apply()
+
+    /**
      * A show's theme tune under its page. Off unless asked for: something that makes
      * noise on its own should be chosen rather than discovered.
      */
@@ -94,10 +102,14 @@ class Settings(context: Context) {
         private const val UPDATE_URL = "update.url"
         private const val FAVOURITE_SECTIONS = "library.favourites"
         private const val STREAM_FORMAT = "live.format"
+        private const val MULTIVIEW_LAYOUT = "live.multiview.layout"
         private const val THEME_MUSIC = "theme.music"
         // Renamed when the default came down from a level that turned out to be four
         // times too loud, so an install that had already nudged it starts again.
         private const val THEME_VOLUME = "theme.volume.quiet"
+
+        const val LAYOUT_GRID = "grid"
+        const val LAYOUT_FOCUS = "focus"
 
         const val FORMAT_TS = "ts"
         const val FORMAT_HLS = "m3u8"

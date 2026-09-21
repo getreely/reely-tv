@@ -78,6 +78,8 @@ fun GuideOverlay(
     playingIndex: Int,
     /** Opened to put a channel beside the one playing rather than to change channel. */
     addMode: Boolean = false,
+    /** What choosing a channel will do, said plainly: "Add" or "Replace with". */
+    pickVerb: String = "Add",
     onSelect: (Int) -> Unit,
     onAddToMultiview: (XtreamChannel) -> Unit,
     canAddTile: Boolean,
@@ -235,7 +237,7 @@ fun GuideOverlay(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                text = if (addMode) "Add a channel — ${channel?.name.orEmpty()}"
+                text = if (addMode) "$pickVerb — ${channel?.name.orEmpty()}"
                 else channel?.name.orEmpty(),
                 color = Parchment,
                 fontSize = 17.sp,
@@ -246,7 +248,7 @@ fun GuideOverlay(
             )
             Text(
                 text = when {
-                    addMode -> "OK adds this channel beside what is playing"
+                    addMode -> "OK · ${pickVerb.lowercase()} this channel"
                     onNow != null -> "${onNow.title}  ·  ${guideTimeRange(onNow)}"
                     else -> "OK to watch · hold OK for more"
                 },
@@ -293,6 +295,7 @@ fun GuideOverlay(
             ChannelMenu(
                 channel = target,
                 canAddTile = canAddTile,
+                pickVerb = pickVerb,
                 focusRequester = menuFocus,
                 onWatch = {
                     menuFor = null
@@ -313,6 +316,7 @@ fun GuideOverlay(
 private fun ChannelMenu(
     channel: XtreamChannel,
     canAddTile: Boolean,
+    pickVerb: String,
     focusRequester: FocusRequester,
     onWatch: () -> Unit,
     onAdd: () -> Unit,
@@ -342,7 +346,11 @@ private fun ChannelMenu(
         )
         TvActionButton(label = "Watch this channel", onClick = onWatch, emphasised = true)
         if (canAddTile) {
-            TvActionButton(label = "Add beside what is playing", onClick = onAdd)
+            TvActionButton(
+                label = if (pickVerb == "Add") "Add beside what is playing"
+                else "Put this channel in that tile",
+                onClick = onAdd,
+            )
         } else {
             Text(
                 text = "Four channels is the most that fit.",

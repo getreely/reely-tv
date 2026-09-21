@@ -81,6 +81,7 @@ fun SettingsScreen(
     onToggleGuidePreview: () -> Unit,
     onCyclePlaybackMode: () -> Unit,
     onCycleMaxBitrate: () -> Unit,
+    onToggleMultiviewLayout: () -> Unit,
     onToggleThemeMusic: () -> Unit,
     onNudgeThemeVolume: (Float) -> Unit,
     onRefreshChannels: () -> Unit,
@@ -141,6 +142,7 @@ fun SettingsScreen(
                     live = live,
                     guide = guide,
                     prefs = prefs,
+                    onToggleMultiviewLayout = onToggleMultiviewLayout,
                     onRefreshChannels = onRefreshChannels,
                     onRefreshGuide = onRefreshGuide,
                     onToggleFormat = onToggleFormat,
@@ -260,6 +262,7 @@ private fun LiveSection(
     live: LiveState,
     guide: GuideState,
     prefs: PlayerPrefs,
+    onToggleMultiviewLayout: () -> Unit,
     onRefreshChannels: () -> Unit,
     onRefreshGuide: () -> Unit,
     onToggleFormat: () -> Unit,
@@ -325,14 +328,29 @@ private fun LiveSection(
             fontSize = 13.sp,
             lineHeight = 19.sp,
         )
+        FactLine(
+            "Multiview layout",
+            if (prefs.multiviewLayout == Settings.LAYOUT_FOCUS)
+                "Focus — the one you are hearing takes most of the screen"
+            else
+                "Grid — equal room for each",
+        )
         Text(
             text = "Multiview opens one connection per channel, so four tiles needs four of " +
                 "them — and this account allows " +
-                "${live.account?.maxConnections ?: "?"}.",
+                "${live.account?.maxConnections ?: "?"}. In the grid, OK fills the screen " +
+                "with a tile and back returns to it; holding OK swaps what is in it.",
             color = Muted,
             fontSize = 13.sp,
             lineHeight = 19.sp,
         )
+        Buttons {
+            TvActionButton(
+                label = if (prefs.multiviewLayout == Settings.LAYOUT_FOCUS) "Use grid"
+                else "Use focus layout",
+                onClick = onToggleMultiviewLayout,
+            )
+        }
         Buttons {
             TvActionButton(
                 label = "Use ${if (live.format == StreamFormat.TS) "HLS" else "MPEG-TS"}",

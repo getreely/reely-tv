@@ -289,6 +289,7 @@ data class PlayerPrefs(
     val guidePreview: Boolean = true,
     val playbackMode: String = Settings.MODE_AUTO,
     val maxBitrateKbps: Int = 0,
+    val multiviewLayout: String = Settings.LAYOUT_GRID,
     val themeMusic: Boolean = false,
     val themeVolume: Float = Settings.DEFAULT_THEME_VOLUME,
 )
@@ -355,6 +356,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 guidePreview = settings.guidePreview,
                 playbackMode = settings.playbackMode,
                 maxBitrateKbps = settings.maxBitrateKbps,
+                multiviewLayout = settings.multiviewLayout,
                 themeMusic = settings.themeMusic,
                 themeVolume = settings.themeVolume,
             )
@@ -1684,6 +1686,32 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clearMultiview() = _state.update { it.copy(multiview = emptyList()) }
+
+    fun toggleMultiviewLayout() {
+        val next = if (settings.multiviewLayout == Settings.LAYOUT_FOCUS) Settings.LAYOUT_GRID
+        else Settings.LAYOUT_FOCUS
+        settings.multiviewLayout = next
+        _state.update { it.copy(prefs = it.prefs.copy(multiviewLayout = next)) }
+    }
+
+    /**
+     * Puts a different channel in a tile that is already there. Slot zero is the channel
+     * the player itself is on, so replacing that one is simply changing channel.
+     */
+    fun replaceInMultiview(slot: Int, channel: XtreamChannel) {
+        if (slot == 0) {
+            val index = _state.value.live.channels.indexOfFirst { it.streamId == channel.streamId }
+            if (index >= 0) playChannel(index)
+            return
+        }
+        val index = slot - 1
+        _state.update { current ->
+            if (index !in current.multiview.indices) current
+            else current.copy(
+                multiview = current.multiview.toMutableList().apply { this[index] = channel }
+            )
+        }
+    }
 
     /** Going full screen on one tile: everything else goes away. */
     fun collapseToChannel(channel: XtreamChannel) {

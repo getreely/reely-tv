@@ -253,3 +253,34 @@ fun AddTile(focused: Boolean, modifier: Modifier = Modifier) {
         }
     }
 }
+
+/**
+ * The other way to share a screen: whichever channel you are listening to takes most of
+ * it, and the rest line up beside it. Better than an even grid when one game matters and
+ * the others are being kept an eye on.
+ *
+ * Moving the cursor moves which one is large, so the layout reorders as you go. That is
+ * the point of it rather than a side effect.
+ */
+@Composable
+fun FocusLayout(
+    slots: Int,
+    focused: Int,
+    modifier: Modifier = Modifier,
+    tile: @Composable (index: Int) -> Unit,
+) {
+    Row(
+        modifier = modifier.fillMaxSize(),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Box(modifier = Modifier.weight(0.7f).fillMaxHeight()) { tile(focused) }
+        Column(
+            modifier = Modifier.weight(0.3f).fillMaxHeight(),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            (0 until slots).filter { it != focused }.forEach { index ->
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) { tile(index) }
+            }
+        }
+    }
+}

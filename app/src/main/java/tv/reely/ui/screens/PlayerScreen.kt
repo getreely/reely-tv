@@ -123,6 +123,7 @@ fun PlayerScreen(
     onAddToMultiview: (XtreamChannel) -> Unit,
     onRemoveTile: (Int) -> Unit,
     onClearTiles: () -> Unit,
+    onReplaceTile: (Int, XtreamChannel) -> Unit,
     onCollapseToChannel: (XtreamChannel) -> Unit,
     onStepEpisode: (Int) -> Unit,
     onDecodeFailure: (Long) -> Unit,
@@ -187,15 +188,19 @@ fun PlayerScreen(
     // The guide, raised over a playing channel. Mutually exclusive with the controls.
     var guideOpen by remember { mutableStateOf(false) }
     var guideAdds by remember { mutableStateOf(false) }
+    // Which tile the guide is about to replace, if it was opened to do that.
+    var guideReplaces by remember { mutableStateOf<Int?>(null) }
+    var tileLongPress by remember { mutableStateOf(false) }
 
     // Tile 0 is the channel in `playback`, drawn by the player that is already running.
     // With nothing beside it this is all inert and the screen behaves exactly as before.
     val tiles = if (playback.isLive) multiview else emptyList()
     val tileCount = tiles.size + 1
+    val focusLayout = prefs.multiviewLayout == Settings.LAYOUT_FOCUS
     // A grid with room left over offers the spare cell as somewhere to put another
     // channel. Two side by side is a deliberate exception: filling half the screen with
     // an invitation is worse than not having one.
-    val hasSpare = tileCount == 3
+    val hasSpare = tileCount == 3 && !focusLayout
     val slotCount = tileCount + if (hasSpare) 1 else 0
     val addSlot = if (hasSpare) tileCount else -1
     var focusedTile by remember { mutableIntStateOf(0) }
@@ -267,6 +272,9 @@ fun PlayerScreen(
             when (event) {
                 Lifecycle.Event.ON_STOP -> {
                     exoPlayer.playWhenReady = false
+                    // The other tiles are players too, and a player nobody stopped keeps
+                    // playing over the launcher. Twice bitten.
+                    extraPlayers.values.forEach { it.playWhenReady = false }
                     if (!playback.isLive && playback.ratingKey != null) {
                         onReportProgress(exoPlayer.currentPosition.coerceAtLeast(0), false)
                     }
@@ -278,6 +286,13 @@ fun PlayerScreen(
                 Lifecycle.Event.ON_START -> if (playback.isLive && exoPlayer.mediaItemCount > 0) {
                     exoPlayer.prepare()
                     exoPlayer.playWhenReady = true
+                    // Each of these is as far behind live as the main one, for the same
+                    // reason, and rejoins the same way.
+                    extraPlayers.values.forEach {
+                        it.seekToDefaultPosition()
+                        it.prepare()
+                        it.playWhenReady = true
+                    }
                 }
 
                 else -> Unit
@@ -415,6 +430,14 @@ fun PlayerScreen(
             .focusRequester(rootFocus)
             .focusable()
             .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyUp) {
+                    val select = event.key == Key.DirectionCenter || event.key == Key.Enter
+                    if (select && tileLongPress) {
+                        tileLongPress = false
+                        return@onPreviewKeyEvent true
+                    }
+                    return@onPreviewKeyEvent false
+                }
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 // This is the first thing in the composition to see a key, so closing a
                 // panel here is the one way to be sure it takes a single press. Leaving
@@ -431,6 +454,7 @@ fun PlayerScreen(
                         guideOpen -> {
                             guideOpen = false
                             guideAdds = false
+                            guideReplaces = null
                             true
                         }
                         // Coming out of a zoomed tile returns to the grid it came from.
@@ -475,7 +499,14 @@ fun PlayerScreen(
                 // With a grid up, the direction keys walk it. Only a press that runs off
                 // the edge falls through to what that key means with one channel on
                 // screen, which is why a single tile behaves exactly as it always has.
-                if (slotCount > 1 && !controlsVisible) {
+                // Zoomed: the grid is not on screen to move around, and stepping channel
+                // would retune the main tile rather than the one being looked at.
+                if (slotCount > 1 && zoomed != null && !controlsVisible) {
+                    val directional = event.key == Key.DirectionUp || event.key == Key.DirectionDown ||
+                        event.key == Key.DirectionLeft || event.key == Key.DirectionRight
+                    if (directional) return@onPreviewKeyEvent true
+                }
+                if (slotCount > 1 && !controlsVisible && zoomed == null) {
                     val dx = when (event.key) {
                         Key.DirectionLeft -> -1
                         Key.DirectionRight -> 1
@@ -487,7 +518,14 @@ fun PlayerScreen(
                         else -> 0
                     }
                     if (dx != 0 || dy != 0) {
-                        val next = tileNeighbour(slotCount, focusedTile, dx, dy)
+                        // In the focus layout the tiles are a line rather than a grid,
+                        // because the one with the cursor on it is always the big one and
+                        // the rest shuffle up beside it.
+                        val next = if (focusLayout) {
+                            (focusedTile + dy + dx).takeIf { it in 0 until slotCount }
+                        } else {
+                            tileNeighbour(slotCount, focusedTile, dx, dy)
+                        }
                         if (next != null) {
                             interaction++
                             focusedTile = next
@@ -502,8 +540,14 @@ fun PlayerScreen(
                         return@onPreviewKeyEvent true
                     }
                 }
-                // OK on a tile gives that channel the whole screen; on the spare cell it
-                // asks which channel to put there.
+                /*
+                 * OK on a tile fills the screen with it; holding OK swaps what is in it.
+                 * The spare cell asks what to put there either way.
+                 *
+                 * Held presses fire on a key-down repeat while the finger is still on the
+                 * button, so the release has to be swallowed or it would act again on
+                 * whatever the guide has just focused.
+                 */
                 if (
                     slotCount > 1 && !controlsVisible &&
                     (event.key == Key.DirectionCenter || event.key == Key.Enter)
@@ -513,16 +557,25 @@ fun PlayerScreen(
                         guideOpen = live.channels.isNotEmpty()
                         return@onPreviewKeyEvent true
                     }
+                    if (event.nativeKeyEvent.repeatCount >= 1) {
+                        if (!tileLongPress) {
+                            tileLongPress = true
+                            guideReplaces = focusedTile
+                            guideAdds = true
+                            guideOpen = live.channels.isNotEmpty()
+                        }
+                        return@onPreviewKeyEvent true
+                    }
                     // Fills the screen with this one and leaves the rest running behind
-                    // it. Back returns to the grid.
-                    zoomed = focusedTile
+                    // it. Pressing it again, or back, returns to the grid.
+                    zoomed = if (zoomed == focusedTile) null else focusedTile
                     return@onPreviewKeyEvent true
                 }
                 // Steering live television is not an interaction. Counting it raised the
                 // controls on every channel change, and with them up the next press of
                 // left or right went to the transport instead of the next channel — so
                 // changing channel twice in a row was impossible.
-                if (playback.isLive && !controlsVisible) {
+                if (playback.isLive && !controlsVisible && slotCount == 1) {
                     when (event.key) {
                         Key.DirectionLeft -> {
                             onStepChannel(-1)
@@ -613,6 +666,12 @@ fun PlayerScreen(
             mainSurface()
         } else if (zoomed != null) {
             Box(modifier = Modifier.fillMaxSize()) { tileAt(zoomed!!) }
+        } else if (focusLayout) {
+            FocusLayout(
+                slots = slotCount,
+                focused = focusedTile,
+                modifier = Modifier.fillMaxSize(),
+            ) { tileAt(it) }
         } else {
             MultiViewGrid(slots = slotCount, modifier = Modifier.fillMaxSize()) { tileAt(it) }
         }
@@ -625,6 +684,7 @@ fun PlayerScreen(
                 windowEnd = guide.windowEnd,
                 playingIndex = playback.channelIndex,
                 addMode = guideAdds,
+                pickVerb = if (guideReplaces != null) "Replace with" else "Add",
                 onSelect = { index ->
                     guideOpen = false
                     guideAdds = false
@@ -634,7 +694,9 @@ fun PlayerScreen(
                 onAddToMultiview = { channel ->
                     guideOpen = false
                     guideAdds = false
-                    onAddToMultiview(channel)
+                    val slot = guideReplaces
+                    guideReplaces = null
+                    if (slot != null) onReplaceTile(slot, channel) else onAddToMultiview(channel)
                 },
                 canAddTile = tileCount < 4,
                 onDismiss = { guideOpen = false },
