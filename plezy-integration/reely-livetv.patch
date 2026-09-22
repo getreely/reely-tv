@@ -1,5 +1,5 @@
 diff --git a/android/app/build.gradle.kts b/android/app/build.gradle.kts
-index 6d4f942..d9d3d82 100644
+index 6d4f942..37dad79 100644
 --- a/android/app/build.gradle.kts
 +++ b/android/app/build.gradle.kts
 @@ -6,6 +6,8 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -21,7 +21,7 @@ index 6d4f942..d9d3d82 100644
    buildToolsVersion = "36.1.0"
    ndkVersion = "29.0.14206865"
  
-@@ -239,17 +242,23 @@ android {
+@@ -239,17 +242,30 @@ android {
    // by FEATURE_AUTOMOTIVE and the manifest declares `uses-library android.car required=false`.
    useLibrary("android.car")
  
@@ -37,6 +37,13 @@ index 6d4f942..d9d3d82 100644
    defaultConfig {
 -    applicationId = "com.edde746.plezy"
 +    applicationId = "tv.reely"
++
++    // Reely: the only shapes a television is. Without this the prebuilt mpv libraries
++    // still ship an x86_64 slice with no Flutter engine behind it, and Android will
++    // happily select an ABI it cannot start the app on.
++    ndk {
++      abiFilters += listOf("armeabi-v7a", "arm64-v8a")
++    }
      minSdk = 25 // Fire OS 6.x (API 25); :libmpv shares the same floor
      targetSdk = flutter.targetSdkVersion
 -    versionCode = flutter.versionCode
@@ -48,7 +55,7 @@ index 6d4f942..d9d3d82 100644
      testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
  
      externalNativeBuild {
-@@ -423,6 +432,20 @@ tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders"
+@@ -423,6 +439,20 @@ tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders"
  }
  
  dependencies {

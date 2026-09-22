@@ -81,7 +81,11 @@ jobs:
         working-directory: work
         run: |
           flutter pub get
-          flutter build apk --release --target-platform android-arm64
+          # Both ARM variants. Restricting this to arm64 is what made 0.26.0 install and
+          # then die on launch: the prebuilt mpv libraries ship for every ABI, so Android
+          # saw armeabi-v7a support and chose it, and there was no Flutter engine there.
+          # Most Fire TV sticks run a 32-bit userspace, so that is nearly all of them.
+          flutter build apk --release --target-platform android-arm,android-arm64
 
       # The asset names are what the app's update check asks for: it derives the
       # manifest's address from the APK's by swapping the extension.
@@ -106,6 +110,32 @@ jobs:
           }, open("out/reely-tv.json", "w"), indent=2)
           PY
           cat out/reely-tv.json
+
+      # The failure above was invisible to a signature check and to badging, which only
+      # lists the ABIs present. What matters is that every ABI carrying native code also
+      # carries the engine that loads it.
+      - name: Check every ABI can actually start
+        run: |
+          python3 - <<'PY'
+          import zipfile, sys, collections
+          names = zipfile.ZipFile("out/reely-tv.apk").namelist()
+          abis = collections.defaultdict(set)
+          for n in names:
+              parts = n.split("/")
+              if len(parts) == 3 and parts[0] == "lib":
+                  abis[parts[1]].add(parts[2])
+          if not abis:
+              sys.exit("No native libraries at all.")
+          bad = []
+          for abi, libs in sorted(abis.items()):
+              missing = {"libflutter.so", "libapp.so"} - libs
+              print(f"{abi}: {len(libs)} libraries" + (f" MISSING {sorted(missing)}" if missing else " ok"))
+              if missing:
+                  bad.append(abi)
+          if bad:
+              sys.exit(f"::error::{bad} carry native code but no Flutter engine. "
+                       "Android may select one of these and the app will die on launch.")
+          PY
 
       - name: Check it is signed with our key
         run: |
