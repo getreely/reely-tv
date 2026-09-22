@@ -1,0 +1,133 @@
+name: Release Live TV APK
+
+# 0.26.0 onwards: Plezy's Plex client with this project's live television grafted on.
+# The fork is not vendored here — the repository carries a patch and the commit it
+# applies to, and this rebuilds from those. That keeps the diff reviewable and is what
+# makes the GPL obligation easy to meet: upstream plus the patch is the whole source.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Flutter, the NDK and mpv together do not fit beside everything the runner image
+      # ships with. None of what goes here is used by this build.
+      - name: Make room
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk \
+                      /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          df -h /
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      # The libmpv module pins this exact version, and the runner image does not carry it.
+      - name: Install the CMake libmpv wants
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            --install "cmake;4.1.2" "platforms;android-37" > /dev/null || \
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            --install "cmake;4.1.2" <<< "y" > /dev/null
+
+      - name: Fetch upstream and apply the patch
+        run: |
+          UPSTREAM=$(cat plezy-integration/UPSTREAM_COMMIT)
+          echo "Building against edde746/plezy @ $UPSTREAM"
+          git clone --filter=blob:none https://github.com/edde746/plezy.git work
+          git -C work checkout "$UPSTREAM"
+          git -C work apply --verbose "$GITHUB_WORKSPACE/plezy-integration/reely-livetv.patch"
+
+      # Without this the build falls back to a debug key, which Android will not accept
+      # as an update over anything signed with ours.
+      - name: Restore the signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::No RELEASE_KEYSTORE_BASE64. A debug-signed build cannot update an install."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          cat > work/android/key.properties <<EOF
+          storePassword=$STORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=$RUNNER_TEMP/release.jks
+          EOF
+
+      - name: Build
+        working-directory: work
+        run: |
+          flutter pub get
+          flutter build apk --release --target-platform android-arm64
+
+      # The asset names are what the app's update check asks for: it derives the
+      # manifest's address from the APK's by swapping the extension.
+      - name: Collect and describe
+        id: collect
+        run: |
+          mkdir -p out
+          cp work/build/app/outputs/flutter-apk/app-release.apk out/reely-tv.apk
+          VERSION=$(grep -o 'versionName = "[^"]*"' work/android/app/build.gradle.kts | head -1 | cut -d'"' -f2)
+          CODE=$(grep -o 'versionCode = [0-9]*' work/android/app/build.gradle.kts | head -1 | awk '{print $3}')
+          SIZE=$(stat -c%s out/reely-tv.apk)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          python3 - "$CODE" "$VERSION" "$SIZE" <<'PY'
+          import json, sys, datetime
+          code, name, size = sys.argv[1], sys.argv[2], sys.argv[3]
+          json.dump({
+            "versionCode": int(code),
+            "versionName": name,
+            "sizeBytes": int(size),
+            "published": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "notes": "Plex by Plezy, live television by Reely. One app, two halves.",
+          }, open("out/reely-tv.json", "w"), indent=2)
+          PY
+          cat out/reely-tv.json
+
+      - name: Check it is signed with our key
+        run: |
+          SIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)
+          "$SIGNER" verify --print-certs out/reely-tv.apk | head -2
+          "$SIGNER" verify --print-certs out/reely-tv.apk | grep -q "CN=Reely TV" \
+            || { echo "::error::Not signed with the release key."; exit 1; }
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.collect.outputs.version }}
+        run: |
+          UPSTREAM=$(cat plezy-integration/UPSTREAM_COMMIT)
+          cat > notes.md <<EOF
+          Plex by [Plezy](https://github.com/edde746/plezy), live television by Reely.
+
+          Built from edde746/plezy @ \`$UPSTREAM\` with \`plezy-integration/reely-livetv.patch\`
+          applied. Plezy is GPL-3.0; that commit plus the patch in this repository is the
+          complete corresponding source.
+
+          Two entries appear on the television's home screen: the library, and live TV.
+          EOF
+          gh release delete "v$VERSION" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "v$VERSION" \
+            --target "$GITHUB_SHA" \
+            --title "Reely TV $VERSION" \
+            --notes-file notes.md \
+            out/reely-tv.apk out/reely-tv.json
