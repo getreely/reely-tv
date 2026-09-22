@@ -81,24 +81,38 @@ jobs:
         working-directory: work
         run: |
           flutter pub get
-          # Both ARM variants. Restricting this to arm64 is what made 0.26.0 install and
-          # then die on launch: the prebuilt mpv libraries ship for every ABI, so Android
-          # saw armeabi-v7a support and chose it, and there was no Flutter engine there.
-          # Most Fire TV sticks run a 32-bit userspace, so that is nearly all of them.
-          flutter build apk --release --target-platform android-arm,android-arm64
+          # One APK per ABI, which is how Plezy builds for the Amazon store. It makes the
+          # fault that broke 0.26.0 impossible rather than something to detect afterwards:
+          # each archive holds one ABI and the engine that matches it, so there is no slice
+          # for Android to select and then fail to start.
+          flutter build apk --release --split-per-abi
 
       # The asset names are what the app's update check asks for: it derives the
       # manifest's address from the APK's by swapping the extension.
+      #
+      # armeabi-v7a is the one the update check points at. Every Fire TV runs 32-bit ARM,
+      # including the 64-bit ones, so it is the build that cannot pick the wrong device.
+      # arm64 rides along for anything that would rather have it.
       - name: Collect and describe
         id: collect
         run: |
           mkdir -p out
-          cp work/build/app/outputs/flutter-apk/app-release.apk out/reely-tv.apk
-          VERSION=$(grep -o 'versionName = "[^"]*"' work/android/app/build.gradle.kts | head -1 | cut -d'"' -f2)
-          CODE=$(grep -o 'versionCode = [0-9]*' work/android/app/build.gradle.kts | head -1 | awk '{print $3}')
-          SIZE=$(stat -c%s out/reely-tv.apk)
+          APKS=work/build/app/outputs/flutter-apk
+          cp "$APKS/app-armeabi-v7a-release.apk" out/reely-tv.apk
+          cp "$APKS/app-arm64-v8a-release.apk" out/reely-tv-arm64.apk
+
+          # Read the version out of the APK rather than the build file. --split-per-abi
+          # rewrites versionCode per ABI, and upstream's AMAZON switch adds 3000 to it, so
+          # the number in the source is not the number that ships — and the update check
+          # compares what the manifest claims against what is installed.
+          AAPT=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | tail -1)
+          BADGING=$("$AAPT" dump badging out/reely-tv.apk | head -1)
+          CODE=$(sed -n "s/.*versionCode='\\([0-9]*\\)'.*/\\1/p" <<< "$BADGING")
+          VERSION=$(sed -n "s/.*versionName='\\([^']*\\)'.*/\\1/p" <<< "$BADGING")
+          echo "Publishing $VERSION (versionCode $CODE)"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          python3 - "$CODE" "$VERSION" "$SIZE" <<'PY'
+
+          python3 - "$CODE" "$VERSION" "$(stat -c%s out/reely-tv.apk)" <<'PY'
           import json, sys, datetime
           code, name, size = sys.argv[1], sys.argv[2], sys.argv[3]
           json.dump({
@@ -111,67 +125,44 @@ jobs:
           PY
           cat out/reely-tv.json
 
-      # The failure above was invisible to a signature check and to badging, which only
-      # lists the ABIs present. What matters is that every ABI carrying native code also
-      # carries the engine that loads it.
-      # Nothing inside Gradle removes this. abiFilters does not reach the libraries the
-      # :libmpv module contributes, whether set directly or through upstream's AMAZON
-      # switch, and a packaging exclude leaves libc++_shared.so behind — one stray
-      # library being enough for Android to choose an ABI it cannot start on. Taking it
-      # out of the finished archive is the only method that was actually observed to
-      # work, so the APK is re-signed afterwards.
-      - name: Drop the ABI with no engine behind it
-        env:
-          STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: |
-          SIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)
-          ALIGN=$(ls "$ANDROID_HOME"/build-tools/*/zipalign | tail -1)
-          zip -q -d out/reely-tv.apk "lib/x86_64/*"
-          "$ALIGN" -p -f 4 out/reely-tv.apk out/aligned.apk
-          "$SIGNER" sign --ks "$RUNNER_TEMP/release.jks" \
-            --ks-pass "pass:$STORE_PASSWORD" --key-pass "pass:$KEY_PASSWORD" \
-            --ks-key-alias "$KEY_ALIAS" --out out/reely-tv.apk out/aligned.apk
-          rm -f out/aligned.apk out/reely-tv.apk.idsig
-          # The manifest quotes the size, and it has just changed.
-          python3 - <<'PY'
-          import json, os
-          m = json.load(open("out/reely-tv.json"))
-          m["sizeBytes"] = os.path.getsize("out/reely-tv.apk")
-          json.dump(m, open("out/reely-tv.json", "w"), indent=2)
-          print(m)
-          PY
-
+      # A signature check and a badging dump both passed on the build that would not
+      # start: badging lists which ABIs are present and says nothing about what is in
+      # them. This checks the property that actually decides whether the app runs.
       - name: Check every ABI can actually start
         run: |
           python3 - <<'PY'
-          import zipfile, sys, collections
-          names = zipfile.ZipFile("out/reely-tv.apk").namelist()
-          abis = collections.defaultdict(set)
-          for n in names:
-              parts = n.split("/")
-              if len(parts) == 3 and parts[0] == "lib":
-                  abis[parts[1]].add(parts[2])
-          if not abis:
-              sys.exit("No native libraries at all.")
-          bad = []
-          for abi, libs in sorted(abis.items()):
-              missing = {"libflutter.so", "libapp.so"} - libs
-              print(f"{abi}: {len(libs)} libraries" + (f" MISSING {sorted(missing)}" if missing else " ok"))
-              if missing:
-                  bad.append(abi)
-          if bad:
-              sys.exit(f"::error::{bad} carry native code but no Flutter engine. "
-                       "Android may select one of these and the app will die on launch.")
+          import zipfile, sys, collections, glob
+          failed = []
+          for apk in sorted(glob.glob("out/*.apk")):
+              abis = collections.defaultdict(set)
+              for n in zipfile.ZipFile(apk).namelist():
+                  parts = n.split("/")
+                  if len(parts) == 3 and parts[0] == "lib":
+                      abis[parts[1]].add(parts[2])
+              if not abis:
+                  failed.append(f"{apk}: no native libraries at all")
+                  continue
+              for abi, libs in sorted(abis.items()):
+                  missing = {"libflutter.so", "libapp.so"} - libs
+                  state = f"MISSING {sorted(missing)}" if missing else "ok"
+                  print(f"{apk}  {abi}: {len(libs)} libraries {state}")
+                  if missing:
+                      failed.append(f"{apk} [{abi}]")
+          if failed:
+              sys.exit("::error::" + "; ".join(failed) +
+                       " — native code with no Flutter engine behind it. Android may "
+                       "select one of these and the app will die on launch.")
           PY
 
-      - name: Check it is signed with our key
+      - name: Check both are signed with our key
         run: |
           SIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)
-          "$SIGNER" verify --print-certs out/reely-tv.apk | head -2
-          "$SIGNER" verify --print-certs out/reely-tv.apk | grep -q "CN=Reely TV" \
-            || { echo "::error::Not signed with the release key."; exit 1; }
+          for apk in out/*.apk; do
+            echo "--- $apk"
+            "$SIGNER" verify --print-certs "$apk" | head -2
+            "$SIGNER" verify --print-certs "$apk" | grep -q "CN=Reely TV" \
+              || { echo "::error::$apk is not signed with the release key."; exit 1; }
+          done
 
       - name: Publish
         env:
@@ -193,4 +184,4 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "Reely TV $VERSION" \
             --notes-file notes.md \
-            out/reely-tv.apk out/reely-tv.json
+            out/reely-tv.apk out/reely-tv-arm64.apk out/reely-tv.json

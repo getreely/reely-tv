@@ -1,5 +1,5 @@
 diff --git a/android/app/build.gradle.kts b/android/app/build.gradle.kts
-index 6d4f942..2ca799a 100644
+index 6d4f942..d68dbbd 100644
 --- a/android/app/build.gradle.kts
 +++ b/android/app/build.gradle.kts
 @@ -6,6 +6,8 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -45,8 +45,8 @@ index 6d4f942..2ca799a 100644
 -    versionName = flutter.versionName
 +    // Reely: this app's own numbering, which has to keep climbing past 0.25.0 (50) for
 +    // the update check to offer it over what is installed.
-+    versionCode = 51
-+    versionName = "0.26.0"
++    versionCode = 52
++    versionName = "0.27.0"
      testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
  
      externalNativeBuild {
