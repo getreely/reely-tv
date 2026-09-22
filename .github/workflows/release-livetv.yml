@@ -25,11 +25,15 @@ jobs:
                       /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
           df -h /
 
-      - name: Set up JDK 17
+      # 21, not 17. AGP 9's lint runs as part of assembleRelease and calls
+      # List.removeLast(), which arrived with Java 21's sequenced collections — on 17 it
+      # dies inside CommentDetector with a NoSuchMethodError that looks like a lint bug
+      # and is really a toolchain mismatch. The build still targets 17.
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
 
       - uses: subosito/flutter-action@v2
         with:
