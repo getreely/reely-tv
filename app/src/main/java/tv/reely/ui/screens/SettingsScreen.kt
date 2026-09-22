@@ -83,6 +83,7 @@ fun SettingsScreen(
     onCycleMaxBitrate: () -> Unit,
     onToggleMultiviewLayout: () -> Unit,
     onToggleThemeMusic: () -> Unit,
+    onToggleMatchFrameRate: () -> Unit,
     onNudgeThemeVolume: (Float) -> Unit,
     onRefreshChannels: () -> Unit,
     onRefreshGuide: () -> Unit,
@@ -135,6 +136,7 @@ fun SettingsScreen(
                     onCyclePlaybackMode = onCyclePlaybackMode,
                     onCycleMaxBitrate = onCycleMaxBitrate,
                     onToggleThemeMusic = onToggleThemeMusic,
+                    onToggleMatchFrameRate = onToggleMatchFrameRate,
                     onNudgeThemeVolume = onNudgeThemeVolume,
                 )
 
@@ -179,6 +181,7 @@ private fun VideoSection(
     onCyclePlaybackMode: () -> Unit,
     onCycleMaxBitrate: () -> Unit,
     onToggleThemeMusic: () -> Unit,
+    onToggleMatchFrameRate: () -> Unit,
     onNudgeThemeVolume: (Float) -> Unit,
 ) {
     Panel(title = "Playback") {
@@ -212,6 +215,28 @@ private fun VideoSection(
             TvActionButton(
                 label = if (prefs.subtitleBackground) "Background off" else "Background on",
                 onClick = onToggleSubtitleBackground,
+            )
+        }
+    }
+
+    Panel(title = "Refresh rate") {
+        FactLine("Match the screen to the film", if (prefs.matchFrameRate) "On" else "Off")
+        Text(
+            text = "Film runs at just under twenty-four frames a second and a television " +
+                "sits at sixty, which does not divide — so some frames are held longer " +
+                "than others and slow camera moves stutter. This asks the screen to " +
+                "change rate to suit what is playing, and puts it back afterwards. Turn " +
+                "it off if your television blanks for a second or two while it changes. " +
+                "Live channels are left alone either way.",
+            color = Muted,
+            fontSize = 13.sp,
+            lineHeight = 19.sp,
+        )
+        Buttons {
+            TvActionButton(
+                label = if (prefs.matchFrameRate) "Turn off" else "Turn on",
+                onClick = onToggleMatchFrameRate,
+                emphasised = prefs.matchFrameRate,
             )
         }
     }

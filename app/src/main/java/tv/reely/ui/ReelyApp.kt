@@ -409,6 +409,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onToggleGuidePreview = viewModel::toggleGuidePreview,
                 onToggleMultiviewLayout = viewModel::toggleMultiviewLayout,
                 onToggleThemeMusic = viewModel::toggleThemeMusic,
+                onToggleMatchFrameRate = viewModel::toggleMatchFrameRate,
                 onNudgeThemeVolume = viewModel::nudgeThemeVolume,
                 onCyclePlaybackMode = viewModel::cyclePlaybackMode,
                 onCycleMaxBitrate = viewModel::cycleMaxBitrate,

@@ -58,6 +58,16 @@ class Settings(context: Context) {
         set(value) = prefs.edit().putString(MULTIVIEW_LAYOUT, value).apply()
 
     /**
+     * Whether to ask the screen to change refresh rate to suit what is playing.
+     *
+     * On by default because the judder it removes is on every film. A television that
+     * blanks for a second or two while it changes mode is the reason to turn it off.
+     */
+    var matchFrameRate: Boolean
+        get() = prefs.getBoolean(MATCH_FRAME_RATE, true)
+        set(value) = prefs.edit().putBoolean(MATCH_FRAME_RATE, value).apply()
+
+    /**
      * A show's theme tune under its page. Off unless asked for: something that makes
      * noise on its own should be chosen rather than discovered.
      */
@@ -98,6 +108,7 @@ class Settings(context: Context) {
         private const val UP_NEXT_SECONDS = "upnext.seconds"
         private const val GUIDE_PREVIEW = "guide.preview"
         private const val PLAYBACK_MODE = "playback.mode"
+        private const val MATCH_FRAME_RATE = "playback.matchFrameRate"
         private const val MAX_BITRATE = "playback.maxBitrate"
         private const val UPDATE_URL = "update.url"
         private const val FAVOURITE_SECTIONS = "library.favourites"

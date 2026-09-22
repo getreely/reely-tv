@@ -292,6 +292,7 @@ data class PlayerPrefs(
     val multiviewLayout: String = Settings.LAYOUT_GRID,
     val themeMusic: Boolean = false,
     val themeVolume: Float = Settings.DEFAULT_THEME_VOLUME,
+    val matchFrameRate: Boolean = true,
 )
 
 /** Where a check for a newer build has got to. */
@@ -359,6 +360,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 multiviewLayout = settings.multiviewLayout,
                 themeMusic = settings.themeMusic,
                 themeVolume = settings.themeVolume,
+                matchFrameRate = settings.matchFrameRate,
             )
         )
     )
@@ -1964,6 +1966,12 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         settings.themeMusic = next
         _state.update { it.copy(prefs = it.prefs.copy(themeMusic = next)) }
         if (!next) themePlayer.silence() else startTheme()
+    }
+
+    fun toggleMatchFrameRate() {
+        val next = !settings.matchFrameRate
+        settings.matchFrameRate = next
+        _state.update { it.copy(prefs = it.prefs.copy(matchFrameRate = next)) }
     }
 
     fun nudgeThemeVolume(delta: Float) {

@@ -1,6 +1,7 @@
 package tv.reely.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
@@ -74,6 +75,7 @@ import tv.reely.ui.GuideState
 import tv.reely.ui.LiveState
 import tv.reely.ui.PlayerPrefs
 import tv.reely.ui.Playback
+import tv.reely.ui.components.MatchFrameRate
 import tv.reely.ui.components.PauseGlyph
 import tv.reely.ui.components.PlayGlyph
 import tv.reely.ui.components.PlusGlyph
@@ -407,6 +409,15 @@ fun PlayerScreen(
         delay(CONTROLS_TIMEOUT_MS)
         controlsVisible = false
     }
+
+    // The screen's refresh rate, matched to what is playing. Live television is left
+    // alone: a channel is fifty or sixty already, and a mode change mid-surf would blank
+    // the picture on every press of left or right.
+    MatchFrameRate(
+        player = exoPlayer,
+        activity = LocalActivity.current,
+        enabled = prefs.matchFrameRate && !playback.isLive,
+    )
 
     val playFocus = remember { FocusRequester() }
     val scrubberFocus = remember { FocusRequester() }
