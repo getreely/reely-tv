@@ -34,6 +34,18 @@ import tv.reely.ui.components.rememberRowFocus
 import tv.reely.ui.components.rowItem
 import tv.reely.ui.components.restoreFocusTo
 import tv.reely.ui.theme.Parchment
+import androidx.compose.foundation.background
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.focus.FocusRequester
+import tv.reely.ui.components.CardAction
+import tv.reely.ui.components.CardMenu
+import tv.reely.ui.components.requestWhenReady
+import tv.reely.ui.theme.Ink
 
 private val HERO_HEIGHT = 168.dp
 
@@ -46,6 +58,8 @@ fun HomeScreen(
     backdropUrl: (String?, String?) -> String?,
     onFocusItem: (PlexItem?) -> Unit,
     onOpenItem: (PlexItem) -> Unit,
+    onPlayItem: (PlexItem, Boolean) -> Unit,
+    onToggleWatched: (PlexItem) -> Unit,
     onStartLink: () -> Unit,
     onCancelLink: () -> Unit,
     onDismissPlexError: () -> Unit,
@@ -67,6 +81,10 @@ fun HomeScreen(
     val resumeFocus = rememberRowFocus()
     val episodeFocus = rememberRowFocus()
     val movieFocus = rememberRowFocus()
+
+    var menuFor by remember { mutableStateOf<PlexItem?>(null) }
+    val menuFocus = remember { FocusRequester() }
+    LaunchedEffect(menuFor) { if (menuFor != null) menuFocus.requestWhenReady() }
 
     Box(modifier = modifier.fillMaxSize()) {
         HeroBackdrop(
@@ -130,6 +148,7 @@ fun HomeScreen(
                                         onFocusItem(item)
                                     },
                                     onClick = { onOpenItem(item) },
+                                    onLongPress = { menuFor = item },
                                     modifier = rowItem(resumeFocus, item.listKey),
                                 )
                             }
@@ -162,6 +181,7 @@ fun HomeScreen(
                                         onFocusItem(movie)
                                     },
                                     onClick = { onOpenItem(movie) },
+                                    onLongPress = { menuFor = movie },
                                     modifier = rowItem(movieFocus, movie.listKey),
                                 )
                             }
@@ -180,6 +200,43 @@ fun HomeScreen(
                 }
             }
         }
+
+        // Drawn last so it sits over the rows. A row clips its children, so a menu
+        // raised inside one would appear cut in half.
+        menuFor?.let { item ->
+            Box(
+                modifier = Modifier.fillMaxSize().background(Ink.copy(alpha = 0.55f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                CardMenu(
+                    title = item.rowTitle,
+                    subtitle = episodeLine(item) ?: item.caption,
+                    focusRequester = menuFocus,
+                    actions = buildList {
+                        val resumable = (item.resumeFraction ?: 0f) > 0f
+                        add(
+                            CardAction(
+                                label = if (resumable) "Resume" else "Play",
+                                emphasised = true,
+                            ) { menuFor = null; onPlayItem(item, true) },
+                        )
+                        if (resumable) {
+                            add(CardAction("Play from the beginning") {
+                                menuFor = null; onPlayItem(item, false)
+                            })
+                        }
+                        add(
+                            CardAction(
+                                if (item.isWatched) "Mark unwatched" else "Mark watched",
+                            ) { menuFor = null; onToggleWatched(item) },
+                        )
+                        add(CardAction("Details") { menuFor = null; onOpenItem(item) })
+                    },
+                    onCancel = { menuFor = null },
+                )
+            }
+        }
+
     }
 }
 

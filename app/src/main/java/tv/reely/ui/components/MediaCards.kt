@@ -28,6 +28,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -62,6 +63,22 @@ fun ProgressStrip(fraction: Float, modifier: Modifier = Modifier) {
 }
 
 /**
+ * OK on a card, and OK held on a card.
+ *
+ * Consuming the key here is what stops `clickable` also firing: Compose acts on key-up,
+ * and a hold's release would otherwise press whatever the menu it opened had focused.
+ * A card with no menu keeps the plain clickable and behaves exactly as it always has.
+ */
+@Composable
+private fun Modifier.cardPress(onClick: () -> Unit, onLongPress: (() -> Unit)?): Modifier {
+    if (onLongPress == null) return this.clickable(onClick = onClick)
+    val press = rememberSelectPress()
+    return this
+        .onPreviewKeyEvent { event -> press.handle(event, onPress = onClick, onHold = onLongPress) }
+        .clickable(onClick = onClick)
+}
+
+/**
  * The landscape card used for Continue Watching, where knowing which episode you are on
  * matters more than the poster art.
  */
@@ -72,6 +89,7 @@ fun WideCard(
     imageUrl: String?,
     progress: Float?,
     onClick: () -> Unit,
+    onLongPress: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -82,7 +100,7 @@ fun WideCard(
             .width(268.dp)
             .scale(scale)
             .onFocusChanged { focused = it.isFocused }
-            .clickable(onClick = onClick)
+            .cardPress(onClick, onLongPress)
             .padding(4.dp),
     ) {
         Box(
@@ -141,6 +159,7 @@ fun PosterCard(
     subtitle: String?,
     imageUrl: String?,
     onClick: () -> Unit,
+    onLongPress: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     badge: Int? = null,
     progress: Float? = null,
@@ -159,7 +178,7 @@ fun PosterCard(
                 focused = it.isFocused
                 if (it.isFocused) onFocus()
             }
-            .clickable(onClick = onClick)
+            .cardPress(onClick, onLongPress)
             .padding(4.dp),
     ) {
         Box(
@@ -326,6 +345,7 @@ fun EpisodeRow(
     imageUrl: String?,
     progress: Float?,
     onClick: () -> Unit,
+    onLongPress: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -340,7 +360,7 @@ fun EpisodeRow(
                 color = if (focused) Accent else Color.Transparent,
                 shape = RoundedCornerShape(10.dp),
             )
-            .clickable(onClick = onClick)
+            .cardPress(onClick, onLongPress)
             .padding(12.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -411,6 +431,7 @@ fun EpisodeTile(
     watched: Boolean,
     onFocus: () -> Unit,
     onClick: () -> Unit,
+    onLongPress: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     /**
      * This is the episode the page's buttons act on. It keeps a marker even when focus
@@ -431,7 +452,7 @@ fun EpisodeTile(
                 focused = it.isFocused
                 if (it.isFocused) onFocus()
             }
-            .clickable(onClick = onClick)
+            .cardPress(onClick, onLongPress)
             .padding(4.dp),
     ) {
         Box(

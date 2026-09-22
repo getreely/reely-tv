@@ -311,6 +311,8 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 backdropUrl = viewModel::plexBackdropUrl,
                 onFocusItem = viewModel::focusItem,
                 onOpenItem = { viewModel.navigate(detailRouteFor(it)) },
+                onPlayItem = { item, resume -> viewModel.play(item, resume = resume) },
+                onToggleWatched = viewModel::toggleWatched,
                 onStartLink = viewModel::startPlexLink,
                 onCancelLink = viewModel::cancelPlexLink,
                 onDismissPlexError = viewModel::dismissPlexError,
