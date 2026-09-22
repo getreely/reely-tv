@@ -46,6 +46,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import tv.reely.ui.components.GuideNowLine
 import tv.reely.ui.components.GuideRow
+import tv.reely.ui.components.isSelect
+import tv.reely.ui.components.rememberSelectPress
 import tv.reely.ui.components.GuideRuler
 import tv.reely.ui.components.guideTimeRange
 import tv.reely.ui.components.TvActionButton
@@ -123,7 +125,7 @@ fun GuideOverlay(
     // A held OK opens this instead of switching channel, which is the only way to reach
     // multiview without giving the grid a second set of buttons.
     var menuFor by remember { mutableStateOf<XtreamChannel?>(null) }
-    var longPressFired by remember { mutableStateOf(false) }
+    val press = rememberSelectPress()
     val menuFocus = remember { FocusRequester() }
 
     // Focus follows the menu both ways. The grid stops being focusable while the menu is
@@ -151,9 +153,10 @@ fun GuideOverlay(
                      * go pressed whatever button the menu had just focused. The remainder
                      * of that press is swallowed here.
                      */
-                    val selectKey = event.key == Key.DirectionCenter || event.key == Key.Enter
-                    if (longPressFired && selectKey) {
-                        if (event.type == KeyEventType.KeyUp) longPressFired = false
+                    if (event.isSelect()) {
+                        // The rest of the press that opened it. The menu has taken focus
+                        // by now, so letting go would press whatever it focused.
+                        press.handle(event, onPress = {}, onHold = {})
                         return@onPreviewKeyEvent true
                     }
                     if (event.key == Key.Back && event.type == KeyEventType.KeyDown) {
@@ -163,34 +166,17 @@ fun GuideOverlay(
                     return@onPreviewKeyEvent false
                 }
 
-                val selectKey = event.key == Key.DirectionCenter || event.key == Key.Enter
-                if (selectKey) {
-                    // Android repeats a held key once the long-press timeout elapses, so
-                    // the first repeat is the signal. The short press then has to wait for
-                    // the key to come up, or holding it would switch channel on the way
-                    // down and open the menu immediately afterwards.
-                    return@onPreviewKeyEvent when {
-                        event.type == KeyEventType.KeyDown &&
-                            event.nativeKeyEvent.repeatCount >= 1 -> {
-                            if (!longPressFired) {
-                                longPressFired = true
-                                menuFor = channels.getOrNull(cursor)
-                            }
-                            true
-                        }
-
-                        event.type == KeyEventType.KeyUp -> {
-                            if (!longPressFired) {
-                                val channel = channels.getOrNull(cursor)
-                                if (addMode && channel != null) onAddToMultiview(channel)
-                                else onSelect(cursor)
-                            }
-                            longPressFired = false
-                            true
-                        }
-
-                        else -> true
-                    }
+                if (event.isSelect()) {
+                    press.handle(
+                        event,
+                        onPress = {
+                            val channel = channels.getOrNull(cursor)
+                            if (addMode && channel != null) onAddToMultiview(channel)
+                            else onSelect(cursor)
+                        },
+                        onHold = { menuFor = channels.getOrNull(cursor) },
+                    )
+                    return@onPreviewKeyEvent true
                 }
 
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false

@@ -83,6 +83,7 @@ import tv.reely.ui.components.SubtitleGlyph
 import tv.reely.ui.components.TransportButton
 import tv.reely.ui.components.TvActionButton
 import tv.reely.ui.components.TvListRow
+import tv.reely.ui.components.rememberSelectPress
 import tv.reely.ui.components.requestWhenReady
 import tv.reely.xtream.XtreamApi
 import tv.reely.xtream.XtreamChannel
@@ -192,9 +193,9 @@ fun PlayerScreen(
     var guideAdds by remember { mutableStateOf(false) }
     // Which tile the guide is about to replace, if it was opened to do that.
     var guideReplaces by remember { mutableStateOf<Int?>(null) }
-    var tileLongPress by remember { mutableStateOf(false) }
     // Which tile the held-OK menu is open over, if any.
     var tileMenu by remember { mutableStateOf<Int?>(null) }
+    val tilePress = rememberSelectPress()
 
     // Tile 0 is the channel in `playback`, drawn by the player that is already running.
     // With nothing beside it this is all inert and the screen behaves exactly as before.
@@ -446,13 +447,29 @@ fun PlayerScreen(
             .focusRequester(rootFocus)
             .focusable()
             .onPreviewKeyEvent { event ->
-                if (event.type == KeyEventType.KeyUp) {
-                    val select = event.key == Key.DirectionCenter || event.key == Key.Enter
-                    if (select && tileLongPress) {
-                        tileLongPress = false
-                        return@onPreviewKeyEvent true
-                    }
-                    return@onPreviewKeyEvent false
+                /*
+                 * A press of OK on a tile, and a hold of it, both halves. This has to run
+                 * before the key-up bail below, because a press is not a press until the
+                 * key comes up — see SelectPress.
+                 */
+                val tilePressOwnsOk = slotCount > 1 && !controlsVisible &&
+                    tileMenu == null && panel == Panel.NONE && !guideOpen && upNext == null
+                if (tilePressOwnsOk) {
+                    val handled = tilePress.handle(
+                        event,
+                        onPress = {
+                            if (focusedTile == addSlot) {
+                                guideAdds = true
+                                guideOpen = live.channels.isNotEmpty()
+                            } else {
+                                // Fills the screen with this one and leaves the rest
+                                // running behind it. Again, or back, returns to the grid.
+                                zoomed = if (zoomed == focusedTile) null else focusedTile
+                            }
+                        },
+                        onHold = { if (focusedTile != addSlot) tileMenu = focusedTile },
+                    )
+                    if (handled) return@onPreviewKeyEvent true
                 }
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 // This is the first thing in the composition to see a key, so closing a
@@ -560,35 +577,6 @@ fun PlayerScreen(
                         if (dy > 0) guideOpen = live.channels.isNotEmpty()
                         return@onPreviewKeyEvent true
                     }
-                }
-                /*
-                 * OK on a tile fills the screen with it; holding OK swaps what is in it.
-                 * The spare cell asks what to put there either way.
-                 *
-                 * Held presses fire on a key-down repeat while the finger is still on the
-                 * button, so the release has to be swallowed or it would act again on
-                 * whatever the guide has just focused.
-                 */
-                if (
-                    slotCount > 1 && !controlsVisible &&
-                    (event.key == Key.DirectionCenter || event.key == Key.Enter)
-                ) {
-                    if (focusedTile == addSlot) {
-                        guideAdds = true
-                        guideOpen = live.channels.isNotEmpty()
-                        return@onPreviewKeyEvent true
-                    }
-                    if (event.nativeKeyEvent.repeatCount >= 1) {
-                        if (!tileLongPress) {
-                            tileLongPress = true
-                            tileMenu = focusedTile
-                        }
-                        return@onPreviewKeyEvent true
-                    }
-                    // Fills the screen with this one and leaves the rest running behind
-                    // it. Pressing it again, or back, returns to the grid.
-                    zoomed = if (zoomed == focusedTile) null else focusedTile
-                    return@onPreviewKeyEvent true
                 }
                 // Steering live television is not an interaction. Counting it raised the
                 // controls on every channel change, and with them up the next press of
