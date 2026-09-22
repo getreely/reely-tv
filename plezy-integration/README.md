@@ -25,8 +25,11 @@ toolkits, and it will look like it unless the styling is matched deliberately.
 - `tv/reely/live/LiveViewModel.kt` — the live half of the original view model, lifted
   out of the class that also carried Plex. It needed no changes: the live state never
   referred to Plex in the first place, which is the whole reason this was worth trying.
-- A method channel (`tv.reely/live`) in Plezy's `MainActivity`, and a leanback launcher
-  entry, so live television can be reached either from inside the app or directly.
+- A leanback launcher entry, so live television is a second tile on the television's
+  home screen beside the library. That tile is currently the only way in.
+- A method channel (`tv.reely/live`, method `open`) in Plezy's `MainActivity`, ready for
+  a Dart caller. Nothing calls it yet: no Dart file is touched by this patch, so there is
+  no way to reach live television from inside Plezy's own interface.
 
 ## What was stripped
 
