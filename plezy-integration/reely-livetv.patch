@@ -1,5 +1,5 @@
 diff --git a/android/app/build.gradle.kts b/android/app/build.gradle.kts
-index 6d4f942..68ee2d3 100644
+index 6d4f942..d804218 100644
 --- a/android/app/build.gradle.kts
 +++ b/android/app/build.gradle.kts
 @@ -6,6 +6,8 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -21,7 +21,7 @@ index 6d4f942..68ee2d3 100644
    buildToolsVersion = "36.1.0"
    ndkVersion = "29.0.14206865"
  
-@@ -239,17 +242,40 @@ android {
+@@ -239,17 +242,25 @@ android {
    // by FEATURE_AUTOMOTIVE and the manifest declares `uses-library android.car required=false`.
    useLibrary("android.car")
  
@@ -29,15 +29,6 @@ index 6d4f942..68ee2d3 100644
 +    compose = true
 +  }
 +
-+  // Reely: abiFilters alone does not reach native libraries contributed by the :libmpv
-+  // module, so an x86_64 slice survived with no Flutter engine behind it — and Android
-+  // will select an ABI it cannot start the app on. Packaging rules apply to the merged
-+  // set, which is the only place this can be dropped for certain.
-+  packaging {
-+    jniLibs {
-+      excludes += "lib/x86_64/**"
-+    }
-+  }
 +
    compileOptions {
      sourceCompatibility = JavaVersion.VERSION_17
@@ -48,12 +39,6 @@ index 6d4f942..68ee2d3 100644
 -    applicationId = "com.edde746.plezy"
 +    applicationId = "tv.reely"
 +
-+    // Reely: the only shapes a television is. Without this the prebuilt mpv libraries
-+    // still ship an x86_64 slice with no Flutter engine behind it, and Android will
-+    // happily select an ABI it cannot start the app on.
-+    ndk {
-+      abiFilters += listOf("armeabi-v7a", "arm64-v8a")
-+    }
      minSdk = 25 // Fire OS 6.x (API 25); :libmpv shares the same floor
      targetSdk = flutter.targetSdkVersion
 -    versionCode = flutter.versionCode
@@ -65,7 +50,20 @@ index 6d4f942..68ee2d3 100644
      testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
  
      externalNativeBuild {
-@@ -423,6 +449,20 @@ tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders"
+@@ -262,8 +273,11 @@ android {
+       }
+     }
+ 
++    // Reely: upstream's own Fire TV switch, which is the supported way to get an
++    // ARM-only build — nothing else reaches the native libraries the :libmpv module
++    // contributes. Its versionCode bump is dropped: this app numbers its own releases,
++    // and the update check compares against the number written just above.
+     if (System.getenv("AMAZON") != null) {
+-      versionCode = (flutter.versionCode ?: 0) + 3000
+       ndk {
+         abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+       }
+@@ -423,6 +437,20 @@ tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders"
  }
  
  dependencies {

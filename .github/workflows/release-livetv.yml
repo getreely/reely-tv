@@ -79,6 +79,11 @@ jobs:
 
       - name: Build
         working-directory: work
+        env:
+          # Upstream's own Fire TV switch. It is the only thing that reaches the native
+          # libraries the :libmpv module contributes, so it is what keeps an x86_64 slice
+          # with no Flutter engine out of the APK.
+          AMAZON: "1"
         run: |
           flutter pub get
           # Both ARM variants. Restricting this to arm64 is what made 0.26.0 install and
