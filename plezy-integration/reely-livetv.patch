@@ -1,5 +1,5 @@
 diff --git a/android/app/build.gradle.kts b/android/app/build.gradle.kts
-index 6d4f942..37dad79 100644
+index 6d4f942..68ee2d3 100644
 --- a/android/app/build.gradle.kts
 +++ b/android/app/build.gradle.kts
 @@ -6,6 +6,8 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -21,12 +21,22 @@ index 6d4f942..37dad79 100644
    buildToolsVersion = "36.1.0"
    ndkVersion = "29.0.14206865"
  
-@@ -239,17 +242,30 @@ android {
+@@ -239,17 +242,40 @@ android {
    // by FEATURE_AUTOMOTIVE and the manifest declares `uses-library android.car required=false`.
    useLibrary("android.car")
  
 +  buildFeatures {
 +    compose = true
++  }
++
++  // Reely: abiFilters alone does not reach native libraries contributed by the :libmpv
++  // module, so an x86_64 slice survived with no Flutter engine behind it — and Android
++  // will select an ABI it cannot start the app on. Packaging rules apply to the merged
++  // set, which is the only place this can be dropped for certain.
++  packaging {
++    jniLibs {
++      excludes += "lib/x86_64/**"
++    }
 +  }
 +
    compileOptions {
@@ -55,7 +65,7 @@ index 6d4f942..37dad79 100644
      testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
  
      externalNativeBuild {
-@@ -423,6 +439,20 @@ tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders"
+@@ -423,6 +449,20 @@ tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders"
  }
  
  dependencies {
