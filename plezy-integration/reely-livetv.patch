@@ -1,5 +1,5 @@
 diff --git a/android/app/build.gradle.kts b/android/app/build.gradle.kts
-index 6d4f942..d804218 100644
+index 6d4f942..2ca799a 100644
 --- a/android/app/build.gradle.kts
 +++ b/android/app/build.gradle.kts
 @@ -6,6 +6,8 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -50,20 +50,7 @@ index 6d4f942..d804218 100644
      testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
  
      externalNativeBuild {
-@@ -262,8 +273,11 @@ android {
-       }
-     }
- 
-+    // Reely: upstream's own Fire TV switch, which is the supported way to get an
-+    // ARM-only build — nothing else reaches the native libraries the :libmpv module
-+    // contributes. Its versionCode bump is dropped: this app numbers its own releases,
-+    // and the update check compares against the number written just above.
-     if (System.getenv("AMAZON") != null) {
--      versionCode = (flutter.versionCode ?: 0) + 3000
-       ndk {
-         abiFilters += listOf("armeabi-v7a", "arm64-v8a")
-       }
-@@ -423,6 +437,20 @@ tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders"
+@@ -423,6 +434,20 @@ tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders"
  }
  
  dependencies {
