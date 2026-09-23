@@ -12,6 +12,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.reely.core.AudioPlan
+import tv.reely.core.DeviceAudio
+import tv.reely.core.audioPlan
 import tv.reely.core.continueWatchingOrder
 import tv.reely.core.LivePlayer
 import tv.reely.core.SecureStore
@@ -285,6 +288,9 @@ data class Playback(
      * it; the picture is the file's own. Implies [transcoding].
      */
     val audioConverted: Boolean = false,
+    /** The file's own sound, by Plex's name for it, and its channels, when known. */
+    val audioCodec: String? = null,
+    val audioChannels: Int = 0,
     val transcodeSession: String? = null,
 )
 
@@ -347,6 +353,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     private val store = SecureStore(application)
     private val settings = Settings(application)
     private val epgStore = EpgStore(application)
+    private val deviceAudio = DeviceAudio(application)
 
     /** Shared by the guide's preview and the full-screen player, so one becomes the other. */
     val livePlayer = LivePlayer(application)
@@ -1053,8 +1060,23 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             silenceTheme()
             _state.update { it.copy(multiview = emptyList()) }
             val startAt = if (resume) item.viewOffsetMs else 0
-            val transcode = _state.value.prefs.playbackMode == Settings.MODE_TRANSCODE
+            val mode = _state.value.prefs.playbackMode
+            val transcode = mode == Settings.MODE_TRANSCODE
             val session = UUID.randomUUID().toString()
+
+            /*
+             * Decided before the first frame, from what the file's sound is and what this
+             * device plays — so a file it cannot play starts converted, rather than
+             * starting in silence and restarting once that is noticed. Direct-only means
+             * the server is not asked; a full transcode already makes its own choice.
+             */
+            val convert = if (transcode || mode == Settings.MODE_DIRECT) {
+                null
+            } else {
+                audioPlan(resolved.audioCodec, resolved.audioChannels, deviceAudio::canPlay)
+                    as? AudioPlan.Convert
+            }
+            val serverWorks = transcode || convert != null
 
             releaseTranscode()
             _state.update {
@@ -1063,7 +1085,16 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                     playback = Playback(
                         title = item.title,
                         subtitle = subtitleLineFor(item),
-                        url = if (transcode) {
+                        url = if (convert != null) {
+                            PlexApi.audioConvertUrl(
+                                base = base,
+                                token = token,
+                                clientId = clientId,
+                                ratingKey = item.ratingKey,
+                                sessionId = session,
+                                audioCodecs = convert.codecs,
+                            )
+                        } else if (transcode) {
                             PlexApi.transcodeUrl(
                                 base = base,
                                 token = token,
@@ -1087,8 +1118,11 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                         serverBase = on,
                         queue = effectiveQueue,
                         queueIndex = effectiveQueue.indexOfFirst { entry -> entry.ratingKey == item.ratingKey },
-                        transcoding = transcode,
-                        transcodeSession = if (transcode) session else null,
+                        transcoding = serverWorks,
+                        audioConverted = convert != null,
+                        transcodeSession = if (serverWorks) session else null,
+                        audioCodec = resolved.audioCodec,
+                        audioChannels = resolved.audioChannels,
                     ),
                 )
             }
@@ -1250,9 +1284,14 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * The file's sound cannot be played here, so ask the server to convert just that —
-     * see [PlexApi.audioConvertUrl]. Picks up at the same point, with the same subtitles,
-     * because the timeline is the file's own.
+     * The file's sound turned out not to play here, so ask the server to convert just
+     * that — see [PlexApi.audioConvertUrl]. Picks up at the same point, with the same
+     * subtitles, because the timeline is the file's own.
+     *
+     * This is the net under the check made before playback, so reaching it means the
+     * device's own account of what it plays was wrong, or the file did not say what its
+     * sound was. Either way that account is not trusted a second time: AAC only, the one
+     * conversion certain to play.
      */
     fun convertAudio(positionMs: Long) {
         val playback = _state.value.playback ?: return

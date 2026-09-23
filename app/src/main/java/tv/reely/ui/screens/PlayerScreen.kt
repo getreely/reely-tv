@@ -73,6 +73,7 @@ import tv.reely.core.GuideRequest
 import tv.reely.core.SkipPrompt
 import tv.reely.core.skipPromptAt
 import tv.reely.core.LivePlayer
+import tv.reely.core.DeviceAudio
 import tv.reely.core.Settings
 import tv.reely.core.SilentAudio
 import tv.reely.core.silentAudio
@@ -1274,6 +1275,8 @@ private fun StatsPanel(
 
     val video = remember(tick) { player.videoFormat }
     val audio = remember(tick) { player.audioFormat }
+    val context = LocalContext.current
+    val deviceSound = remember { DeviceAudio(context).summary() }
     // The file's own sound, which is what to describe when none could be selected —
     // otherwise the panel shows a dash exactly when the audio is the question.
     val fileAudio = remember(tick) {
@@ -1359,6 +1362,9 @@ private fun StatsPanel(
         )
         StatLine("Rate", audio?.sampleRate?.takeIf { it > 0 }?.let { "$it Hz" } ?: "—")
         StatLine("Bitrate", bitrate(audio?.bitrate ?: -1))
+        // What this device said it plays — by decoder, or passed over HDMI to whatever
+        // is plugged in — which is what decided whether the sound above was converted.
+        StatLine("Device plays", deviceSound.ifEmpty { "—" })
 
         TvActionButton(label = "Close", onClick = onClose, emphasised = true)
     }

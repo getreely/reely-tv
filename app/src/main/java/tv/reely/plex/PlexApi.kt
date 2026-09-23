@@ -64,6 +64,9 @@ data class PlexPlayback(
     val url: String,
     val subtitles: List<PlexSubtitle>,
     val markers: List<PlexMarker> = emptyList(),
+    /** The sound that will play, by Plex's name for it — `eac3`, `ac3`, `aac` — if known. */
+    val audioCodec: String? = null,
+    val audioChannels: Int = 0,
 )
 
 /** A person in the cast, as Plex records them. */
@@ -224,6 +227,7 @@ object PlexApi {
     private const val PLEX_TV = "https://plex.tv"
     private const val PRODUCT = "Reely TV"
     private const val VERSION = "0.2.0"
+    private const val AUDIO_STREAM = 2
     private const val SUBTITLE_STREAM = 3
 
     // Plex's own type filters, used when asking a section for one kind of thing.
@@ -479,10 +483,13 @@ object PlexApi {
             val part = media.optJSONArray("Part")?.optJSONObject(0) ?: return@withContext null
             val key = part.optString("key").takeIf(String::isNotEmpty) ?: return@withContext null
 
+            val sound = audioOf(media, part)
             PlexPlayback(
                 url = "$base$key?X-Plex-Token=$token",
                 subtitles = subtitlesOf(part, base, token),
                 markers = markersOf(metadata),
+                audioCodec = sound?.first,
+                audioChannels = sound?.second ?: 0,
             )
         }
 
@@ -578,9 +585,11 @@ object PlexApi {
      * - The Generic profile plus an explicit target, so the server's choice is settled by
      *   what is written here. The built-in Android profile lists E-AC3 as acceptable, and
      *   would be within its rights to convert it to E-AC3.
-     * - AAC as the only audio codec on offer, because it is the one every Android device
-     *   decodes. Offering AC3 as well would let the server pick something this device may
-     *   not play either.
+     * - Only codecs this device plays are on offer — see
+     *   [tv.reely.core.conversionTargets]. Surround is kept as Dolby when the device can
+     *   take it, and AAC always ends the list, because every Android device decodes it.
+     *   Offering anything else would let the server pick something that leaves the
+     *   viewer in silence again.
      * - `directStream=1` with H.264 and HEVC as copy targets: the picture already plays
      *   here, so it is passed through rather than re-encoded.
      * - `subtitles=none`. `burn` burns whatever subtitle is selected on the server, which
@@ -594,9 +603,10 @@ object PlexApi {
         clientId: String,
         ratingKey: String,
         sessionId: String,
+        audioCodecs: List<String> = listOf("aac"),
     ): String {
         val path = URLEncoder.encode("/library/metadata/$ratingKey", "UTF-8")
-        val profile = URLEncoder.encode(AUDIO_CONVERT_PROFILE, "UTF-8")
+        val profile = URLEncoder.encode(audioConvertProfile(audioCodecs), "UTF-8")
         return "$base/video/:/transcode/universal/start.m3u8" +
             "?path=$path&mediaIndex=0&partIndex=0" +
             "&protocol=hls&fastSeek=1" +
@@ -612,13 +622,15 @@ object PlexApi {
 
     /**
      * What the server may send back when converting audio: the picture copied as it is,
-     * the sound as AAC. The commas are encoded inside the clause because the server
-     * decodes the parameter once and then parses the clause as a query of its own.
+     * the sound as the first of [audioCodecs] it can make. The commas are encoded inside
+     * the clause because the server decodes the parameter once and then parses the clause
+     * as a query of its own.
      */
-    internal const val AUDIO_CONVERT_PROFILE =
+    internal fun audioConvertProfile(audioCodecs: List<String>): String =
         "add-settings(DirectPlayStreamSelection=true)" +
             "+add-transcode-target(type=videoProfile&context=streaming&protocol=hls" +
-            "&container=mpegts&videoCodec=h264%2Chevc&audioCodec=aac)"
+            "&container=mpegts&videoCodec=h264%2Chevc" +
+            "&audioCodec=" + audioCodecs.ifEmpty { listOf("aac") }.joinToString("%2C") + ")"
 
     /** Releases the server's encoder. Without this a session lingers and keeps working. */
     suspend fun stopTranscode(base: String, token: String, sessionId: String) =
@@ -780,6 +792,36 @@ object PlexApi {
                 PlexMarker(type = type, startMs = start, endMs = end)
             }
     }
+
+    /**
+     * The sound that will play: the audio stream the server has selected, which is the
+     * one it sends and the one a viewer may have chosen on another device. Failing that,
+     * what the file as a whole says about its audio.
+     */
+    private fun audioOf(media: JSONObject, part: JSONObject): Pair<String, Int>? {
+        val streams = part.optJSONArray("Stream")
+        val selected = streams?.let { array ->
+            (0 until array.length())
+                .map { array.getJSONObject(it) }
+                .filter { it.optInt("streamType") == AUDIO_STREAM }
+                .let { audio -> audio.firstOrNull { isSelected(it) } ?: audio.firstOrNull() }
+        }
+        val codec = selected?.optString("codec")?.takeIf(String::isNotBlank)
+            ?: media.optString("audioCodec").takeIf(String::isNotBlank)
+            ?: return null
+        val channels = selected?.optInt("channels")?.takeIf { it > 0 }
+            ?: media.optInt("audioChannels")
+        return codec.lowercase() to channels
+    }
+
+    /** Servers have said this as a boolean and as a number. */
+    private fun isSelected(stream: JSONObject): Boolean =
+        when (val value = stream.opt("selected")) {
+            is Boolean -> value
+            is Number -> value.toInt() == 1
+            is String -> value == "1" || value.equals("true", ignoreCase = true)
+            else -> false
+        }
 
     private fun subtitlesOf(part: JSONObject, base: String, token: String): List<PlexSubtitle> {
         val streams = part.optJSONArray("Stream") ?: return emptyList()
