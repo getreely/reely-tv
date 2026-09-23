@@ -90,6 +90,17 @@ fun tileNeighbour(slots: Int, from: Int, dx: Int, dy: Int): Int? {
 }
 
 /**
+ * Whether the layout has room to offer a spare cell for another channel.
+ *
+ * In the focus layout the spare costs nothing but a slice of the side column, so it is
+ * offered from the second channel on. The grid would have to shrink a running stream from
+ * half the screen to a quarter to show one, so there it waits for the third. Four is the
+ * ceiling either way, and the held-OK menu offers the same thing without taking any room.
+ */
+fun hasSpareCell(tileCount: Int, focusLayout: Boolean): Boolean =
+    if (focusLayout) tileCount in 2..3 else tileCount == 3
+
+/**
  * Lays the tiles out for the count in hand and hands each one a slot to draw into. The
  * caller supplies the content so the first tile can keep using the player that is already
  * running rather than starting a second one for the same channel.
@@ -298,7 +309,10 @@ fun TileMenu(
     name: String,
     focusRequester: FocusRequester,
     canClose: Boolean,
+    /** False once four channels are up, which is all the screen holds. */
+    canAdd: Boolean,
     onMaximize: () -> Unit,
+    onAdd: () -> Unit,
     onReplace: () -> Unit,
     onClose: () -> Unit,
     onCancel: () -> Unit,
@@ -326,6 +340,15 @@ fun TileMenu(
             overflow = TextOverflow.Ellipsis,
         )
         TvActionButton(label = "Maximise", onClick = onMaximize, emphasised = true)
+        /*
+         * The only way to a third channel that does not have to be guessed at.
+         *
+         * The spare cell covers one case — a grid with exactly three channels up — and
+         * the transport's own button disappears the moment there is more than one. That
+         * left holding OK on a channel in the guide, which nobody would think to try, so
+         * the side-by-side layout stopped at two channels and looked like its limit.
+         */
+        if (canAdd) TvActionButton(label = "Add another channel", onClick = onAdd)
         TvActionButton(label = "Replace channel", onClick = onReplace)
         // The main tile is the player itself; closing it would be closing the screen.
         if (canClose) TvActionButton(label = "Close channel", onClick = onClose)

@@ -1,8 +1,11 @@
 package tv.reely
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import tv.reely.ui.screens.hasSpareCell
 import tv.reely.ui.screens.tileNeighbour
 
 /**
@@ -109,5 +112,28 @@ class MultiViewLayoutTest {
         // is not drawn.
         assertNull(tileNeighbour(5, 0, 1, 0))
         assertNull(tileNeighbour(0, 0, 1, 0))
+    }
+
+    /*
+     * The side-by-side layout looked like it stopped at two channels. The spare cell was
+     * offered only by the grid and only with exactly three up, and the transport's own
+     * Add button disappears the moment there is more than one channel — so beyond the
+     * second there was nothing to press but a hold nobody would guess at.
+     */
+    @Test
+    fun `the focus layout offers a spare from the second channel on`() {
+        assertFalse(hasSpareCell(tileCount = 1, focusLayout = true))
+        assertTrue(hasSpareCell(tileCount = 2, focusLayout = true))
+        assertTrue(hasSpareCell(tileCount = 3, focusLayout = true))
+        assertFalse(hasSpareCell(tileCount = 4, focusLayout = true))
+    }
+
+    /** The grid waits, because showing one there halves a stream that is playing. */
+    @Test
+    fun `the grid offers a spare only with three up`() {
+        assertFalse(hasSpareCell(tileCount = 1, focusLayout = false))
+        assertFalse(hasSpareCell(tileCount = 2, focusLayout = false))
+        assertTrue(hasSpareCell(tileCount = 3, focusLayout = false))
+        assertFalse(hasSpareCell(tileCount = 4, focusLayout = false))
     }
 }

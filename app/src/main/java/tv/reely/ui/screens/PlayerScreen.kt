@@ -212,7 +212,7 @@ fun PlayerScreen(
     // A grid with room left over offers the spare cell as somewhere to put another
     // channel. Two side by side is a deliberate exception: filling half the screen with
     // an invitation is worse than not having one.
-    val hasSpare = tileCount == 3 && !focusLayout
+    val hasSpare = hasSpareCell(tileCount, focusLayout)
     val slotCount = tileCount + if (hasSpare) 1 else 0
     val addSlot = if (hasSpare) tileCount else -1
     var focusedTile by remember { mutableIntStateOf(0) }
@@ -823,9 +823,14 @@ fun PlayerScreen(
                 else tiles.getOrNull(slot - 1)?.name.orEmpty(),
                 focusRequester = tileMenuFocus,
                 canClose = slot in 1..tiles.size,
+                canAdd = tileCount < 4,
                 onMaximize = {
                     tileMenu = null
                     zoomed = slot
+                },
+                onAdd = {
+                    tileMenu = null
+                    guideRequest = GuideRequest.add(live.channels.isNotEmpty())
                 },
                 onReplace = {
                     tileMenu = null
