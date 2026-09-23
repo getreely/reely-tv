@@ -94,6 +94,11 @@ data class PlexItem(
     val viewedLeafCount: Int,
     val viewCount: Int,
     val addedAt: Long,
+    /**
+     * When this was last played, as Unix seconds, or 0 if never. It is an absolute time,
+     * so unlike a server's own ordering it can be compared across servers.
+     */
+    val lastViewedAt: Long = 0,
     /** Which library this came from, so a tab can show only its own library's things. */
     val librarySectionId: String?,
     /**
@@ -380,11 +385,35 @@ object PlexApi {
     }
 
     /**
-     * On Deck — what Plex itself thinks you should carry on with. Rendered in the order
-     * the server returns it: no merging, pruning or re-sorting on this side.
+     * On Deck, the older of the two lists. Only a fallback now, for a server too old to
+     * answer [continueWatching].
      */
     suspend fun onDeck(base: String, token: String): List<PlexItem> =
         items(base, token, "/library/onDeck", limit = 40)
+
+    /**
+     * The Continue Watching row as Plex's own apps build it: the home screen's
+     * `home.continue` and `home.ondeck` hubs, asked for together. This is what shows in
+     * Plex itself, which `/library/onDeck` on its own is not — it lags the home screen and
+     * leaves out things Plex considers in progress.
+     *
+     * Unordered and unmerged here: the hubs overlap, and the order across them is settled
+     * by [tv.reely.core.continueWatchingOrder] so one rule decides it for every server.
+     */
+    suspend fun continueWatching(base: String, token: String): List<PlexItem> =
+        withContext(Dispatchers.IO) {
+            val url = "$base/hubs?identifier=" +
+                URLEncoder.encode("home.continue,home.ondeck", "UTF-8") + "&count=40"
+            val hubs = container(url, token).optJSONArray("Hub")
+                ?: return@withContext onDeck(base, token)
+            (0 until hubs.length())
+                .mapNotNull { hubs.optJSONObject(it)?.optJSONArray("Metadata") }
+                .flatMap { metadata ->
+                    (0 until metadata.length()).map { parseItem(metadata.getJSONObject(it)) }
+                }
+                .filter { it.isPlayable }
+                .map { it.copy(serverBase = base) }
+        }
 
     /** The newest things in one library, of one kind. */
     suspend fun recentlyAdded(
@@ -509,10 +538,17 @@ object PlexApi {
         clientId: String,
         ratingKey: String,
         sessionId: String,
-        offsetMs: Long,
         maxBitrateKbps: Int,
         resolution: String,
     ): String {
+        /*
+         * No `offset`, on purpose. With one, the transcode starts part-way in and the
+         * player's clock starts again at nought — so resuming at twenty minutes read as
+         * nought on the scrubber, Skip Intro fired against the wrong clock, and the
+         * position reported to Plex was the one from the restarted clock, overwriting
+         * the real resume point near the start. Starting at the beginning and letting the
+         * player seek keeps every one of those in the file's own time.
+         */
         val path = URLEncoder.encode("/library/metadata/$ratingKey", "UTF-8")
         val bitrate = if (maxBitrateKbps > 0) "&maxVideoBitrate=$maxBitrateKbps" else ""
         return "$base/video/:/transcode/universal/start.m3u8" +
@@ -522,12 +558,67 @@ object PlexApi {
             // cannot be sideloaded become playable.
             "&subtitles=burn&audioBoost=100&videoQuality=100" +
             "&videoResolution=$resolution$bitrate" +
-            "&offset=${offsetMs / 1000}" +
             "&session=$sessionId" +
             "&X-Plex-Client-Identifier=$clientId" +
             "&X-Plex-Platform=Android&X-Plex-Product=" + URLEncoder.encode(PRODUCT, "UTF-8") +
             "&X-Plex-Token=$token"
     }
+
+    /**
+     * Asks the server to convert only the audio, and hand the picture over untouched.
+     *
+     * For a file whose audio this device cannot play — Dolby Digital Plus on a stick with
+     * no decoder for it and a television that will not take it over HDMI. The player
+     * cannot select the track, so it plays the picture in silence and raises no error;
+     * this is what Plex's own apps do about it.
+     *
+     * The shape is copied from a client that measured it against real servers, and each
+     * part matters:
+     *
+     * - The Generic profile plus an explicit target, so the server's choice is settled by
+     *   what is written here. The built-in Android profile lists E-AC3 as acceptable, and
+     *   would be within its rights to convert it to E-AC3.
+     * - AAC as the only audio codec on offer, because it is the one every Android device
+     *   decodes. Offering AC3 as well would let the server pick something this device may
+     *   not play either.
+     * - `directStream=1` with H.264 and HEVC as copy targets: the picture already plays
+     *   here, so it is passed through rather than re-encoded.
+     * - `subtitles=none`. `burn` burns whatever subtitle is selected on the server, which
+     *   can be a choice made on another device, and a burn is a full video transcode.
+     * - No offset. The transcode starts at the beginning and the player seeks, so the
+     *   timeline stays in the file's own time and subtitles loaded alongside still line up.
+     */
+    fun audioConvertUrl(
+        base: String,
+        token: String,
+        clientId: String,
+        ratingKey: String,
+        sessionId: String,
+    ): String {
+        val path = URLEncoder.encode("/library/metadata/$ratingKey", "UTF-8")
+        val profile = URLEncoder.encode(AUDIO_CONVERT_PROFILE, "UTF-8")
+        return "$base/video/:/transcode/universal/start.m3u8" +
+            "?path=$path&mediaIndex=0&partIndex=0" +
+            "&protocol=hls&fastSeek=1" +
+            "&directPlay=0&directStream=1&directStreamAudio=0" +
+            "&subtitles=none&audioBoost=100&location=lan" +
+            "&session=$sessionId" +
+            "&X-Plex-Client-Profile-Name=Generic&X-Plex-Platform=Generic" +
+            "&X-Plex-Client-Profile-Extra=$profile" +
+            "&X-Plex-Client-Identifier=$clientId" +
+            "&X-Plex-Product=" + URLEncoder.encode(PRODUCT, "UTF-8") +
+            "&X-Plex-Token=$token"
+    }
+
+    /**
+     * What the server may send back when converting audio: the picture copied as it is,
+     * the sound as AAC. The commas are encoded inside the clause because the server
+     * decodes the parameter once and then parses the clause as a query of its own.
+     */
+    internal const val AUDIO_CONVERT_PROFILE =
+        "add-settings(DirectPlayStreamSelection=true)" +
+            "+add-transcode-target(type=videoProfile&context=streaming&protocol=hls" +
+            "&container=mpegts&videoCodec=h264%2Chevc&audioCodec=aac)"
 
     /** Releases the server's encoder. Without this a session lingers and keeps working. */
     suspend fun stopTranscode(base: String, token: String, sessionId: String) =
@@ -648,6 +739,7 @@ object PlexApi {
         viewedLeafCount = entry.optInt("viewedLeafCount"),
         viewCount = entry.optInt("viewCount"),
         addedAt = entry.optLong("addedAt"),
+        lastViewedAt = entry.optLong("lastViewedAt"),
         librarySectionId = entry.optString("librarySectionID").takeIf(String::isNotBlank),
     )
 

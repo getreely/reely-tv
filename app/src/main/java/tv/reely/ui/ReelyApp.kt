@@ -125,6 +125,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             onCollapseToChannel = viewModel::collapseToChannel,
             onStepEpisode = viewModel::stepEpisode,
             onDecodeFailure = viewModel::retryWithTranscode,
+            onConvertAudio = viewModel::convertAudio,
             onToggleFormat = viewModel::toggleFormat,
             onReportProgress = viewModel::reportProgress,
             onNudgeSubtitleScale = viewModel::nudgeSubtitleScale,

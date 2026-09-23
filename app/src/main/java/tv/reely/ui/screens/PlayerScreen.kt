@@ -29,6 +29,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,6 +74,8 @@ import tv.reely.core.SkipPrompt
 import tv.reely.core.skipPromptAt
 import tv.reely.core.LivePlayer
 import tv.reely.core.Settings
+import tv.reely.core.SilentAudio
+import tv.reely.core.silentAudio
 import tv.reely.plex.PlexItem
 import tv.reely.ui.GuideState
 import tv.reely.ui.LiveState
@@ -106,6 +109,9 @@ import tv.reely.ui.theme.SurfaceRaised
 private const val SEEK_STEP_MS = 10_000L
 private const val CONTROLS_TIMEOUT_MS = 6_000L
 
+/** Long enough to read twice from across a room, short enough not to sit on the picture. */
+private const val AUDIO_NOTICE_MS = 9_000L
+
 private enum class Panel { NONE, SUBTITLES, AUDIO, STATS }
 
 private data class TrackChoice(
@@ -137,6 +143,8 @@ fun PlayerScreen(
     onCollapseToChannel: (XtreamChannel) -> Unit,
     onStepEpisode: (Int) -> Unit,
     onDecodeFailure: (Long) -> Unit,
+    /** The file's sound cannot be played here; ask the server to convert just that. */
+    onConvertAudio: (Long) -> Unit,
     onToggleFormat: () -> Unit,
     onReportProgress: (Long, Boolean) -> Unit,
     onNudgeSubtitleScale: (Float) -> Unit,
@@ -189,6 +197,18 @@ fun PlayerScreen(
     var bufferedMs by remember { mutableLongStateOf(0L) }
     var buffering by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    /*
+     * Why there is no sound, when nothing can be done about it. Separate from `error`
+     * because this is found while the picture plays: reaching the ready state clears
+     * errors, and would wipe this the moment it was set.
+     */
+    var audioNotice by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(audioNotice) {
+        if (audioNotice != null) {
+            delay(AUDIO_NOTICE_MS)
+            audioNotice = null
+        }
+    }
     var tracksVersion by remember { mutableIntStateOf(0) }
 
     // A film or episode opening is worth showing the transport for; a channel is not,
@@ -340,6 +360,14 @@ fun PlayerScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    /*
+     * The listener below lives as long as the player, so anything it reads from the
+     * composition has to be read live. It used to capture `playback` from the first
+     * composition, which meant its "already transcoding" test was false forever.
+     */
+    val currentPlayback by rememberUpdatedState(playback)
+    val currentPrefs by rememberUpdatedState(prefs)
+
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -356,6 +384,22 @@ fun PlayerScreen(
 
             override fun onTracksChanged(tracks: Tracks) {
                 tracksVersion++
+                val now = currentPlayback
+                when (
+                    silentAudio(
+                        hasAudio = tracks.containsType(C.TRACK_TYPE_AUDIO),
+                        audioSelected = tracks.isTypeSelected(C.TRACK_TYPE_AUDIO),
+                        isLive = now.isLive,
+                        fromPlex = now.ratingKey != null,
+                        alreadyTranscoding = now.transcoding,
+                        directOnly = currentPrefs.playbackMode == Settings.MODE_DIRECT,
+                    )
+                ) {
+                    SilentAudio.FINE -> Unit
+                    SilentAudio.CONVERT_ON_SERVER ->
+                        onConvertAudio(exoPlayer.currentPosition.coerceAtLeast(0))
+                    SilentAudio.EXPLAIN -> audioNotice = explainSilence(tracks, now, currentPrefs)
+                }
             }
 
             override fun onPlayerError(playbackError: PlaybackException) {
@@ -369,7 +413,7 @@ fun PlayerScreen(
                 // device could not handle the file — which is what the server's
                 // transcoder is for. Network errors are not that, and stay errors.
                 val deviceCannotPlay = playbackError.errorCode in 3_000..5_999
-                if (deviceCannotPlay && !playback.transcoding) {
+                if (deviceCannotPlay && !currentPlayback.transcoding) {
                     onDecodeFailure(exoPlayer.currentPosition.coerceAtLeast(0))
                 } else {
                     error = describe(playbackError)
@@ -382,6 +426,7 @@ fun PlayerScreen(
 
     LaunchedEffect(playback.url) {
         error = null
+        audioNotice = null
         panel = Panel.NONE
         // A film or episode starting is worth showing the controls for. A channel
         // starting is not: this fires on every channel change, and it was the third and
@@ -766,6 +811,54 @@ fun PlayerScreen(
             ) { tileAt(it) }
         } else {
             MultiViewGrid(slots = slotCount, modifier = Modifier.fillMaxSize()) { tileAt(it) }
+        }
+
+        /*
+         * Loading and errors. Both were deleted with the transport by the split-view
+         * rework and missed when it was put back — so every playback failure since then
+         * has been swallowed without a word, and a stalled stream looked like a frozen
+         * picture. One picture only: in a grid this would sit across the join between
+         * tiles and describe only the first of them.
+         */
+        if (buffering && error == null && tileCount == 1) {
+            Text(
+                text = "Loading…",
+                color = Parchment,
+                fontSize = 15.sp,
+                lineHeight = 20.sp,
+                modifier = Modifier.align(Alignment.Center),
+            )
+        }
+
+        error?.let { message ->
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .widthIn(max = 820.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Ink.copy(alpha = 0.92f))
+                    .border(1.dp, Accent.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                    .padding(20.dp),
+            ) {
+                Text(text = message, color = Parchment, fontSize = 15.sp, lineHeight = 22.sp)
+            }
+        }
+
+        // At the top, away from the transport and the skip prompt, and gone on its own:
+        // the picture is still playing and this is only saying why it is quiet.
+        audioNotice?.let { message ->
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 32.dp)
+                    .widthIn(max = 760.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Ink.copy(alpha = 0.92f))
+                    .border(1.dp, Accent.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+            ) {
+                Text(text = message, color = Parchment, fontSize = 14.sp, lineHeight = 20.sp)
+            }
         }
 
         if (guideOpen) {
@@ -1181,6 +1274,13 @@ private fun StatsPanel(
 
     val video = remember(tick) { player.videoFormat }
     val audio = remember(tick) { player.audioFormat }
+    // The file's own sound, which is what to describe when none could be selected —
+    // otherwise the panel shows a dash exactly when the audio is the question.
+    val fileAudio = remember(tick) {
+        player.currentTracks.groups.firstOrNull { it.type == C.TRACK_TYPE_AUDIO }?.getTrackFormat(0)
+    }
+    val unplayable = audio == null && fileAudio != null &&
+        !player.currentTracks.isTypeSelected(C.TRACK_TYPE_AUDIO)
     val dropped = remember(tick) { player.videoDecoderCounters?.droppedBufferCount ?: 0 }
 
     Column(
@@ -1205,10 +1305,14 @@ private fun StatsPanel(
             "Method",
             when {
                 playback.isLive -> "Direct play  ·  ${playback.format.label}"
+                playback.audioConverted -> "Direct stream  ·  audio converted by server"
                 playback.transcoding -> "Transcoding"
                 else -> "Direct play"
             },
         )
+        // Whether the server sent intro and credits markers at all, which is the only
+        // way to tell a server that has not detected them from a button that failed.
+        if (!playback.isLive) StatLine("Skip markers", describeMarkers(playback.markers))
         StatLine("Source", playback.serverBase?.removePrefix("http://")?.removePrefix("https://")
             ?: "—")
 
@@ -1239,10 +1343,11 @@ private fun StatsPanel(
             letterSpacing = 1.4.sp,
             modifier = Modifier.padding(top = 6.dp),
         )
-        StatLine("Codec", audio?.sampleMimeType?.let(::codecName) ?: "—")
+        StatLine("Codec", (audio ?: fileAudio)?.sampleMimeType?.let(::codecName) ?: "—")
+        if (unplayable) StatLine("Status", "Can't be played on this device")
         StatLine(
             "Channels",
-            audio?.channelCount?.takeIf { it > 0 }?.let { count ->
+            (audio ?: fileAudio)?.channelCount?.takeIf { it > 0 }?.let { count ->
                 when (count) {
                     1 -> "Mono"
                     2 -> "Stereo"
@@ -1552,6 +1657,56 @@ private fun clock(millis: Long): String {
  * A refused stream must say so. Providers cap simultaneous connections, and a dead player
  * looks exactly like a broken app.
  */
+/**
+ * Why there is no sound, in terms of what somebody can do about it. Only reached when the
+ * server cannot be asked, or already has been — see [silentAudio].
+ */
+private fun explainSilence(tracks: Tracks, playback: Playback, prefs: PlayerPrefs): String {
+    val sound = tracks.groups
+        .firstOrNull { it.type == C.TRACK_TYPE_AUDIO }
+        ?.getTrackFormat(0)
+        ?.let(::describeAudio)
+        ?: "This sound"
+    return when {
+        playback.isLive ->
+            "No sound: this channel's audio is $sound, which this device can't play."
+        playback.transcoding ->
+            "No sound: the server couldn't convert this file's audio ($sound) into something this device plays."
+        prefs.playbackMode == Settings.MODE_DIRECT ->
+            "No sound: this file's audio is $sound, which this device can't play. " +
+                "Set playback to Auto in Settings and the server will convert it."
+        else -> "No sound: this file's audio is $sound, which this device can't play."
+    }
+}
+
+/** "Dolby Digital Plus 5.1", or as much of that as the format says. */
+private fun describeAudio(format: androidx.media3.common.Format): String {
+    val codec = format.sampleMimeType?.let(::codecName) ?: "an unknown format"
+    val layout = channelLayout(format.channelCount)
+    return if (layout == null) codec else "$codec $layout"
+}
+
+private fun channelLayout(count: Int): String? = when (count) {
+    1 -> "mono"
+    2 -> "stereo"
+    6 -> "5.1"
+    8 -> "7.1"
+    else -> if (count > 0) "$count-channel" else null
+}
+
+/** The server's intro and credits markers, or a plain statement that it sent none. */
+private fun describeMarkers(markers: List<tv.reely.plex.PlexMarker>): String {
+    if (markers.isEmpty()) return "None from the server"
+    return markers.joinToString("  ·  ") { marker ->
+        val kind = when {
+            marker.isIntro -> "Intro"
+            marker.isCredits -> "Credits"
+            else -> marker.type.replaceFirstChar { it.uppercase() }
+        }
+        "$kind ${clock(marker.startMs)}–${clock(marker.endMs)}"
+    }
+}
+
 private fun describe(error: PlaybackException): String = when (val cause = error.cause) {
     is HttpDataSource.InvalidResponseCodeException -> when (cause.responseCode) {
         401, 403 -> "Refused this stream (HTTP ${cause.responseCode}). Either these credentials " +

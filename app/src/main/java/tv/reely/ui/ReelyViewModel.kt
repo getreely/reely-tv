@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.reely.core.continueWatchingOrder
 import tv.reely.core.LivePlayer
 import tv.reely.core.SecureStore
 import tv.reely.core.ThemePlayer
@@ -279,6 +280,11 @@ data class Playback(
     val markers: List<PlexMarker> = emptyList(),
     /** True when the server is encoding this rather than handing over the file. */
     val transcoding: Boolean = false,
+    /**
+     * True when only the sound is being converted, because this device could not play
+     * it; the picture is the file's own. Implies [transcoding].
+     */
+    val audioConverted: Boolean = false,
     val transcodeSession: String? = null,
 )
 
@@ -701,12 +707,14 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
             val servers = sources.map { it.baseUrl to it.token }.distinct()
 
-            // On Deck is rendered as each server composes it. The servers share no notion
-            // of recency, so the merge falls back to the only thing they agree on: how
-            // far through something is and when it was added.
-            val onDeck = servers.flatMap { (base, token) ->
-                runCatching { PlexApi.onDeck(base, token) }.getOrElse { emptyList() }
-            }.sortedByDescending { it.addedAt }
+            // The row Plex's own home screen shows, from every server, in order of when
+            // each thing was last watched. It used to be ordered by when things were
+            // added to the library — see continueWatchingOrder.
+            val onDeck = continueWatchingOrder(
+                servers.flatMap { (base, token) ->
+                    runCatching { PlexApi.continueWatching(base, token) }.getOrElse { emptyList() }
+                }
+            ).take(40)
 
             val movieSources = sources.filter { it.section.type == LibraryKind.MOVIES.plexType }
             val showSources = sources.filter { it.section.type == LibraryKind.SHOWS.plexType }
@@ -1062,7 +1070,6 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                                 clientId = clientId,
                                 ratingKey = item.ratingKey,
                                 sessionId = session,
-                                offsetMs = startAt,
                                 maxBitrateKbps = it.prefs.maxBitrateKbps,
                                 resolution = RESOLUTION,
                             )
@@ -1071,9 +1078,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                         },
                         isLive = false,
                         ratingKey = item.ratingKey,
-                        // A transcode already starts at the offset, so the player must not
-                        // seek there as well.
-                        startPositionMs = if (transcode) 0 else startAt,
+                        // Both start from the file's beginning and seek, so the clock the
+                        // player keeps is the file's own — see PlexApi.transcodeUrl.
+                        startPositionMs = startAt,
                         durationMs = item.durationMs,
                         subtitles = if (transcode) emptyList() else resolved.subtitles,
                         markers = resolved.markers,
@@ -1230,13 +1237,45 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                         clientId = clientId,
                         ratingKey = ratingKey,
                         sessionId = session,
-                        offsetMs = positionMs,
                         maxBitrateKbps = it.prefs.maxBitrateKbps,
                         resolution = RESOLUTION,
                     ),
-                    startPositionMs = 0,
+                    startPositionMs = positionMs,
                     subtitles = emptyList(),
                     transcoding = true,
+                    transcodeSession = session,
+                )
+            )
+        }
+    }
+
+    /**
+     * The file's sound cannot be played here, so ask the server to convert just that —
+     * see [PlexApi.audioConvertUrl]. Picks up at the same point, with the same subtitles,
+     * because the timeline is the file's own.
+     */
+    fun convertAudio(positionMs: Long) {
+        val playback = _state.value.playback ?: return
+        if (playback.transcoding || playback.isLive) return
+        val ratingKey = playback.ratingKey ?: return
+        val plex = _state.value.plex
+        val base = playback.serverBase ?: plex.baseUrl ?: return
+        val token = plex.tokenFor(playback.serverBase) ?: return
+
+        val session = UUID.randomUUID().toString()
+        _state.update {
+            it.copy(
+                playback = playback.copy(
+                    url = PlexApi.audioConvertUrl(
+                        base = base,
+                        token = token,
+                        clientId = clientId,
+                        ratingKey = ratingKey,
+                        sessionId = session,
+                    ),
+                    startPositionMs = positionMs,
+                    transcoding = true,
+                    audioConverted = true,
                     transcodeSession = session,
                 )
             )
@@ -1516,7 +1555,6 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                         clientId = clientId,
                         ratingKey = trailer.ratingKey,
                         sessionId = session,
-                        offsetMs = 0,
                         maxBitrateKbps = it.prefs.maxBitrateKbps,
                         resolution = RESOLUTION,
                     ),
