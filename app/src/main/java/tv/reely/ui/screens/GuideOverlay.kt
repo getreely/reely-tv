@@ -170,15 +170,17 @@ fun GuideOverlay(
                 // The menu owns everything while it is up.
                 if (menuFor != null) {
                     /*
-                     * Except the rest of the press that opened it. A long press fires on
-                     * a key-down repeat, so the finger is still on the button; Compose
-                     * acts on key-up, and the menu has taken focus by then — so letting
-                     * go pressed whatever button the menu had just focused. The remainder
-                     * of that press is swallowed here.
+                     * Except the rest of the press that opened it, and *only* that. The
+                     * hold fires while the finger is still down, Compose acts on key-up,
+                     * and the menu has taken focus by then — so letting go would press
+                     * whatever button it focused. That one release is swallowed.
+                     *
+                     * Swallowing every select instead, which is what this did at first,
+                     * left the menu looking alive and doing nothing: its own buttons
+                     * never saw a press. awaitingRelease is the difference between the
+                     * tail of the opening hold and a press somebody actually made.
                      */
-                    if (event.isSelect()) {
-                        // The rest of the press that opened it. The menu has taken focus
-                        // by now, so letting go would press whatever it focused.
+                    if (event.isSelect() && press.awaitingRelease) {
                         press.handle(event, onPress = {}, onHold = {})
                         return@onPreviewKeyEvent true
                     }
@@ -228,6 +230,9 @@ fun GuideOverlay(
                 }
             },
     ) {
+        // One or the other. Both were drawn at the same size in the same corner,
+        // so the categories landed on top of the grid and each was unreadable.
+        if (!showCategories) {
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
@@ -298,6 +303,7 @@ fun GuideOverlay(
                 }
                 GuideNowLine(windowStart = start, now = now, scroll = scroll)
             }
+        }
         }
 
         // Back from the grid raises this rather than closing the guide, so a channel in

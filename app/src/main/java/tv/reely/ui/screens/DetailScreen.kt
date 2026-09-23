@@ -29,6 +29,7 @@ import androidx.tv.material3.Text
 import tv.reely.plex.PlexItem
 import tv.reely.plex.formatDuration
 import tv.reely.ui.DetailState
+import tv.reely.core.minimumScrollDistance
 import tv.reely.ui.components.HeroBackdrop
 import tv.reely.ui.components.CastCircle
 import tv.reely.ui.components.CheckGlyph
@@ -85,18 +86,22 @@ fun DetailScreen(
     val episodeRail = rememberLazyListState()
     // Set only while a landing focus request is in flight; see the rail effect below.
     var holdColumn by remember { mutableStateOf(false) }
-    // Ordinary behaviour, except while a landing focus request is in flight. Delegating
-    // to whatever is already ambient rather than reimplementing it keeps every other
-    // scroll on this page — moving between the rows — exactly as it was.
-    val ambientScroll = LocalBringIntoViewSpec.current
-    val pageScroll = remember(ambientScroll) {
+    /*
+     * Move the page only when something would otherwise be off screen.
+     *
+     * The ambient rule on a television is a pivot: it holds whatever has focus three
+     * tenths down the viewport, so it scrolls on every move of the cursor, including
+     * moves between things already in plain sight. Delegating to it was the mistake in
+     * the first attempt at this — coming up off the episode row still shifted the page.
+     */
+    val pageScroll = remember {
         object : BringIntoViewSpec {
             override fun calculateScrollDistance(
                 offset: Float,
                 size: Float,
                 containerSize: Float,
             ): Float = if (holdColumn) 0f
-            else ambientScroll.calculateScrollDistance(offset, size, containerSize)
+            else minimumScrollDistance(offset, size, containerSize)
         }
     }
     val railFocus = rememberRowFocus()
