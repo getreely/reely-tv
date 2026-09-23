@@ -68,6 +68,7 @@ import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
 import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
+import tv.reely.core.GuideRequest
 import tv.reely.core.LivePlayer
 import tv.reely.core.Settings
 import tv.reely.plex.PlexItem
@@ -194,12 +195,11 @@ fun PlayerScreen(
     // here to move to" — which is what makes another press of up mean "put these away".
     var atTopOfControls by remember { mutableStateOf(false) }
     // The guide, raised over a playing channel. Mutually exclusive with the controls.
-    var guideOpen by remember { mutableStateOf(false) }
-    var guideAdds by remember { mutableStateOf(false) }
-    // Which tile the guide is about to replace, if it was opened to do that.
-    var guideReplaces by remember { mutableStateOf<Int?>(null) }
-    // The guide's second level: every category, for a channel that is not in this one.
-    var guideCategories by remember { mutableStateOf(false) }
+    // One value rather than three flags, so opening it has to say what it is for and
+    // closing it cannot half-forget — see GuideRequest.
+    var guideRequest by remember { mutableStateOf(GuideRequest.Closed) }
+    val guideOpen = guideRequest.open
+
     // Which tile the held-OK menu is open over, if any.
     var tileMenu by remember { mutableStateOf<Int?>(null) }
     val tilePress = rememberSelectPress()
@@ -380,12 +380,20 @@ fun PlayerScreen(
         }
     }
 
-    // Tell Plex where we are every so often, so Continue Watching is not a guess.
+    /*
+     * Tell Plex where we are, starting at once.
+     *
+     * The delay used to come first, so nothing at all was sent for the first ten seconds
+     * and the server had no idea the item had been opened — start something, look at Plex
+     * on another device, and it still showed as unwatched. Reporting up front also means
+     * a pause or a resume is sent the moment it happens, because this restarts on
+     * `playing`, rather than up to ten seconds later.
+     */
     LaunchedEffect(playback.ratingKey, playing) {
         if (playback.isLive || playback.ratingKey == null) return@LaunchedEffect
         while (true) {
-            delay(10_000)
             onReportProgress(exoPlayer.currentPosition.coerceAtLeast(0), playing)
+            delay(10_000)
         }
     }
 
@@ -479,9 +487,7 @@ fun PlayerScreen(
                         event,
                         onPress = {
                             if (focusedTile == addSlot) {
-                                guideAdds = true
-                                guideCategories = false
-                            guideOpen = live.channels.isNotEmpty()
+                                guideRequest = GuideRequest.add(live.channels.isNotEmpty())
                             } else {
                                 // Fills the screen with this one and leaves the rest
                                 // running behind it. Again, or back, returns to the grid.
@@ -509,16 +515,12 @@ fun PlayerScreen(
                             interaction++
                             true
                         }
+                        // Back closes the guide, full stop. The categories used to be a
+                        // second level reached by backing out of the grid, which made
+                        // back mean two different things; they are now a row above the
+                        // channels that up walks into, so this can be what it looks like.
                         guideOpen -> {
-                            // Out to the categories first, and only then out of the guide.
-                            if (!guideCategories && live.categories.size > 1) {
-                                guideCategories = true
-                            } else {
-                                guideOpen = false
-                                guideAdds = false
-                                guideReplaces = null
-                                guideCategories = false
-                            }
+                            guideRequest = GuideRequest.Closed
                             true
                         }
                         // Coming out of a zoomed tile returns to the grid it came from.
@@ -601,10 +603,7 @@ fun PlayerScreen(
                         // one picture here. Sideways does nothing rather than surprising
                         // somebody by retuning a tile they were only walking past.
                         interaction++
-                        if (dy > 0) {
-                            guideCategories = false
-                            guideOpen = live.channels.isNotEmpty()
-                        }
+                        if (dy > 0) guideRequest = GuideRequest.browse(live.channels.isNotEmpty())
                         return@onPreviewKeyEvent true
                     }
                 }
@@ -625,8 +624,7 @@ fun PlayerScreen(
                         }
 
                         Key.DirectionDown -> {
-                            guideCategories = false
-                            guideOpen = live.channels.isNotEmpty()
+                            guideRequest = GuideRequest.browse(live.channels.isNotEmpty())
                             return@onPreviewKeyEvent true
                         }
 
@@ -724,31 +722,21 @@ fun PlayerScreen(
                 playingIndex = playback.channelIndex,
                 categories = live.categories,
                 selectedCategory = live.selectedCategory,
-                showCategories = guideCategories,
-                onSelectCategory = { category ->
-                    guideCategories = false
-                    onOpenCategory(category)
-                },
-                addMode = guideAdds,
-                pickVerb = if (guideReplaces != null) "Replace with" else "Add",
+                onSelectCategory = onOpenCategory,
+                addMode = guideRequest.adds,
+                pickVerb = guideRequest.verb,
                 onSelect = { index ->
-                    guideOpen = false
-                    guideAdds = false
+                    guideRequest = GuideRequest.Closed
                     focusedTile = 0
                     onSelectChannel(index)
                 },
                 onAddToMultiview = { channel ->
-                    guideOpen = false
-                    guideAdds = false
-                    val slot = guideReplaces
-                    guideReplaces = null
+                    val slot = guideRequest.replaces
+                    guideRequest = GuideRequest.Closed
                     if (slot != null) onReplaceTile(slot, channel) else onAddToMultiview(channel)
                 },
                 canAddTile = tileCount < 4,
-                onDismiss = {
-                    guideOpen = false
-                    guideCategories = false
-                },
+                onDismiss = { guideRequest = GuideRequest.Closed },
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -791,11 +779,7 @@ fun PlayerScreen(
                     if (playback.isLive && !exoPlayer.isPlaying) livePlayer.rejoin()
                     else togglePlay(exoPlayer)
                 },
-                onAddChannel = {
-                    guideAdds = true
-                    guideCategories = false
-                            guideOpen = live.channels.isNotEmpty()
-                },
+                onAddChannel = { guideRequest = GuideRequest.add(live.channels.isNotEmpty()) },
                 onOpenSubtitles = { panel = Panel.SUBTITLES },
                 onOpenAudio = { panel = Panel.AUDIO },
                 onOpenStats = { panel = Panel.STATS },
@@ -845,10 +829,7 @@ fun PlayerScreen(
                 },
                 onReplace = {
                     tileMenu = null
-                    guideReplaces = slot
-                    guideAdds = true
-                    guideCategories = false
-                            guideOpen = live.channels.isNotEmpty()
+                    guideRequest = GuideRequest.replace(slot, live.channels.isNotEmpty())
                 },
                 onClose = {
                     tileMenu = null

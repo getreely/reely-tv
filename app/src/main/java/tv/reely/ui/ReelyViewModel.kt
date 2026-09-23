@@ -372,6 +372,13 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     private var linkJob: Job? = null
     private var guideJob: Job? = null
     private var timelineJob: Job? = null
+
+    /**
+     * One identifier for one sitting. Plex groups consecutive timeline reports by this,
+     * so it has to survive the whole of an item and change when the item does.
+     */
+    private var timelineSession = UUID.randomUUID().toString()
+    private var timelineSessionFor: String? = null
     private var importJob: Job? = null
     private var searchJob: Job? = null
     private var channelsJob: Job? = null
@@ -1174,6 +1181,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val plex = _state.value.plex
         val base = playback.serverBase ?: plex.baseUrl ?: return
         val token = plex.tokenFor(playback.serverBase) ?: return
+        val session = sessionFor(ratingKey)
         timelineJob?.cancel()
         timelineJob = viewModelScope.launch {
             runCatching {
@@ -1184,9 +1192,19 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                     positionMs = positionMs,
                     durationMs = playback.durationMs,
                     state = if (playing) "playing" else "paused",
+                    sessionId = session,
                 )
             }
         }
+    }
+
+    /** The identifier for the sitting this item is part of, minted when the item opens. */
+    private fun sessionFor(ratingKey: String): String {
+        if (timelineSessionFor != ratingKey) {
+            timelineSession = UUID.randomUUID().toString()
+            timelineSessionFor = ratingKey
+        }
+        return timelineSession
     }
 
     /**
@@ -1266,11 +1284,21 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         if (ratingKey != null && base != null && token != null && positionMs > 0) {
             viewModelScope.launch {
                 runCatching {
-                    PlexApi.reportTimeline(base, token, ratingKey, positionMs, playback.durationMs, "stopped")
+                    PlexApi.reportTimeline(
+                        base = base,
+                        token = token,
+                        ratingKey = ratingKey,
+                        positionMs = positionMs,
+                        durationMs = playback.durationMs,
+                        state = "stopped",
+                        sessionId = sessionFor(ratingKey),
+                    )
                 }
                 refreshHome()
             }
         }
+        // A later play of the same thing is a new sitting, so it gets a new identifier.
+        timelineSessionFor = null
         _state.update { it.copy(playback = null, upNext = null) }
     }
 

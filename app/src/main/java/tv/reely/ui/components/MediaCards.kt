@@ -2,6 +2,7 @@ package tv.reely.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -296,15 +297,31 @@ fun CastCircle(
     imageUrl: String?,
     modifier: Modifier = Modifier,
 ) {
+    /*
+     * Focusable, though there is nowhere to go from here.
+     *
+     * A television page scrolls by moving focus, so a row with nothing focusable in it is
+     * a row the remote cannot reach: the cast sat below the fold and down did nothing,
+     * because there was nothing below to move to. Taking focus is what brings it up.
+     */
+    var focused by remember { mutableStateOf(false) }
     Column(
-        modifier = modifier.width(108.dp),
+        modifier = modifier
+            .width(108.dp)
+            .onFocusChanged { focused = it.isFocused }
+            .focusable(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
             modifier = Modifier
                 .size(84.dp)
                 .clip(CircleShape)
-                .background(SurfaceHigh),
+                .background(SurfaceHigh)
+                .border(
+                    width = if (focused) 3.dp else 0.dp,
+                    color = if (focused) Accent else Color.Transparent,
+                    shape = CircleShape,
+                ),
             contentAlignment = Alignment.Center,
         ) {
             if (imageUrl != null) {

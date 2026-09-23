@@ -43,6 +43,7 @@ import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import tv.reely.ui.components.GuideNowLine
 import tv.reely.ui.components.GuideRow
@@ -88,8 +89,6 @@ fun GuideOverlay(
     /** Every category the provider offers, for when the channel wanted is in another. */
     categories: List<XtreamCategory>,
     selectedCategory: XtreamCategory?,
-    /** Back steps out to this before it closes the guide. */
-    showCategories: Boolean,
     onSelectCategory: (XtreamCategory) -> Unit,
     /** Opened to put a channel beside the one playing rather than to change channel. */
     addMode: Boolean = false,
@@ -101,7 +100,10 @@ fun GuideOverlay(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (channels.isEmpty()) return
+    // Categories are drawn even with nothing under them: switching to one that is still
+    // loading used to take the whole guide off the screen, with no way back to the list.
+    val hasCategories = categories.size > 1
+    if (channels.isEmpty() && !hasCategories) return
 
     val density = LocalDensity.current
     var now by remember { mutableLongStateOf(System.currentTimeMillis() / 1_000) }
@@ -117,7 +119,11 @@ fun GuideOverlay(
     val start = if (windowEnd > windowStart) windowStart else (now / TIME_STEP_SECONDS) * TIME_STEP_SECONDS
     val end = if (windowEnd > windowStart) windowEnd else start + 6 * 3_600
 
-    var cursor by remember { mutableIntStateOf(playingIndex.coerceIn(0, channels.lastIndex)) }
+    var cursor by remember {
+        mutableIntStateOf(playingIndex.coerceIn(0, channels.lastIndex.coerceAtLeast(0)))
+    }
+    // Where the cursor is: down among the channels, or up in the row of categories.
+    var inCategories by remember { mutableStateOf(false) }
     // Switching category replaces the channel list under the cursor.
     LaunchedEffect(selectedCategory?.id) { cursor = 0 }
     var focusTime by remember { mutableLongStateOf(now) }
@@ -146,9 +152,9 @@ fun GuideOverlay(
 
     // Focus follows the menu both ways. The grid stops being focusable while the menu is
     // up, so without handing focus back when it closes the guide would be left dead.
-    LaunchedEffect(menuFor, showCategories) {
+    LaunchedEffect(menuFor, inCategories) {
         when {
-            showCategories -> categoryFocus.requestWhenReady()
+            inCategories -> categoryFocus.requestWhenReady()
             menuFor != null -> menuFocus.requestWhenReady()
             else -> grabFocus.requestWhenReady()
         }
@@ -162,11 +168,21 @@ fun GuideOverlay(
         modifier = modifier
             .fillMaxSize()
             .focusRequester(grabFocus)
-            .focusable(enabled = menuFor == null && !showCategories)
+            .focusable(enabled = menuFor == null && !inCategories)
             .onPreviewKeyEvent { event ->
-                // The category list owns everything while it is up, bar the Back that
-                // takes it away, which the player handles.
-                if (showCategories) return@onPreviewKeyEvent false
+                /*
+                 * With the cursor up in the categories the chips own left, right and OK;
+                 * down brings it back to the channels and up has nowhere to go. Back is
+                 * left alone either way, because the player closes the guide with it.
+                 */
+                if (inCategories) {
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    return@onPreviewKeyEvent when (event.key) {
+                        Key.DirectionDown -> { inCategories = false; true }
+                        Key.DirectionUp -> true
+                        else -> false
+                    }
+                }
                 // The menu owns everything while it is up.
                 if (menuFor != null) {
                     /*
@@ -206,8 +222,13 @@ fun GuideOverlay(
 
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (event.key) {
+                    // Off the top of the list is the row of categories, not the way out.
                     Key.DirectionUp -> {
-                        if (cursor > 0) cursor-- else onDismiss()
+                        when {
+                            cursor > 0 -> cursor--
+                            hasCategories -> inCategories = true
+                            else -> onDismiss()
+                        }
                         true
                     }
 
@@ -230,14 +251,18 @@ fun GuideOverlay(
                 }
             },
     ) {
-        // One or the other. Both were drawn at the same size in the same corner,
-        // so the categories landed on top of the grid and each was unreadable.
-        if (!showCategories) {
+        /*
+         * Categories and channels in one stack, both on screen at once.
+         *
+         * These were two panels of the same size in the same corner, shown one at a time,
+         * which made back mean "up a level" before it meant "close the guide". A row of
+         * chips above the list is smaller, always legible, and reached by pressing up —
+         * so back is free to do the one obvious thing.
+         */
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
-                .height(330.dp)
                 .background(
                     Brush.verticalGradient(
                         listOf(
@@ -250,9 +275,24 @@ fun GuideOverlay(
                 .padding(start = 28.dp, end = 28.dp, top = 12.dp, bottom = 10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            if (hasCategories) {
+                CategoryStrip(
+                    categories = categories,
+                    selected = selectedCategory,
+                    active = inCategories,
+                    focusRequester = categoryFocus,
+                    onSelect = { category ->
+                        inCategories = false
+                        onSelectCategory(category)
+                    },
+                )
+            }
             Text(
-                text = if (addMode) "$pickVerb — ${channel?.name.orEmpty()}"
-                else channel?.name.orEmpty(),
+                text = when {
+                    channels.isEmpty() -> "Nothing in this category"
+                    addMode -> "$pickVerb — ${channel?.name.orEmpty()}"
+                    else -> channel?.name.orEmpty()
+                },
                 color = Parchment,
                 fontSize = 17.sp,
                 lineHeight = 22.sp,
@@ -262,8 +302,10 @@ fun GuideOverlay(
             )
             Text(
                 text = when {
+                    channels.isEmpty() -> "Pick another above"
                     addMode -> "OK · ${pickVerb.lowercase()} this channel"
                     onNow != null -> "${onNow.title}  ·  ${guideTimeRange(onNow)}"
+                    hasCategories -> "OK to watch · hold OK for more · up for categories"
                     else -> "OK to watch · hold OK for more"
                 },
                 color = Faint,
@@ -273,7 +315,7 @@ fun GuideOverlay(
                 overflow = TextOverflow.Ellipsis,
             )
 
-            Box(modifier = Modifier.fillMaxWidth().clipToBounds()) {
+            Box(modifier = Modifier.fillMaxWidth().height(254.dp).clipToBounds()) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     GuideRuler(windowStart = start, windowEnd = end, scroll = scroll)
                     LazyColumn(
@@ -303,20 +345,6 @@ fun GuideOverlay(
                 }
                 GuideNowLine(windowStart = start, now = now, scroll = scroll)
             }
-        }
-        }
-
-        // Back from the grid raises this rather than closing the guide, so a channel in
-        // another category can be reached without leaving what is playing. Back again
-        // closes the lot, which the player handles.
-        if (showCategories) {
-            CategoryPanel(
-                categories = categories,
-                selected = selectedCategory,
-                focusRequester = categoryFocus,
-                onSelect = onSelectCategory,
-                modifier = Modifier.align(Alignment.BottomStart),
-            )
         }
 
         menuFor?.let { target ->
@@ -393,19 +421,20 @@ private fun ChannelMenu(
 
 
 /**
- * Every category the provider offers, raised over the guide.
+ * Every category the provider offers, as a row above the channels.
  *
  * The guide only ever showed the category already open, so putting a channel from another
  * one into a split meant leaving the player, changing category and coming back — by which
- * point whatever was on had moved on.
+ * point whatever was on had moved on. It sits above the list rather than over it so the
+ * two can be read together, and dims when the cursor is down among the channels.
  */
 @Composable
-private fun CategoryPanel(
+private fun CategoryStrip(
     categories: List<XtreamCategory>,
     selected: XtreamCategory?,
+    active: Boolean,
     focusRequester: FocusRequester,
     onSelect: (XtreamCategory) -> Unit,
-    modifier: Modifier = Modifier,
 ) {
     val list = rememberLazyListState()
     LaunchedEffect(selected?.id) {
@@ -413,43 +442,21 @@ private fun CategoryPanel(
         if (start > 0) runCatching { list.scrollToItem(start) }
     }
 
-    Column(
-        modifier = modifier
+    LazyRow(
+        state = list,
+        modifier = Modifier
             .fillMaxWidth()
-            .height(330.dp)
-            .background(
-                Brush.verticalGradient(
-                    listOf(Color.Transparent, Ink.copy(alpha = 0.88f), Ink.copy(alpha = 0.96f))
-                )
-            )
-            .padding(start = 28.dp, end = 28.dp, top = 12.dp, bottom = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .alpha(if (active) 1f else 0.72f)
+            .focusGroup()
+            .focusRequester(focusRequester),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(
-            text = "Categories",
-            color = Parchment,
-            fontSize = 17.sp,
-            lineHeight = 22.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Text(
-            text = "OK opens one · back closes the guide",
-            color = Faint,
-            fontSize = 12.sp,
-            lineHeight = 16.sp,
-        )
-        LazyRow(
-            state = list,
-            modifier = Modifier.focusGroup().focusRequester(focusRequester),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            items(categories, key = { it.id }) { category ->
-                CategoryChip(
-                    label = category.name,
-                    selected = category.id == selected?.id,
-                    onClick = { onSelect(category) },
-                )
-            }
+        items(categories, key = { it.id }) { category ->
+            CategoryChip(
+                label = category.name,
+                selected = category.id == selected?.id,
+                onClick = { onSelect(category) },
+            )
         }
     }
 }

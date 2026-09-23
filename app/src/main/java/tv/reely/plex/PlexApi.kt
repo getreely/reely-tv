@@ -469,11 +469,29 @@ object PlexApi {
         positionMs: Long,
         durationMs: Long,
         state: String,
+        sessionId: String,
     ) = withContext(Dispatchers.IO) {
+        /*
+         * Three things here are not optional, and all three were missing.
+         *
+         * `identifier` tells the server which agent the key belongs to; without it the
+         * timeline is accepted with a 200 and then dropped, which is why nothing ever
+         * appeared in Continue Watching. The client headers are what make the report
+         * belong to a player at all — an anonymous timeline has no session to attach to.
+         * And a session identifier is what lets consecutive reports be recognised as the
+         * same sitting rather than a stream of unrelated ones.
+         */
         val url = "$base/:/timeline?ratingKey=$ratingKey" +
             "&key=" + URLEncoder.encode("/library/metadata/$ratingKey", "UTF-8") +
-            "&state=$state&time=$positionMs&duration=$durationMs&X-Plex-Token=$token"
-        val request = Request.Builder().url(url).header("accept", "application/json").get().build()
+            "&identifier=com.plexapp.plugins.library" +
+            "&state=$state&time=$positionMs&duration=$durationMs" +
+            "&playbackTime=$positionMs&playQueueItemID=-1"
+        val request = Request.Builder()
+            .url(url)
+            .plexHeaders(clientId, token)
+            .header("X-Plex-Session-Identifier", sessionId)
+            .get()
+            .build()
         runCatching { Http.client.newCall(request).execute().use { it.isSuccessful } }
         Unit
     }

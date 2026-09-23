@@ -309,11 +309,24 @@ fun DetailScreen(
                 }
             }
 
+            if (detail.genres.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "Genres   " + detail.genres.joinToString(", "),
+                        color = Muted,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 40.dp),
+                    )
+                }
+            }
+
             if (detail.roles.isNotEmpty()) {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         SectionHeading("Cast", modifier = Modifier.padding(horizontal = 40.dp))
                         LazyRow(
+                            modifier = Modifier.focusGroup(),
                             contentPadding = PaddingValues(horizontal = 40.dp),
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
                         ) {
@@ -326,18 +339,6 @@ fun DetailScreen(
                             }
                         }
                     }
-                }
-            }
-
-            if (detail.genres.isNotEmpty()) {
-                item {
-                    Text(
-                        text = "Genres   " + detail.genres.joinToString(", "),
-                        color = Muted,
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 40.dp),
-                    )
                 }
             }
         }
