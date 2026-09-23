@@ -84,6 +84,7 @@ import tv.reely.ui.components.PauseGlyph
 import tv.reely.ui.components.PlayGlyph
 import tv.reely.ui.components.PlusGlyph
 import tv.reely.ui.components.SkipGlyph
+import tv.reely.ui.components.isSelect
 import tv.reely.ui.components.SpeakerGlyph
 import tv.reely.ui.components.SubtitleGlyph
 import tv.reely.ui.components.TransportButton
@@ -680,6 +681,11 @@ fun PlayerScreen(
                         else -> Unit
                     }
                 }
+                // The skip prompt owns OK while it is up, and this must not count as
+                // activity: that raises the transport over the thing being skipped, and
+                // the button jumps as its padding moves to clear it. Declining rather
+                // than consuming, so the press still reaches the button that has focus.
+                if (skipLabel != null && event.isSelect()) return@onPreviewKeyEvent false
                 interaction++
                 when (event.key) {
                     Key.DirectionUp -> { controlsVisible = true; false }
@@ -843,7 +849,6 @@ fun PlayerScreen(
             TvActionButton(
                 label = skipLabel,
                 onClick = {
-                    interaction++
                     if (prompt == SkipPrompt.INTRO && intro != null) exoPlayer.seekTo(intro.endMs)
                     else onStepEpisode(1)
                 },
