@@ -76,6 +76,7 @@ import tv.reely.ui.LiveState
 import tv.reely.ui.PlayerPrefs
 import tv.reely.ui.Playback
 import tv.reely.ui.components.MatchFrameRate
+import tv.reely.ui.components.InfoGlyph
 import tv.reely.ui.components.PauseGlyph
 import tv.reely.ui.components.PlayGlyph
 import tv.reely.ui.components.PlusGlyph
@@ -101,7 +102,7 @@ import tv.reely.ui.theme.SurfaceRaised
 private const val SEEK_STEP_MS = 10_000L
 private const val CONTROLS_TIMEOUT_MS = 6_000L
 
-private enum class Panel { NONE, SUBTITLES, AUDIO }
+private enum class Panel { NONE, SUBTITLES, AUDIO, STATS }
 
 private data class TrackChoice(
     val label: String,
@@ -797,8 +798,38 @@ fun PlayerScreen(
                 },
                 onOpenSubtitles = { panel = Panel.SUBTITLES },
                 onOpenAudio = { panel = Panel.AUDIO },
+                onOpenStats = { panel = Panel.STATS },
                 onToggleFormat = onToggleFormat,
                 modifier = Modifier.align(Alignment.BottomStart),
+            )
+        }
+
+        /*
+         * The track menus. Deleted by the same rework that took the transport, and
+         * missed when that was put back — so choosing subtitles or audio set the state
+         * that gates every key and drew nothing, leaving the remote dead until back.
+         */
+        if (panel == Panel.SUBTITLES || panel == Panel.AUDIO) {
+            TrackPanel(
+                panel = panel,
+                player = exoPlayer,
+                prefs = prefs,
+                tracksVersion = tracksVersion,
+                focusRequester = panelFocus,
+                onClose = { panel = Panel.NONE },
+                onNudgeScale = onNudgeSubtitleScale,
+                onToggleBackground = onToggleSubtitleBackground,
+                modifier = Modifier.align(Alignment.CenterEnd),
+            )
+        }
+
+        if (panel == Panel.STATS) {
+            StatsPanel(
+                playback = playback,
+                player = exoPlayer,
+                focusRequester = panelFocus,
+                onClose = { panel = Panel.NONE },
+                modifier = Modifier.align(Alignment.CenterEnd),
             )
         }
 
@@ -862,6 +893,7 @@ private fun Controls(
     onAddChannel: () -> Unit,
     onOpenSubtitles: () -> Unit,
     onOpenAudio: () -> Unit,
+    onOpenStats: () -> Unit,
     onToggleFormat: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -970,6 +1002,11 @@ private fun Controls(
                     diameter = 36.dp,
                     glyph = { SpeakerGlyph(it, 17.dp) },
                 )
+                TransportButton(
+                    onClick = onOpenStats,
+                    diameter = 36.dp,
+                    glyph = { InfoGlyph(it, 17.dp) },
+                )
                 if (playback.isLive) {
                     TvActionButton(
                         label = if (playback.format.label == "MPEG-TS") "HLS" else "TS",
@@ -1055,6 +1092,153 @@ private fun Scrubber(
 }
 
 // ---------------------------------------------------------------- Track panel
+
+/**
+ * What is actually happening to this stream.
+ *
+ * The one thing worth knowing is whether the server is handing over the file or
+ * re-encoding it, because a transcode costs the server and loses quality, and nothing
+ * else in the app says which is happening. The codecs and the decoder names are here
+ * because when something will not play, they are the first question.
+ */
+@Composable
+private fun StatsPanel(
+    playback: Playback,
+    player: ExoPlayer,
+    focusRequester: FocusRequester,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // Formats arrive after the first frame and change on a transcode's quality switch,
+    // so this is read again rather than sampled once.
+    var tick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1_000)
+            tick++
+        }
+    }
+
+    val video = remember(tick) { player.videoFormat }
+    val audio = remember(tick) { player.audioFormat }
+    val dropped = remember(tick) { player.videoDecoderCounters?.droppedBufferCount ?: 0 }
+
+    Column(
+        modifier = modifier
+            .width(400.dp)
+            .fillMaxHeight()
+            .background(Ink.copy(alpha = 0.96f))
+            .border(1.dp, Line, RoundedCornerShape(0.dp))
+            .padding(24.dp)
+            .focusGroup()
+            .focusRequester(focusRequester),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            text = "Playback",
+            color = Parchment,
+            fontSize = 18.sp,
+            lineHeight = 23.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        StatLine(
+            "Method",
+            when {
+                playback.isLive -> "Direct play  ·  ${playback.format.label}"
+                playback.transcoding -> "Transcoding"
+                else -> "Direct play"
+            },
+        )
+        StatLine("Source", playback.serverBase?.removePrefix("http://")?.removePrefix("https://")
+            ?: "—")
+
+        Text(
+            text = "VIDEO",
+            color = Faint,
+            fontSize = 11.sp,
+            lineHeight = 14.sp,
+            letterSpacing = 1.4.sp,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        StatLine("Codec", video?.sampleMimeType?.let(::codecName) ?: "—")
+        StatLine(
+            "Size",
+            video?.takeIf { it.width > 0 }?.let { format ->
+                val fps = format.frameRate.takeIf { it > 0f }?.let { "  ·  %.3g fps".format(it) }.orEmpty()
+                "${format.width} × ${format.height}$fps"
+            } ?: "—",
+        )
+        StatLine("Bitrate", bitrate(video?.bitrate ?: -1))
+        StatLine("Dropped frames", dropped.toString())
+
+        Text(
+            text = "AUDIO",
+            color = Faint,
+            fontSize = 11.sp,
+            lineHeight = 14.sp,
+            letterSpacing = 1.4.sp,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        StatLine("Codec", audio?.sampleMimeType?.let(::codecName) ?: "—")
+        StatLine(
+            "Channels",
+            audio?.channelCount?.takeIf { it > 0 }?.let { count ->
+                when (count) {
+                    1 -> "Mono"
+                    2 -> "Stereo"
+                    6 -> "5.1"
+                    8 -> "7.1"
+                    else -> "$count channels"
+                }
+            } ?: "—",
+        )
+        StatLine("Rate", audio?.sampleRate?.takeIf { it > 0 }?.let { "$it Hz" } ?: "—")
+        StatLine("Bitrate", bitrate(audio?.bitrate ?: -1))
+
+        TvActionButton(label = "Close", onClick = onClose, emphasised = true)
+    }
+}
+
+@Composable
+private fun StatLine(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(text = label, color = Muted, fontSize = 13.sp, lineHeight = 18.sp)
+        Text(
+            text = value,
+            color = Parchment,
+            fontSize = 13.sp,
+            lineHeight = 18.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/** The part of a mime type anybody says out loud. */
+private fun codecName(mime: String): String = when (mime.substringAfter('/')) {
+    "avc", "avc1", "h264" -> "H.264"
+    "hevc", "hvc1", "hev1" -> "HEVC"
+    "av01" -> "AV1"
+    "mp4v-es" -> "MPEG-4"
+    "mpeg2" -> "MPEG-2"
+    "x-vnd.on2.vp9" -> "VP9"
+    "mp4a-latm" -> "AAC"
+    "ac3" -> "Dolby Digital"
+    "eac3", "eac3-joc" -> "Dolby Digital Plus"
+    "true-hd" -> "Dolby TrueHD"
+    "vnd.dts" -> "DTS"
+    "vnd.dts.hd" -> "DTS-HD"
+    else -> mime.substringAfter('/').uppercase()
+}
+
+private fun bitrate(bits: Int): String = when {
+    bits <= 0 -> "—"
+    bits >= 1_000_000 -> "%.1f Mbps".format(bits / 1_000_000f)
+    else -> "${bits / 1_000} kbps"
+}
 
 @Composable
 private fun TrackPanel(
