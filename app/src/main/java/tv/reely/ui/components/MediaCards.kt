@@ -74,6 +74,13 @@ private fun Modifier.cardPress(onClick: () -> Unit, onLongPress: (() -> Unit)?):
     if (onLongPress == null) return this.clickable(onClick = onClick)
     val press = rememberSelectPress()
     return this
+        /*
+         * A hold opens a menu, the menu takes focus, and this card stops receiving keys —
+         * so the release never arrives here. Forgetting the press on the way out is what
+         * stops the next one being swallowed as the tail of a hold that never ended.
+         * CardMenu swallows that orphaned release so it cannot press a button instead.
+         */
+        .onFocusChanged { if (!it.isFocused) press.reset() }
         .onPreviewKeyEvent { event -> press.handle(event, onPress = onClick, onHold = onLongPress) }
         .clickable(onClick = onClick)
 }

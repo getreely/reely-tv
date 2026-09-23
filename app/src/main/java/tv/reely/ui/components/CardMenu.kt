@@ -9,10 +9,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -49,8 +56,28 @@ fun CardMenu(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    /*
+     * A hold opens this menu while the finger is still down, and by the time the key
+     * comes up this has taken focus — so the release lands on a button here. The card
+     * that opened it cannot swallow it, because it is no longer the thing receiving keys.
+     * So a release with no press of its own behind it is thrown away.
+     */
+    var sawOwnPress by remember { mutableStateOf(false) }
+
     Column(
         modifier = modifier
+            .onPreviewKeyEvent { event ->
+                if (!event.isSelect()) return@onPreviewKeyEvent false
+                when (event.type) {
+                    KeyEventType.KeyDown -> {
+                        sawOwnPress = true
+                        false
+                    }
+
+                    KeyEventType.KeyUp -> !sawOwnPress
+                    else -> false
+                }
+            }
             .widthIn(min = 260.dp, max = 420.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(Ink.copy(alpha = 0.97f))

@@ -108,6 +108,9 @@ object XtreamApi {
                     name = it.optString("category_name").ifEmpty { "Unnamed" },
                 )
             }.filter { it.id.isNotEmpty() }
+                // Same reasoning as the channels below: the id is a lazy list's key, and
+                // a repeated one brings the app down when it scrolls into view.
+                .distinctBy { it.id }
         }
 
     /**
