@@ -89,9 +89,13 @@ fun DetailScreen(
             // Always, not only past the first: a new season inherits the old one's scroll
             // offset, so landing on episode one still needed the rail wound back to it.
             runCatching { episodeRail.scrollToItem(index) }
-            // Arriving from a row means arriving at this episode, so it is what the
-            // remote should already be pointed at.
-            railFocus.land(key)
+            /*
+             * Only when this season was opened for this episode. Taking focus on an
+             * ordinary season change dragged the page down with it: focus landing on the
+             * rail asks the column to bring it into view, which scrolled the season
+             * buttons, the title and half the summary off the top of the screen.
+             */
+            if (state.landOnEpisode == key) railFocus.land(key)
         }
         railBroughtTo = key
     }

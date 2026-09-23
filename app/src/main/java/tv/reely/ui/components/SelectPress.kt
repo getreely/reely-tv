@@ -42,6 +42,18 @@ class SelectPress {
     private var held = false
 
     /**
+     * True between a hold firing and the key coming back up.
+     *
+     * A caller decides whether it owns OK before handing the event over, and that
+     * decision usually depends on what is on screen — which the hold has just changed.
+     * On a multiview tile the hold opened a menu, the test for "no menu is open" then
+     * failed, the release never reached this class, and the menu had a button pressed
+     * by the finger coming off the very key that opened it. Whatever else a caller
+     * checks, it must also let the release through while this is true.
+     */
+    val awaitingRelease: Boolean get() = held
+
+    /**
      * The decision on its own, with no key event attached, because this is the part that
      * has been wrong twice and a stubbed android.view.KeyEvent cannot report a repeat.
      */

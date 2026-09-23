@@ -116,6 +116,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             livePlayer = viewModel.livePlayer,
             onStepChannel = viewModel::stepChannel,
             onSelectChannel = viewModel::playChannel,
+            onOpenCategory = viewModel::openCategory,
             multiview = state.multiview,
             onAddToMultiview = viewModel::addToMultiview,
             onRemoveTile = viewModel::removeFromMultiview,

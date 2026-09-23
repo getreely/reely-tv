@@ -91,4 +91,31 @@ class SelectPressTest {
 
         assertEquals(SelectOutcome.PRESS, press.up())
     }
+
+    @Test
+    fun `a hold says it is waiting for the release`() {
+        val press = SelectPress()
+        assertEquals(false, press.awaitingRelease)
+
+        press.down()
+        assertEquals(false, press.awaitingRelease)
+
+        press.down(repeat = true)
+        // What a caller has to consult before deciding it no longer owns the key. On a
+        // multiview tile the hold opened a menu, the caller's "no menu is open" test then
+        // failed, and the release went to the menu instead of being swallowed.
+        assertEquals(true, press.awaitingRelease)
+
+        press.up()
+        assertEquals(false, press.awaitingRelease)
+    }
+
+    @Test
+    fun `an ordinary press never claims to be waiting`() {
+        val press = SelectPress()
+        press.down()
+        assertEquals(false, press.awaitingRelease)
+        press.up()
+        assertEquals(false, press.awaitingRelease)
+    }
 }

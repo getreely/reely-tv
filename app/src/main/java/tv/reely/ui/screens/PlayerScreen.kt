@@ -88,6 +88,7 @@ import tv.reely.ui.components.TvListRow
 import tv.reely.ui.components.rememberSelectPress
 import tv.reely.ui.components.requestWhenReady
 import tv.reely.xtream.XtreamApi
+import tv.reely.xtream.XtreamCategory
 import tv.reely.xtream.XtreamChannel
 import tv.reely.ui.theme.Accent
 import tv.reely.ui.theme.Faint
@@ -121,6 +122,7 @@ fun PlayerScreen(
     onDismissUpNext: () -> Unit,
     onStepChannel: (Int) -> Unit,
     onSelectChannel: (Int) -> Unit,
+    onOpenCategory: (XtreamCategory) -> Unit,
     livePlayer: LivePlayer,
     multiview: List<XtreamChannel>,
     onAddToMultiview: (XtreamChannel) -> Unit,
@@ -195,6 +197,8 @@ fun PlayerScreen(
     var guideAdds by remember { mutableStateOf(false) }
     // Which tile the guide is about to replace, if it was opened to do that.
     var guideReplaces by remember { mutableStateOf<Int?>(null) }
+    // The guide's second level: every category, for a channel that is not in this one.
+    var guideCategories by remember { mutableStateOf(false) }
     // Which tile the held-OK menu is open over, if any.
     var tileMenu by remember { mutableStateOf<Int?>(null) }
     val tilePress = rememberSelectPress()
@@ -463,15 +467,20 @@ fun PlayerScreen(
                  * before the key-up bail below, because a press is not a press until the
                  * key comes up — see SelectPress.
                  */
-                val tilePressOwnsOk = slotCount > 1 && !controlsVisible &&
-                    tileMenu == null && panel == Panel.NONE && !guideOpen && upNext == null
+                // The release belongs to the press that started it, whatever the hold
+                // has since put on screen — see SelectPress.awaitingRelease.
+                val tilePressOwnsOk = tilePress.awaitingRelease || (
+                    slotCount > 1 && !controlsVisible &&
+                        tileMenu == null && panel == Panel.NONE && !guideOpen && upNext == null
+                    )
                 if (tilePressOwnsOk) {
                     val handled = tilePress.handle(
                         event,
                         onPress = {
                             if (focusedTile == addSlot) {
                                 guideAdds = true
-                                guideOpen = live.channels.isNotEmpty()
+                                guideCategories = false
+                            guideOpen = live.channels.isNotEmpty()
                             } else {
                                 // Fills the screen with this one and leaves the rest
                                 // running behind it. Again, or back, returns to the grid.
@@ -500,9 +509,15 @@ fun PlayerScreen(
                             true
                         }
                         guideOpen -> {
-                            guideOpen = false
-                            guideAdds = false
-                            guideReplaces = null
+                            // Out to the categories first, and only then out of the guide.
+                            if (!guideCategories && live.categories.size > 1) {
+                                guideCategories = true
+                            } else {
+                                guideOpen = false
+                                guideAdds = false
+                                guideReplaces = null
+                                guideCategories = false
+                            }
                             true
                         }
                         // Coming out of a zoomed tile returns to the grid it came from.
@@ -585,7 +600,10 @@ fun PlayerScreen(
                         // one picture here. Sideways does nothing rather than surprising
                         // somebody by retuning a tile they were only walking past.
                         interaction++
-                        if (dy > 0) guideOpen = live.channels.isNotEmpty()
+                        if (dy > 0) {
+                            guideCategories = false
+                            guideOpen = live.channels.isNotEmpty()
+                        }
                         return@onPreviewKeyEvent true
                     }
                 }
@@ -606,6 +624,7 @@ fun PlayerScreen(
                         }
 
                         Key.DirectionDown -> {
+                            guideCategories = false
                             guideOpen = live.channels.isNotEmpty()
                             return@onPreviewKeyEvent true
                         }
@@ -702,6 +721,13 @@ fun PlayerScreen(
                 windowStart = guide.windowStart,
                 windowEnd = guide.windowEnd,
                 playingIndex = playback.channelIndex,
+                categories = live.categories,
+                selectedCategory = live.selectedCategory,
+                showCategories = guideCategories,
+                onSelectCategory = { category ->
+                    guideCategories = false
+                    onOpenCategory(category)
+                },
                 addMode = guideAdds,
                 pickVerb = if (guideReplaces != null) "Replace with" else "Add",
                 onSelect = { index ->
@@ -718,7 +744,10 @@ fun PlayerScreen(
                     if (slot != null) onReplaceTile(slot, channel) else onAddToMultiview(channel)
                 },
                 canAddTile = tileCount < 4,
-                onDismiss = { guideOpen = false },
+                onDismiss = {
+                    guideOpen = false
+                    guideCategories = false
+                },
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -763,7 +792,8 @@ fun PlayerScreen(
                 },
                 onAddChannel = {
                     guideAdds = true
-                    guideOpen = live.channels.isNotEmpty()
+                    guideCategories = false
+                            guideOpen = live.channels.isNotEmpty()
                 },
                 onOpenSubtitles = { panel = Panel.SUBTITLES },
                 onOpenAudio = { panel = Panel.AUDIO },
@@ -786,7 +816,8 @@ fun PlayerScreen(
                     tileMenu = null
                     guideReplaces = slot
                     guideAdds = true
-                    guideOpen = live.channels.isNotEmpty()
+                    guideCategories = false
+                            guideOpen = live.channels.isNotEmpty()
                 },
                 onClose = {
                     tileMenu = null

@@ -58,8 +58,15 @@ import tv.reely.ui.theme.Line
 import tv.reely.ui.theme.Ink
 import tv.reely.ui.theme.Parchment
 import tv.reely.xtream.EpgProgramme
+import tv.reely.xtream.XtreamCategory
 import tv.reely.xtream.XtreamChannel
 import kotlin.math.roundToInt
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.focus.onFocusChanged
+import tv.reely.ui.theme.Accent
+import tv.reely.ui.theme.Muted
 
 /** Half an hour per press of left or right, which is how a guide is read. */
 private const val TIME_STEP_SECONDS = 1_800L
@@ -78,6 +85,12 @@ fun GuideOverlay(
     windowStart: Long,
     windowEnd: Long,
     playingIndex: Int,
+    /** Every category the provider offers, for when the channel wanted is in another. */
+    categories: List<XtreamCategory>,
+    selectedCategory: XtreamCategory?,
+    /** Back steps out to this before it closes the guide. */
+    showCategories: Boolean,
+    onSelectCategory: (XtreamCategory) -> Unit,
     /** Opened to put a channel beside the one playing rather than to change channel. */
     addMode: Boolean = false,
     /** What choosing a channel will do, said plainly: "Add" or "Replace with". */
@@ -105,6 +118,8 @@ fun GuideOverlay(
     val end = if (windowEnd > windowStart) windowEnd else start + 6 * 3_600
 
     var cursor by remember { mutableIntStateOf(playingIndex.coerceIn(0, channels.lastIndex)) }
+    // Switching category replaces the channel list under the cursor.
+    LaunchedEffect(selectedCategory?.id) { cursor = 0 }
     var focusTime by remember { mutableLongStateOf(now) }
     val rows = rememberLazyListState()
     val scroll = rememberScrollState()
@@ -127,11 +142,16 @@ fun GuideOverlay(
     var menuFor by remember { mutableStateOf<XtreamChannel?>(null) }
     val press = rememberSelectPress()
     val menuFocus = remember { FocusRequester() }
+    val categoryFocus = remember { FocusRequester() }
 
     // Focus follows the menu both ways. The grid stops being focusable while the menu is
     // up, so without handing focus back when it closes the guide would be left dead.
-    LaunchedEffect(menuFor) {
-        if (menuFor != null) menuFocus.requestWhenReady() else grabFocus.requestWhenReady()
+    LaunchedEffect(menuFor, showCategories) {
+        when {
+            showCategories -> categoryFocus.requestWhenReady()
+            menuFor != null -> menuFocus.requestWhenReady()
+            else -> grabFocus.requestWhenReady()
+        }
     }
 
     val channel = channels.getOrNull(cursor)
@@ -142,8 +162,11 @@ fun GuideOverlay(
         modifier = modifier
             .fillMaxSize()
             .focusRequester(grabFocus)
-            .focusable(enabled = menuFor == null)
+            .focusable(enabled = menuFor == null && !showCategories)
             .onPreviewKeyEvent { event ->
+                // The category list owns everything while it is up, bar the Back that
+                // takes it away, which the player handles.
+                if (showCategories) return@onPreviewKeyEvent false
                 // The menu owns everything while it is up.
                 if (menuFor != null) {
                     /*
@@ -277,6 +300,19 @@ fun GuideOverlay(
             }
         }
 
+        // Back from the grid raises this rather than closing the guide, so a channel in
+        // another category can be reached without leaving what is playing. Back again
+        // closes the lot, which the player handles.
+        if (showCategories) {
+            CategoryPanel(
+                categories = categories,
+                selected = selectedCategory,
+                focusRequester = categoryFocus,
+                onSelect = onSelectCategory,
+                modifier = Modifier.align(Alignment.BottomStart),
+            )
+        }
+
         menuFor?.let { target ->
             ChannelMenu(
                 channel = target,
@@ -347,4 +383,95 @@ private fun ChannelMenu(
         }
         TvActionButton(label = "Cancel", onClick = onCancel)
     }
+}
+
+
+/**
+ * Every category the provider offers, raised over the guide.
+ *
+ * The guide only ever showed the category already open, so putting a channel from another
+ * one into a split meant leaving the player, changing category and coming back — by which
+ * point whatever was on had moved on.
+ */
+@Composable
+private fun CategoryPanel(
+    categories: List<XtreamCategory>,
+    selected: XtreamCategory?,
+    focusRequester: FocusRequester,
+    onSelect: (XtreamCategory) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val list = rememberLazyListState()
+    LaunchedEffect(selected?.id) {
+        val start = categories.indexOfFirst { it.id == selected?.id }
+        if (start > 0) runCatching { list.scrollToItem(start) }
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(330.dp)
+            .background(
+                Brush.verticalGradient(
+                    listOf(Color.Transparent, Ink.copy(alpha = 0.88f), Ink.copy(alpha = 0.96f))
+                )
+            )
+            .padding(start = 28.dp, end = 28.dp, top = 12.dp, bottom = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = "Categories",
+            color = Parchment,
+            fontSize = 17.sp,
+            lineHeight = 22.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = "OK opens one · back closes the guide",
+            color = Faint,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+        )
+        LazyRow(
+            state = list,
+            modifier = Modifier.focusGroup().focusRequester(focusRequester),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            items(categories, key = { it.id }) { category ->
+                CategoryChip(
+                    label = category.name,
+                    selected = category.id == selected?.id,
+                    onClick = { onSelect(category) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Text(
+        text = label,
+        color = if (focused || selected) Parchment else Muted,
+        fontSize = 14.sp,
+        lineHeight = 18.sp,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier
+            .onFocusChanged { focused = it.isFocused }
+            .clip(RoundedCornerShape(9.dp))
+            .background(if (focused) Accent.copy(alpha = 0.22f) else Ink.copy(alpha = 0.6f))
+            .border(
+                width = if (focused) 2.dp else 1.dp,
+                color = when {
+                    focused -> Accent
+                    selected -> Parchment.copy(alpha = 0.5f)
+                    else -> Line
+                },
+                shape = RoundedCornerShape(9.dp),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+    )
 }
