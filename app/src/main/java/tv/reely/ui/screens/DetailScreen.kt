@@ -47,6 +47,10 @@ import tv.reely.ui.components.TrailerGlyph
 import tv.reely.ui.components.TvChip
 import tv.reely.ui.components.EpisodeTile
 import tv.reely.ui.theme.Muted
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.withFrameNanos
 
 @Composable
 fun DetailScreen(
@@ -79,6 +83,22 @@ fun DetailScreen(
     // off the left edge. The rail is brought to it once, when the season's episodes
     // arrive — not on every focus change, which would fight the rail's own scrolling.
     val episodeRail = rememberLazyListState()
+    // Set only while a landing focus request is in flight; see the rail effect below.
+    var holdColumn by remember { mutableStateOf(false) }
+    // Ordinary behaviour, except while a landing focus request is in flight. Delegating
+    // to whatever is already ambient rather than reimplementing it keeps every other
+    // scroll on this page — moving between the rows — exactly as it was.
+    val ambientScroll = LocalBringIntoViewSpec.current
+    val pageScroll = remember(ambientScroll) {
+        object : BringIntoViewSpec {
+            override fun calculateScrollDistance(
+                offset: Float,
+                size: Float,
+                containerSize: Float,
+            ): Float = if (holdColumn) 0f
+            else ambientScroll.calculateScrollDistance(offset, size, containerSize)
+        }
+    }
     val railFocus = rememberRowFocus()
     var railBroughtTo by remember(state.ratingKey) { mutableStateOf<String?>(null) }
     LaunchedEffect(state.episodes) {
@@ -90,12 +110,18 @@ fun DetailScreen(
             // offset, so landing on episode one still needed the rail wound back to it.
             runCatching { episodeRail.scrollToItem(index) }
             /*
-             * Only when this season was opened for this episode. Taking focus on an
-             * ordinary season change dragged the page down with it: focus landing on the
-             * rail asks the column to bring it into view, which scrolled the season
-             * buttons, the title and half the summary off the top of the screen.
+             * Focus lands on the episode, but the page stays where it is.
+             *
+             * Focus arriving anywhere asks the column to bring it into view, and bringing
+             * the rail into view scrolled the season buttons, the title and half the
+             * summary off the top. Holding the column still for the moment the request
+             * goes through is the difference between the two; refusing focus instead
+             * would have been the wrong half of the problem.
              */
-            if (state.landOnEpisode == key) railFocus.land(key)
+            holdColumn = true
+            railFocus.land(key)
+            withFrameNanos { }
+            holdColumn = false
         }
         railBroughtTo = key
     }
@@ -106,6 +132,7 @@ fun DetailScreen(
     Box(modifier = modifier.fillMaxSize()) {
         HeroBackdrop(url = backdrop, modifier = Modifier.fillMaxSize())
 
+        CompositionLocalProvider(LocalBringIntoViewSpec provides pageScroll) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(top = 14.dp, bottom = 34.dp),
@@ -308,6 +335,7 @@ fun DetailScreen(
                     )
                 }
             }
+        }
         }
     }
 }

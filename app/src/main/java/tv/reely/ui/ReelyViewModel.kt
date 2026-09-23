@@ -143,12 +143,6 @@ data class DetailState(
     val episodes: List<PlexItem> = emptyList(),
     /** What the text block at the top is describing: the show, or an episode under it. */
     val focusedEpisode: PlexItem? = null,
-    /**
-     * Set only when a season was opened to land on one particular episode, which is what
-     * arriving from a row does. Choosing a season by hand leaves it null, so the cursor
-     * stays on the season buttons instead of being dragged down to the rail.
-     */
-    val landOnEpisode: String? = null,
     val trailers: List<PlexExtra> = emptyList(),
     val busy: Boolean = true,
     val error: String? = null,
@@ -992,7 +986,6 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                     detail = current.detail?.copy(
                         episodes = episodes,
                         focusedEpisode = landOn,
-                        landOnEpisode = focusEpisodeKey,
                         busy = false,
                     )
                 )

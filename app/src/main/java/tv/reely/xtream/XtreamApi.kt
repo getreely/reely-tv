@@ -133,6 +133,16 @@ object XtreamApi {
                     .takeIf(String::isNotBlank)?.lowercase(),
             )
         }
+            /*
+             * A panel lists the same stream in as many categories as it likes, and asking
+             * for the whole lineup — which is what search does — returns it once per
+             * category. Two entries with one id is a repeated key in a lazy row, and a
+             * lazy row only checks its keys as items come into view: holding right to
+             * scroll through search results brought the app down the moment it reached
+             * the duplicate. It also handed one focus requester to two nodes, which is
+             * fatal on its own. PlexApi has done the same on ratingKey for a while.
+             */
+            .distinctBy { it.streamId }
     }
 
     /** Where the provider serves its whole XMLTV guide. */
