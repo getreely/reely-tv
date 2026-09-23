@@ -478,20 +478,38 @@ fun PlayerScreen(
                  */
                 // The release belongs to the press that started it, whatever the hold
                 // has since put on screen — see SelectPress.awaitingRelease.
+                /*
+                 * A hold opens the tile menu with one channel up as readily as with four.
+                 *
+                 * This used to require a split already on screen, so the menu — the one
+                 * route to another channel that does not depend on the layout — was
+                 * unreachable from exactly the state everybody starts in. A single
+                 * channel has nothing to maximise and cannot be closed, so its menu is
+                 * Add, Replace and Cancel, which is what a hold there is wanted for.
+                 *
+                 * Films are left alone: OK on one belongs to the transport.
+                 */
                 val tilePressOwnsOk = tilePress.awaitingRelease || (
-                    slotCount > 1 && !controlsVisible &&
+                    playback.isLive && !controlsVisible &&
                         tileMenu == null && panel == Panel.NONE && !guideOpen && upNext == null
                     )
                 if (tilePressOwnsOk) {
                     val handled = tilePress.handle(
                         event,
                         onPress = {
-                            if (focusedTile == addSlot) {
-                                guideRequest = GuideRequest.add(live.channels.isNotEmpty())
-                            } else {
+                            when {
+                                // One picture: OK still means "show me the transport".
+                                slotCount == 1 -> {
+                                    interaction++
+                                    controlsVisible = true
+                                }
+
+                                focusedTile == addSlot ->
+                                    guideRequest = GuideRequest.add(live.channels.isNotEmpty())
+
                                 // Fills the screen with this one and leaves the rest
                                 // running behind it. Again, or back, returns to the grid.
-                                zoomed = if (zoomed == focusedTile) null else focusedTile
+                                else -> zoomed = if (zoomed == focusedTile) null else focusedTile
                             }
                         },
                         onHold = { if (focusedTile != addSlot) tileMenu = focusedTile },
@@ -824,6 +842,8 @@ fun PlayerScreen(
                 focusRequester = tileMenuFocus,
                 canClose = slot in 1..tiles.size,
                 canAdd = tileCount < 4,
+                // Nothing to maximise when the tile already is the screen.
+                canMaximize = slotCount > 1,
                 onMaximize = {
                     tileMenu = null
                     zoomed = slot

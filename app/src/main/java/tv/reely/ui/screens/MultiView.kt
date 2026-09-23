@@ -311,6 +311,8 @@ fun TileMenu(
     canClose: Boolean,
     /** False once four channels are up, which is all the screen holds. */
     canAdd: Boolean,
+    /** False with one channel up, where the tile already fills the screen. */
+    canMaximize: Boolean,
     onMaximize: () -> Unit,
     onAdd: () -> Unit,
     onReplace: () -> Unit,
@@ -339,7 +341,9 @@ fun TileMenu(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        TvActionButton(label = "Maximise", onClick = onMaximize, emphasised = true)
+        if (canMaximize) {
+            TvActionButton(label = "Maximise", onClick = onMaximize, emphasised = true)
+        }
         /*
          * The only way to a third channel that does not have to be guessed at.
          *
@@ -348,7 +352,14 @@ fun TileMenu(
          * left holding OK on a channel in the guide, which nobody would think to try, so
          * the side-by-side layout stopped at two channels and looked like its limit.
          */
-        if (canAdd) TvActionButton(label = "Add another channel", onClick = onAdd)
+        if (canAdd) {
+            TvActionButton(
+                label = "Add another channel",
+                onClick = onAdd,
+                // The obvious thing to want from a menu opened on the only channel up.
+                emphasised = !canMaximize,
+            )
+        }
         TvActionButton(label = "Replace channel", onClick = onReplace)
         // The main tile is the player itself; closing it would be closing the screen.
         if (canClose) TvActionButton(label = "Close channel", onClick = onClose)
