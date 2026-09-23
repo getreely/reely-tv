@@ -69,6 +69,8 @@ import androidx.media3.ui.SubtitleView
 import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
 import tv.reely.core.GuideRequest
+import tv.reely.core.SkipPrompt
+import tv.reely.core.skipPromptAt
 import tv.reely.core.LivePlayer
 import tv.reely.core.Settings
 import tv.reely.plex.PlexItem
@@ -262,6 +264,29 @@ fun PlayerScreen(
     val canSkipForward = if (playback.isLive) true
     else playback.queueIndex >= 0 && playback.queueIndex < playback.queue.lastIndex
 
+    /*
+     * The skip prompt, and only while the marker it is for is under the playhead.
+     *
+     * This was computed and then thrown away: the rework that took the transport out of
+     * a split took the prompt with it, and putting the transport back missed it, so the
+     * markers were fetched from the server on every episode and never shown. The half
+     * second off the end of the intro keeps the button from flashing away under a thumb
+     * already on its way to OK.
+     */
+    val prompt = skipPromptAt(
+        positionMs = positionMs,
+        introStartMs = intro?.startMs,
+        introEndMs = intro?.endMs,
+        creditsStartMs = credits?.startMs,
+        canSkipForward = canSkipForward,
+        upNextShowing = upNext != null,
+    )
+    val skipLabel = when (prompt) {
+        SkipPrompt.INTRO -> "Skip Intro"
+        SkipPrompt.NEXT_EPISODE -> "Next Episode"
+        null -> null
+    }
+
     // Nothing else tells the system the screen is in use, so Fire OS starts its screensaver
     // over a playing film. This is what stops that.
     DisposableEffect(playing) {
@@ -445,11 +470,17 @@ fun PlayerScreen(
      * after they timed out and were summoned back, which re-ran this against nodes that
      * existed by then. So keep asking for a few frames instead of giving up on the first.
      */
-    LaunchedEffect(controlsVisible, panel, guideOpen, tileMenu, playback.isLive, playback.url) {
+    LaunchedEffect(
+        controlsVisible, panel, guideOpen, tileMenu, skipLabel, playback.isLive, playback.url,
+    ) {
         if (guideOpen) return@LaunchedEffect
         when {
             tileMenu != null -> tileMenuFocus.requestWhenReady()
             panel != Panel.NONE -> panelFocus.requestWhenReady()
+            // Above the transport: a prompt that is only up for a few seconds is no use
+            // if reaching it means hunting for it first. When it goes, focus has to land
+            // somewhere or the remote does nothing at all.
+            skipLabel != null -> skipFocus.requestWhenReady()
             controlsVisible -> playFocus.requestWhenReady()
             else -> rootFocus.requestWhenReady()
         }
@@ -803,6 +834,24 @@ fun PlayerScreen(
                 onOpenStats = { panel = Panel.STATS },
                 onToggleFormat = onToggleFormat,
                 modifier = Modifier.align(Alignment.BottomStart),
+            )
+        }
+
+        // Sits clear of the transport when that is up, and near the corner when it is
+        // not. Drawn after it so it is never behind it.
+        if (skipLabel != null) {
+            TvActionButton(
+                label = skipLabel,
+                onClick = {
+                    interaction++
+                    if (prompt == SkipPrompt.INTRO && intro != null) exoPlayer.seekTo(intro.endMs)
+                    else onStepEpisode(1)
+                },
+                emphasised = true,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 40.dp, bottom = if (controlsVisible) 168.dp else 40.dp)
+                    .focusRequester(skipFocus),
             )
         }
 
