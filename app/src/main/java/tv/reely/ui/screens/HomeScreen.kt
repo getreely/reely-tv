@@ -1,5 +1,8 @@
 package tv.reely.ui.screens
 
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.foundation.gestures.BringIntoViewSpec
 import tv.reely.ui.components.PosterRowPlaceholder
 import tv.reely.ui.components.HeroPlaceholder
 import tv.reely.ui.components.Shimmer
@@ -57,8 +60,18 @@ import tv.reely.ui.components.CardMenu
 import tv.reely.ui.components.requestWhenReady
 import tv.reely.ui.theme.Ink
 
-// Sized for the type scale: a 72 dp title logo, details, two lines of summary.
-private val HERO_HEIGHT = 184.dp
+/*
+ * Sized so a whole row fits beneath it on a 540 dp screen, focus lift and safe area
+ * included: a 56 dp title logo, details, two lines of summary. At 184 dp the row below
+ * ran off the bottom edge and a focused card lost its caption.
+ */
+private val HERO_HEIGHT = 160.dp
+
+/** Between a row's heading and its cards: room for a focused card's lift and ring. */
+private val HEADING_GAP = 16.dp
+
+/** Below the last row: a focused card's lift, then the television's safe area. */
+private val ROWS_BOTTOM = 40.dp
 
 @Composable
 fun HomeScreen(
@@ -94,6 +107,21 @@ fun HomeScreen(
     val episodeFocus = rememberRowFocus()
     val movieFocus = rememberRowFocus()
 
+    /*
+     * A row coming into focus snaps its heading to the top of the rows. The television's
+     * own rule is a pivot, which left a lower row flush with the bottom of the screen and
+     * the focused card's caption off it. The rows keep that rule for moving sideways.
+     */
+    val sideways = LocalBringIntoViewSpec.current
+    val density = LocalDensity.current
+    val rowHead = with(density) { ReelyType.RowTitle.lineHeight.toPx() + HEADING_GAP.toPx() }
+    val rowsScroll = remember(rowHead) {
+        object : BringIntoViewSpec {
+            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float =
+                offset - rowHead
+        }
+    }
+
     var menuFor by remember { mutableStateOf<PlexItem?>(null) }
     val menuFocus = remember { FocusRequester() }
     LaunchedEffect(menuFor) { if (menuFor != null) menuFocus.requestWhenReady() }
@@ -116,7 +144,7 @@ fun HomeScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(HERO_HEIGHT)
-                        .padding(horizontal = 40.dp, vertical = 10.dp),
+                        .padding(horizontal = 40.dp, vertical = 6.dp),
                 ) {
                     if (focused != null) {
                         // An episode is introduced by its show — the show's logo, or its name —
@@ -151,86 +179,88 @@ fun HomeScreen(
                     }
                 }
 
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    if (home.error != null) {
-                        item { ErrorNote(home.error, modifier = Modifier.padding(horizontal = 40.dp)) }
-                    }
+                CompositionLocalProvider(LocalBringIntoViewSpec provides rowsScroll) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = ROWS_BOTTOM),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        if (home.error != null) {
+                            item { ErrorNote(home.error, modifier = Modifier.padding(horizontal = 40.dp)) }
+                        }
 
-                    if (home.continueWatching.isNotEmpty()) {
-                        item {
-                            PosterRow(title = "Continue Watching", rowFocus = resumeFocus) {
-                                items(home.continueWatching, key = { it.listKey }) { item ->
-                                    PosterCard(
-                                        title = item.rowTitle,
-                                        subtitle = episodeLine(item),
-                                        imageUrl = imageUrl(item.serverBase, posterArt(item), 300, 450),
-                                        progress = item.resumeFraction,
-                                        watched = item.isWatched,
-                                        onFocus = {
-                                            resumeFocus.onFocused(item.listKey)
-                                            onFocusItem(item)
-                                        },
-                                        onClick = { onOpenItem(item) },
-                                        onLongPress = { menuFor = item },
-                                        modifier = rowItem(resumeFocus, item.listKey),
-                                    )
+                        if (home.continueWatching.isNotEmpty()) {
+                            item {
+                                PosterRow(title = "Continue Watching", rowFocus = resumeFocus, sideways = sideways) {
+                                    items(home.continueWatching, key = { it.listKey }) { item ->
+                                        PosterCard(
+                                            title = item.rowTitle,
+                                            subtitle = episodeLine(item),
+                                            imageUrl = imageUrl(item.serverBase, posterArt(item), 300, 450),
+                                            progress = item.resumeFraction,
+                                            watched = item.isWatched,
+                                            onFocus = {
+                                                resumeFocus.onFocused(item.listKey)
+                                                onFocusItem(item)
+                                            },
+                                            onClick = { onOpenItem(item) },
+                                            onLongPress = { menuFor = item },
+                                            modifier = rowItem(resumeFocus, item.listKey),
+                                        )
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    if (home.recentEpisodes.isNotEmpty()) {
-                        item {
-                            PosterRow(title = "Recently Added Episodes", rowFocus = episodeFocus) {
-                                items(home.recentEpisodes, key = { it.listKey }) { group ->
-                                    EpisodeGroupCard(group, imageUrl, episodeFocus, onFocusItem, onOpenItem)
+                        if (home.recentEpisodes.isNotEmpty()) {
+                            item {
+                                PosterRow(title = "Recently Added Episodes", rowFocus = episodeFocus, sideways = sideways) {
+                                    items(home.recentEpisodes, key = { it.listKey }) { group ->
+                                        EpisodeGroupCard(group, imageUrl, episodeFocus, onFocusItem, onOpenItem)
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    if (home.recentMovies.isNotEmpty()) {
-                        item {
-                            PosterRow(title = "Recently Added Movies", rowFocus = movieFocus) {
-                                items(home.recentMovies, key = { it.listKey }) { movie ->
-                                    PosterCard(
-                                        title = movie.title,
-                                        subtitle = movie.caption,
-                                        imageUrl = imageUrl(movie.serverBase, movie.thumb, 300, 450),
-                                        progress = movie.resumeFraction,
-                                        watched = movie.isWatched,
-                                        onFocus = {
-                                            movieFocus.onFocused(movie.listKey)
-                                            onFocusItem(movie)
-                                        },
-                                        onClick = { onOpenItem(movie) },
-                                        onLongPress = { menuFor = movie },
-                                        modifier = rowItem(movieFocus, movie.listKey),
-                                    )
+                        if (home.recentMovies.isNotEmpty()) {
+                            item {
+                                PosterRow(title = "Recently Added Movies", rowFocus = movieFocus, sideways = sideways) {
+                                    items(home.recentMovies, key = { it.listKey }) { movie ->
+                                        PosterCard(
+                                            title = movie.title,
+                                            subtitle = movie.caption,
+                                            imageUrl = imageUrl(movie.serverBase, movie.thumb, 300, 450),
+                                            progress = movie.resumeFraction,
+                                            watched = movie.isWatched,
+                                            onFocus = {
+                                                movieFocus.onFocused(movie.listKey)
+                                                onFocusItem(movie)
+                                            },
+                                            onClick = { onOpenItem(movie) },
+                                            onLongPress = { menuFor = movie },
+                                            modifier = rowItem(movieFocus, movie.listKey),
+                                        )
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    if (home.isEmpty && home.busy) {
-                        item {
-                            Shimmer {
-                                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                                    PosterRowPlaceholder()
-                                    PosterRowPlaceholder()
+                        if (home.isEmpty && home.busy) {
+                            item {
+                                Shimmer {
+                                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                        PosterRowPlaceholder()
+                                        PosterRowPlaceholder()
+                                    }
                                 }
                             }
-                        }
-                    } else if (home.isEmpty) {
-                        item {
-                            EmptyNote(
-                                "Nothing to show yet. Watch something and it will appear here.",
-                                modifier = Modifier.padding(horizontal = 40.dp, vertical = 20.dp),
-                            )
+                        } else if (home.isEmpty) {
+                            item {
+                                EmptyNote(
+                                    "Nothing to show yet. Watch something and it will appear here.",
+                                    modifier = Modifier.padding(horizontal = 40.dp, vertical = 20.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -313,11 +343,13 @@ private fun EpisodeGroupCard(
 private fun PosterRow(
     title: String,
     rowFocus: tv.reely.ui.components.RowFocus,
+    /** How the row scrolls along itself: the screen's own rule, not the rows' snap. */
+    sideways: BringIntoViewSpec,
     content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit,
 ) {
     // Room between heading and cards for a focused card's lift and ring, which reach
     // about 14 dp above the row and ran into the heading.
-    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(HEADING_GAP)) {
         Text(
             text = title,
             color = Chalk,
@@ -327,12 +359,14 @@ private fun PosterRow(
         // The rest of the row steps back while one card in it has focus. The gap is wide
         // enough for the focus ring, which sits outside the artwork.
         FocusRow { rowFocused ->
-            LazyRow(
-                modifier = Modifier.restoreFocusTo(rowFocus).focusGroup().then(rowFocused),
-                contentPadding = PaddingValues(horizontal = 36.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                content = content,
-            )
+            CompositionLocalProvider(LocalBringIntoViewSpec provides sideways) {
+                LazyRow(
+                    modifier = Modifier.restoreFocusTo(rowFocus).focusGroup().then(rowFocused),
+                    contentPadding = PaddingValues(horizontal = 36.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    content = content,
+                )
+            }
         }
     }
 }

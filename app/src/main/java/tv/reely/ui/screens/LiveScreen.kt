@@ -1,9 +1,17 @@
 package tv.reely.ui.screens
 
+import tv.reely.ui.theme.SurfaceRaised
+import tv.reely.ui.theme.ReelyType
+import tv.reely.ui.components.cardRing
+import tv.reely.ui.components.cardLift
+import tv.reely.ui.components.WideCorner
+import tv.reely.ui.components.LocalTint
+import tv.reely.ui.components.FocusRow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.runtime.CompositionLocalProvider
 import tv.reely.ui.components.placeholder
 import tv.reely.ui.components.Shimmer
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,8 +53,6 @@ import tv.reely.ui.components.TvActionButton
 import tv.reely.ui.components.TvTextField
 import tv.reely.ui.components.channelTint
 import tv.reely.ui.components.glass
-import tv.reely.ui.theme.Accent
-import tv.reely.ui.theme.Faint
 import tv.reely.ui.theme.Muted
 import tv.reely.ui.theme.Chalk
 import tv.reely.xtream.XtreamCategory
@@ -73,87 +79,98 @@ fun LiveCategoriesScreen(
         return
     }
 
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 240.dp),
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 40.dp, vertical = 20.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            Column(modifier = Modifier.padding(bottom = 8.dp)) {
-                Text(
-                    text = "Live TV",
-                    color = Chalk,
-                    fontSize = 30.sp,
-                    lineHeight = 37.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = buildString {
-                        append("${live.categories.size} categories")
-                        live.account?.let { append("  ·  ${it.maxConnections} connection(s) allowed") }
-                        append("  ·  ${live.format.label}")
-                    },
-                    color = Faint,
-                    fontSize = 14.sp,
-                    lineHeight = 18.sp,
-                )
-                if (live.error != null) {
-                    ErrorNote(
-                        message = live.error,
-                        onDismiss = onDismissError,
-                        modifier = Modifier.padding(top = 12.dp),
+    // The tiles step back while one of them has focus, as a row of posters does.
+    FocusRow { gridFocused ->
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 240.dp),
+            modifier = modifier.fillMaxSize().then(gridFocused),
+            // Inside the safe area, with room at the edges and between tiles for a focused
+            // one's lift and glow.
+            contentPadding = PaddingValues(start = 48.dp, end = 48.dp, top = 20.dp, bottom = 27.dp),
+            horizontalArrangement = Arrangement.spacedBy(18.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Column(modifier = Modifier.padding(bottom = 8.dp)) {
+                    Text(text = "Live TV", color = Chalk, style = ReelyType.Display)
+                    Text(
+                        text = buildString {
+                            append("${live.categories.size} categories")
+                            live.account?.let { append("  ·  ${it.maxConnections} connection(s) allowed") }
+                            append("  ·  ${live.format.label}")
+                        },
+                        color = Muted,
+                        style = ReelyType.Meta,
+                        modifier = Modifier.padding(top = 4.dp),
                     )
-                }
-                if (live.categories.isEmpty() && !live.busy) {
-                    EmptyNote("The panel returned no categories.", modifier = Modifier.padding(top = 12.dp))
+                    if (live.error != null) {
+                        ErrorNote(
+                            message = live.error,
+                            onDismiss = onDismissError,
+                            modifier = Modifier.padding(top = 12.dp),
+                        )
+                    }
+                    if (live.categories.isEmpty() && !live.busy) {
+                        EmptyNote("The panel returned no categories.", modifier = Modifier.padding(top = 12.dp))
+                    }
                 }
             }
-        }
 
-        // Category tiles to be, while the panel answers.
-        if (live.categories.isEmpty() && live.busy) {
-            items(12) {
-                Shimmer { Box(modifier = Modifier.fillMaxWidth().height(92.dp).placeholder(corner = 14.dp)) }
+            // Category tiles to be, while the panel answers.
+            if (live.categories.isEmpty() && live.busy) {
+                items(12) {
+                    Shimmer { Box(modifier = Modifier.fillMaxWidth().height(TILE_HEIGHT).placeholder(WideCorner)) }
+                }
             }
-        }
 
-        items(live.categories, key = { it.id }) { category ->
-            CategoryCard(category = category, onClick = { onSelectCategory(category) })
+            items(live.categories, key = { it.id }) { category ->
+                CategoryCard(category = category, onClick = { onSelectCategory(category) })
+            }
         }
     }
 }
 
+private val TILE_HEIGHT = 92.dp
+
+/**
+ * A category, in its own colour. Focus is the same as a poster's: a white ring, a lift,
+ * and a glow — here in the tile's colour rather than the artwork's, since it has none.
+ */
 @Composable
 private fun CategoryCard(category: XtreamCategory, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val tint = channelTint(category.id)
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(92.dp)
-            .onFocusChanged { focused = it.isFocused }
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (focused) tint.copy(alpha = 0.45f) else tint.copy(alpha = 0.22f))
-            .border(
-                width = if (focused) 3.dp else 1.dp,
-                color = if (focused) Accent else tint.copy(alpha = 0.5f),
-                shape = RoundedCornerShape(14.dp),
+    CompositionLocalProvider(LocalTint provides tint) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(TILE_HEIGHT)
+                .cardLift(focused)
+                .onFocusChanged { focused = it.isFocused }
+                .cardRing(focused, WideCorner)
+                .clip(RoundedCornerShape(WideCorner))
+                .background(SurfaceRaised)
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            tint.copy(alpha = if (focused) 0.5f else 0.34f),
+                            tint.copy(alpha = if (focused) 0.2f else 0.1f),
+                        )
+                    )
+                )
+                .clickable(onClick = onClick)
+                .padding(horizontal = 20.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Text(
+                text = category.name,
+                color = if (focused) Chalk else Chalk.copy(alpha = 0.86f),
+                style = ReelyType.Body,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 18.dp),
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        Text(
-            text = category.name,
-            color = if (focused) Chalk else Muted,
-            fontSize = 17.sp,
-            lineHeight = 22.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
+        }
     }
 }
 

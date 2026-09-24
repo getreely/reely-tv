@@ -363,9 +363,11 @@ fun HeroText(
     /** What the file is: 4K, Dolby Vision, 5.1. See [tv.reely.core.qualityBadges]. */
     qualities: List<String> = emptyList(),
 ) {
+    // Room between the lines: at 6 dp the logo, the facts and the summary read as one
+    // block jammed together on a real set.
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (eyebrow != null) {
             Text(
@@ -399,12 +401,13 @@ fun HeroText(
             )
         }
         if (!summary.isNullOrBlank()) {
-            // The one place anybody reads more than a line, so it gets body size and a
-            // reading width: it used to run on for 700 dp and was hard to follow back.
+            // The one place anybody reads more than a line, so it gets a reading width: it
+            // used to run on for 700 dp and was hard to follow back. A size down from body,
+            // so it sits under the title rather than competing with it.
             Text(
                 text = summary,
                 color = Muted,
-                style = ReelyType.Body,
+                style = HeroSummary,
                 maxLines = summaryMaxLines,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.widthIn(max = 560.dp),
@@ -413,9 +416,14 @@ fun HeroText(
     }
 }
 
-/** Title logos are fitted into this box: 13% of the screen's height at most. */
-private val LOGO_HEIGHT = 72.dp
-private val LOGO_WIDTH = 420.dp
+/** Title logos are fitted into this box: a tenth of the screen's height at most. */
+private val LOGO_HEIGHT = 56.dp
+private val LOGO_WIDTH = 320.dp
+
+/** A title with no logo, sized to sit where one would. */
+private val HeroTitle = ReelyType.Display.copy(fontSize = 30.sp, lineHeight = 36.sp, letterSpacing = (-0.4).sp)
+
+private val HeroSummary = ReelyType.Body.copy(fontSize = 16.sp, lineHeight = 23.sp)
 
 /**
  * A title's own logo in place of its name — or the name, at display size, when there is
@@ -431,7 +439,7 @@ fun TitleArt(url: String?, title: String, modifier: Modifier = Modifier) {
         Text(
             text = title,
             color = Chalk,
-            style = ReelyType.Display,
+            style = HeroTitle,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = modifier,

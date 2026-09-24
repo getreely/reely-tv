@@ -10,6 +10,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.requestFocus
 import org.junit.Before
 import org.junit.Rule
@@ -35,7 +36,12 @@ class HomeShot {
 
     @Before fun setUp() { Shots.onlyWhenAsked(); Shots.syncImages() }
 
-    @Test fun home() {
+    @Test fun home() = homeWithFocusOn("Harbor Lights", "home")
+
+    /** Focus down in a lower row: the page scrolls, and the lifted card must stay whole. */
+    @Test fun homeLowerRow() = homeWithFocusOn("2 new episodes", "home-lower-row")
+
+    private fun homeWithFocusOn(title: String, name: String, last: Boolean = false) {
         val cw = listOf("north", "harbor", "shift", "quiet", "salt").map(Shots::item)
         val movies = listOf("ember", "field", "orbit", "glass", "ferry", "cardinal").map(Shots::item)
         val groups = listOf("north", "harbor", "shift").map { key ->
@@ -74,8 +80,9 @@ class HomeShot {
                 }
             }
         }
-        compose.onAllNodesWithText("Harbor Lights").onFirst().requestFocus()
-        Shots.save(compose, "home")
+        val matches = compose.onAllNodesWithText(title)
+        (if (last) matches.onLast() else matches.onFirst()).requestFocus()
+        Shots.save(compose, name)
     }
 
     /** Home before the server has answered: the rows' shapes, not a line of text. */
