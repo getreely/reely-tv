@@ -1,5 +1,10 @@
 package tv.reely.ui.screens
 
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.FocusRequester
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusGroup
@@ -94,10 +99,32 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     var section by remember { mutableStateOf(Section.VIDEO) }
+    val sectionFocus = remember { Section.entries.associateWith { FocusRequester() } }
+    var inOptions by remember { mutableStateOf(false) }
 
-    Row(modifier = modifier.fillMaxSize().padding(horizontal = 36.dp, vertical = 14.dp)) {
+    // Back from the options goes back to the section they belong to. Back from the
+    // sections leaves Settings, as it always has.
+    BackHandler(enabled = inOptions) { sectionFocus.getValue(section).requestFocus() }
+
+    /*
+     * Settings is entered at its sections, on the one that is showing: arriving from the
+     * gear up in the corner used to land in the options, the nearest thing below it, with
+     * no obvious way back out to the sections. Coming back left from the options lands on
+     * that section too, rather than on whichever one happened to sit level with the cursor.
+     */
+    val toSection = Modifier.focusProperties {
+        onEnter = { sectionFocus.getValue(section).requestFocus() }
+    }
+
+    Row(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 36.dp, vertical = 14.dp)
+            .then(toSection)
+            .focusGroup(),
+    ) {
         Column(
-            modifier = Modifier.width(180.dp).fillMaxHeight().focusGroup(),
+            modifier = Modifier.width(180.dp).fillMaxHeight().then(toSection).focusGroup(),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
@@ -113,7 +140,12 @@ fun SettingsScreen(
                     label = entry.title,
                     selected = section == entry,
                     onClick = { section = entry },
-                    modifier = Modifier.fillMaxWidth(),
+                    // Moving down the sections shows each one, as a television's own
+                    // settings do; right then goes into what is on screen.
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(sectionFocus.getValue(entry))
+                        .onFocusChanged { if (it.isFocused) section = entry },
                 )
             }
         }
@@ -124,6 +156,7 @@ fun SettingsScreen(
                 .fillMaxHeight()
                 .padding(start = 26.dp)
                 .verticalScroll(rememberScrollState())
+                .onFocusChanged { inOptions = it.hasFocus }
                 .focusGroup(),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {

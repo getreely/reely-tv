@@ -19,8 +19,8 @@ android {
         // Keystore-backed credential store needs API 23 and Compose is painful below it.
         minSdk = 23
         targetSdk = 34
-        versionCode = 1107
-        versionName = "0.33.2"
+        versionCode = 1108
+        versionName = "0.33.3"
     }
 
     signingConfigs {

@@ -296,24 +296,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 .fillMaxWidth()
                 .weight(1f)
                 .focusRequester(contentFocus)
-                .focusGroup()
-                /*
-                 * Up is the only way out of a page, and it goes to that page's own tab.
-                 *
-                 * Any other direction off the edge of a page used to carry on to whatever
-                 * lay that way on screen, and the only thing there is the tab row above:
-                 * right from a checkbox in Settings landed on TV Shows, which a tab takes
-                 * as being chosen, so the screen changed under a press meant to do nothing.
-                 */
-                .focusProperties {
-                    onExit = {
-                        if (requestedFocusDirection == FocusDirection.Up) {
-                            currentTabFocus.requestFocus()
-                        } else {
-                            cancelFocusChange()
-                        }
-                    }
-                }
+                .pageArea(upTo = currentTabFocus)
                 .onGloballyPositioned { constraintsWidth = it.size.width }
                 .onFocusChanged {
                     if (it.hasFocus) {
@@ -739,3 +722,25 @@ private fun ConfirmExit(
         }
     }
 }
+
+/**
+ * The area under the tab row that every page is drawn in.
+ *
+ * Up is the only way out of a page, and it goes to that page's own tab. Any other
+ * direction off the edge of a page used to carry on to whatever lay that way on screen,
+ * and the only thing there is the tab row above: right from a checkbox in Settings landed
+ * on TV Shows, which a tab takes as being chosen, so the screen changed under a press
+ * meant to do nothing.
+ *
+ * The properties come before the group, which is what they apply to. Placed after it,
+ * they reached past it to every page's own groups instead, so moving left from Settings'
+ * options to its sections counted as leaving sideways, and was cancelled.
+ */
+internal fun Modifier.pageArea(upTo: FocusRequester): Modifier = this
+    .focusProperties {
+        onExit = {
+            if (requestedFocusDirection == FocusDirection.Up) upTo.requestFocus()
+            else cancelFocusChange()
+        }
+    }
+    .focusGroup()
