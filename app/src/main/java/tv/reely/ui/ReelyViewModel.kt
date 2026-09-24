@@ -305,7 +305,11 @@ data class PlayerPrefs(
     val themeMusic: Boolean = false,
     val themeVolume: Float = Settings.DEFAULT_THEME_VOLUME,
     val matchFrameRate: Boolean = true,
+    val largerBuffer: Boolean = false,
 )
+
+/** How often a browsing screen left up asks for what has changed. */
+internal const val BROWSE_REFRESH_MS = 5L * 60_000
 
 /** Where a check for a newer build has got to. */
 sealed interface UpdateStatus {
@@ -374,6 +378,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 themeMusic = settings.themeMusic,
                 themeVolume = settings.themeVolume,
                 matchFrameRate = settings.matchFrameRate,
+                largerBuffer = settings.largerBuffer,
             )
         )
     )
@@ -434,7 +439,42 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         if (route !is Route.Detail) stopTheme()
         if (route is Route.Detail) loadDetail(route)
         if (route is Route.Home) refreshHome()
+        if (route is Route.Library) refreshLibrary(route.kind, force = false)
         if (route is Route.Live) openGuide()
+    }
+
+    /*
+     * Keeping the libraries current. There is no push from the server, so the app asks
+     * again: on arriving at a library, on coming back to the app, and every few minutes
+     * while a browsing screen is up. Before, only Home asked — a film added while the
+     * app sat on the Movies tab stayed missing until something happened to visit Home.
+     */
+    private val libraryRefreshedAt = mutableMapOf<LibraryKind, Long>()
+
+    /** What is on screen, asked for again. Called on coming back to the app and on a timer. */
+    fun refreshVisible() {
+        if (_state.value.playback != null) return
+        when (val route = _state.value.route) {
+            is Route.Home -> refreshHome()
+            is Route.Library -> refreshLibrary(route.kind, force = true)
+            else -> Unit
+        }
+    }
+
+    /**
+     * A library's rows and grid, read again. Arriving by moving across the tabs visits
+     * each one on the way, so that only asks once a minute; the timer and coming back to
+     * the app always ask. The grid is refreshed in place — the items stay on screen while
+     * the new list is fetched, and keep their keys, so the cursor stays where it was.
+     */
+    private fun refreshLibrary(kind: LibraryKind, force: Boolean) {
+        val now = System.currentTimeMillis()
+        if (!force && now - (libraryRefreshedAt[kind] ?: 0L) < LIBRARY_REFRESH_GAP_MS) return
+        val section = _state.value.plex.browseFor(kind).section ?: return
+        libraryRefreshedAt[kind] = now
+        refreshHome()
+        loadReleased(kind, section)
+        loadBrowse(kind)
     }
 
     /** True when there is somewhere to go back to. */
@@ -2143,6 +2183,12 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         if (!next) themePlayer.silence() else startTheme()
     }
 
+    fun toggleLargerBuffer() {
+        val next = !settings.largerBuffer
+        settings.largerBuffer = next
+        _state.update { it.copy(prefs = it.prefs.copy(largerBuffer = next)) }
+    }
+
     fun toggleMatchFrameRate() {
         val next = !settings.matchFrameRate
         settings.matchFrameRate = next
@@ -2215,6 +2261,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
         /** Guide data older than this is worth fetching again. */
         const val REFRESH_AFTER_SECONDS = 6L * 3_600
+
+        /** The least time between two refreshes of a library caused by passing its tab. */
+        const val LIBRARY_REFRESH_GAP_MS = 60_000L
 
         /** What a transcode is asked to produce. A stick has no use for more. */
         const val RESOLUTION = "1920x1080"

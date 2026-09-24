@@ -89,6 +89,7 @@ fun SettingsScreen(
     onToggleMultiviewLayout: () -> Unit,
     onToggleThemeMusic: () -> Unit,
     onToggleMatchFrameRate: () -> Unit,
+    onToggleLargerBuffer: () -> Unit,
     onNudgeThemeVolume: (Float) -> Unit,
     onRefreshChannels: () -> Unit,
     onRefreshGuide: () -> Unit,
@@ -170,6 +171,7 @@ fun SettingsScreen(
                     onCycleMaxBitrate = onCycleMaxBitrate,
                     onToggleThemeMusic = onToggleThemeMusic,
                     onToggleMatchFrameRate = onToggleMatchFrameRate,
+                    onToggleLargerBuffer = onToggleLargerBuffer,
                     onNudgeThemeVolume = onNudgeThemeVolume,
                 )
 
@@ -215,6 +217,7 @@ private fun VideoSection(
     onCycleMaxBitrate: () -> Unit,
     onToggleThemeMusic: () -> Unit,
     onToggleMatchFrameRate: () -> Unit,
+    onToggleLargerBuffer: () -> Unit,
     onNudgeThemeVolume: (Float) -> Unit,
 ) {
     Panel(title = "Playback") {
@@ -248,6 +251,28 @@ private fun VideoSection(
             TvActionButton(
                 label = if (prefs.subtitleBackground) "Background off" else "Background on",
                 onClick = onToggleSubtitleBackground,
+            )
+        }
+    }
+
+    Panel(title = "Buffering") {
+        FactLine("Loaded ahead", if (prefs.largerBuffer) "Larger — up to 2 minutes" else "Normal — up to 30 seconds")
+        Text(
+            text = "How much of a film or episode is kept loaded ahead of what is playing. " +
+                "Normal starts things quickest. Larger rides out a slow or uneven connection " +
+                "to the server, at the cost of a second or so more before playing starts. " +
+                "Very high bitrate files, such as 4K remuxes, fill the memory set aside " +
+                "before either limit, so they gain less. Live TV is not affected. Takes " +
+                "effect from the next thing played.",
+            color = Muted,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+        )
+        Buttons {
+            TvActionButton(
+                label = if (prefs.largerBuffer) "Use normal" else "Use larger",
+                onClick = onToggleLargerBuffer,
+                emphasised = prefs.largerBuffer,
             )
         }
     }

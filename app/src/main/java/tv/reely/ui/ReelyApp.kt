@@ -181,11 +181,26 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     // once. Backgrounding kills the theme outright.
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
+        var wasStopped = false
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) viewModel.silenceTheme()
+            if (event == Lifecycle.Event.ON_STOP) {
+                viewModel.silenceTheme()
+                wasStopped = true
+            }
+            // Back from the launcher or a screensaver: whatever was added meanwhile.
+            // Not the first start, which loads everything anyway.
+            if (event == Lifecycle.Event.ON_START && wasStopped) viewModel.refreshVisible()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // A browsing screen left up keeps itself current. See ReelyViewModel.refreshVisible.
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(BROWSE_REFRESH_MS)
+            viewModel.refreshVisible()
+        }
     }
 
     val contentFocus = remember { FocusRequester() }
@@ -417,6 +432,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onToggleMultiviewLayout = viewModel::toggleMultiviewLayout,
                 onToggleThemeMusic = viewModel::toggleThemeMusic,
                 onToggleMatchFrameRate = viewModel::toggleMatchFrameRate,
+                onToggleLargerBuffer = viewModel::toggleLargerBuffer,
                 onNudgeThemeVolume = viewModel::nudgeThemeVolume,
                 onCyclePlaybackMode = viewModel::cyclePlaybackMode,
                 onCycleMaxBitrate = viewModel::cycleMaxBitrate,

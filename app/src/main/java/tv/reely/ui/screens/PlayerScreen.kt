@@ -165,12 +165,8 @@ fun PlayerScreen(
 
     val ownPlayer = remember {
         ExoPlayer.Builder(context)
-            .setLoadControl(
-                // A small start buffer: channel-switch latency is what separates good from bad.
-                DefaultLoadControl.Builder()
-                    .setBufferDurationsMs(2_000, 30_000, 1_000, 2_000)
-                    .build()
-            )
+            // Quick to start by default; more in hand when asked for — see bufferFor.
+            .setLoadControl(bufferFor(prefs.largerBuffer))
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
@@ -1741,3 +1737,24 @@ private fun describe(error: PlaybackException): String = when (val cause = error
 
     else -> error.errorCodeName + (error.message?.let { " — $it" } ?: "")
 }
+
+/**
+ * How much of a film or episode to keep loaded ahead.
+ *
+ * Normal: a second to start, a ceiling of thirty seconds — channel-switch speed, which is
+ * what separates good from bad on live television, and fine on a good home network.
+ * Larger: the same start, then it keeps loading to a minute before easing off, holds up
+ * to two, and after a stall waits for five seconds in hand rather than two, so an uneven
+ * connection does not stutter through a string of short stops. Both are also bounded by
+ * the player's memory budget, which a very high bitrate file reaches first.
+ */
+private fun bufferFor(larger: Boolean): DefaultLoadControl =
+    if (larger) {
+        DefaultLoadControl.Builder()
+            .setBufferDurationsMs(60_000, 120_000, 1_500, 5_000)
+            .build()
+    } else {
+        DefaultLoadControl.Builder()
+            .setBufferDurationsMs(2_000, 30_000, 1_000, 2_000)
+            .build()
+    }

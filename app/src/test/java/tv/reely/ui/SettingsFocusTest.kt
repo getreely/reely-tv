@@ -80,7 +80,7 @@ class SettingsFocusTest {
                             onToggleFormat = {}, onNudgeSubtitleScale = {}, onToggleSubtitleBackground = {},
                             onNudgeUpNext = {}, onToggleGuidePreview = {}, onCyclePlaybackMode = {},
                             onCycleMaxBitrate = {}, onToggleMultiviewLayout = {}, onToggleThemeMusic = {},
-                            onToggleMatchFrameRate = {}, onNudgeThemeVolume = {}, onRefreshChannels = {},
+                            onToggleMatchFrameRate = {}, onToggleLargerBuffer = {}, onNudgeThemeVolume = {}, onRefreshChannels = {},
                             onRefreshGuide = {}, update = UpdateStatus.Idle, updateUrl = "https://example",
                             onCheckForUpdate = {}, onInstallUpdate = {},
                         )

@@ -68,6 +68,15 @@ class Settings(context: Context) {
         set(value) = prefs.edit().putBoolean(MATCH_FRAME_RATE, value).apply()
 
     /**
+     * Keep more of a film or episode loaded ahead of what is playing. Off by default: the
+     * ordinary amount starts things quickest, and only a slow or uneven connection to the
+     * server needs more in hand.
+     */
+    var largerBuffer: Boolean
+        get() = prefs.getBoolean(LARGER_BUFFER, false)
+        set(value) = prefs.edit().putBoolean(LARGER_BUFFER, value).apply()
+
+    /**
      * A show's theme tune under its page. Off unless asked for: something that makes
      * noise on its own should be chosen rather than discovered.
      */
@@ -109,6 +118,7 @@ class Settings(context: Context) {
         private const val GUIDE_PREVIEW = "guide.preview"
         private const val PLAYBACK_MODE = "playback.mode"
         private const val MATCH_FRAME_RATE = "playback.matchFrameRate"
+        private const val LARGER_BUFFER = "playback.largerBuffer"
         private const val MAX_BITRATE = "playback.maxBitrate"
         private const val UPDATE_URL = "update.url"
         private const val FAVOURITE_SECTIONS = "library.favourites"
