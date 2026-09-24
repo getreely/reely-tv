@@ -43,7 +43,7 @@ import tv.reely.ui.components.TvActionButton
 import tv.reely.ui.components.TvChip
 import tv.reely.ui.theme.Line
 import tv.reely.ui.theme.Muted
-import tv.reely.ui.theme.Parchment
+import tv.reely.ui.theme.Chalk
 import tv.reely.ui.theme.SurfaceRaised
 import tv.reely.xtream.StreamFormat
 import java.text.SimpleDateFormat
@@ -102,7 +102,7 @@ fun SettingsScreen(
         ) {
             Text(
                 text = "Settings",
-                color = Parchment,
+                color = Chalk,
                 fontSize = 22.sp,
                 lineHeight = 28.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -200,8 +200,8 @@ private fun VideoSection(
             text = "Subtitles start off on everything. Choosing a track in the player turns " +
                 "them on and that choice carries to whatever is played next.",
             color = Muted,
-            fontSize = 13.sp,
-            lineHeight = 19.sp,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
         )
         Buttons {
             TvActionButton(
@@ -229,8 +229,8 @@ private fun VideoSection(
                 "it off if your television blanks for a second or two while it changes. " +
                 "Live channels are left alone either way.",
             color = Muted,
-            fontSize = 13.sp,
-            lineHeight = 19.sp,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
         )
         Buttons {
             TvActionButton(
@@ -250,8 +250,8 @@ private fun VideoSection(
                 "from whatever else the television is doing. A tenth is about right; this " +
                 "is a raw gain, so twice the number is a great deal more than twice as loud.",
             color = Muted,
-            fontSize = 13.sp,
-            lineHeight = 19.sp,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
         )
         Buttons {
             TvActionButton(
@@ -314,8 +314,8 @@ private fun LiveSection(
             text = "Providers add and drop channels without notice, and the guide goes stale " +
                 "on its own. Neither is refetched unless asked.",
             color = Muted,
-            fontSize = 13.sp,
-            lineHeight = 19.sp,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
         )
         Buttons {
             TvActionButton(
@@ -350,8 +350,8 @@ private fun LiveSection(
                 "behind live. MPEG-TS is one continuous connection: quicker onto a channel " +
                 "and closer to the action, with nothing to rejoin when it breaks.",
             color = Muted,
-            fontSize = 13.sp,
-            lineHeight = 19.sp,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
         )
         FactLine(
             "Multiview layout",
@@ -366,8 +366,8 @@ private fun LiveSection(
                 "${live.account?.maxConnections ?: "?"}. In the grid, OK fills the screen " +
                 "with a tile and back returns to it; holding OK swaps what is in it.",
             color = Muted,
-            fontSize = 13.sp,
-            lineHeight = 19.sp,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
         )
         Buttons {
             TvActionButton(
@@ -431,8 +431,8 @@ private fun PlexPanel(
                     "Only the picked libraries are offered. Clear them all to go back to " +
                         "offering every one.",
                 color = Muted,
-                fontSize = 13.sp,
-                lineHeight = 19.sp,
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
             )
             Column(
                 modifier = Modifier.padding(top = 8.dp).focusGroup(),
@@ -463,8 +463,8 @@ private fun PlexPanel(
                     "is usually all that is needed and this is the long way round. Switching " +
                     "replaces every library, row and page with that server's own.",
                 color = Muted,
-                fontSize = 13.sp,
-                lineHeight = 19.sp,
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
             )
             Column(
                 modifier = Modifier.padding(top = 8.dp).focusGroup(),
@@ -497,8 +497,8 @@ private fun UpdatesSection(
             text = "Releases are built and published by GitHub, so this address always " +
                 "points at the newest one.",
             color = Muted,
-            fontSize = 13.sp,
-            lineHeight = 19.sp,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
         )
     }
 
@@ -535,7 +535,7 @@ private fun UpdatesSection(
                 }
                 update.info.published?.let { FactLine("Dated", it) }
                 update.info.notes?.let {
-                    Text(text = it, color = Muted, fontSize = 13.sp, lineHeight = 19.sp)
+                    Text(text = it, color = Muted, fontSize = 14.sp, lineHeight = 20.sp)
                 }
             }
 
@@ -547,8 +547,8 @@ private fun UpdatesSection(
                         "upgrade. Publishing reely-tv.json beside the APK fixes that — " +
                         "the release build writes one.",
                     color = Muted,
-                    fontSize = 13.sp,
-                    lineHeight = 19.sp,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
                 )
                 if (update.info.sizeBytes > 0) {
                     FactLine("Size", "${update.info.sizeBytes / 1_048_576} MB")

@@ -24,7 +24,7 @@ import tv.reely.ui.theme.Accent
 import tv.reely.ui.theme.Faint
 import tv.reely.ui.theme.Line
 import tv.reely.ui.theme.Muted
-import tv.reely.ui.theme.Parchment
+import tv.reely.ui.theme.Chalk
 import tv.reely.ui.theme.SurfaceRaised
 
 /**
@@ -46,7 +46,7 @@ fun PlexSignInPanel(
         SectionHeading("Plex library")
         Text(
             text = "Sign in to see a library",
-            color = Parchment,
+            color = Chalk,
             fontSize = 26.sp,
             lineHeight = 32.sp,
             fontWeight = FontWeight.SemiBold,
@@ -87,7 +87,7 @@ fun PlexSignInPanel(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(text = "On a phone or computer, go to", color = Muted, fontSize = 14.sp)
-                Text(text = "plex.tv/link", color = Parchment, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+                Text(text = "plex.tv/link", color = Chalk, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
                 Text(text = "and enter this code", color = Muted, fontSize = 14.sp)
                 Text(
                     text = code,
@@ -100,7 +100,7 @@ fun PlexSignInPanel(
                 Text(
                     text = "This screen updates by itself once the code is accepted.",
                     color = Faint,
-                    fontSize = 12.sp,
+                    fontSize = 14.sp,
                 )
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     TvActionButton(label = "Cancel", onClick = onCancelLink)

@@ -46,7 +46,7 @@ import tv.reely.ui.components.glass
 import tv.reely.ui.theme.Accent
 import tv.reely.ui.theme.Faint
 import tv.reely.ui.theme.Muted
-import tv.reely.ui.theme.Parchment
+import tv.reely.ui.theme.Chalk
 import tv.reely.xtream.XtreamCategory
 
 /**
@@ -82,7 +82,7 @@ fun LiveCategoriesScreen(
             Column(modifier = Modifier.padding(bottom = 8.dp)) {
                 Text(
                     text = "Live TV",
-                    color = Parchment,
+                    color = Chalk,
                     fontSize = 30.sp,
                     lineHeight = 37.sp,
                     fontWeight = FontWeight.Bold,
@@ -94,8 +94,8 @@ fun LiveCategoriesScreen(
                         append("  ·  ${live.format.label}")
                     },
                     color = Faint,
-                    fontSize = 13.sp,
-                    lineHeight = 17.sp,
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp,
                 )
                 if (live.error != null) {
                     ErrorNote(
@@ -141,7 +141,7 @@ private fun CategoryCard(category: XtreamCategory, onClick: () -> Unit) {
     ) {
         Text(
             text = category.name,
-            color = if (focused) Parchment else Muted,
+            color = if (focused) Chalk else Muted,
             fontSize = 17.sp,
             lineHeight = 22.sp,
             fontWeight = FontWeight.Medium,
@@ -169,7 +169,7 @@ internal fun XtreamSignInPanel(
         SectionHeading("Live TV")
         Text(
             text = "Sign in to your IPTV provider",
-            color = Parchment,
+            color = Chalk,
             fontSize = 26.sp,
             lineHeight = 32.sp,
             fontWeight = FontWeight.SemiBold,

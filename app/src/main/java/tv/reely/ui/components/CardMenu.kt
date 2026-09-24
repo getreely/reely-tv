@@ -28,7 +28,7 @@ import androidx.tv.material3.Text
 import tv.reely.ui.theme.Ink
 import tv.reely.ui.theme.Line
 import tv.reely.ui.theme.Muted
-import tv.reely.ui.theme.Parchment
+import tv.reely.ui.theme.Chalk
 
 /** One thing a card's menu can do. */
 data class CardAction(
@@ -91,7 +91,7 @@ fun CardMenu(
     ) {
         Text(
             text = title,
-            color = Parchment,
+            color = Chalk,
             fontSize = 16.sp,
             lineHeight = 21.sp,
             fontWeight = FontWeight.SemiBold,
@@ -102,8 +102,8 @@ fun CardMenu(
             Text(
                 text = it,
                 color = Muted,
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
+                fontSize = 14.sp,
+                lineHeight = 19.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

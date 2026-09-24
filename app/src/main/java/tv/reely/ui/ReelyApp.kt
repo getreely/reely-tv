@@ -75,7 +75,7 @@ import tv.reely.ui.theme.Faint
 import tv.reely.ui.theme.Ink
 import tv.reely.ui.theme.Line
 import tv.reely.ui.theme.Muted
-import tv.reely.ui.theme.Parchment
+import tv.reely.ui.theme.Chalk
 
 private enum class TabIcon { NONE, SEARCH, GEAR }
 
@@ -544,7 +544,7 @@ private fun contentReady(state: ReelyState): Boolean = when (val route = state.r
 }
 
 @Composable
-private fun TopBar(
+internal fun TopBar(
     current: Route,
     onNavigate: (Route) -> Unit,
     onActivate: (Route) -> Unit,
@@ -565,7 +565,7 @@ private fun TopBar(
         Text(
             text = "reely",
             color = Accent,
-            fontSize = 20.sp,
+            fontSize = 22.sp,
             lineHeight = 25.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(end = 18.dp),
@@ -595,8 +595,8 @@ private fun TopBar(
             Text(
                 text = serverName,
                 color = Faint,
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
+                fontSize = 14.sp,
+                lineHeight = 18.sp,
                 modifier = Modifier.padding(end = 12.dp),
             )
         }
@@ -641,7 +641,7 @@ private fun NavTab(
             .background(
                 when {
                     selected -> Accent.copy(alpha = 0.22f)
-                    focused -> Parchment.copy(alpha = 0.10f)
+                    focused -> Chalk.copy(alpha = 0.10f)
                     else -> Color.Transparent
                 }
             )
@@ -653,7 +653,7 @@ private fun NavTab(
             .clickable(onClick = onActivate)
             .padding(horizontal = if (icon == TabIcon.NONE) 18.dp else 13.dp, vertical = 9.dp),
     ) {
-        val tint = if (selected || focused) Parchment else Muted
+        val tint = if (selected || focused) Chalk else Muted
         when (icon) {
             TabIcon.SEARCH -> SearchGlyph(color = tint, size = 20.dp)
             TabIcon.GEAR -> GearGlyph(color = tint, size = 20.dp)
@@ -693,7 +693,7 @@ private fun ConfirmExit(
     ) {
         Text(
             text = "Close Reely?",
-            color = Parchment,
+            color = Chalk,
             fontSize = 18.sp,
             lineHeight = 23.sp,
             fontWeight = FontWeight.SemiBold,

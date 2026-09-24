@@ -40,7 +40,8 @@ import tv.reely.ui.components.rememberRowFocus
 import tv.reely.ui.components.rowItem
 import tv.reely.ui.components.restoreFocusTo
 import tv.reely.ui.components.TvChip
-import tv.reely.ui.theme.Parchment
+import tv.reely.ui.theme.Chalk
+import tv.reely.ui.theme.ReelyType
 
 private val HERO_HEIGHT = 150.dp
 
@@ -132,12 +133,15 @@ fun LibraryScreen(
                             formatDuration(focused.durationMs).takeIf { it.isNotEmpty() },
                         ),
                         summary = focused.summary,
+                        // One line: the grid is what this page is for, and two lines at
+                        // body size would push it down.
+                        summaryMaxLines = 1,
                         modifier = Modifier.widthIn(max = 700.dp),
                     )
                 } else {
                     Text(
                         text = browse.section?.title ?: kind.title,
-                        color = Parchment,
+                        color = Chalk,
                         fontSize = 28.sp,
                         lineHeight = 34.sp,
                         fontWeight = FontWeight.Bold,
@@ -283,10 +287,8 @@ fun LibraryScreen(
                     ) {
                         Text(
                             text = browse.section?.title ?: "All ${kind.title}",
-                            color = Parchment,
-                            fontSize = 17.sp,
-                            lineHeight = 22.sp,
-                            fontWeight = FontWeight.SemiBold,
+                            color = Chalk,
+                            style = ReelyType.RowTitle,
                             modifier = Modifier.padding(horizontal = 4.dp),
                         )
                         // Sort, then the watched filter, then genres. One row that runs
@@ -370,10 +372,8 @@ private fun RowBlock(title: String, content: @Composable () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
             text = title,
-            color = Parchment,
-            fontSize = 17.sp,
-            lineHeight = 22.sp,
-            fontWeight = FontWeight.SemiBold,
+            color = Chalk,
+            style = ReelyType.RowTitle,
             modifier = Modifier.padding(horizontal = 4.dp),
         )
         content()

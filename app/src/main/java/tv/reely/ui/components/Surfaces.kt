@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -41,7 +42,8 @@ import tv.reely.ui.theme.GlassEdge
 import tv.reely.ui.theme.Good
 import tv.reely.ui.theme.Ink
 import tv.reely.ui.theme.Muted
-import tv.reely.ui.theme.Parchment
+import tv.reely.ui.theme.Chalk
+import tv.reely.ui.theme.ReelyType
 
 /**
  * The artwork behind a browse screen, darkened until text sits comfortably on it.
@@ -127,19 +129,19 @@ fun IconAction(
                 .background(if (filled) Accent else Glass)
                 .border(
                     width = if (focused) 3.dp else 1.dp,
-                    color = if (focused) Parchment else GlassEdge,
+                    color = if (focused) Chalk else GlassEdge,
                     shape = RoundedCornerShape(50),
                 )
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
-            glyph(if (filled) Ink else Parchment)
+            glyph(if (filled) Ink else Chalk)
         }
         Text(
             text = label,
-            color = if (focused) Parchment else Faint,
-            fontSize = 11.sp,
-            lineHeight = 14.sp,
+            color = if (focused) Chalk else Faint,
+            fontSize = 14.sp,
+            lineHeight = 18.sp,
             maxLines = 1,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 6.dp),
@@ -171,7 +173,7 @@ fun RatingBadges(
             Badge(text = contentRating, tint = GlassEdge)
         }
         trailing.forEach { fact ->
-            Text(text = fact, color = Muted, fontSize = 13.sp, lineHeight = 17.sp, maxLines = 1)
+            Text(text = fact, color = Muted, style = ReelyType.Meta, maxLines = 1)
         }
     }
 }
@@ -187,9 +189,9 @@ private fun Badge(text: String, tint: Color, emphasised: Boolean = false) {
     ) {
         Text(
             text = text,
-            color = Parchment,
-            fontSize = 12.sp,
-            lineHeight = 15.sp,
+            color = Chalk,
+            fontSize = 14.sp,
+            lineHeight = 18.sp,
             fontWeight = if (emphasised) FontWeight.SemiBold else FontWeight.Normal,
             maxLines = 1,
         )
@@ -244,8 +246,8 @@ fun HeroText(
             Text(
                 text = eyebrow.uppercase(),
                 color = Faint,
-                fontSize = 11.sp,
-                lineHeight = 14.sp,
+                fontSize = 14.sp,
+                lineHeight = 18.sp,
                 letterSpacing = 1.5.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
@@ -254,10 +256,8 @@ fun HeroText(
         }
         Text(
             text = title,
-            color = Parchment,
-            fontSize = 30.sp,
-            lineHeight = 36.sp,
-            fontWeight = FontWeight.Bold,
+            color = Chalk,
+            style = ReelyType.Display,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -270,13 +270,15 @@ fun HeroText(
             )
         }
         if (!summary.isNullOrBlank()) {
+            // The one place anybody reads more than a line, so it gets body size and a
+            // reading width: it used to run on for 700 dp and was hard to follow back.
             Text(
                 text = summary,
                 color = Muted,
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
+                style = ReelyType.Body,
                 maxLines = summaryMaxLines,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 560.dp),
             )
         }
     }
@@ -320,9 +322,9 @@ fun TransportButton(
 ) {
     var focused by remember { mutableStateOf(false) }
     val tint = when {
-        !enabled -> Parchment.copy(alpha = 0.25f)
+        !enabled -> Chalk.copy(alpha = 0.25f)
         filled -> Ink
-        else -> Parchment
+        else -> Chalk
     }
     Box(
         modifier = modifier
@@ -333,14 +335,14 @@ fun TransportButton(
                 when {
                     !enabled -> Color.Transparent
                     filled -> Accent
-                    focused -> Parchment.copy(alpha = 0.18f)
+                    focused -> Chalk.copy(alpha = 0.18f)
                     else -> Glass
                 }
             )
             .border(
                 width = if (focused) 3.dp else 1.dp,
                 color = when {
-                    focused -> Parchment
+                    focused -> Chalk
                     !enabled -> Color.Transparent
                     else -> GlassEdge
                 },

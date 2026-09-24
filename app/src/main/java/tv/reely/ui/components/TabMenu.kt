@@ -72,8 +72,8 @@ fun TabMenu(
         Text(
             text = "Back closes this",
             color = tv.reely.ui.theme.Faint,
-            fontSize = 11.sp,
-            lineHeight = 14.sp,
+            fontSize = 14.sp,
+            lineHeight = 18.sp,
             modifier = Modifier.padding(top = 8.dp),
         )
     }

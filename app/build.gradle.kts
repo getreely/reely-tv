@@ -81,6 +81,24 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
+    testOptions {
+        unitTests {
+            // Robolectric needs the real resources — fonts above all — to draw screens.
+            isIncludeAndroidResources = true
+            all { test ->
+                // Screenshots render only when asked for (-Pscreenshots): they take a
+                // while, and what they are for is looking at, not passing or failing.
+                val wanted = project.hasProperty("screenshots")
+                test.systemProperty("reely.screenshots", wanted.toString())
+                test.systemProperty("roborazzi.test.record", wanted.toString())
+                test.systemProperty(
+                    "roborazzi.output.dir",
+                    layout.buildDirectory.dir("screenshots").get().asFile.absolutePath,
+                )
+            }
+        }
+    }
 }
 
 dependencies {
@@ -105,6 +123,14 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.7.0")
 
     testImplementation("junit:junit:4.13.2")
+
+    // Screens drawn on the build machine, so layout can be looked at without a device.
+    testImplementation(platform("androidx.compose:compose-bom:2026.09.00"))
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("org.robolectric:robolectric:4.17")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi:1.75.0")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.75.0")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
 
 /**

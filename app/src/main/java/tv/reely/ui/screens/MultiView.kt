@@ -46,7 +46,7 @@ import tv.reely.ui.components.PlusGlyph
 import tv.reely.ui.components.TvActionButton
 import tv.reely.ui.theme.Ink
 import tv.reely.ui.theme.Line
-import tv.reely.ui.theme.Parchment
+import tv.reely.ui.theme.Chalk
 
 /**
  * Where a tile sits when several channels share the screen.
@@ -254,14 +254,14 @@ fun TileFrame(
                     // see which is live.
                     .border(
                         width = if (focused) 3.dp else 0.dp,
-                        color = if (focused) Parchment else Color.Transparent,
+                        color = if (focused) Chalk else Color.Transparent,
                     ),
             ) {
                 Text(
                     text = name,
-                    color = if (focused) Parchment else Parchment.copy(alpha = 0.7f),
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp,
+                    color = if (focused) Chalk else Chalk.copy(alpha = 0.7f),
+                    fontSize = 14.sp,
+                    lineHeight = 19.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
@@ -334,7 +334,7 @@ fun TileMenu(
     ) {
         Text(
             text = name,
-            color = Parchment,
+            color = Chalk,
             fontSize = 16.sp,
             lineHeight = 21.sp,
             fontWeight = FontWeight.SemiBold,
@@ -380,20 +380,20 @@ fun AddTile(focused: Boolean, modifier: Modifier = Modifier) {
             .background(Ink.copy(alpha = 0.6f))
             .border(
                 width = if (focused) 3.dp else 1.dp,
-                color = if (focused) Parchment else Parchment.copy(alpha = 0.22f),
+                color = if (focused) Chalk else Chalk.copy(alpha = 0.22f),
             ),
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             PlusGlyph(
-                color = if (focused) Parchment else Parchment.copy(alpha = 0.5f),
+                color = if (focused) Chalk else Chalk.copy(alpha = 0.5f),
                 size = 34.dp,
             )
             Text(
                 text = "Add a channel",
-                color = if (focused) Parchment else Parchment.copy(alpha = 0.5f),
-                fontSize = 13.sp,
-                lineHeight = 17.sp,
+                color = if (focused) Chalk else Chalk.copy(alpha = 0.5f),
+                fontSize = 14.sp,
+                lineHeight = 18.sp,
                 modifier = Modifier.padding(top = 8.dp),
             )
         }

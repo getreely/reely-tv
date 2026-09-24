@@ -34,7 +34,7 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import tv.reely.ui.theme.Accent
 import tv.reely.ui.theme.Faint
-import tv.reely.ui.theme.Parchment
+import tv.reely.ui.theme.Chalk
 import tv.reely.xtream.EpgProgramme
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -86,8 +86,8 @@ fun GuideRuler(
                     Text(
                         text = guideClock(tick),
                         color = Faint,
-                        fontSize = 12.sp,
-                        lineHeight = 15.sp,
+                        fontSize = 14.sp,
+                        lineHeight = 18.sp,
                         modifier = Modifier.padding(start = 8.dp),
                     )
                 }
@@ -132,7 +132,7 @@ fun GuideRow(
                 )
                 .border(
                     width = if (isCurrent) 2.dp else 0.dp,
-                    color = if (isCurrent) Parchment else Color.Transparent,
+                    color = if (isCurrent) Chalk else Color.Transparent,
                     shape = RoundedCornerShape(14.dp),
                 ),
             contentAlignment = Alignment.Center,
@@ -147,7 +147,7 @@ fun GuideRow(
             } else {
                 Text(
                     text = name.take(3).uppercase(),
-                    color = Parchment,
+                    color = Chalk,
                     fontSize = 14.sp,
                     lineHeight = 18.sp,
                     fontWeight = FontWeight.Bold,
@@ -240,8 +240,8 @@ private fun ProgrammeCard(
             .background(
                 when {
                     selected -> Accent.copy(alpha = 0.3f)
-                    past -> Parchment.copy(alpha = 0.05f)
-                    else -> Parchment.copy(alpha = 0.1f)
+                    past -> Chalk.copy(alpha = 0.05f)
+                    else -> Chalk.copy(alpha = 0.1f)
                 }
             )
             .border(
@@ -264,7 +264,7 @@ private fun ProgrammeCard(
         ) {
             Text(
                 text = title,
-                color = if (past && !selected) Parchment.copy(alpha = 0.55f) else Parchment,
+                color = if (past && !selected) Chalk.copy(alpha = 0.55f) else Chalk,
                 fontSize = 15.sp,
                 lineHeight = 19.sp,
                 fontWeight = if (past && !selected) FontWeight.Normal else FontWeight.Medium,
@@ -274,9 +274,9 @@ private fun ProgrammeCard(
             if (slot != null) {
                 Text(
                     text = slot,
-                    color = Parchment.copy(alpha = 0.45f),
-                    fontSize = 13.sp,
-                    lineHeight = 17.sp,
+                    color = Chalk.copy(alpha = 0.45f),
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -299,13 +299,13 @@ fun GuideNowLine(windowStart: Long, now: Long, scroll: ScrollState) {
             .offset { IntOffset(nowX.roundToInt(), 0) }
             .width(2.dp)
             .fillMaxHeight()
-            .background(Parchment.copy(alpha = 0.8f)),
+            .background(Chalk.copy(alpha = 0.8f)),
     )
     Box(
         modifier = Modifier
             .offset { IntOffset((nowX - with(density) { 4.dp.toPx() }).roundToInt(), 0) }
             .size(10.dp)
             .clip(RoundedCornerShape(50))
-            .background(Parchment),
+            .background(Chalk),
     )
 }

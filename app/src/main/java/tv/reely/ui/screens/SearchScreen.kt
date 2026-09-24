@@ -32,7 +32,8 @@ import tv.reely.ui.components.rememberRowFocus
 import tv.reely.ui.components.rowItem
 import tv.reely.ui.components.restoreFocusTo
 import tv.reely.ui.components.TvTextField
-import tv.reely.ui.theme.Parchment
+import tv.reely.ui.theme.Chalk
+import tv.reely.ui.theme.ReelyType
 import tv.reely.xtream.XtreamChannel
 
 @Composable
@@ -104,10 +105,8 @@ fun SearchScreen(
                     ) {
                         Text(
                             text = "Live TV",
-                            color = Parchment,
-                            fontSize = 17.sp,
-                            lineHeight = 22.sp,
-                            fontWeight = FontWeight.SemiBold,
+                            color = Chalk,
+                            style = ReelyType.RowTitle,
                         )
                         LazyRow(
                             modifier = Modifier.restoreFocusTo(channelFocus).focusGroup(),

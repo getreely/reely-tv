@@ -33,7 +33,8 @@ import tv.reely.ui.components.PosterCard
 import tv.reely.ui.components.rememberRowFocus
 import tv.reely.ui.components.rowItem
 import tv.reely.ui.components.restoreFocusTo
-import tv.reely.ui.theme.Parchment
+import tv.reely.ui.theme.Chalk
+import tv.reely.ui.theme.ReelyType
 import androidx.compose.foundation.background
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,7 +48,8 @@ import tv.reely.ui.components.CardMenu
 import tv.reely.ui.components.requestWhenReady
 import tv.reely.ui.theme.Ink
 
-private val HERO_HEIGHT = 168.dp
+// Sized for the type scale: eyebrow, 36 sp title, details, two lines of summary.
+private val HERO_HEIGHT = 176.dp
 
 @Composable
 fun HomeScreen(
@@ -116,7 +118,7 @@ fun HomeScreen(
                 } else {
                     Text(
                         text = "Home",
-                        color = Parchment,
+                        color = Chalk,
                         fontSize = 28.sp,
                         lineHeight = 34.sp,
                         fontWeight = FontWeight.Bold,
@@ -282,10 +284,8 @@ private fun PosterRow(
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
             text = title,
-            color = Parchment,
-            fontSize = 17.sp,
-            lineHeight = 22.sp,
-            fontWeight = FontWeight.SemiBold,
+            color = Chalk,
+            style = ReelyType.RowTitle,
             modifier = Modifier.padding(horizontal = 40.dp),
         )
         LazyRow(

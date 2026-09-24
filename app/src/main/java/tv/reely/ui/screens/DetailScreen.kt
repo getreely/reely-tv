@@ -314,8 +314,8 @@ fun DetailScreen(
                     Text(
                         text = "Genres   " + detail.genres.joinToString(", "),
                         color = Muted,
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp,
+                        fontSize = 14.sp,
+                        lineHeight = 19.sp,
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 40.dp),
                     )
                 }

@@ -104,7 +104,7 @@ import tv.reely.ui.theme.Faint
 import tv.reely.ui.theme.Ink
 import tv.reely.ui.theme.Line
 import tv.reely.ui.theme.Muted
-import tv.reely.ui.theme.Parchment
+import tv.reely.ui.theme.Chalk
 import tv.reely.ui.theme.SurfaceRaised
 
 private const val SEEK_STEP_MS = 10_000L
@@ -824,7 +824,7 @@ fun PlayerScreen(
         if (buffering && error == null && tileCount == 1) {
             Text(
                 text = "Loading…",
-                color = Parchment,
+                color = Chalk,
                 fontSize = 15.sp,
                 lineHeight = 20.sp,
                 modifier = Modifier.align(Alignment.Center),
@@ -841,7 +841,7 @@ fun PlayerScreen(
                     .border(1.dp, Accent.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
                     .padding(20.dp),
             ) {
-                Text(text = message, color = Parchment, fontSize = 15.sp, lineHeight = 22.sp)
+                Text(text = message, color = Chalk, fontSize = 15.sp, lineHeight = 22.sp)
             }
         }
 
@@ -858,7 +858,7 @@ fun PlayerScreen(
                     .border(1.dp, Accent.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
                     .padding(horizontal = 20.dp, vertical = 14.dp),
             ) {
-                Text(text = message, color = Parchment, fontSize = 14.sp, lineHeight = 20.sp)
+                Text(text = message, color = Chalk, fontSize = 14.sp, lineHeight = 20.sp)
             }
         }
 
@@ -1064,7 +1064,7 @@ private fun Controls(
     ) {
         Text(
             text = playback.title,
-            color = Parchment,
+            color = Chalk,
             fontSize = 17.sp,
             lineHeight = 22.sp,
             fontWeight = FontWeight.SemiBold,
@@ -1075,8 +1075,8 @@ private fun Controls(
             Text(
                 text = it,
                 color = Muted,
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
+                fontSize = 14.sp,
+                lineHeight = 19.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1086,8 +1086,8 @@ private fun Controls(
             Text(
                 text = "LIVE",
                 color = Accent,
-                fontSize = 11.sp,
-                lineHeight = 14.sp,
+                fontSize = 14.sp,
+                lineHeight = 18.sp,
                 letterSpacing = 1.6.sp,
                 fontWeight = FontWeight.Medium,
             )
@@ -1196,7 +1196,7 @@ private fun Scrubber(
                 .fillMaxWidth()
                 .height(if (focused) 8.dp else 5.dp)
                 .clip(RoundedCornerShape(5.dp))
-                .background(Parchment.copy(alpha = if (focused) 0.3f else 0.22f))
+                .background(Chalk.copy(alpha = if (focused) 0.3f else 0.22f))
                 .focusRequester(focusRequester)
                 .onFocusChanged {
                     focused = it.isFocused
@@ -1217,7 +1217,7 @@ private fun Scrubber(
                 modifier = Modifier
                     .fillMaxWidth((bufferedMs.toFloat() / total).coerceIn(0f, 1f))
                     .fillMaxHeight()
-                    .background(Parchment.copy(alpha = 0.3f)),
+                    .background(Chalk.copy(alpha = 0.3f)),
             )
             Box(
                 modifier = Modifier
@@ -1227,19 +1227,19 @@ private fun Scrubber(
             )
         }
         Row(modifier = Modifier.fillMaxWidth()) {
-            Text(text = clock(positionMs), color = Parchment, fontSize = 12.sp, lineHeight = 16.sp)
+            Text(text = clock(positionMs), color = Chalk, fontSize = 14.sp, lineHeight = 19.sp)
             Box(modifier = Modifier.weight(1f))
             Text(
                 text = "-" + clock((durationMs - positionMs).coerceAtLeast(0)),
                 color = Muted,
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
+                fontSize = 14.sp,
+                lineHeight = 19.sp,
             )
             Text(
                 text = "   /   " + clock(durationMs),
                 color = Faint,
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
+                fontSize = 14.sp,
+                lineHeight = 19.sp,
             )
         }
     }
@@ -1299,7 +1299,7 @@ private fun StatsPanel(
     ) {
         Text(
             text = "Playback",
-            color = Parchment,
+            color = Chalk,
             fontSize = 18.sp,
             lineHeight = 23.sp,
             fontWeight = FontWeight.SemiBold,
@@ -1322,8 +1322,8 @@ private fun StatsPanel(
         Text(
             text = "VIDEO",
             color = Faint,
-            fontSize = 11.sp,
-            lineHeight = 14.sp,
+            fontSize = 14.sp,
+            lineHeight = 18.sp,
             letterSpacing = 1.4.sp,
             modifier = Modifier.padding(top = 6.dp),
         )
@@ -1341,8 +1341,8 @@ private fun StatsPanel(
         Text(
             text = "AUDIO",
             color = Faint,
-            fontSize = 11.sp,
-            lineHeight = 14.sp,
+            fontSize = 14.sp,
+            lineHeight = 18.sp,
             letterSpacing = 1.4.sp,
             modifier = Modifier.padding(top = 6.dp),
         )
@@ -1376,12 +1376,12 @@ private fun StatLine(label: String, value: String) {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(text = label, color = Muted, fontSize = 13.sp, lineHeight = 18.sp)
+        Text(text = label, color = Muted, fontSize = 14.sp, lineHeight = 19.sp)
         Text(
             text = value,
-            color = Parchment,
-            fontSize = 13.sp,
-            lineHeight = 18.sp,
+            color = Chalk,
+            fontSize = 14.sp,
+            lineHeight = 19.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -1439,7 +1439,7 @@ private fun TrackPanel(
     ) {
         Text(
             text = if (panel == Panel.SUBTITLES) "Subtitles" else "Audio",
-            color = Parchment,
+            color = Chalk,
             fontSize = 21.sp,
             lineHeight = 27.sp,
             fontWeight = FontWeight.SemiBold,
@@ -1452,8 +1452,8 @@ private fun TrackPanel(
                 else
                     "This file has only one audio track.",
                 color = Muted,
-                fontSize = 13.sp,
-                lineHeight = 19.sp,
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
             )
         }
 
@@ -1476,8 +1476,8 @@ private fun TrackPanel(
             Text(
                 text = "Appearance",
                 color = Faint,
-                fontSize = 11.sp,
-                lineHeight = 14.sp,
+                fontSize = 14.sp,
+                lineHeight = 18.sp,
                 letterSpacing = 1.4.sp,
                 modifier = Modifier.padding(top = 8.dp),
             )
@@ -1488,8 +1488,8 @@ private fun TrackPanel(
             Text(
                 text = "Size ${(prefs.subtitleScale * 100).toInt()}%",
                 color = Muted,
-                fontSize = 13.sp,
-                lineHeight = 17.sp,
+                fontSize = 14.sp,
+                lineHeight = 18.sp,
             )
             TvActionButton(
                 label = if (prefs.subtitleBackground) "Background: on" else "Background: off",
@@ -1572,14 +1572,14 @@ private fun UpNextCard(
         Text(
             text = if (countdownSeconds > 0) "UP NEXT IN $remaining" else "UP NEXT",
             color = Accent,
-            fontSize = 11.sp,
-            lineHeight = 14.sp,
+            fontSize = 14.sp,
+            lineHeight = 18.sp,
             letterSpacing = 1.5.sp,
             fontWeight = FontWeight.Medium,
         )
         Text(
             text = item.title,
-            color = Parchment,
+            color = Chalk,
             fontSize = 19.sp,
             lineHeight = 25.sp,
             fontWeight = FontWeight.SemiBold,
@@ -1588,7 +1588,7 @@ private fun UpNextCard(
         )
         listOfNotNull(item.grandparentTitle, item.caption).joinToString("  ·  ")
             .takeIf { it.isNotBlank() }
-            ?.let { Text(text = it, color = Muted, fontSize = 13.sp, lineHeight = 17.sp) }
+            ?.let { Text(text = it, color = Muted, fontSize = 14.sp, lineHeight = 18.sp) }
 
         Row(
             modifier = Modifier.padding(top = 6.dp),

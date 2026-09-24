@@ -82,7 +82,7 @@ import tv.reely.ui.theme.Faint
 import tv.reely.ui.theme.GlassEdge
 import tv.reely.ui.theme.Ink
 import tv.reely.ui.theme.Muted
-import tv.reely.ui.theme.Parchment
+import tv.reely.ui.theme.Chalk
 import tv.reely.xtream.EpgProgramme
 import tv.reely.xtream.XtreamApi
 import java.text.SimpleDateFormat
@@ -183,14 +183,14 @@ fun GuideScreen(
                 Text(
                     text = live.selectedCategory?.name.orEmpty().uppercase(),
                     color = Faint,
-                    fontSize = 11.sp,
-                    lineHeight = 14.sp,
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp,
                     letterSpacing = 1.4.sp,
                     maxLines = 1,
                 )
                 Text(
                     text = selected?.title ?: channel?.name ?: "Guide",
-                    color = Parchment,
+                    color = Chalk,
                     fontSize = 24.sp,
                     lineHeight = 30.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -201,8 +201,8 @@ fun GuideScreen(
                     text = selected?.let { "${channel?.name}  ·  ${guideTimeRange(it)}" }
                         ?: guide.status.describe(),
                     color = Muted,
-                    fontSize = 13.sp,
-                    lineHeight = 17.sp,
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -210,8 +210,8 @@ fun GuideScreen(
                     Text(
                         text = it,
                         color = Muted,
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp,
+                        fontSize = 14.sp,
+                        lineHeight = 19.sp,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 4.dp),
@@ -251,7 +251,7 @@ fun GuideScreen(
                         modifier = Modifier.fillMaxSize(),
                     )
                     if (previewFailed) {
-                        Text(text = "Preview unavailable", color = Faint, fontSize = 12.sp, lineHeight = 16.sp)
+                        Text(text = "Preview unavailable", color = Faint, fontSize = 14.sp, lineHeight = 19.sp)
                     }
                 }
             }

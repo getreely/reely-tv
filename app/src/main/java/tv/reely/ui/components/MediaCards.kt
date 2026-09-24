@@ -42,7 +42,7 @@ import tv.reely.ui.theme.Accent
 import tv.reely.ui.theme.Faint
 import tv.reely.ui.theme.Ink
 import tv.reely.ui.theme.Muted
-import tv.reely.ui.theme.Parchment
+import tv.reely.ui.theme.Chalk
 import tv.reely.ui.theme.SurfaceHigh
 
 /** The resume bar Plex draws across the bottom of a half-watched thing. */
@@ -137,7 +137,7 @@ fun WideCard(
         }
         Text(
             text = title,
-            color = if (focused) Parchment else Muted,
+            color = if (focused) Chalk else Muted,
             fontSize = 14.sp,
             lineHeight = 18.sp,
             maxLines = 1,
@@ -148,8 +148,8 @@ fun WideCard(
             Text(
                 text = subtitle,
                 color = Faint,
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
+                fontSize = 14.sp,
+                lineHeight = 19.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -246,8 +246,8 @@ fun PosterCard(
                     Text(
                         text = badge.toString(),
                         color = Ink,
-                        fontSize = 13.sp,
-                        lineHeight = 16.sp,
+                        fontSize = 14.sp,
+                        lineHeight = 18.sp,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center,
                     )
@@ -268,17 +268,17 @@ fun PosterCard(
         ) {
             Text(
                 text = title,
-                color = if (focused) Parchment else Muted,
-                fontSize = 13.sp,
-                lineHeight = 16.sp,
+                color = if (focused) Chalk else Muted,
+                fontSize = 14.sp,
+                lineHeight = 18.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = subtitle.orEmpty(),
                 color = Faint,
-                fontSize = 11.sp,
-                lineHeight = 14.sp,
+                fontSize = 14.sp,
+                lineHeight = 18.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -337,9 +337,9 @@ fun CastCircle(
         }
         Text(
             text = name,
-            color = Parchment,
-            fontSize = 12.sp,
-            lineHeight = 16.sp,
+            color = Chalk,
+            fontSize = 14.sp,
+            lineHeight = 19.sp,
             maxLines = 2,
             textAlign = TextAlign.Center,
             overflow = TextOverflow.Ellipsis,
@@ -349,8 +349,8 @@ fun CastCircle(
             Text(
                 text = role,
                 color = Faint,
-                fontSize = 11.sp,
-                lineHeight = 14.sp,
+                fontSize = 14.sp,
+                lineHeight = 18.sp,
                 maxLines = 1,
                 textAlign = TextAlign.Center,
                 overflow = TextOverflow.Ellipsis,
@@ -410,7 +410,7 @@ fun EpisodeRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = listOfNotNull(number.takeIf { it.isNotBlank() }, title).joinToString(". "),
-                color = Parchment,
+                color = Chalk,
                 fontSize = 16.sp,
                 lineHeight = 21.sp,
                 fontWeight = FontWeight.Medium,
@@ -421,8 +421,8 @@ fun EpisodeRow(
                 Text(
                     text = duration,
                     color = Faint,
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp,
+                    fontSize = 14.sp,
+                    lineHeight = 19.sp,
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
@@ -430,8 +430,8 @@ fun EpisodeRow(
                 Text(
                     text = description,
                     color = Muted,
-                    fontSize = 13.sp,
-                    lineHeight = 19.sp,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 6.dp),
@@ -529,7 +529,7 @@ fun EpisodeTile(
         ) {
             Text(
                 text = listOfNotNull(number.takeIf { it.isNotBlank() }, title).joinToString(". "),
-                color = if (marked) Parchment else Muted,
+                color = if (marked) Chalk else Muted,
                 fontSize = 14.sp,
                 lineHeight = 18.sp,
                 maxLines = 1,
@@ -538,8 +538,8 @@ fun EpisodeTile(
             Text(
                 text = duration.orEmpty(),
                 color = Faint,
-                fontSize = 11.sp,
-                lineHeight = 14.sp,
+                fontSize = 14.sp,
+                lineHeight = 18.sp,
                 maxLines = 1,
             )
         }
@@ -592,7 +592,7 @@ fun ChannelCard(
             } else {
                 Text(
                     text = name.take(3).uppercase(),
-                    color = Parchment,
+                    color = Chalk,
                     fontSize = 17.sp,
                     lineHeight = 22.sp,
                     fontWeight = FontWeight.Bold,
@@ -603,17 +603,17 @@ fun ChannelCard(
         Column(modifier = Modifier.height(40.dp).padding(top = 6.dp)) {
             Text(
                 text = name,
-                color = if (focused) Parchment else Muted,
-                fontSize = 13.sp,
-                lineHeight = 17.sp,
+                color = if (focused) Chalk else Muted,
+                fontSize = 14.sp,
+                lineHeight = 18.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = if (number > 0) "Channel $number" else "Live",
                 color = Faint,
-                fontSize = 11.sp,
-                lineHeight = 15.sp,
+                fontSize = 14.sp,
+                lineHeight = 19.sp,
                 maxLines = 1,
             )
         }

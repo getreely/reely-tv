@@ -57,7 +57,7 @@ import tv.reely.ui.components.requestWhenReady
 import tv.reely.ui.theme.Faint
 import tv.reely.ui.theme.Line
 import tv.reely.ui.theme.Ink
-import tv.reely.ui.theme.Parchment
+import tv.reely.ui.theme.Chalk
 import tv.reely.xtream.EpgProgramme
 import tv.reely.xtream.XtreamCategory
 import tv.reely.xtream.XtreamChannel
@@ -293,7 +293,7 @@ fun GuideOverlay(
                     addMode -> "$pickVerb — ${channel?.name.orEmpty()}"
                     else -> channel?.name.orEmpty()
                 },
-                color = Parchment,
+                color = Chalk,
                 fontSize = 17.sp,
                 lineHeight = 22.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -309,8 +309,8 @@ fun GuideOverlay(
                     else -> "OK to watch · hold OK for more"
                 },
                 color = Faint,
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
+                fontSize = 14.sp,
+                lineHeight = 19.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -393,7 +393,7 @@ private fun ChannelMenu(
     ) {
         Text(
             text = channel.name,
-            color = Parchment,
+            color = Chalk,
             fontSize = 16.sp,
             lineHeight = 21.sp,
             fontWeight = FontWeight.SemiBold,
@@ -411,8 +411,8 @@ private fun ChannelMenu(
             Text(
                 text = "Four channels is the most that fit.",
                 color = Faint,
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
+                fontSize = 14.sp,
+                lineHeight = 19.sp,
             )
         }
         TvActionButton(label = "Cancel", onClick = onCancel)
@@ -466,7 +466,7 @@ private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) 
     var focused by remember { mutableStateOf(false) }
     Text(
         text = label,
-        color = if (focused || selected) Parchment else Muted,
+        color = if (focused || selected) Chalk else Muted,
         fontSize = 14.sp,
         lineHeight = 18.sp,
         maxLines = 1,
@@ -479,7 +479,7 @@ private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) 
                 width = if (focused) 2.dp else 1.dp,
                 color = when {
                     focused -> Accent
-                    selected -> Parchment.copy(alpha = 0.5f)
+                    selected -> Chalk.copy(alpha = 0.5f)
                     else -> Line
                 },
                 shape = RoundedCornerShape(9.dp),

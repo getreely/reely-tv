@@ -54,7 +54,7 @@ import tv.reely.ui.theme.Accent
 import tv.reely.ui.theme.Faint
 import tv.reely.ui.theme.Line
 import tv.reely.ui.theme.Muted
-import tv.reely.ui.theme.Parchment
+import tv.reely.ui.theme.Chalk
 import tv.reely.ui.theme.SurfaceHigh
 import tv.reely.ui.theme.SurfaceRaised
 
@@ -77,7 +77,7 @@ fun TvActionButton(
         emphasised -> Accent.copy(alpha = 0.22f)
         else -> SurfaceRaised
     }
-    val foreground = if (focused && emphasised) Color.Black else Parchment
+    val foreground = if (focused && emphasised) Color.Black else Chalk
     Box(
         modifier = modifier
             .onFocusChanged { focused = it.isFocused }
@@ -129,7 +129,7 @@ fun TvChip(
     ) {
         Text(
             text = label,
-            color = if (selected || focused) Parchment else Muted,
+            color = if (selected || focused) Chalk else Muted,
             fontSize = 14.sp,
             maxLines = 1,
         )
@@ -187,14 +187,14 @@ fun TvPosterTile(
         }
         Text(
             text = title,
-            color = if (focused) Parchment else Muted,
-            fontSize = 13.sp,
+            color = if (focused) Chalk else Muted,
+            fontSize = 14.sp,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 8.dp),
         )
         if (subtitle != null) {
-            Text(text = subtitle, color = Faint, fontSize = 11.sp, maxLines = 1)
+            Text(text = subtitle, color = Faint, fontSize = 14.sp, maxLines = 1)
         }
     }
 }
@@ -250,13 +250,13 @@ fun TvListRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                color = if (focused || selected) Parchment else Muted,
+                color = if (focused || selected) Chalk else Muted,
                 fontSize = 15.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             if (subtitle != null) {
-                Text(text = subtitle, color = Faint, fontSize = 12.sp, maxLines = 1)
+                Text(text = subtitle, color = Faint, fontSize = 14.sp, maxLines = 1)
             }
         }
     }
@@ -286,13 +286,13 @@ fun TvTextField(
     val keyboard = LocalSoftwareKeyboardController.current
 
     Column(modifier = modifier) {
-        Text(text = label, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
+        Text(text = label, color = Muted, fontSize = 14.sp, modifier = Modifier.padding(bottom = 6.dp))
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
             singleLine = true,
             readOnly = !editing,
-            textStyle = TextStyle(color = Parchment, fontSize = 16.sp),
+            textStyle = TextStyle(color = Chalk, fontSize = 16.sp),
             cursorBrush = androidx.compose.ui.graphics.SolidColor(Accent),
             visualTransformation = if (password) PasswordVisualTransformation() else
                 androidx.compose.ui.text.input.VisualTransformation.None,
@@ -339,7 +339,7 @@ fun TvTextField(
                         .border(
                             width = 2.dp,
                             color = when {
-                                editing -> Parchment
+                                editing -> Chalk
                                 focused -> Accent
                                 else -> Line
                             },
@@ -355,7 +355,7 @@ fun TvTextField(
                         Text(
                             text = "OK to type",
                             color = Faint,
-                            fontSize = 12.sp,
+                            fontSize = 14.sp,
                             modifier = Modifier.align(Alignment.CenterEnd),
                         )
                     }
@@ -370,7 +370,7 @@ fun SectionHeading(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text.uppercase(),
         color = Faint,
-        fontSize = 11.sp,
+        fontSize = 14.sp,
         letterSpacing = 1.6.sp,
         fontWeight = FontWeight.Medium,
         modifier = modifier,
@@ -391,7 +391,7 @@ fun ErrorNote(message: String, onDismiss: (() -> Unit)? = null, modifier: Modifi
     ) {
         Text(
             text = message,
-            color = Parchment,
+            color = Chalk,
             fontSize = 14.sp,
             modifier = Modifier.weight(1f),
         )
@@ -412,7 +412,7 @@ fun FactLine(label: String, value: String, modifier: Modifier = Modifier) {
     Text(
         text = buildAnnotatedString {
             withStyle(SpanStyle(color = Faint)) { append("$label  ") }
-            withStyle(SpanStyle(color = Parchment)) { append(value) }
+            withStyle(SpanStyle(color = Chalk)) { append(value) }
         },
         fontSize = 14.sp,
         modifier = modifier,
@@ -424,7 +424,7 @@ fun HintBar(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
         color = Faint,
-        fontSize = 12.sp,
+        fontSize = 14.sp,
         style = MaterialTheme.typography.bodySmall,
         modifier = modifier,
     )
