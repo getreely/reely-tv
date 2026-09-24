@@ -32,9 +32,8 @@ import tv.reely.ui.theme.Muted
 /*
  * How focus looks, in one place, so every card and every button says it the same way.
  *
- * On a card, focus is light rather than an outline: the card lifts, a white ring sits a
- * little way off the artwork, and it glows from behind in the colour of what is on
- * screen. The rest of its row steps back. The coral outline this replaces was easy to
+ * On a card, focus is light rather than an outline: the card lifts, a thin white ring
+ * hugs the artwork, and it glows from behind in the colour of what is on screen. The rest of its row steps back. The coral outline this replaces was easy to
  * lose against a busy poster, and coral is the brand colour, not a signal.
  *
  * On a button or a chip, focus is a white pill with dark text. One look for focus
@@ -47,8 +46,13 @@ val WideCorner = 14.dp
 
 private const val LIFT = 1.08f
 private const val STEPPED_BACK = 0.72f
-private val RING_GAP = 5.dp
-private val RING_WIDTH = 3.dp
+/*
+ * The ring sits right on the artwork's edge, just outside it. It used to float 5 dp
+ * off, which on a poster with a progress bar along the bottom read as the artwork
+ * stopping short of its own frame. 2 dp is plenty to find from across a room.
+ */
+private val RING_GAP = 0.dp
+private val RING_WIDTH = 2.dp
 private val GLOW = 20.dp
 
 /**

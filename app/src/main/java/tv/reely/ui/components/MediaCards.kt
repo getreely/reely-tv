@@ -45,19 +45,26 @@ import tv.reely.ui.theme.Muted
 import tv.reely.ui.theme.Chalk
 import tv.reely.ui.theme.SurfaceHigh
 
-/** The resume bar Plex draws across the bottom of a half-watched thing. */
+/**
+ * How far through something is: a small rounded bar floating just inside the bottom of
+ * the artwork. It used to run flush along the bottom edge, and once the cards' corners
+ * were rounded they cut into both ends of it, so it looked as if it stopped short.
+ */
 @Composable
 fun ProgressStrip(fraction: Float, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
+            .padding(horizontal = 10.dp, vertical = 9.dp)
             .fillMaxWidth()
             .height(4.dp)
-            .background(Color.Black.copy(alpha = 0.55f)),
+            .clip(RoundedCornerShape(2.dp))
+            .background(Chalk.copy(alpha = 0.28f)),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth(fraction.coerceIn(0f, 1f))
                 .height(4.dp)
+                .clip(RoundedCornerShape(2.dp))
                 .background(Accent),
         )
     }
