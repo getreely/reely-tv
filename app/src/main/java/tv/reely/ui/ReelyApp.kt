@@ -297,10 +297,20 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 .weight(1f)
                 .focusRequester(contentFocus)
                 .focusGroup()
+                /*
+                 * Up is the only way out of a page, and it goes to that page's own tab.
+                 *
+                 * Any other direction off the edge of a page used to carry on to whatever
+                 * lay that way on screen, and the only thing there is the tab row above:
+                 * right from a checkbox in Settings landed on TV Shows, which a tab takes
+                 * as being chosen, so the screen changed under a press meant to do nothing.
+                 */
                 .focusProperties {
                     onExit = {
                         if (requestedFocusDirection == FocusDirection.Up) {
                             currentTabFocus.requestFocus()
+                        } else {
+                            cancelFocusChange()
                         }
                     }
                 }
