@@ -121,6 +121,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     implementation("com.squareup.okhttp3:okhttp:5.5.0")
     implementation("io.coil-kt:coil-compose:2.7.0")
+    // Reads the main colour out of the artwork, for the glow behind a browse screen.
+    implementation("androidx.palette:palette-ktx:1.0.0")
 
     testImplementation("junit:junit:4.13.2")
 

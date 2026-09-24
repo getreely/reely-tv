@@ -15,6 +15,11 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import tv.reely.ui.theme.Accent
+import tv.reely.ui.components.LocalTint
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -90,162 +95,170 @@ fun HomeScreen(
     val menuFocus = remember { FocusRequester() }
     LaunchedEffect(menuFor) { if (menuFor != null) menuFocus.requestWhenReady() }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        HeroBackdrop(
-            url = backdropUrl(focused?.serverBase, focused?.art ?: focused?.thumb),
-            modifier = Modifier.fillMaxSize(),
-        )
-
-        Column(modifier = Modifier.fillMaxSize()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(HERO_HEIGHT)
-                    .padding(horizontal = 40.dp, vertical = 10.dp),
-            ) {
-                if (focused != null) {
-                    // An episode is introduced by its show — the show's logo, or its name —
-                    // with the episode's own title in the details beneath.
-                    val isEpisode = focused.type == "episode" && focused.grandparentTitle != null
-                    HeroText(
-                        eyebrow = null,
-                        title = if (isEpisode) focused.grandparentTitle!! else focused.title,
-                        logoUrl = logoUrl(focused.serverBase, focused.logo),
-                        criticRating = null,
-                        audienceRating = null,
-                        contentRating = null,
-                        facts = listOfNotNull(
-                            focused.caption,
-                            focused.title.takeIf { isEpisode },
-                            formatDuration(focused.durationMs).takeIf { it.isNotEmpty() },
-                        ),
-                        summary = focused.summary,
-                        modifier = Modifier.widthIn(max = 700.dp),
-                    )
-                } else {
-                    Text(
-                        text = "Home",
-                        color = Chalk,
-                        fontSize = 28.sp,
-                        lineHeight = 34.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
-
-            LazyColumn(
+    // The screen takes its colour from the artwork of what has focus — the glow at the
+    // bottom and behind a focused card. See HeroBackdrop and LocalTint.
+    var tint by remember { mutableStateOf(Accent) }
+    val glow by animateColorAsState(tint, tween(700), label = "ambient")
+    CompositionLocalProvider(LocalTint provides glow) {
+        Box(modifier = modifier.fillMaxSize()) {
+            HeroBackdrop(
+                url = backdropUrl(focused?.serverBase, focused?.art ?: focused?.thumb),
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                if (home.error != null) {
-                    item { ErrorNote(home.error, modifier = Modifier.padding(horizontal = 40.dp)) }
-                }
+                onTint = { tint = it },
+                glow = glow,
+            )
 
-                if (home.continueWatching.isNotEmpty()) {
-                    item {
-                        PosterRow(title = "Continue Watching", rowFocus = resumeFocus) {
-                            items(home.continueWatching, key = { it.listKey }) { item ->
-                                PosterCard(
-                                    title = item.rowTitle,
-                                    subtitle = episodeLine(item),
-                                    imageUrl = imageUrl(item.serverBase, posterArt(item), 300, 450),
-                                    progress = item.resumeFraction,
-                                    watched = item.isWatched,
-                                    onFocus = {
-                                        resumeFocus.onFocused(item.listKey)
-                                        onFocusItem(item)
-                                    },
-                                    onClick = { onOpenItem(item) },
-                                    onLongPress = { menuFor = item },
-                                    modifier = rowItem(resumeFocus, item.listKey),
-                                )
-                            }
-                        }
-                    }
-                }
-
-                if (home.recentEpisodes.isNotEmpty()) {
-                    item {
-                        PosterRow(title = "Recently Added Episodes", rowFocus = episodeFocus) {
-                            items(home.recentEpisodes, key = { it.listKey }) { group ->
-                                EpisodeGroupCard(group, imageUrl, episodeFocus, onFocusItem, onOpenItem)
-                            }
-                        }
-                    }
-                }
-
-                if (home.recentMovies.isNotEmpty()) {
-                    item {
-                        PosterRow(title = "Recently Added Movies", rowFocus = movieFocus) {
-                            items(home.recentMovies, key = { it.listKey }) { movie ->
-                                PosterCard(
-                                    title = movie.title,
-                                    subtitle = movie.caption,
-                                    imageUrl = imageUrl(movie.serverBase, movie.thumb, 300, 450),
-                                    progress = movie.resumeFraction,
-                                    watched = movie.isWatched,
-                                    onFocus = {
-                                        movieFocus.onFocused(movie.listKey)
-                                        onFocusItem(movie)
-                                    },
-                                    onClick = { onOpenItem(movie) },
-                                    onLongPress = { menuFor = movie },
-                                    modifier = rowItem(movieFocus, movie.listKey),
-                                )
-                            }
-                        }
-                    }
-                }
-
-                if (home.isEmpty) {
-                    item {
-                        EmptyNote(
-                            if (home.busy) "Reading your library…"
-                            else "Nothing to show yet. Watch something and it will appear here.",
-                            modifier = Modifier.padding(horizontal = 40.dp, vertical = 20.dp),
+            Column(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(HERO_HEIGHT)
+                        .padding(horizontal = 40.dp, vertical = 10.dp),
+                ) {
+                    if (focused != null) {
+                        // An episode is introduced by its show — the show's logo, or its name —
+                        // with the episode's own title in the details beneath.
+                        val isEpisode = focused.type == "episode" && focused.grandparentTitle != null
+                        HeroText(
+                            eyebrow = null,
+                            title = if (isEpisode) focused.grandparentTitle!! else focused.title,
+                            logoUrl = logoUrl(focused.serverBase, focused.logo),
+                            criticRating = null,
+                            audienceRating = null,
+                            contentRating = null,
+                            facts = listOfNotNull(
+                                focused.caption,
+                                focused.title.takeIf { isEpisode },
+                                formatDuration(focused.durationMs).takeIf { it.isNotEmpty() },
+                            ),
+                            summary = focused.summary,
+                            modifier = Modifier.widthIn(max = 700.dp),
                         )
+                    } else {
+                        Text(
+                            text = "Home",
+                            color = Chalk,
+                            fontSize = 28.sp,
+                            lineHeight = 34.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    if (home.error != null) {
+                        item { ErrorNote(home.error, modifier = Modifier.padding(horizontal = 40.dp)) }
+                    }
+
+                    if (home.continueWatching.isNotEmpty()) {
+                        item {
+                            PosterRow(title = "Continue Watching", rowFocus = resumeFocus) {
+                                items(home.continueWatching, key = { it.listKey }) { item ->
+                                    PosterCard(
+                                        title = item.rowTitle,
+                                        subtitle = episodeLine(item),
+                                        imageUrl = imageUrl(item.serverBase, posterArt(item), 300, 450),
+                                        progress = item.resumeFraction,
+                                        watched = item.isWatched,
+                                        onFocus = {
+                                            resumeFocus.onFocused(item.listKey)
+                                            onFocusItem(item)
+                                        },
+                                        onClick = { onOpenItem(item) },
+                                        onLongPress = { menuFor = item },
+                                        modifier = rowItem(resumeFocus, item.listKey),
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (home.recentEpisodes.isNotEmpty()) {
+                        item {
+                            PosterRow(title = "Recently Added Episodes", rowFocus = episodeFocus) {
+                                items(home.recentEpisodes, key = { it.listKey }) { group ->
+                                    EpisodeGroupCard(group, imageUrl, episodeFocus, onFocusItem, onOpenItem)
+                                }
+                            }
+                        }
+                    }
+
+                    if (home.recentMovies.isNotEmpty()) {
+                        item {
+                            PosterRow(title = "Recently Added Movies", rowFocus = movieFocus) {
+                                items(home.recentMovies, key = { it.listKey }) { movie ->
+                                    PosterCard(
+                                        title = movie.title,
+                                        subtitle = movie.caption,
+                                        imageUrl = imageUrl(movie.serverBase, movie.thumb, 300, 450),
+                                        progress = movie.resumeFraction,
+                                        watched = movie.isWatched,
+                                        onFocus = {
+                                            movieFocus.onFocused(movie.listKey)
+                                            onFocusItem(movie)
+                                        },
+                                        onClick = { onOpenItem(movie) },
+                                        onLongPress = { menuFor = movie },
+                                        modifier = rowItem(movieFocus, movie.listKey),
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (home.isEmpty) {
+                        item {
+                            EmptyNote(
+                                if (home.busy) "Reading your library…"
+                                else "Nothing to show yet. Watch something and it will appear here.",
+                                modifier = Modifier.padding(horizontal = 40.dp, vertical = 20.dp),
+                            )
+                        }
                     }
                 }
             }
-        }
 
-        // Drawn last so it sits over the rows. A row clips its children, so a menu
-        // raised inside one would appear cut in half.
-        menuFor?.let { item ->
-            Box(
-                modifier = Modifier.fillMaxSize().background(Ink.copy(alpha = 0.55f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                CardMenu(
-                    title = item.rowTitle,
-                    subtitle = episodeLine(item) ?: item.caption,
-                    focusRequester = menuFocus,
-                    actions = buildList {
-                        val resumable = (item.resumeFraction ?: 0f) > 0f
-                        add(
-                            CardAction(
-                                label = if (resumable) "Resume" else "Play",
-                                emphasised = true,
-                            ) { menuFor = null; onPlayItem(item, true) },
-                        )
-                        if (resumable) {
-                            add(CardAction("Play from the beginning") {
-                                menuFor = null; onPlayItem(item, false)
-                            })
-                        }
-                        add(
-                            CardAction(
-                                if (item.isWatched) "Mark unwatched" else "Mark watched",
-                            ) { menuFor = null; onToggleWatched(item) },
-                        )
-                        add(CardAction("Details") { menuFor = null; onOpenItem(item) })
-                    },
-                    onCancel = { menuFor = null },
-                )
+            // Drawn last so it sits over the rows. A row clips its children, so a menu
+            // raised inside one would appear cut in half.
+            menuFor?.let { item ->
+                Box(
+                    modifier = Modifier.fillMaxSize().background(Ink.copy(alpha = 0.55f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CardMenu(
+                        title = item.rowTitle,
+                        subtitle = episodeLine(item) ?: item.caption,
+                        focusRequester = menuFocus,
+                        actions = buildList {
+                            val resumable = (item.resumeFraction ?: 0f) > 0f
+                            add(
+                                CardAction(
+                                    label = if (resumable) "Resume" else "Play",
+                                    emphasised = true,
+                                ) { menuFor = null; onPlayItem(item, true) },
+                            )
+                            if (resumable) {
+                                add(CardAction("Play from the beginning") {
+                                    menuFor = null; onPlayItem(item, false)
+                                })
+                            }
+                            add(
+                                CardAction(
+                                    if (item.isWatched) "Mark unwatched" else "Mark watched",
+                                ) { menuFor = null; onToggleWatched(item) },
+                            )
+                            add(CardAction("Details") { menuFor = null; onOpenItem(item) })
+                        },
+                        onCancel = { menuFor = null },
+                    )
+                }
             }
-        }
 
+        }
     }
 }
 

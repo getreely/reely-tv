@@ -23,6 +23,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import coil.request.ImageRequest
+import coil.imageLoader
+import androidx.palette.graphics.Palette
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.Image
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.Crossfade
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.Bitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
@@ -54,21 +71,49 @@ import tv.reely.ui.theme.ReelyType
  * OS stops at 30. At a fortyfold upscale there is not enough left of the picture to read
  * as a blur: it comes out as mottled blobs and banding. A real backdrop under a heavy
  * scrim is both better looking and what every television app of this kind actually does.
+ *
+ * Moving between titles fades from one picture to the next. The next one is loaded out
+ * of sight first and only then faded in, so the fade is picture to picture — never to
+ * black and back while it downloads — and it used to be a hard cut.
+ *
+ * The same picture gives the screen its colour: [onTint] is told the artwork's main
+ * colour, and [glow], when given, lights the bottom of the screen with it.
  */
 @Composable
 fun HeroBackdrop(
     url: String?,
     modifier: Modifier = Modifier,
     scrimFromLeft: Boolean = true,
+    onTint: ((Color) -> Unit)? = null,
+    glow: Color? = null,
 ) {
+    val context = LocalContext.current
+    var shown by remember { mutableStateOf<ImageBitmap?>(null) }
+    val latestOnTint by rememberUpdatedState(onTint)
+    LaunchedEffect(url) {
+        if (url == null) return@LaunchedEffect
+        val request = ImageRequest.Builder(context)
+            .data(url)
+            // A software bitmap, because the colour is read out of its pixels.
+            .allowHardware(false)
+            .build()
+        val bitmap = (context.imageLoader.execute(request).drawable as? BitmapDrawable)?.bitmap
+            ?: return@LaunchedEffect
+        shown = bitmap.asImageBitmap()
+        val tint = withContext(Dispatchers.Default) { artworkTint(bitmap) }
+        if (tint != null) latestOnTint?.invoke(tint)
+    }
+
     Box(modifier) {
-        if (url != null) {
-            AsyncImage(
-                model = url,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
+        Crossfade(targetState = shown, animationSpec = tween(BACKDROP_FADE_MS), label = "backdrop") { picture ->
+            if (picture != null) {
+                Image(
+                    bitmap = picture,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
         // A flat dim first, so a bright poster cannot overpower the text on top of it.
         Box(modifier = Modifier.fillMaxSize().background(Ink.copy(alpha = 0.45f)))
@@ -99,7 +144,48 @@ fun HeroBackdrop(
                     )
                 )
         )
+        // The artwork's colour, rising from the bottom left where the rows are, and a
+        // little in the far corner. Over the scrims, so it tints the dark, not the picture.
+        if (glow != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .drawBehind {
+                        drawRect(
+                            Brush.radialGradient(
+                                colors = listOf(glow.copy(alpha = 0.20f), Color.Transparent),
+                                center = Offset(size.width * 0.08f, size.height * 1.04f),
+                                radius = size.width * 0.75f,
+                            )
+                        )
+                        drawRect(
+                            Brush.radialGradient(
+                                colors = listOf(glow.copy(alpha = 0.09f), Color.Transparent),
+                                center = Offset(size.width, 0f),
+                                radius = size.width * 0.55f,
+                            )
+                        )
+                    }
+            )
+        }
     }
+}
+
+private const val BACKDROP_FADE_MS = 450
+
+/**
+ * The colour a piece of artwork gives off, for a glow behind it: its most vivid colour,
+ * or failing that its most common, with the hue kept but the light evened out. A glow
+ * from a near-black poster would be invisible, and one from a neon poster would shout.
+ */
+fun artworkTint(bitmap: Bitmap): Color? {
+    val palette = Palette.from(bitmap).maximumColorCount(16).generate()
+    val swatch = palette.vibrantSwatch ?: palette.lightVibrantSwatch ?: palette.dominantSwatch ?: return null
+    val hsv = FloatArray(3)
+    android.graphics.Color.colorToHSV(swatch.rgb, hsv)
+    hsv[1] = hsv[1].coerceIn(0.35f, 0.85f)
+    hsv[2] = hsv[2].coerceIn(0.65f, 0.95f)
+    return Color(android.graphics.Color.HSVToColor(hsv))
 }
 
 /** A translucent surface with a hairline edge — the app's stand-in for frosted glass. */

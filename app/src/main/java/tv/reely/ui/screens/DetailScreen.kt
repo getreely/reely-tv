@@ -21,6 +21,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import tv.reely.ui.theme.Accent
+import tv.reely.ui.components.LocalTint
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -137,184 +141,223 @@ fun DetailScreen(
     // The block of text always describes whatever has focus: the show, or an episode.
     val backdrop = backdropUrl(state.serverBase, episode?.thumb ?: detail.art ?: detail.thumb)
 
-    Box(modifier = modifier.fillMaxSize()) {
-        HeroBackdrop(url = backdrop, modifier = Modifier.fillMaxSize())
+    // The screen takes its colour from the artwork of what has focus — the glow at the
+    // bottom and behind a focused card. See HeroBackdrop and LocalTint.
+    var tint by remember { mutableStateOf(Accent) }
+    val glow by animateColorAsState(tint, tween(700), label = "ambient")
+    CompositionLocalProvider(LocalTint provides glow) {
+        Box(modifier = modifier.fillMaxSize()) {
+            HeroBackdrop(url = backdrop, modifier = Modifier.fillMaxSize(), onTint = { tint = it }, glow = glow)
 
-        CompositionLocalProvider(LocalBringIntoViewSpec provides pageScroll) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(top = 14.dp, bottom = 34.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            if (detail.isShow && state.seasons.isNotEmpty()) {
+            CompositionLocalProvider(LocalBringIntoViewSpec provides pageScroll) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(top = 14.dp, bottom = 34.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                if (detail.isShow && state.seasons.isNotEmpty()) {
+                    item {
+                        LazyRow(
+                            modifier = Modifier.focusGroup(),
+                            contentPadding = PaddingValues(horizontal = 40.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            items(state.seasons, key = { it.ratingKey }) { season ->
+                                TvChip(
+                                    label = season.title,
+                                    selected = state.selectedSeason?.ratingKey == season.ratingKey,
+                                    onClick = { onSelectSeason(season) },
+                                )
+                            }
+                        }
+                    }
+                }
+
                 item {
-                    LazyRow(
-                        modifier = Modifier.focusGroup(),
-                        contentPadding = PaddingValues(horizontal = 40.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    Column(
+                        modifier = Modifier.padding(horizontal = 40.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
-                        items(state.seasons, key = { it.ratingKey }) { season ->
-                            TvChip(
-                                label = season.title,
-                                selected = state.selectedSeason?.ratingKey == season.ratingKey,
-                                onClick = { onSelectSeason(season) },
+                        if (state.error != null) ErrorNote(state.error)
+
+                        /*
+                         * The show's logo stays at the top of its own page, with the focused
+                         * episode's title under it. With no logo it is as it was: the show and
+                         * season above, the episode's title as the heading.
+                         */
+                        val logo = logoUrl(state.serverBase, detail.logo)
+                        HeroText(
+                            eyebrow = when {
+                                episode == null -> null
+                                logo != null -> state.selectedSeason?.title
+                                else -> listOfNotNull(
+                                    episode.grandparentTitle,
+                                    state.selectedSeason?.title,
+                                ).joinToString("  ·  ")
+                            },
+                            title = if (logo != null) detail.title else episode?.title ?: detail.title,
+                            logoUrl = logo,
+                            subtitle = episode?.title?.takeIf { logo != null },
+                            criticRating = if (episode == null) detail.rating else null,
+                            audienceRating = if (episode == null) detail.audienceRating else null,
+                            contentRating = if (episode == null) detail.contentRating else null,
+                            facts = if (episode != null) {
+                                listOfNotNull(
+                                    episode.caption,
+                                    formatDuration(episode.durationMs).takeIf { it.isNotEmpty() },
+                                )
+                            } else {
+                                listOfNotNull(
+                                    detail.year?.toString(),
+                                    detail.childCount.takeIf { it > 0 && detail.isShow }
+                                        ?.let { "$it seasons" },
+                                    formatDuration(detail.durationMs).takeIf { !detail.isShow && it.isNotEmpty() },
+                                    detail.studio,
+                                )
+                            },
+                            summary = null,
+                            modifier = Modifier.widthIn(max = 780.dp),
+                        )
+
+                        val summary = episode?.summary ?: detail.summary
+                        if (!summary.isNullOrBlank()) {
+                            // Body size at a reading width, like the hero's: at 780 dp a line
+                            // was too long to find the start of the next one from the sofa.
+                            Text(
+                                text = summary,
+                                color = Muted,
+                                style = ReelyType.Body,
+                                minLines = if (expanded) 1 else 3,
+                                maxLines = if (expanded) 12 else 3,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.widthIn(max = 640.dp),
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.focusGroup(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            val target = episode
+                            // What Play would resume. For a show that is the part-watched
+                            // episode, which is also what starting over would restart.
+                            val resumeFrom = when {
+                                target != null -> target.viewOffsetMs
+                                detail.isShow ->
+                                    state.episodes.firstOrNull { it.resumeFraction != null }?.viewOffsetMs ?: 0L
+
+                                else -> detail.viewOffsetMs
+                            }
+                            IconAction(
+                                label = if (resumeFrom > 0) "Resume" else "Play",
+                                filled = true,
+                                onClick = { if (target != null) onPlay(target) else onPlayDetail() },
+                                glyph = { PlayGlyph(it, 20.dp) },
+                            )
+                            // Only worth offering when Play would pick up part-way through.
+                            if (resumeFrom > 0) {
+                                IconAction(
+                                    label = "Restart",
+                                    filled = false,
+                                    onClick = {
+                                        if (target != null) onPlayFromStart(target) else onPlayDetailFromStart()
+                                    },
+                                    glyph = { RestartGlyph(it, 20.dp) },
+                                )
+                            }
+                            IconAction(
+                                label = if ((target?.isWatched ?: detail.isWatched)) "Unwatch" else "Watched",
+                                filled = false,
+                                onClick = { if (target != null) onToggleWatched(target) else onToggleWatchedDetail() },
+                                glyph = { CheckGlyph(it, 20.dp) },
+                            )
+                            // Only appears when the server actually has a trailer to play.
+                            if (state.trailers.isNotEmpty() && episode == null) {
+                                IconAction(
+                                    label = "Trailer",
+                                    filled = false,
+                                    onClick = onPlayTrailer,
+                                    glyph = { TrailerGlyph(it, 20.dp) },
+                                )
+                            }
+                            IconAction(
+                                label = if (expanded) "Less" else "Info",
+                                filled = false,
+                                onClick = { expanded = !expanded },
+                                glyph = { InfoGlyph(it, 20.dp) },
                             )
                         }
                     }
                 }
-            }
 
-            item {
-                Column(
-                    modifier = Modifier.padding(horizontal = 40.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    if (state.error != null) ErrorNote(state.error)
+                if (detail.isShow) {
+                    if (state.busy && state.episodes.isEmpty()) {
+                        item {
+                            EmptyNote("Loading episodes…", modifier = Modifier.padding(horizontal = 40.dp))
+                        }
+                    }
+                    if (state.episodes.isNotEmpty()) {
+                        item {
+                            FocusRow { rowFocused ->
+                                LazyRow(
+                                    state = episodeRail,
+                                    // Coming back down from Play or Watched returns to the
+                                    // episode those buttons were acting on, rather than whichever
+                                    // tile happens to be nearest the cursor.
+                                    modifier = Modifier.restoreFocusTo(railFocus).focusGroup().then(rowFocused),
+                                    contentPadding = PaddingValues(horizontal = 36.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                ) {
+                                    items(state.episodes, key = { it.ratingKey }) { entry ->
+                                        val isTarget = state.focusedEpisode?.ratingKey == entry.ratingKey
+                                        EpisodeTile(
+                                            number = entry.index?.toString().orEmpty(),
+                                            title = entry.title,
+                                            duration = formatDuration(entry.durationMs).takeIf { it.isNotEmpty() },
+                                            imageUrl = imageUrl(state.serverBase, entry.thumb, 320, 180),
+                                            progress = entry.resumeFraction,
+                                            watched = entry.isWatched,
+                                            selected = isTarget,
+                                            onFocus = {
+                                                railFocus.onFocused(entry.ratingKey)
+                                                onFocusEpisode(entry)
+                                            },
+                                            onClick = { onPlay(entry) },
+                                            modifier = rowItem(railFocus, entry.ratingKey),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
 
-                    /*
-                     * The show's logo stays at the top of its own page, with the focused
-                     * episode's title under it. With no logo it is as it was: the show and
-                     * season above, the episode's title as the heading.
-                     */
-                    val logo = logoUrl(state.serverBase, detail.logo)
-                    HeroText(
-                        eyebrow = when {
-                            episode == null -> null
-                            logo != null -> state.selectedSeason?.title
-                            else -> listOfNotNull(
-                                episode.grandparentTitle,
-                                state.selectedSeason?.title,
-                            ).joinToString("  ·  ")
-                        },
-                        title = if (logo != null) detail.title else episode?.title ?: detail.title,
-                        logoUrl = logo,
-                        subtitle = episode?.title?.takeIf { logo != null },
-                        criticRating = if (episode == null) detail.rating else null,
-                        audienceRating = if (episode == null) detail.audienceRating else null,
-                        contentRating = if (episode == null) detail.contentRating else null,
-                        facts = if (episode != null) {
-                            listOfNotNull(
-                                episode.caption,
-                                formatDuration(episode.durationMs).takeIf { it.isNotEmpty() },
-                            )
-                        } else {
-                            listOfNotNull(
-                                detail.year?.toString(),
-                                detail.childCount.takeIf { it > 0 && detail.isShow }
-                                    ?.let { "$it seasons" },
-                                formatDuration(detail.durationMs).takeIf { !detail.isShow && it.isNotEmpty() },
-                                detail.studio,
-                            )
-                        },
-                        summary = null,
-                        modifier = Modifier.widthIn(max = 780.dp),
-                    )
-
-                    val summary = episode?.summary ?: detail.summary
-                    if (!summary.isNullOrBlank()) {
-                        // Body size at a reading width, like the hero's: at 780 dp a line
-                        // was too long to find the start of the next one from the sofa.
+                if (detail.genres.isNotEmpty()) {
+                    item {
                         Text(
-                            text = summary,
+                            text = "Genres   " + detail.genres.joinToString(", "),
                             color = Muted,
-                            style = ReelyType.Body,
-                            minLines = if (expanded) 1 else 3,
-                            maxLines = if (expanded) 12 else 3,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.widthIn(max = 640.dp),
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.focusGroup(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        val target = episode
-                        // What Play would resume. For a show that is the part-watched
-                        // episode, which is also what starting over would restart.
-                        val resumeFrom = when {
-                            target != null -> target.viewOffsetMs
-                            detail.isShow ->
-                                state.episodes.firstOrNull { it.resumeFraction != null }?.viewOffsetMs ?: 0L
-
-                            else -> detail.viewOffsetMs
-                        }
-                        IconAction(
-                            label = if (resumeFrom > 0) "Resume" else "Play",
-                            filled = true,
-                            onClick = { if (target != null) onPlay(target) else onPlayDetail() },
-                            glyph = { PlayGlyph(it, 20.dp) },
-                        )
-                        // Only worth offering when Play would pick up part-way through.
-                        if (resumeFrom > 0) {
-                            IconAction(
-                                label = "Restart",
-                                filled = false,
-                                onClick = {
-                                    if (target != null) onPlayFromStart(target) else onPlayDetailFromStart()
-                                },
-                                glyph = { RestartGlyph(it, 20.dp) },
-                            )
-                        }
-                        IconAction(
-                            label = if ((target?.isWatched ?: detail.isWatched)) "Unwatch" else "Watched",
-                            filled = false,
-                            onClick = { if (target != null) onToggleWatched(target) else onToggleWatchedDetail() },
-                            glyph = { CheckGlyph(it, 20.dp) },
-                        )
-                        // Only appears when the server actually has a trailer to play.
-                        if (state.trailers.isNotEmpty() && episode == null) {
-                            IconAction(
-                                label = "Trailer",
-                                filled = false,
-                                onClick = onPlayTrailer,
-                                glyph = { TrailerGlyph(it, 20.dp) },
-                            )
-                        }
-                        IconAction(
-                            label = if (expanded) "Less" else "Info",
-                            filled = false,
-                            onClick = { expanded = !expanded },
-                            glyph = { InfoGlyph(it, 20.dp) },
+                            fontSize = 14.sp,
+                            lineHeight = 19.sp,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 40.dp),
                         )
                     }
                 }
-            }
 
-            if (detail.isShow) {
-                if (state.busy && state.episodes.isEmpty()) {
+                if (detail.roles.isNotEmpty()) {
                     item {
-                        EmptyNote("Loading episodes…", modifier = Modifier.padding(horizontal = 40.dp))
-                    }
-                }
-                if (state.episodes.isNotEmpty()) {
-                    item {
-                        FocusRow { rowFocused ->
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            SectionHeading("Cast", modifier = Modifier.padding(horizontal = 40.dp))
                             LazyRow(
-                                state = episodeRail,
-                                // Coming back down from Play or Watched returns to the
-                                // episode those buttons were acting on, rather than whichever
-                                // tile happens to be nearest the cursor.
-                                modifier = Modifier.restoreFocusTo(railFocus).focusGroup().then(rowFocused),
-                                contentPadding = PaddingValues(horizontal = 36.dp),
-                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                modifier = Modifier.focusGroup(),
+                                contentPadding = PaddingValues(horizontal = 40.dp),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
                             ) {
-                                items(state.episodes, key = { it.ratingKey }) { entry ->
-                                    val isTarget = state.focusedEpisode?.ratingKey == entry.ratingKey
-                                    EpisodeTile(
-                                        number = entry.index?.toString().orEmpty(),
-                                        title = entry.title,
-                                        duration = formatDuration(entry.durationMs).takeIf { it.isNotEmpty() },
-                                        imageUrl = imageUrl(state.serverBase, entry.thumb, 320, 180),
-                                        progress = entry.resumeFraction,
-                                        watched = entry.isWatched,
-                                        selected = isTarget,
-                                        onFocus = {
-                                            railFocus.onFocused(entry.ratingKey)
-                                            onFocusEpisode(entry)
-                                        },
-                                        onClick = { onPlay(entry) },
-                                        modifier = rowItem(railFocus, entry.ratingKey),
+                                items(detail.roles.take(24)) { role ->
+                                    CastCircle(
+                                        name = role.name,
+                                        role = role.role,
+                                        imageUrl = imageUrl(state.serverBase, role.thumb, 160, 160),
                                     )
                                 }
                             }
@@ -322,40 +365,7 @@ fun DetailScreen(
                     }
                 }
             }
-
-            if (detail.genres.isNotEmpty()) {
-                item {
-                    Text(
-                        text = "Genres   " + detail.genres.joinToString(", "),
-                        color = Muted,
-                        fontSize = 14.sp,
-                        lineHeight = 19.sp,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 40.dp),
-                    )
-                }
             }
-
-            if (detail.roles.isNotEmpty()) {
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        SectionHeading("Cast", modifier = Modifier.padding(horizontal = 40.dp))
-                        LazyRow(
-                            modifier = Modifier.focusGroup(),
-                            contentPadding = PaddingValues(horizontal = 40.dp),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        ) {
-                            items(detail.roles.take(24)) { role ->
-                                CastCircle(
-                                    name = role.name,
-                                    role = role.role,
-                                    imageUrl = imageUrl(state.serverBase, role.thumb, 160, 160),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
         }
     }
 }

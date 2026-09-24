@@ -13,7 +13,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -53,7 +52,9 @@ private const val STEPPED_BACK = 0.72f
  */
 private val RING_GAP = 0.dp
 private val RING_WIDTH = 2.dp
-private val GLOW = 20.dp
+private val GLOW = 14.dp
+private const val GLOW_STEPS = 12
+private const val GLOW_ALPHA = 0.06f
 
 /**
  * The colour of what is on screen, for the glow behind a focused card. Set from the
@@ -101,11 +102,27 @@ fun Modifier.cardLift(focused: Boolean): Modifier {
 @Composable
 fun Modifier.cardRing(focused: Boolean, corner: Dp, round: Boolean = false): Modifier {
     val on by animateFloatAsState(if (focused) 1f else 0f, tween(200), label = "card-ring")
-    val tint = LocalTint.current.copy(alpha = 0.75f)
-    val shape = if (round) CircleShape else RoundedCornerShape(corner)
+    val tint = LocalTint.current
     return this
-        .shadow(elevation = GLOW * on, shape = shape, clip = false, ambientColor = tint, spotColor = tint)
         .drawWithContent {
+            // The glow: a few stacked outlines, each wider and fainter, fading out by
+            // GLOW beyond the artwork. Drawn rather than an elevation shadow, which is
+            // grey before Android 9, varies by maker, and cannot be seen in screenshots.
+            // Kept inside the few dp a scrolling row lets its cards spill over, so it is
+            // never cut off with a hard edge.
+            if (on > 0f && !round) {
+                val reach = GLOW.toPx()
+                val r = corner.toPx()
+                for (i in 1..GLOW_STEPS) {
+                    val spread = reach * i / GLOW_STEPS
+                    drawRoundRect(
+                        color = tint.copy(alpha = GLOW_ALPHA * on * (1f - i.toFloat() / (GLOW_STEPS + 1))),
+                        topLeft = Offset(-spread, -spread * 0.6f),
+                        size = Size(size.width + spread * 2, size.height + spread * 1.6f),
+                        cornerRadius = CornerRadius(r + spread, r + spread),
+                    )
+                }
+            }
             drawContent()
             if (on <= 0f) return@drawWithContent
             val gap = RING_GAP.toPx()
