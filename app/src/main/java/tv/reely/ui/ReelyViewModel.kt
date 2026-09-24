@@ -474,6 +474,28 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             val servers = runCatching { PlexApi.servers(clientId, token) }.getOrElse { return@launch }
             updatePlex { it.copy(servers = servers) }
             scanLibraries()
+            preferBetterAddress(servers)
+        }
+    }
+
+    /*
+     * The address found at sign-in is stored and used from then on. If it was the internet
+     * one — because the local one would not answer then, or was not tried — every stream
+     * went out through the router and back, and the server treated it as remote. So look
+     * again at each start for anything better on the list that answers now, and keep it
+     * for the next start. Not this one: everything on screen was read from the address in
+     * use, and switching under it would leave those items pointing at the old one.
+     */
+    private suspend fun preferBetterAddress(servers: List<PlexServer>) {
+        val plex = _state.value.plex
+        val current = plex.baseUrl ?: return
+        val server = servers.firstOrNull { it.name == plex.serverName } ?: return
+        val better = server.connections.takeWhile { it != current }
+        for (uri in better) {
+            if (PlexApi.reachable(server, uri)) {
+                store.put(SecureStore.PLEX_SERVER_URI, uri)
+                return
+            }
         }
     }
 

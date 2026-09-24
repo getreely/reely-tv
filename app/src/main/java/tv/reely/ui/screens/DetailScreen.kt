@@ -118,6 +118,9 @@ fun DetailScreen(
     }
     val railFocus = rememberRowFocus()
     var railBroughtTo by remember(state.ratingKey) { mutableStateOf<String?>(null) }
+    val page = rememberLazyListState()
+    // Set by choosing a season from its row, and spent once that season's episodes land.
+    var seasonChosen by remember(state.ratingKey) { mutableStateOf(false) }
     LaunchedEffect(state.episodes) {
         val key = state.focusedEpisode?.ratingKey ?: return@LaunchedEffect
         if (railBroughtTo == key) return@LaunchedEffect
@@ -139,6 +142,15 @@ fun DetailScreen(
             railFocus.land(key)
             withFrameNanos { }
             holdColumn = false
+            /*
+             * A season picked by hand is a move on to its episodes, so the page follows:
+             * the row of seasons goes up off the top and the episodes come fully into
+             * view. Arriving on the page is different, and stays put — see above.
+             */
+            if (seasonChosen) {
+                seasonChosen = false
+                runCatching { page.animateScrollToItem(1) }
+            }
         }
         railBroughtTo = key
     }
@@ -156,6 +168,7 @@ fun DetailScreen(
 
             CompositionLocalProvider(LocalBringIntoViewSpec provides pageScroll) {
             LazyColumn(
+                state = page,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(top = 14.dp, bottom = 34.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -171,7 +184,10 @@ fun DetailScreen(
                                 TvChip(
                                     label = season.title,
                                     selected = state.selectedSeason?.ratingKey == season.ratingKey,
-                                    onClick = { onSelectSeason(season) },
+                                    onClick = {
+                                        seasonChosen = true
+                                        onSelectSeason(season)
+                                    },
                                 )
                             }
                         }

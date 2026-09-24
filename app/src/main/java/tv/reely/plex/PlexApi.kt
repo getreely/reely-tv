@@ -311,16 +311,18 @@ object PlexApi {
                     if (!resource.optString("provides").contains("server")) continue
 
                     val connections = resource.optJSONArray("connections") ?: JSONArray()
-                    val uris = (0 until connections.length())
-                        .map { connections.getJSONObject(it) }
-                        // Local first, relay last: a relay works everywhere but is slow.
-                        .sortedWith(
-                            compareBy<JSONObject>(
-                                { it.optBoolean("relay") },
-                                { !it.optBoolean("local") },
+                    val uris = connectionOrder(
+                        (0 until connections.length()).map { index ->
+                            val connection = connections.getJSONObject(index)
+                            PlexConnection(
+                                uri = connection.optString("uri"),
+                                address = connection.optString("address"),
+                                port = connection.optInt("port", 32400),
+                                local = connection.optBoolean("local"),
+                                relay = connection.optBoolean("relay"),
                             )
-                        )
-                        .mapNotNull { it.optString("uri").takeIf(String::isNotEmpty) }
+                        }
+                    )
 
                     if (uris.isEmpty()) continue
                     add(
@@ -335,20 +337,54 @@ object PlexApi {
         }
     }
 
+    /** One way to reach a server, as plex.tv lists it. */
+    data class PlexConnection(
+        val uri: String,
+        val address: String,
+        val port: Int,
+        val local: Boolean,
+        val relay: Boolean,
+    )
+
+    /**
+     * The addresses to try, best first: on the home network, then over the internet, then
+     * through Plex's relay.
+     *
+     * Plex gives a local connection only as an https name under plex.direct, which has to
+     * be looked up in DNS to reach a 192.168 address — and plenty of home routers refuse
+     * to answer that, as protection against DNS rebinding. When they do, the local address
+     * fails, and everything went out to the internet and back in through the router
+     * instead: slower, and counted by the server as a remote stream, with its remote
+     * quality limits. So each local connection is followed by the same address over plain
+     * http, which needs no lookup and works whenever the server allows insecure local
+     * connections — Plex's default of "Preferred".
+     */
+    fun connectionOrder(connections: List<PlexConnection>): List<String> {
+        val sorted = connections
+            .filter { it.uri.isNotEmpty() }
+            .sortedWith(compareBy<PlexConnection>({ it.relay }, { !it.local }))
+        return buildList {
+            for (connection in sorted) {
+                add(connection.uri)
+                if (connection.local && !connection.relay && connection.address.isNotEmpty()) {
+                    add("http://${connection.address}:${connection.port}")
+                }
+            }
+        }.distinct()
+    }
+
     /** The first address that actually answers, which is not knowable from the list alone. */
-    suspend fun firstReachable(server: PlexServer): String? = withContext(Dispatchers.IO) {
-        for (uri in server.connections) {
-            val request = Request.Builder()
-                .url("$uri/identity")
-                .header("accept", "application/json")
-                .header("X-Plex-Token", server.accessToken)
-                .build()
-            val reachable = runCatching {
-                Http.probe.newCall(request).execute().use { it.isSuccessful }
-            }.getOrDefault(false)
-            if (reachable) return@withContext uri
-        }
-        null
+    suspend fun firstReachable(server: PlexServer): String? =
+        server.connections.firstOrNull { reachable(server, it) }
+
+    /** Whether the server answers at this address, within the probe's few seconds. */
+    suspend fun reachable(server: PlexServer, uri: String): Boolean = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url("$uri/identity")
+            .header("accept", "application/json")
+            .header("X-Plex-Token", server.accessToken)
+            .build()
+        runCatching { Http.probe.newCall(request).execute().use { it.isSuccessful } }.getOrDefault(false)
     }
 
     suspend fun sections(base: String, token: String): List<PlexSection> = withContext(Dispatchers.IO) {
