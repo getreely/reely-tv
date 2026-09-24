@@ -1,5 +1,6 @@
 package tv.reely.ui
 
+import tv.reely.ui.components.DetailPlaceholder
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
@@ -361,7 +362,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             is Route.Detail -> {
                 val detail = state.detail
                 if (detail == null) {
-                    EmptyNote("Loading…", modifier = Modifier.padding(40.dp))
+                    DetailPlaceholder(modifier = Modifier.fillMaxSize())
                 } else {
                     DetailScreen(
                         state = detail,

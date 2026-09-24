@@ -1,5 +1,8 @@
 package tv.reely.ui.screens
 
+import tv.reely.ui.components.EpisodeRailPlaceholder
+import tv.reely.ui.components.Shimmer
+import tv.reely.ui.components.DetailPlaceholder
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -78,8 +81,10 @@ fun DetailScreen(
 ) {
     val detail = state.detail
     if (detail == null) {
-        Column(modifier = modifier.fillMaxSize().padding(40.dp)) {
-            if (state.error != null) ErrorNote(state.error) else EmptyNote("Loading…")
+        if (state.error != null) {
+            Column(modifier = modifier.fillMaxSize().padding(40.dp)) { ErrorNote(state.error) }
+        } else {
+            DetailPlaceholder(modifier = modifier.fillMaxSize())
         }
         return
     }
@@ -293,9 +298,7 @@ fun DetailScreen(
 
                 if (detail.isShow) {
                     if (state.busy && state.episodes.isEmpty()) {
-                        item {
-                            EmptyNote("Loading episodes…", modifier = Modifier.padding(horizontal = 40.dp))
-                        }
+                        item { Shimmer { EpisodeRailPlaceholder() } }
                     }
                     if (state.episodes.isNotEmpty()) {
                         item {

@@ -1,5 +1,9 @@
 package tv.reely.ui.screens
 
+import tv.reely.ui.components.GUIDE_ROW_HEIGHT
+import tv.reely.ui.components.GUIDE_CHANNEL_COLUMN
+import tv.reely.ui.components.placeholder
+import tv.reely.ui.components.Shimmer
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
@@ -258,7 +262,7 @@ fun GuideScreen(
         }
 
         if (live.channels.isEmpty()) {
-            EmptyNote(if (live.busy) "Loading channels…" else "No channels in this category.")
+            if (live.busy) GuidePlaceholder() else EmptyNote("No channels in this category.")
             return@Column
         }
 
@@ -337,4 +341,37 @@ private fun GuideStatus.describe(): String = when (this) {
 
     is GuideStatus.Ready -> "$count programmes in the guide"
     is GuideStatus.Failed -> message
+}
+
+/** The grid's rows before there are channels to fill them: a channel, then its programmes. */
+@Composable
+private fun GuidePlaceholder() {
+    // Programmes run to different lengths, so the blocks do too.
+    val rows = listOf(
+        listOf(180, 250, 140, 320),
+        listOf(300, 160, 220, 200),
+        listOf(120, 280, 260, 180),
+        listOf(240, 200, 150, 300),
+        listOf(200, 140, 310, 190),
+    )
+    Shimmer {
+        Column(
+            modifier = Modifier.padding(top = 34.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            rows.forEach { widths ->
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .width(GUIDE_CHANNEL_COLUMN)
+                            .height(GUIDE_ROW_HEIGHT)
+                            .placeholder(corner = 10.dp),
+                    )
+                    widths.forEach { width ->
+                        Box(modifier = Modifier.width(width.dp).height(GUIDE_ROW_HEIGHT).placeholder(corner = 10.dp))
+                    }
+                }
+            }
+        }
+    }
 }

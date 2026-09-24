@@ -1,5 +1,7 @@
 package tv.reely.ui.screens
 
+import tv.reely.ui.components.PosterPlaceholder
+import tv.reely.ui.components.Shimmer
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -338,13 +340,15 @@ fun LibraryScreen(
                                 "No ${kind.title.lowercase()} library on ${plex.serverName ?: "this server"}."
                             )
 
-                            browse.busy && browse.items.isEmpty() ->
-                                EmptyNote("Loading ${kind.title.lowercase()}…")
-
                             browse.items.isEmpty() && browse.isFiltered ->
                                 EmptyNote("Nothing in this library matches those filters.")
                         }
                     }
+                }
+
+                // The grid's own shape while the first page is on its way.
+                if (sections.isNotEmpty() && browse.busy && browse.items.isEmpty()) {
+                    items(PLACEHOLDER_COUNT) { Shimmer { PosterPlaceholder() } }
                 }
 
                 items(browse.items, key = { it.listKey }) { item ->
@@ -379,3 +383,6 @@ private fun RowBlock(title: String, content: @Composable () -> Unit) {
         content()
     }
 }
+
+/** Three rows of a six-across grid: a screenful, and no more. */
+private const val PLACEHOLDER_COUNT = 18

@@ -1,5 +1,8 @@
 package tv.reely.ui.screens
 
+import tv.reely.ui.components.PosterRowPlaceholder
+import tv.reely.ui.components.HeroPlaceholder
+import tv.reely.ui.components.Shimmer
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -135,6 +138,8 @@ fun HomeScreen(
                             qualities = focused.qualities,
                             modifier = Modifier.widthIn(max = 700.dp),
                         )
+                    } else if (home.busy && home.isEmpty) {
+                        Shimmer { HeroPlaceholder(modifier = Modifier.padding(top = 8.dp)) }
                     } else {
                         Text(
                             text = "Home",
@@ -211,11 +216,19 @@ fun HomeScreen(
                         }
                     }
 
-                    if (home.isEmpty) {
+                    if (home.isEmpty && home.busy) {
+                        item {
+                            Shimmer {
+                                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                    PosterRowPlaceholder()
+                                    PosterRowPlaceholder()
+                                }
+                            }
+                        }
+                    } else if (home.isEmpty) {
                         item {
                             EmptyNote(
-                                if (home.busy) "Reading your library…"
-                                else "Nothing to show yet. Watch something and it will appear here.",
+                                "Nothing to show yet. Watch something and it will appear here.",
                                 modifier = Modifier.padding(horizontal = 40.dp, vertical = 20.dp),
                             )
                         }

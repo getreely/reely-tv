@@ -1,5 +1,7 @@
 package tv.reely.ui.screens
 
+import tv.reely.ui.components.placeholder
+import tv.reely.ui.components.Shimmer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -104,12 +106,16 @@ fun LiveCategoriesScreen(
                         modifier = Modifier.padding(top = 12.dp),
                     )
                 }
-                if (live.categories.isEmpty()) {
-                    EmptyNote(
-                        if (live.busy) "Loading categories…" else "The panel returned no categories.",
-                        modifier = Modifier.padding(top = 12.dp),
-                    )
+                if (live.categories.isEmpty() && !live.busy) {
+                    EmptyNote("The panel returned no categories.", modifier = Modifier.padding(top = 12.dp))
                 }
+            }
+        }
+
+        // Category tiles to be, while the panel answers.
+        if (live.categories.isEmpty() && live.busy) {
+            items(12) {
+                Shimmer { Box(modifier = Modifier.fillMaxWidth().height(92.dp).placeholder(corner = 14.dp)) }
             }
         }
 

@@ -77,4 +77,37 @@ class HomeShot {
         compose.onAllNodesWithText("Harbor Lights").onFirst().requestFocus()
         Shots.save(compose, "home")
     }
+
+    /** Home before the server has answered: the rows' shapes, not a line of text. */
+    @Test fun homeLoading() {
+        compose.setContent {
+            ReelyTheme {
+                Box(Modifier.fillMaxSize().background(Ink)) {
+                    HomeScreen(
+                        plex = PlexState(baseUrl = "http://server", serverToken = "t", token = "t", serverName = "Living Room"),
+                        home = HomeState(busy = true),
+                        focused = null,
+                        imageUrl = { _, _, _, _ -> null },
+                        backdropUrl = { _, _ -> null },
+                        logoUrl = { _, _ -> null },
+                        onFocusItem = {}, onOpenItem = {}, onPlayItem = { _, _ -> }, onToggleWatched = {},
+                        onStartLink = {}, onCancelLink = {}, onDismissPlexError = {},
+                    )
+                }
+            }
+        }
+        Shots.save(compose, "home-loading")
+    }
+
+    /** A detail page on its way. */
+    @Test fun detailLoading() {
+        compose.setContent {
+            ReelyTheme {
+                Box(Modifier.fillMaxSize().background(Ink)) {
+                    tv.reely.ui.components.DetailPlaceholder(Modifier.fillMaxSize())
+                }
+            }
+        }
+        Shots.save(compose, "detail-loading")
+    }
 }

@@ -1,5 +1,6 @@
 package tv.reely.ui.screens
 
+import tv.reely.ui.components.LoadingRing
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
@@ -97,7 +98,6 @@ import tv.reely.ui.components.SubtitleGlyph
 import tv.reely.ui.components.TransportButton
 import tv.reely.ui.components.TvActionButton
 import tv.reely.ui.components.TvListRow
-import tv.reely.ui.components.glass
 import tv.reely.ui.components.sheet
 import tv.reely.ui.components.rememberSelectPress
 import tv.reely.ui.components.requestWhenReady
@@ -877,12 +877,7 @@ fun PlayerScreen(
          * tiles and describe only the first of them.
          */
         if (buffering && error == null && tileCount == 1) {
-            Text(
-                text = "Loading…",
-                color = Chalk,
-                style = ReelyType.Meta,
-                modifier = Modifier.align(Alignment.Center).glass(radius = 100).padding(horizontal = 20.dp, vertical = 10.dp),
-            )
+            LoadingRing(modifier = Modifier.align(Alignment.Center))
         }
 
         error?.let { message ->
