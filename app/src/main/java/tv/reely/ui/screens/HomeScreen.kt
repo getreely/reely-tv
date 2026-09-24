@@ -132,6 +132,7 @@ fun HomeScreen(
                                 formatDuration(focused.durationMs).takeIf { it.isNotEmpty() },
                             ),
                             summary = focused.summary,
+                            qualities = focused.qualities,
                             modifier = Modifier.widthIn(max = 700.dp),
                         )
                     } else {

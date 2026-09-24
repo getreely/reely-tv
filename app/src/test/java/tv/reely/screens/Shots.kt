@@ -175,6 +175,7 @@ object Shots {
             thumb = "poster/$key",
             art = "backdrop/$key",
             logo = t.logo?.let { "logo/$key" },
+            qualities = if (t.logo != null) listOf("4K", "5.1") else listOf("HD", "Stereo"),
             summary = t.summary,
             year = t.year,
             index = t.e,

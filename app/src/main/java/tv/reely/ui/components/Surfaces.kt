@@ -249,6 +249,8 @@ fun RatingBadges(
     contentRating: String?,
     trailing: List<String> = emptyList(),
     modifier: Modifier = Modifier,
+    /** What the file is — 4K, Dolby Vision, 5.1 — after the details. */
+    qualities: List<String> = emptyList(),
 ) {
     Row(
         modifier = modifier,
@@ -266,6 +268,21 @@ fun RatingBadges(
         }
         trailing.forEach { fact ->
             Text(text = fact, color = Muted, style = ReelyType.Meta, maxLines = 1)
+        }
+        // Filled rather than outlined, so they read as facts about the file and not as
+        // ratings; a little apart from the details they follow.
+        qualities.forEachIndexed { i, quality ->
+            Text(
+                text = quality,
+                color = Chalk,
+                style = ReelyType.Label.copy(fontWeight = FontWeight.SemiBold),
+                maxLines = 1,
+                modifier = Modifier
+                    .padding(start = if (i == 0) 6.dp else 0.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Chalk.copy(alpha = 0.13f))
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+            )
         }
     }
 }
@@ -333,6 +350,8 @@ fun HeroText(
     logoUrl: String? = null,
     /** A second line under the title, for an episode shown beneath its show's logo. */
     subtitle: String? = null,
+    /** What the file is: 4K, Dolby Vision, 5.1. See [tv.reely.core.qualityBadges]. */
+    qualities: List<String> = emptyList(),
 ) {
     Column(
         modifier = modifier,
@@ -360,12 +379,13 @@ fun HeroText(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        if (criticRating != null || audienceRating != null || !contentRating.isNullOrBlank() || facts.isNotEmpty()) {
+        if (criticRating != null || audienceRating != null || !contentRating.isNullOrBlank() || facts.isNotEmpty() || qualities.isNotEmpty()) {
             RatingBadges(
                 criticRating = criticRating,
                 audienceRating = audienceRating,
                 contentRating = contentRating,
                 trailing = facts,
+                qualities = qualities,
             )
         }
         if (!summary.isNullOrBlank()) {

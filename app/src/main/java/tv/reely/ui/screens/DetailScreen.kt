@@ -216,6 +216,7 @@ fun DetailScreen(
                                 )
                             },
                             summary = null,
+                            qualities = episode?.qualities ?: detail.qualities,
                             modifier = Modifier.widthIn(max = 780.dp),
                         )
 

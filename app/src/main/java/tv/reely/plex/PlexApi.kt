@@ -6,6 +6,7 @@ import okhttp3.FormBody
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
+import tv.reely.core.qualityBadges
 import tv.reely.core.Http
 import java.net.URLEncoder
 
@@ -108,6 +109,8 @@ data class PlexItem(
      * show's. Absent when the server has none.
      */
     val logo: String? = null,
+    /** What the file is — 4K, Dolby Vision, 5.1 — as far as this listing says. */
+    val qualities: List<String> = emptyList(),
     /** Which library this came from, so a tab can show only its own library's things. */
     val librarySectionId: String?,
     /**
@@ -191,6 +194,8 @@ data class PlexDetail(
     val parentIndex: Int?,
     /** See [PlexItem.logo]. */
     val logo: String? = null,
+    /** See [PlexItem.qualities]; a full item carries its HDR, which a listing may not. */
+    val qualities: List<String> = emptyList(),
 ) {
     val isShow: Boolean get() = type == "show"
 
@@ -472,6 +477,7 @@ object PlexApi {
                 index = entry.optInt("index").takeIf { it > 0 },
                 parentIndex = entry.optInt("parentIndex").takeIf { it > 0 },
                 logo = logoOf(entry),
+                qualities = qualitiesOf(entry),
             )
         }
 
@@ -762,8 +768,27 @@ object PlexApi {
         addedAt = entry.optLong("addedAt"),
         lastViewedAt = entry.optLong("lastViewedAt"),
         logo = logoOf(entry),
+        qualities = qualitiesOf(entry),
         librarySectionId = entry.optString("librarySectionID").takeIf(String::isNotBlank),
     )
+
+    /**
+     * What an item's first file is, from its Media block, and from the video stream when
+     * the response carries one — which a full item does and a listing usually does not.
+     */
+    private fun qualitiesOf(entry: JSONObject): List<String> {
+        val media = entry.optJSONArray("Media")?.optJSONObject(0) ?: return emptyList()
+        val streams = media.optJSONArray("Part")?.optJSONObject(0)?.optJSONArray("Stream")
+        val video = streams?.let { list ->
+            (0 until list.length()).mapNotNull { list.optJSONObject(it) }.firstOrNull { it.optInt("streamType") == 1 }
+        }
+        return qualityBadges(
+            resolution = media.optString("videoResolution").takeIf(String::isNotBlank),
+            audioChannels = media.optInt("audioChannels"),
+            dolbyVision = video?.optBoolean("DOVIPresent") == true,
+            transfer = video?.optString("colorTrc")?.takeIf(String::isNotBlank),
+        )
+    }
 
     /** The clearLogo in an item's images, if it has one. */
     private fun logoOf(entry: JSONObject): String? {

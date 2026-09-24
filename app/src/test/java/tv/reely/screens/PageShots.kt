@@ -91,6 +91,7 @@ class PageShots {
                                     .map { (who, as_) -> PlexRole(name = who, role = as_, thumb = null) },
                                 childCount = 3, leafCount = 24, grandparentTitle = null, index = null, parentIndex = null,
                                 logo = "logo/north",
+                                qualities = listOf("4K", "Dolby Vision", "5.1"),
                             ),
                             seasons = seasons, selectedSeason = seasons[1], episodes = episodes,
                             focusedEpisode = null,
