@@ -10,7 +10,7 @@ enum class SkipPrompt { INTRO, NEXT_EPISODE }
  * under a thumb already on its way to OK, and the press lands on whatever took its place.
  *
  * Credits only offer the next episode when there is one to go to and nothing else is
- * already offering it — the Up Next card counts, and two ways to do the same thing a few
+ * already offering it — the Up Next screen counts, and two ways to do the same thing a few
  * pixels apart is worse than one.
  */
 fun skipPromptAt(

@@ -26,7 +26,7 @@ import tv.reely.ui.screens.Panel
 import tv.reely.ui.screens.StatsPanel
 import tv.reely.ui.screens.TileMenu
 import tv.reely.ui.screens.TrackPanel
-import tv.reely.ui.screens.UpNextCard
+import tv.reely.ui.screens.PostPlay
 import tv.reely.ui.theme.ReelyTheme
 
 /** What opens over the picture: the track and stats panels, the tile menu, up next. */
@@ -106,16 +106,33 @@ class PlayerPanelShots {
         Shots.save(compose, "player-tile-menu")
     }
 
+    /** Up Next as its own screen, the credits carrying on in the corner. */
     @Test fun upNext() {
         val focus = FocusRequester()
+        // Left to run, the countdown would finish before the picture is taken.
+        compose.mainClock.autoAdvance = false
         overPicture(focus) {
-            Box(Modifier.fillMaxSize()) {
-                UpNextCard(
-                    item = Shots.item("north"), countdownSeconds = 0, onPlay = {}, onDismiss = {},
-                    modifier = Modifier.align(Alignment.BottomEnd),
+            val next = Shots.item("north")
+            PostPlay(
+                item = next,
+                stillUrl = Shots.imageUrl("backdrop/harbor", 1280, 720),
+                logoUrl = Shots.imageUrl("logo/north", 840, 144),
+                nowTitle = "Cold Open",
+                ended = false,
+                countdownSeconds = 15,
+                focusRequester = focus,
+                onPlay = {},
+                onDecline = {},
+            ) {
+                AsyncImage(
+                    model = Shots.imageUrl("backdrop/ferry", 1280, 720),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
         }
+        compose.mainClock.advanceTimeBy(5_000)
         Shots.save(compose, "player-up-next")
     }
 }

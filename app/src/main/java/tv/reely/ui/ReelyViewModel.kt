@@ -1207,7 +1207,19 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** The player reached the end of a file. Work out what follows, if anything. */
-    fun onPlaybackEnded() {
+    fun onPlaybackEnded() = offerUpNext()
+
+    /**
+     * The credits have started. Up Next is offered now rather than at the very end, the
+     * way Plex does it; the end of the file offers it again to anybody who chose to
+     * watch them.
+     */
+    fun onCreditsReached() {
+        if (_state.value.upNext != null) return
+        offerUpNext()
+    }
+
+    private fun offerUpNext() {
         val playback = _state.value.playback ?: return
         if (playback.isLive) return
         val next = playback.queue.getOrNull(playback.queueIndex + 1)

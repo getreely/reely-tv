@@ -115,6 +115,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             upNext = state.upNext,
             onExit = viewModel::stopPlayback,
             onEnded = viewModel::onPlaybackEnded,
+            onCredits = viewModel::onCreditsReached,
             onPlayUpNext = viewModel::playUpNext,
             onDismissUpNext = viewModel::dismissUpNext,
             livePlayer = viewModel.livePlayer,
@@ -134,6 +135,8 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             onReportProgress = viewModel::reportProgress,
             onNudgeSubtitleScale = viewModel::nudgeSubtitleScale,
             onToggleSubtitleBackground = viewModel::toggleSubtitleBackground,
+            imageUrl = viewModel::plexImageUrl,
+            logoUrl = viewModel::plexLogoUrl,
             modifier = Modifier.fillMaxSize(),
         )
         return

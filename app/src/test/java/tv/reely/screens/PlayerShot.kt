@@ -3,13 +3,7 @@ package tv.reely.screens
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import tv.reely.ui.components.TvActionButton
 import androidx.compose.ui.Alignment
@@ -40,11 +34,36 @@ class PlayerShot {
     /** The transport over a frame of the film, with focus on play, as it arrives. */
     @Test fun controls() = shot("player-controls") { play, _ -> play.requestFocus() }
 
-    /**
-     * Paused with Skip Intro up: the button sits on top of the transport, at the height
-     * the player measures it to be, and keeps the focus.
-     */
-    @Test fun skipOverControls() = shot("player-skip", skip = true) { _, _ -> skipFocus.requestFocus() }
+    /** Paused with Skip Intro up: it sits in the title's row, and keeps the focus. */
+    @Test fun skipInControls() = shot("player-skip", skip = true) { _, _ -> skipFocus.requestFocus() }
+
+    /** Skip Intro with the controls away: on its own, low in the corner. */
+    @Test fun skipAlone() {
+        compose.setContent {
+            ReelyTheme {
+                Shots.RemoteInput()
+                Box(Modifier.fillMaxSize()) {
+                    AsyncImage(
+                        model = Shots.imageUrl("backdrop/north", 1280, 720),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    TvActionButton(
+                        label = "Skip Intro",
+                        onClick = {},
+                        emphasised = true,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 48.dp, bottom = 27.dp)
+                            .focusRequester(skipFocus),
+                    )
+                }
+            }
+        }
+        compose.runOnIdle { skipFocus.requestFocus() }
+        Shots.save(compose, "player-skip-alone")
+    }
 
     private val skipFocus = FocusRequester()
 
@@ -59,7 +78,6 @@ class PlayerShot {
         val play = FocusRequester()
         val scrubber = FocusRequester()
         compose.setContent {
-            var height by remember { mutableIntStateOf(0) }
             ReelyTheme {
                 Shots.RemoteInput()
                 Box(Modifier.fillMaxSize()) {
@@ -82,21 +100,10 @@ class PlayerShot {
                         onScrubberFocus = {},
                         onSeek = {}, onSkip = {}, onTogglePlay = {}, onAddChannel = {},
                         onOpenSubtitles = {}, onOpenAudio = {}, onOpenStats = {}, onToggleFormat = {},
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .onSizeChanged { height = it.height },
+                        skipLabel = if (skip) "Skip Intro" else null,
+                        skipFocus = skipFocus,
+                        modifier = Modifier.align(Alignment.BottomStart),
                     )
-                    if (skip) {
-                        TvActionButton(
-                            label = "Skip Intro",
-                            onClick = {},
-                            emphasised = true,
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(end = 48.dp, bottom = with(LocalDensity.current) { height.toDp() })
-                                .focusRequester(skipFocus),
-                        )
-                    }
                 }
             }
         }

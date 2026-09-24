@@ -36,8 +36,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -136,6 +134,8 @@ fun PlayerScreen(
     upNext: PlexItem?,
     onExit: (Long) -> Unit,
     onEnded: () -> Unit,
+    /** The credits have started: find what comes next, and offer it. */
+    onCredits: () -> Unit,
     onPlayUpNext: () -> Unit,
     onDismissUpNext: () -> Unit,
     onStepChannel: (Int) -> Unit,
@@ -156,6 +156,8 @@ fun PlayerScreen(
     onReportProgress: (Long, Boolean) -> Unit,
     onNudgeSubtitleScale: (Float) -> Unit,
     onToggleSubtitleBackground: () -> Unit,
+    imageUrl: (String?, String?, Int, Int) -> String?,
+    logoUrl: (String?, String?) -> String?,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -221,12 +223,14 @@ fun PlayerScreen(
     // A film or episode opening is worth showing the transport for; a channel is not,
     // and raising it there cost six seconds of a dead d-pad before the timeout cleared it.
     var controlsVisible by remember { mutableStateOf(!playback.isLive) }
-    // In pixels, as measured; the skip prompt sits on top of it.
-    var controlsHeight by remember { mutableIntStateOf(0) }
-    val density = LocalDensity.current
+    // Past the end of the file. Up Next then offers to leave rather than to watch the
+    // credits, which have been and gone.
+    var ended by remember { mutableStateOf(false) }
     // The scrubber is the top of the control bar, so this is "there is nothing above
     // here to move to" — which is what makes another press of up mean "put these away".
     var atTopOfControls by remember { mutableStateOf(false) }
+    // The skip prompt, when the controls are up, is the top of them instead.
+    var skipFocused by remember { mutableStateOf(false) }
     // The guide, raised over a playing channel. Mutually exclusive with the controls.
     // One value rather than three flags, so opening it has to say what it is for and
     // closing it cannot half-forget — see GuideRequest.
@@ -318,6 +322,24 @@ fun PlayerScreen(
         null -> null
     }
 
+    /*
+     * Up Next comes up when the credits start, as it does in Plex, rather than only once
+     * the file has run out. Once per episode: somebody who chose to watch the credits
+     * is not asked again until they are over, when the end of the file asks.
+     */
+    val inCredits = !playback.isLive && credits != null && positionMs >= credits.startMs
+    var creditsOffered by remember(playback.url) { mutableStateOf(false) }
+    LaunchedEffect(inCredits, playback.url) {
+        if (inCredits && !creditsOffered) {
+            creditsOffered = true
+            onCredits()
+        }
+    }
+    // The Up Next screen: the picture shrunk into a corner and the next episode offered
+    // across the rest. One picture only; a grid is live television, which has no next.
+    val postPlay = upNext != null && tileCount == 1 && !playback.isLive
+    val upNextFocus = remember { FocusRequester() }
+
     // Nothing else tells the system the screen is in use, so Fire OS starts its screensaver
     // over a playing film. This is what stops that.
     DisposableEffect(playing) {
@@ -389,6 +411,7 @@ fun PlayerScreen(
                 // Something is playing again, so whatever the last complaint was, it is
                 // no longer true. Live recovers itself; the message should not outlive it.
                 if (state == Player.STATE_READY) error = null
+                ended = state == Player.STATE_ENDED
                 if (state == Player.STATE_ENDED) onEnded()
             }
 
@@ -528,9 +551,11 @@ fun PlayerScreen(
      */
     LaunchedEffect(
         controlsVisible, panel, guideOpen, tileMenu, skipLabel, playback.isLive, playback.url,
+        postPlay,
     ) {
         if (guideOpen) return@LaunchedEffect
         when {
+            postPlay -> upNextFocus.requestWhenReady()
             tileMenu != null -> tileMenuFocus.requestWhenReady()
             panel != Panel.NONE -> panelFocus.requestWhenReady()
             // Above the transport: a prompt that is only up for a few seconds is no use
@@ -640,7 +665,13 @@ fun PlayerScreen(
                             onRemoveTile(index)
                             true
                         }
-                        // Up Next owns the press while it is showing.
+                        // Back from Up Next is the button beside Play: during the
+                        // credits it goes back to them, after them it leaves.
+                        postPlay -> {
+                            if (ended) onExit(exoPlayer.currentPosition.coerceAtLeast(0))
+                            else onDismissUpNext()
+                            true
+                        }
                         upNext != null -> false
                         // Back closes what is open before it closes the player. Note the
                         // absence of interaction++: counting this as activity would fire
@@ -655,6 +686,8 @@ fun PlayerScreen(
                 }
                 if (tileMenu != null) return@onPreviewKeyEvent false
                 if (panel != Panel.NONE) return@onPreviewKeyEvent false
+                // Up Next is a screen of its own, and its two buttons are all there is.
+                if (postPlay) return@onPreviewKeyEvent false
                 // The guide owns every key while it is up, bar the Back handled above.
                 if (guideOpen) return@onPreviewKeyEvent false
                 // Up from the top of the controls dismisses them, rather than leaving
@@ -663,7 +696,7 @@ fun PlayerScreen(
                     event.key == Key.DirectionUp &&
                     !playback.isLive &&
                     controlsVisible &&
-                    atTopOfControls
+                    ((atTopOfControls && skipLabel == null) || skipFocused)
                 ) {
                     controlsVisible = false
                     return@onPreviewKeyEvent true
@@ -810,7 +843,20 @@ fun PlayerScreen(
         }
 
         if (tileCount == 1) {
-            mainSurface()
+            PostPlay(
+                item = upNext.takeIf { postPlay },
+                stillUrl = upNext?.let { imageUrl(it.serverBase, it.thumb ?: it.art, 1280, 720) },
+                logoUrl = upNext?.let { logoUrl(it.serverBase, it.logo) },
+                nowTitle = playback.title,
+                ended = ended,
+                countdownSeconds = prefs.upNextSeconds,
+                focusRequester = upNextFocus,
+                onPlay = onPlayUpNext,
+                onDecline = {
+                    if (ended) onExit(exoPlayer.currentPosition.coerceAtLeast(0)) else onDismissUpNext()
+                },
+                video = mainSurface,
+            )
         } else if (zoomed != null) {
             Box(modifier = Modifier.fillMaxSize()) { tileAt(zoomed!!) }
         } else if (focusLayout) {
@@ -900,7 +946,12 @@ fun PlayerScreen(
          * so a film had no controls, and the flag that gates the direction keys ran on
          * regardless. Hence the tileCount test rather than another deletion.
          */
-        if (controlsVisible && !guideOpen && tileCount == 1) {
+        val controlsShowing = controlsVisible && !guideOpen && tileCount == 1 && !postPlay
+        val skip = {
+            if (prompt == SkipPrompt.INTRO && intro != null) exoPlayer.seekTo(intro.endMs)
+            else onStepEpisode(1)
+        }
+        if (controlsShowing) {
             Controls(
                 playback = playback,
                 playing = playing,
@@ -937,30 +988,26 @@ fun PlayerScreen(
                 onOpenAudio = { panel = Panel.AUDIO },
                 onOpenStats = { panel = Panel.STATS },
                 onToggleFormat = onToggleFormat,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .onSizeChanged { controlsHeight = it.height },
+                skipLabel = skipLabel,
+                skipFocus = skipFocus,
+                onSkipPrompt = skip,
+                onSkipFocus = { skipFocused = it },
+                modifier = Modifier.align(Alignment.BottomStart),
             )
         }
 
-        // Sits clear of the transport when that is up, and near the corner when it is
-        // not. Drawn after it so it is never behind it.
-        if (skipLabel != null) {
+        // With the controls up the prompt is part of them, in the title's row. Without
+        // them it sits low in the corner on its own. Either way the same requester, so
+        // focus follows it from one to the other when the controls come and go.
+        if (skipLabel != null && !controlsShowing) {
             TvActionButton(
                 label = skipLabel,
-                onClick = {
-                    if (prompt == SkipPrompt.INTRO && intro != null) exoPlayer.seekTo(intro.endMs)
-                    else onStepEpisode(1)
-                },
+                onClick = skip,
                 emphasised = true,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    // Measured, not guessed: the transport's height is the type scale's
-                    // and the button's, and a fixed number went stale with either.
-                    .padding(
-                        end = 48.dp,
-                        bottom = if (controlsVisible) with(density) { controlsHeight.toDp() } else 27.dp,
-                    )
+                    .padding(end = 48.dp, bottom = 27.dp)
+                    .onFocusChanged { skipFocused = it.isFocused }
                     .focusRequester(skipFocus),
             )
         }
@@ -1026,15 +1073,6 @@ fun PlayerScreen(
             )
         }
 
-        if (upNext != null) {
-            UpNextCard(
-                item = upNext,
-                countdownSeconds = prefs.upNextSeconds,
-                onPlay = onPlayUpNext,
-                onDismiss = onDismissUpNext,
-                modifier = Modifier.align(Alignment.BottomEnd),
-            )
-        }
     }
 }
 
@@ -1060,6 +1098,11 @@ internal fun Controls(
     onOpenAudio: () -> Unit,
     onOpenStats: () -> Unit,
     onToggleFormat: () -> Unit,
+    /** Skip Intro or Next Episode, when one is being offered; it sits in the title's row. */
+    skipLabel: String? = null,
+    skipFocus: FocusRequester = remember { FocusRequester() },
+    onSkipPrompt: () -> Unit = {},
+    onSkipFocus: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -1076,21 +1119,36 @@ internal fun Controls(
             .padding(start = 48.dp, end = 48.dp, top = 24.dp, bottom = 27.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            text = playback.title,
-            color = Chalk,
-            style = ReelyType.Headline,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        playback.subtitle?.let {
-            Text(
-                text = it,
-                color = Muted,
-                style = ReelyType.Meta,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+        Row(verticalAlignment = Alignment.Bottom) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = playback.title,
+                    color = Chalk,
+                    style = ReelyType.Headline,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                playback.subtitle?.let {
+                    Text(
+                        text = it,
+                        color = Muted,
+                        style = ReelyType.Meta,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            if (skipLabel != null) {
+                TvActionButton(
+                    label = skipLabel,
+                    onClick = onSkipPrompt,
+                    emphasised = true,
+                    modifier = Modifier
+                        .padding(start = 24.dp)
+                        .onFocusChanged { onSkipFocus(it.isFocused) }
+                        .focusRequester(skipFocus),
+                )
+            }
         }
 
         if (playback.isLive) {
@@ -1549,73 +1607,6 @@ private fun applyTrack(player: ExoPlayer, trackType: Int, choice: TrackChoice) {
             .setTrackTypeDisabled(trackType, false)
             .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, 0))
             .build()
-    }
-}
-
-// ---------------------------------------------------------------- Up next
-
-@Composable
-internal fun UpNextCard(
-    item: PlexItem,
-    countdownSeconds: Int,
-    onPlay: () -> Unit,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var remaining by remember(item.ratingKey) { mutableIntStateOf(countdownSeconds) }
-    val focus = remember { FocusRequester() }
-
-    LaunchedEffect(item.ratingKey, countdownSeconds) {
-        focus.requestWhenReady()
-        // Zero means the countdown is switched off: the card waits to be chosen.
-        if (countdownSeconds <= 0) return@LaunchedEffect
-        remaining = countdownSeconds
-        while (remaining > 0) {
-            delay(1_000)
-            remaining--
-        }
-        onPlay()
-    }
-
-    Column(
-        modifier = modifier
-            .padding(end = 48.dp, bottom = 27.dp)
-            .width(420.dp)
-            .sheet()
-            .padding(24.dp)
-            .focusGroup(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(
-            text = if (countdownSeconds > 0) "UP NEXT IN $remaining" else "UP NEXT",
-            color = Accent,
-            style = ReelyType.Label,
-            letterSpacing = 1.4.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Text(
-            text = item.title,
-            color = Chalk,
-            style = ReelyType.Headline,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        listOfNotNull(item.grandparentTitle, item.caption).joinToString("  ·  ")
-            .takeIf { it.isNotBlank() }
-            ?.let { Text(text = it, color = Muted, style = ReelyType.Meta) }
-
-        Row(
-            modifier = Modifier.padding(top = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            TvActionButton(
-                label = "Play now",
-                onClick = onPlay,
-                emphasised = true,
-                modifier = Modifier.focusRequester(focus),
-            )
-            TvActionButton(label = "Stop", onClick = onDismiss)
-        }
     }
 }
 
