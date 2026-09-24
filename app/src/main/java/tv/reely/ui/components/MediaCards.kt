@@ -101,12 +101,11 @@ fun WideCard(
     modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.05f else 1f, label = "wide-scale")
 
     Column(
         modifier = modifier
             .width(268.dp)
-            .scale(scale)
+            .cardLift(focused)
             .onFocusChanged { focused = it.isFocused }
             .cardPress(onClick, onLongPress)
             .padding(4.dp),
@@ -115,13 +114,9 @@ fun WideCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(8.dp))
-                .background(SurfaceHigh)
-                .border(
-                    width = 2.dp,
-                    color = if (focused) Accent else Color.Transparent,
-                    shape = RoundedCornerShape(8.dp),
-                ),
+                .cardRing(focused, WideCorner)
+                .clip(RoundedCornerShape(WideCorner))
+                .background(SurfaceHigh),
         ) {
             if (imageUrl != null) {
                 AsyncImage(
@@ -176,12 +171,11 @@ fun PosterCard(
     width: androidx.compose.ui.unit.Dp = 132.dp,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.07f else 1f, label = "poster-scale")
 
     Column(
         modifier = modifier
             .width(width)
-            .scale(scale)
+            .cardLift(focused)
             .onFocusChanged {
                 focused = it.isFocused
                 if (it.isFocused) onFocus()
@@ -193,13 +187,9 @@ fun PosterCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(2f / 3f)
-                .clip(RoundedCornerShape(8.dp))
-                .background(SurfaceHigh)
-                .border(
-                    width = 2.dp,
-                    color = if (focused) Accent else Color.Transparent,
-                    shape = RoundedCornerShape(8.dp),
-                ),
+                .cardRing(focused, PosterCorner)
+                .clip(RoundedCornerShape(PosterCorner))
+                .background(SurfaceHigh),
         ) {
             if (imageUrl != null) {
                 AsyncImage(
@@ -465,13 +455,12 @@ fun EpisodeTile(
     selected: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.05f else 1f, label = "episode-scale")
     val marked = focused || selected
 
     Column(
         modifier = modifier
             .width(186.dp)
-            .scale(scale)
+            .cardLift(focused)
             .onFocusChanged {
                 focused = it.isFocused
                 if (it.isFocused) onFocus()
@@ -483,18 +472,11 @@ fun EpisodeTile(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(8.dp))
+                .cardRing(focused, WideCorner)
+                .clip(RoundedCornerShape(WideCorner))
                 .background(SurfaceHigh)
-                .border(
-                    width = if (focused) 2.dp else 3.dp,
-                    color = when {
-                        focused -> Accent
-                        // Dimmer and thicker, so a held selection never reads as focus.
-                        selected -> Accent.copy(alpha = 0.55f)
-                        else -> Color.Transparent
-                    },
-                    shape = RoundedCornerShape(8.dp),
-                ),
+                // The episode the buttons act on keeps a thin edge while focus is up there.
+                .then(if (selected && !focused) Modifier.border(2.dp, Chalk.copy(alpha = 0.5f), RoundedCornerShape(WideCorner)) else Modifier),
         ) {
             if (imageUrl != null) {
                 AsyncImage(

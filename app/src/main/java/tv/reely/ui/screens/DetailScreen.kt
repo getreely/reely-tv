@@ -32,6 +32,7 @@ import tv.reely.ui.DetailState
 import tv.reely.core.minimumScrollDistance
 import tv.reely.ui.components.HeroBackdrop
 import tv.reely.ui.components.CastCircle
+import tv.reely.ui.components.FocusRow
 import tv.reely.ui.components.CheckGlyph
 import tv.reely.ui.components.EmptyNote
 import tv.reely.ui.components.ErrorNote
@@ -48,6 +49,7 @@ import tv.reely.ui.components.TrailerGlyph
 import tv.reely.ui.components.TvChip
 import tv.reely.ui.components.EpisodeTile
 import tv.reely.ui.theme.Muted
+import tv.reely.ui.theme.ReelyType
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.runtime.CompositionLocalProvider
@@ -201,15 +203,16 @@ fun DetailScreen(
 
                     val summary = episode?.summary ?: detail.summary
                     if (!summary.isNullOrBlank()) {
+                        // Body size at a reading width, like the hero's: at 780 dp a line
+                        // was too long to find the start of the next one from the sofa.
                         Text(
                             text = summary,
                             color = Muted,
-                            fontSize = 15.sp,
-                            lineHeight = 22.sp,
-                                minLines = if (expanded) 1 else 3,
+                            style = ReelyType.Body,
+                            minLines = if (expanded) 1 else 3,
                             maxLines = if (expanded) 12 else 3,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.widthIn(max = 780.dp),
+                            modifier = Modifier.widthIn(max = 640.dp),
                         )
                     }
 
@@ -277,32 +280,34 @@ fun DetailScreen(
                 }
                 if (state.episodes.isNotEmpty()) {
                     item {
-                        LazyRow(
-                            state = episodeRail,
-                            // Coming back down from Play or Watched returns to the
-                            // episode those buttons were acting on, rather than whichever
-                            // tile happens to be nearest the cursor.
-                            modifier = Modifier.restoreFocusTo(railFocus).focusGroup(),
-                            contentPadding = PaddingValues(horizontal = 36.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            items(state.episodes, key = { it.ratingKey }) { entry ->
-                                val isTarget = state.focusedEpisode?.ratingKey == entry.ratingKey
-                                EpisodeTile(
-                                    number = entry.index?.toString().orEmpty(),
-                                    title = entry.title,
-                                    duration = formatDuration(entry.durationMs).takeIf { it.isNotEmpty() },
-                                    imageUrl = imageUrl(state.serverBase, entry.thumb, 320, 180),
-                                    progress = entry.resumeFraction,
-                                    watched = entry.isWatched,
-                                    selected = isTarget,
-                                    onFocus = {
-                                        railFocus.onFocused(entry.ratingKey)
-                                        onFocusEpisode(entry)
-                                    },
-                                    onClick = { onPlay(entry) },
-                                    modifier = rowItem(railFocus, entry.ratingKey),
-                                )
+                        FocusRow { rowFocused ->
+                            LazyRow(
+                                state = episodeRail,
+                                // Coming back down from Play or Watched returns to the
+                                // episode those buttons were acting on, rather than whichever
+                                // tile happens to be nearest the cursor.
+                                modifier = Modifier.restoreFocusTo(railFocus).focusGroup().then(rowFocused),
+                                contentPadding = PaddingValues(horizontal = 36.dp),
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            ) {
+                                items(state.episodes, key = { it.ratingKey }) { entry ->
+                                    val isTarget = state.focusedEpisode?.ratingKey == entry.ratingKey
+                                    EpisodeTile(
+                                        number = entry.index?.toString().orEmpty(),
+                                        title = entry.title,
+                                        duration = formatDuration(entry.durationMs).takeIf { it.isNotEmpty() },
+                                        imageUrl = imageUrl(state.serverBase, entry.thumb, 320, 180),
+                                        progress = entry.resumeFraction,
+                                        watched = entry.isWatched,
+                                        selected = isTarget,
+                                        onFocus = {
+                                            railFocus.onFocused(entry.ratingKey)
+                                            onFocusEpisode(entry)
+                                        },
+                                        onClick = { onPlay(entry) },
+                                        modifier = rowItem(railFocus, entry.ratingKey),
+                                    )
+                                }
                             }
                         }
                     }

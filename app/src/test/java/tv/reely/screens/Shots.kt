@@ -9,6 +9,11 @@ import android.graphics.Path
 import android.graphics.RadialGradient
 import android.graphics.Shader
 import android.graphics.Typeface
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.onRoot
 import androidx.test.core.app.ApplicationProvider
@@ -30,6 +35,19 @@ object Shots {
     const val QUALIFIERS = "w960dp-h540dp-land-television-xhdpi"
 
     fun onlyWhenAsked() = assumeTrue(System.getProperty("reely.screenshots") == "true")
+
+    /**
+     * Put the screen in remote mode, as the first press of a button does on a television.
+     * The test machine starts in touch mode, where nothing clickable takes focus — so
+     * without this no screenshot could show a focused card, which is half of what they
+     * are for.
+     */
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Composable
+    fun RemoteInput() {
+        val input = LocalInputModeManager.current
+        LaunchedEffect(Unit) { input.requestInputMode(InputMode.Keyboard) }
+    }
 
     /** Pictures load straight away, so a capture never catches a half-drawn screen. */
     fun syncImages() {

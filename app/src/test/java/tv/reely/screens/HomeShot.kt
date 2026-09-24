@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.requestFocus
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -48,6 +51,7 @@ class HomeShot {
         val settingsFocus = FocusRequester()
         compose.setContent {
             ReelyTheme {
+                Shots.RemoteInput()
                 Column(Modifier.fillMaxSize().background(Ink)) {
                     TopBar(
                         current = Route.Home, onNavigate = {}, onActivate = {}, onTabFocused = {},
@@ -69,6 +73,7 @@ class HomeShot {
                 }
             }
         }
+        compose.onAllNodesWithText("Harbor Lights").onFirst().requestFocus()
         Shots.save(compose, "home")
     }
 }

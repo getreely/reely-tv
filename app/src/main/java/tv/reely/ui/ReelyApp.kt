@@ -25,6 +25,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
@@ -637,23 +641,33 @@ private fun NavTab(
                     if (canSelectOnFocus()) onNavigate()
                 }
             }
-            .clip(RoundedCornerShape(99.dp))
-            .background(
-                when {
-                    selected -> Accent.copy(alpha = 0.22f)
-                    focused -> Chalk.copy(alpha = 0.10f)
-                    else -> Color.Transparent
+            /*
+             * A white pill means focus, here as everywhere. The page you are on gets a
+             * different shape entirely — bold text over a short coral line — because a
+             * dimmer pill for it was read as focus: same shape, so the eye took it for
+             * the same thing.
+             */
+            .drawBehind {
+                if (selected && !focused) {
+                    val w = 18.dp.toPx(); val h = 3.dp.toPx()
+                    drawRoundRect(
+                        color = Accent,
+                        topLeft = Offset((size.width - w) / 2, size.height - h - 2.dp.toPx()),
+                        size = Size(w, h),
+                        cornerRadius = CornerRadius(h / 2, h / 2),
+                    )
                 }
-            )
-            .border(
-                width = 2.dp,
-                color = if (focused) Accent else Color.Transparent,
-                shape = RoundedCornerShape(99.dp),
-            )
+            }
+            .clip(RoundedCornerShape(99.dp))
+            .background(if (focused) Chalk else Color.Transparent)
             .clickable(onClick = onActivate)
             .padding(horizontal = if (icon == TabIcon.NONE) 18.dp else 13.dp, vertical = 9.dp),
     ) {
-        val tint = if (selected || focused) Chalk else Muted
+        val tint = when {
+            focused -> Ink
+            selected -> Chalk
+            else -> Muted
+        }
         when (icon) {
             TabIcon.SEARCH -> SearchGlyph(color = tint, size = 20.dp)
             TabIcon.GEAR -> GearGlyph(color = tint, size = 20.dp)

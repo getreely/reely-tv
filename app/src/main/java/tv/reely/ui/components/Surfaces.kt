@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
@@ -125,21 +126,26 @@ fun IconAction(
             modifier = Modifier
                 .size(44.dp)
                 .onFocusChanged { focused = it.isFocused }
+                .graphicsLayer { val lift = if (focused) 1.08f else 1f; scaleX = lift; scaleY = lift }
                 .clip(RoundedCornerShape(50))
-                .background(if (filled) Accent else Glass)
-                .border(
-                    width = if (focused) 3.dp else 1.dp,
-                    color = if (focused) Chalk else GlassEdge,
-                    shape = RoundedCornerShape(50),
+                // White when focused, as every control is. Play keeps its coral otherwise:
+                // it is the one action the page is built around.
+                .background(
+                    when {
+                        focused -> Chalk
+                        filled -> Accent
+                        else -> Glass
+                    }
                 )
+                .border(width = 1.dp, color = if (focused || filled) Color.Transparent else GlassEdge, shape = RoundedCornerShape(50))
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
-            glyph(if (filled) Ink else Chalk)
+            glyph(if (focused || filled) Ink else Chalk)
         }
         Text(
             text = label,
-            color = if (focused) Chalk else Faint,
+            color = if (focused) Chalk else Muted,
             fontSize = 14.sp,
             lineHeight = 18.sp,
             maxLines = 1,

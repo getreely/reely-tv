@@ -7,6 +7,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.requestFocus
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -37,6 +40,7 @@ class PageShots {
 
     private fun settings() = compose.setContent {
         ReelyTheme {
+            Shots.RemoteInput()
             Box(Modifier.fillMaxSize().background(Ink)) {
                 SettingsScreen(
                     plex = PlexState(baseUrl = "http://server", serverToken = "t", token = "t", serverName = "Living Room"),
@@ -59,6 +63,7 @@ class PageShots {
     @Test fun settingsUpdates() {
         settings()
         compose.onNodeWithText("Updates").performClick()
+        compose.onNodeWithText("Check for update").requestFocus()
         Shots.save(compose, "settings-updates")
     }
 
@@ -70,6 +75,7 @@ class PageShots {
         val north = Shots.titles.getValue("north")
         compose.setContent {
             ReelyTheme {
+                Shots.RemoteInput()
                 Box(Modifier.fillMaxSize().background(Ink)) {
                     DetailScreen(
                         state = DetailState(
@@ -98,6 +104,7 @@ class PageShots {
             }
         }
         check(north.show == "Northbound")
+        compose.onAllNodesWithText("3. Dead Air").onFirst().requestFocus()
         Shots.save(compose, "detail-show")
     }
 }

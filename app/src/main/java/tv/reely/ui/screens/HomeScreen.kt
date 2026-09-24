@@ -33,6 +33,7 @@ import tv.reely.ui.components.PosterCard
 import tv.reely.ui.components.rememberRowFocus
 import tv.reely.ui.components.rowItem
 import tv.reely.ui.components.restoreFocusTo
+import tv.reely.ui.components.FocusRow
 import tv.reely.ui.theme.Chalk
 import tv.reely.ui.theme.ReelyType
 import androidx.compose.foundation.background
@@ -281,18 +282,24 @@ private fun PosterRow(
     rowFocus: tv.reely.ui.components.RowFocus,
     content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    // Room between heading and cards for a focused card's lift and ring, which reach
+    // about 14 dp above the row and ran into the heading.
+    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Text(
             text = title,
             color = Chalk,
             style = ReelyType.RowTitle,
             modifier = Modifier.padding(horizontal = 40.dp),
         )
-        LazyRow(
-            modifier = Modifier.restoreFocusTo(rowFocus).focusGroup(),
-            contentPadding = PaddingValues(horizontal = 36.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            content = content,
-        )
+        // The rest of the row steps back while one card in it has focus. The gap is wide
+        // enough for the focus ring, which sits outside the artwork.
+        FocusRow { rowFocused ->
+            LazyRow(
+                modifier = Modifier.restoreFocusTo(rowFocus).focusGroup().then(rowFocused),
+                contentPadding = PaddingValues(horizontal = 36.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                content = content,
+            )
+        }
     }
 }

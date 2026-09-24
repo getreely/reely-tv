@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
@@ -71,32 +72,24 @@ fun TvActionButton(
     emphasised: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val background = when {
-        focused && emphasised -> Accent
-        focused -> SurfaceHigh
-        emphasised -> Accent.copy(alpha = 0.22f)
-        else -> SurfaceRaised
-    }
-    val foreground = if (focused && emphasised) Color.Black else Chalk
+    val colors = pillColors(focused, emphasised = emphasised)
+    val lift by animateFloatAsState(if (focused) 1.04f else 1f, label = "button-lift")
     Box(
         modifier = modifier
             .onFocusChanged { focused = it.isFocused }
-            .clip(RoundedCornerShape(10.dp))
-            .background(background)
-            .border(
-                width = 2.dp,
-                color = if (focused) Accent else Color.Transparent,
-                shape = RoundedCornerShape(10.dp),
-            )
+            .graphicsLayer { scaleX = lift; scaleY = lift }
+            .clip(RoundedCornerShape(50))
+            .background(colors.fill)
             .clickable(onClick = onClick)
             .padding(horizontal = 22.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
-            color = foreground,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Medium,
+            color = colors.text,
+            fontSize = 16.sp,
+            lineHeight = 20.sp,
+            fontWeight = if (focused) FontWeight.SemiBold else FontWeight.Medium,
             maxLines = 1,
         )
     }
@@ -110,27 +103,21 @@ fun TvChip(
     modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val colors = pillColors(focused, selected = selected)
     Box(
         modifier = modifier
             .onFocusChanged { focused = it.isFocused }
-            .clip(RoundedCornerShape(99.dp))
-            .background(if (selected) Accent.copy(alpha = 0.20f) else SurfaceRaised)
-            .border(
-                width = if (focused) 2.dp else 1.dp,
-                color = when {
-                    focused -> Accent
-                    selected -> Accent.copy(alpha = 0.55f)
-                    else -> Line
-                },
-                shape = RoundedCornerShape(99.dp),
-            )
+            .clip(RoundedCornerShape(50))
+            .background(colors.fill)
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 18.dp, vertical = 9.dp),
     ) {
         Text(
             text = label,
-            color = if (selected || focused) Chalk else Muted,
-            fontSize = 14.sp,
+            color = colors.text,
+            fontSize = 16.sp,
+            lineHeight = 20.sp,
+            fontWeight = if (selected || focused) FontWeight.SemiBold else FontWeight.Medium,
             maxLines = 1,
         )
     }
@@ -146,12 +133,11 @@ fun TvPosterTile(
     modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.07f else 1f, label = "poster-scale")
 
     Column(
         modifier = modifier
             .width(150.dp)
-            .scale(scale)
+            .cardLift(focused)
             .onFocusChanged { focused = it.isFocused }
             .clickable(onClick = onClick)
             .padding(4.dp),
@@ -160,13 +146,9 @@ fun TvPosterTile(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(2f / 3f)
-                .clip(RoundedCornerShape(8.dp))
-                .background(SurfaceHigh)
-                .border(
-                    width = 2.dp,
-                    color = if (focused) Accent else Color.Transparent,
-                    shape = RoundedCornerShape(8.dp),
-                ),
+                .cardRing(focused, PosterCorner)
+                .clip(RoundedCornerShape(PosterCorner))
+                .background(SurfaceHigh),
         ) {
             if (imageUrl != null) {
                 AsyncImage(
