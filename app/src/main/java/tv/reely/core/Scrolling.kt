@@ -34,3 +34,31 @@ fun minimumScrollDistance(offset: Float, size: Float, containerSize: Float): Flo
     return if (abs(leading) < abs(trailing - containerSize)) leading
     else trailing - containerSize
 }
+
+/**
+ * The same, with room kept either side of the thing being brought into view.
+ *
+ * A focused card is drawn larger than its bounds — lifted, ringed, glowing — so bringing
+ * exactly its bounds on screen left the lift and the ring off the edge, and on a real
+ * set the bottom of the caption with them. [leadingMargin] is kept clear before it (a
+ * row's heading, say) and [trailingMargin] after it (the lift, then the television's
+ * safe area).
+ *
+ * Scrolling towards the far end goes only as far as it has to, and never so far that the
+ * leading margin is lost: where both cannot fit, the heading wins.
+ */
+fun marginScrollDistance(
+    offset: Float,
+    size: Float,
+    containerSize: Float,
+    leadingMargin: Float,
+    trailingMargin: Float,
+): Float {
+    val leading = offset - leadingMargin
+    val trailing = offset + size + trailingMargin - containerSize
+    return when {
+        leading < 0f -> leading
+        trailing > 0f -> minOf(trailing, leading)
+        else -> 0f
+    }
+}

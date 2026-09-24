@@ -117,4 +117,48 @@ class HomeShot {
         }
         Shots.save(compose, "detail-loading")
     }
+
+    /** TV Shows, focus down on Recently Added: the whole row shows, caption and all. */
+    @Test fun showsLowerRow() {
+        val cw = listOf("north", "harbor", "shift", "quiet").map(Shots::item)
+        val groups = listOf("north", "harbor", "shift").map { key ->
+            val item = Shots.item(key)
+            EpisodeGroup(
+                showTitle = item.grandparentTitle!!, showRatingKey = item.grandparentRatingKey,
+                thumb = item.grandparentThumb, newest = item, count = 2, addedAt = 0,
+                librarySectionId = "1", serverBase = item.serverBase,
+            )
+        }
+        val tabFocus = List(5) { FocusRequester() }
+        val settingsFocus = FocusRequester()
+        compose.setContent {
+            ReelyTheme {
+                Shots.RemoteInput()
+                Column(Modifier.fillMaxSize().background(Ink)) {
+                    TopBar(
+                        current = Route.Library(tv.reely.ui.LibraryKind.SHOWS), onNavigate = {}, onActivate = {},
+                        onTabFocused = {}, onTabPositioned = { _, _ -> }, tabFocus = tabFocus,
+                        settingsFocus = settingsFocus, canSelectOnFocus = { false },
+                        serverName = "Living Room",
+                    )
+                    Box(Modifier.fillMaxWidth().weight(1f)) {
+                    tv.reely.ui.screens.LibraryScreen(
+                        kind = tv.reely.ui.LibraryKind.SHOWS,
+                        view = tv.reely.ui.LibraryView.HOME,
+                        plex = PlexState(baseUrl = "http://server", serverToken = "t", token = "t", serverName = "Living Room"),
+                        home = HomeState(continueWatching = cw, recentEpisodes = groups),
+                        focused = groups[1].newest,
+                        imageUrl = { _, path, w, h -> Shots.imageUrl(path, w, h) },
+                        backdropUrl = { _, path -> Shots.imageUrl(path, 1280, 720) },
+                        onFocusItem = {}, onOpenItem = {}, onStartLink = {}, onCancelLink = {},
+                        onDismissPlexError = {}, onCycleSort = {}, onToggleUnwatched = {},
+                        onSelectGenre = {}, onDismissBrowseError = {},
+                    )
+                    }
+                }
+            }
+        }
+        compose.onAllNodesWithText("2 new episodes").onFirst().requestFocus()
+        Shots.save(compose, "shows-lower-row")
+    }
 }

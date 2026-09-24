@@ -1,5 +1,12 @@
 package tv.reely.ui.screens
 
+import tv.reely.ui.components.ROWS_BOTTOM
+import tv.reely.ui.components.bleed
+import tv.reely.ui.components.rememberMarginScroll
+import tv.reely.ui.components.rememberRowSnap
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.foundation.gestures.BringIntoViewSpec
 import tv.reely.ui.components.PosterPlaceholder
 import tv.reely.ui.components.Shimmer
 import androidx.compose.foundation.focusGroup
@@ -110,6 +117,15 @@ fun LibraryScreen(
     val releasedFocus = rememberRowFocus()
     val gridFocus = rememberRowFocus()
 
+    /*
+     * Room around a focused card, so its lift and caption are never off the bottom of the
+     * screen. The rows snap one at a time, heading at the top, as Home's do; the grid
+     * scrolls only as far as it must. The rows keep the television's own rule sideways.
+     */
+    val sideways = LocalBringIntoViewSpec.current
+    val rowSnap = rememberRowSnap(ROW_HEADING_GAP)
+    val gridScroll = rememberMarginScroll(above = 14.dp)
+
     Box(modifier = modifier.fillMaxSize()) {
         HeroBackdrop(
             url = backdropUrl(focused?.serverBase, focused?.art ?: focused?.thumb),
@@ -151,220 +167,230 @@ fun LibraryScreen(
                 }
             }
 
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 140.dp),
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 36.dp, end = 36.dp, bottom = 34.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+            CompositionLocalProvider(
+                LocalBringIntoViewSpec provides if (view == LibraryView.HOME) rowSnap else gridScroll,
             ) {
-                if (view == LibraryView.HOME && resumable.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        RowBlock("Continue Watching") {
-                            LazyRow(
-                                modifier = Modifier.restoreFocusTo(resumeFocus).focusGroup(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                items(resumable, key = { it.listKey }) { item ->
-                                    PosterCard(
-                                        title = item.rowTitle,
-                                        subtitle = episodeLine(item),
-                                        imageUrl = imageUrl(item.serverBase, posterArt(item), 300, 450),
-                                        progress = item.resumeFraction,
-                                        watched = item.isWatched,
-                                        onFocus = {
-                                            resumeFocus.onFocused(item.listKey)
-                                            onFocusItem(item)
-                                        },
-                                        onClick = { onOpenItem(item) },
-                                        modifier = rowItem(resumeFocus, item.listKey),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (view == LibraryView.HOME && kind == LibraryKind.MOVIES &&
-                    recentMovies.isNotEmpty()
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 140.dp),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 36.dp, end = 36.dp, bottom = ROWS_BOTTOM),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        RowBlock("Recently Added") {
-                            LazyRow(
-                                modifier = Modifier.restoreFocusTo(recentFocus).focusGroup(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                items(recentMovies, key = { it.listKey }) { movie ->
-                                    PosterCard(
-                                        title = movie.title,
-                                        subtitle = movie.caption,
-                                        imageUrl = imageUrl(movie.serverBase, movie.thumb, 300, 450),
-                                        progress = movie.resumeFraction,
-                                        watched = movie.isWatched,
-                                        onFocus = {
-                                            recentFocus.onFocused(movie.listKey)
-                                            onFocusItem(movie)
-                                        },
-                                        onClick = { onOpenItem(movie) },
-                                        modifier = rowItem(recentFocus, movie.listKey),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (view == LibraryView.HOME && kind == LibraryKind.SHOWS &&
-                    recentEpisodes.isNotEmpty()
-                ) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        RowBlock("Recently Added") {
-                            LazyRow(
-                                modifier = Modifier.restoreFocusTo(recentFocus).focusGroup(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                items(
-                                    recentEpisodes,
-                                    key = { it.listKey },
-                                ) { group ->
-                                    PosterCard(
-                                        title = group.showTitle,
-                                        subtitle = if (group.count > 1) "${group.count} new episodes"
-                                        else group.newest.caption,
-                                        imageUrl = imageUrl(group.serverBase, group.thumb, 300, 450),
-                                        badge = group.count,
-                                        onFocus = {
-                                            recentFocus.onFocused(group.listKey)
-                                            onFocusItem(group.newest)
-                                        },
-                                        onClick = { onOpenItem(group.newest) },
-                                        modifier = rowItem(recentFocus, group.listKey),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (view == LibraryView.HOME && browse.released.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        RowBlock("Recently Released") {
-                            LazyRow(
-                                modifier = Modifier.restoreFocusTo(releasedFocus).focusGroup(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                items(browse.released, key = { it.listKey }) { item ->
-                                    PosterCard(
-                                        title = item.title,
-                                        subtitle = item.caption,
-                                        imageUrl = imageUrl(item.serverBase, item.thumb, 300, 450),
-                                        progress = item.resumeFraction,
-                                        watched = item.isWatched,
-                                        onFocus = {
-                                            releasedFocus.onFocused(item.listKey)
-                                            onFocusItem(item)
-                                        },
-                                        onClick = { onOpenItem(item) },
-                                        modifier = rowItem(releasedFocus, item.listKey),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (view == LibraryView.HOME) {
-                    if (home.busy && resumable.isEmpty() && browse.released.isEmpty()) {
+                    if (view == LibraryView.HOME && resumable.isNotEmpty()) {
                         item(span = { GridItemSpan(maxLineSpan) }) {
-                            EmptyNote("Reading your library…")
-                        }
-                    }
-                    return@LazyVerticalGrid
-                }
-
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    Column(
-                        modifier = Modifier.padding(top = 12.dp, bottom = 2.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Text(
-                            text = browse.section?.title ?: "All ${kind.title}",
-                            color = Chalk,
-                            style = ReelyType.RowTitle,
-                            modifier = Modifier.padding(horizontal = 4.dp),
-                        )
-                        // Sort, then the watched filter, then genres. One row that runs
-                        // off to the right, so a library with forty genres still fits.
-                        if (sections.isNotEmpty()) {
-                            LazyRow(
-                                modifier = Modifier.restoreFocusTo(recentFocus).focusGroup(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                item {
-                                    TvChip(
-                                        label = "Sort · ${browse.sort.label}",
-                                        selected = browse.sort != LibrarySort.TITLE,
-                                        onClick = onCycleSort,
-                                    )
-                                }
-                                item {
-                                    TvChip(
-                                        label = "Unwatched",
-                                        selected = browse.unwatchedOnly,
-                                        onClick = onToggleUnwatched,
-                                    )
-                                }
-                                if (browse.genres.isNotEmpty()) {
-                                    item {
-                                        TvChip(
-                                            label = "All genres",
-                                            selected = browse.genreId == null,
-                                            onClick = { onSelectGenre(null) },
-                                        )
-                                    }
-                                    items(browse.genres, key = { it.id }) { genre ->
-                                        TvChip(
-                                            label = genre.title,
-                                            selected = browse.genreId == genre.id,
-                                            onClick = { onSelectGenre(genre.id) },
+                            RowBlock("Continue Watching", sideways) {
+                                LazyRow(
+                                    modifier = Modifier.bleed(PAGE_MARGIN).restoreFocusTo(resumeFocus).focusGroup(),
+                                    contentPadding = PaddingValues(horizontal = PAGE_MARGIN),
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                ) {
+                                    items(resumable, key = { it.listKey }) { item ->
+                                        PosterCard(
+                                            title = item.rowTitle,
+                                            subtitle = episodeLine(item),
+                                            imageUrl = imageUrl(item.serverBase, posterArt(item), 300, 450),
+                                            progress = item.resumeFraction,
+                                            watched = item.isWatched,
+                                            onFocus = {
+                                                resumeFocus.onFocused(item.listKey)
+                                                onFocusItem(item)
+                                            },
+                                            onClick = { onOpenItem(item) },
+                                            modifier = rowItem(resumeFocus, item.listKey),
                                         )
                                     }
                                 }
                             }
                         }
-                        if (browse.error != null) {
-                            ErrorNote(message = browse.error, onDismiss = onDismissBrowseError)
-                        }
-                        when {
-                            sections.isEmpty() -> EmptyNote(
-                                "No ${kind.title.lowercase()} library on ${plex.serverName ?: "this server"}."
-                            )
+                    }
 
-                            browse.items.isEmpty() && browse.isFiltered ->
-                                EmptyNote("Nothing in this library matches those filters.")
+                    if (view == LibraryView.HOME && kind == LibraryKind.MOVIES &&
+                        recentMovies.isNotEmpty()
+                    ) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            RowBlock("Recently Added", sideways) {
+                                LazyRow(
+                                    modifier = Modifier.bleed(PAGE_MARGIN).restoreFocusTo(recentFocus).focusGroup(),
+                                    contentPadding = PaddingValues(horizontal = PAGE_MARGIN),
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                ) {
+                                    items(recentMovies, key = { it.listKey }) { movie ->
+                                        PosterCard(
+                                            title = movie.title,
+                                            subtitle = movie.caption,
+                                            imageUrl = imageUrl(movie.serverBase, movie.thumb, 300, 450),
+                                            progress = movie.resumeFraction,
+                                            watched = movie.isWatched,
+                                            onFocus = {
+                                                recentFocus.onFocused(movie.listKey)
+                                                onFocusItem(movie)
+                                            },
+                                            onClick = { onOpenItem(movie) },
+                                            modifier = rowItem(recentFocus, movie.listKey),
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
-                }
 
-                // The grid's own shape while the first page is on its way.
-                if (sections.isNotEmpty() && browse.busy && browse.items.isEmpty()) {
-                    items(PLACEHOLDER_COUNT) { Shimmer { PosterPlaceholder() } }
-                }
+                    if (view == LibraryView.HOME && kind == LibraryKind.SHOWS &&
+                        recentEpisodes.isNotEmpty()
+                    ) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            RowBlock("Recently Added", sideways) {
+                                LazyRow(
+                                    modifier = Modifier.bleed(PAGE_MARGIN).restoreFocusTo(recentFocus).focusGroup(),
+                                    contentPadding = PaddingValues(horizontal = PAGE_MARGIN),
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                ) {
+                                    items(
+                                        recentEpisodes,
+                                        key = { it.listKey },
+                                    ) { group ->
+                                        PosterCard(
+                                            title = group.showTitle,
+                                            subtitle = if (group.count > 1) "${group.count} new episodes"
+                                            else group.newest.caption,
+                                            imageUrl = imageUrl(group.serverBase, group.thumb, 300, 450),
+                                            badge = group.count,
+                                            onFocus = {
+                                                recentFocus.onFocused(group.listKey)
+                                                onFocusItem(group.newest)
+                                            },
+                                            onClick = { onOpenItem(group.newest) },
+                                            modifier = rowItem(recentFocus, group.listKey),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
 
-                items(browse.items, key = { it.listKey }) { item ->
-                    PosterCard(
-                        title = item.title,
-                        subtitle = item.caption,
-                        imageUrl = imageUrl(item.serverBase, item.thumb, 300, 450),
-                        progress = item.resumeFraction,
-                        watched = item.isWatched,
-                        onFocus = {
-                            gridFocus.onFocused(item.listKey)
-                            onFocusItem(item)
-                        },
-                        onClick = { onOpenItem(item) },
-                        modifier = rowItem(gridFocus, item.listKey),
-                    )
+                    if (view == LibraryView.HOME && browse.released.isNotEmpty()) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            RowBlock("Recently Released", sideways) {
+                                LazyRow(
+                                    modifier = Modifier.bleed(PAGE_MARGIN).restoreFocusTo(releasedFocus).focusGroup(),
+                                    contentPadding = PaddingValues(horizontal = PAGE_MARGIN),
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                ) {
+                                    items(browse.released, key = { it.listKey }) { item ->
+                                        PosterCard(
+                                            title = item.title,
+                                            subtitle = item.caption,
+                                            imageUrl = imageUrl(item.serverBase, item.thumb, 300, 450),
+                                            progress = item.resumeFraction,
+                                            watched = item.isWatched,
+                                            onFocus = {
+                                                releasedFocus.onFocused(item.listKey)
+                                                onFocusItem(item)
+                                            },
+                                            onClick = { onOpenItem(item) },
+                                            modifier = rowItem(releasedFocus, item.listKey),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (view == LibraryView.HOME) {
+                        if (home.busy && resumable.isEmpty() && browse.released.isEmpty()) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                EmptyNote("Reading your library…")
+                            }
+                        }
+                        return@LazyVerticalGrid
+                    }
+
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Column(
+                            modifier = Modifier.padding(top = 12.dp, bottom = 2.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Text(
+                                text = browse.section?.title ?: "All ${kind.title}",
+                                color = Chalk,
+                                style = ReelyType.RowTitle,
+                                modifier = Modifier.padding(horizontal = 4.dp),
+                            )
+                            // Sort, then the watched filter, then genres. One row that runs
+                            // off to the right, so a library with forty genres still fits.
+                            if (sections.isNotEmpty()) {
+                                CompositionLocalProvider(LocalBringIntoViewSpec provides sideways) {
+                                    LazyRow(
+                                        modifier = Modifier.restoreFocusTo(recentFocus).focusGroup(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        item {
+                                            TvChip(
+                                                label = "Sort · ${browse.sort.label}",
+                                                selected = browse.sort != LibrarySort.TITLE,
+                                                onClick = onCycleSort,
+                                            )
+                                        }
+                                        item {
+                                            TvChip(
+                                                label = "Unwatched",
+                                                selected = browse.unwatchedOnly,
+                                                onClick = onToggleUnwatched,
+                                            )
+                                        }
+                                        if (browse.genres.isNotEmpty()) {
+                                            item {
+                                                TvChip(
+                                                    label = "All genres",
+                                                    selected = browse.genreId == null,
+                                                    onClick = { onSelectGenre(null) },
+                                                )
+                                            }
+                                            items(browse.genres, key = { it.id }) { genre ->
+                                                TvChip(
+                                                    label = genre.title,
+                                                    selected = browse.genreId == genre.id,
+                                                    onClick = { onSelectGenre(genre.id) },
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if (browse.error != null) {
+                                ErrorNote(message = browse.error, onDismiss = onDismissBrowseError)
+                            }
+                            when {
+                                sections.isEmpty() -> EmptyNote(
+                                    "No ${kind.title.lowercase()} library on ${plex.serverName ?: "this server"}."
+                                )
+
+                                browse.items.isEmpty() && browse.isFiltered ->
+                                    EmptyNote("Nothing in this library matches those filters.")
+                            }
+                        }
+                    }
+
+                    // The grid's own shape while the first page is on its way.
+                    if (sections.isNotEmpty() && browse.busy && browse.items.isEmpty()) {
+                        items(PLACEHOLDER_COUNT) { Shimmer { PosterPlaceholder() } }
+                    }
+
+                    items(browse.items, key = { it.listKey }) { item ->
+                        PosterCard(
+                            title = item.title,
+                            subtitle = item.caption,
+                            imageUrl = imageUrl(item.serverBase, item.thumb, 300, 450),
+                            progress = item.resumeFraction,
+                            watched = item.isWatched,
+                            onFocus = {
+                                gridFocus.onFocused(item.listKey)
+                                onFocusItem(item)
+                            },
+                            onClick = { onOpenItem(item) },
+                            modifier = rowItem(gridFocus, item.listKey),
+                        )
+                    }
                 }
             }
         }
@@ -372,17 +398,23 @@ fun LibraryScreen(
 }
 
 @Composable
-private fun RowBlock(title: String, content: @Composable () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+private fun RowBlock(title: String, sideways: BringIntoViewSpec, content: @Composable () -> Unit) {
+    // Room between heading and cards for a focused card's lift and ring.
+    Column(verticalArrangement = Arrangement.spacedBy(ROW_HEADING_GAP)) {
         Text(
             text = title,
             color = Chalk,
             style = ReelyType.RowTitle,
             modifier = Modifier.padding(horizontal = 4.dp),
         )
-        content()
+        CompositionLocalProvider(LocalBringIntoViewSpec provides sideways, content = content)
     }
 }
+
+private val ROW_HEADING_GAP = 16.dp
+
+/** The grid's side padding, which a row reaches out over to the screen's edge. */
+private val PAGE_MARGIN = 36.dp
 
 /** Three rows of a six-across grid: a screenful, and no more. */
 private const val PLACEHOLDER_COUNT = 18

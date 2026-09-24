@@ -1,6 +1,5 @@
 package tv.reely.ui.screens
 
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import tv.reely.ui.components.PosterRowPlaceholder
@@ -56,6 +55,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
 import tv.reely.ui.components.CardAction
+import tv.reely.ui.components.ROWS_BOTTOM
+import tv.reely.ui.components.rememberRowSnap
 import tv.reely.ui.components.CardMenu
 import tv.reely.ui.components.requestWhenReady
 import tv.reely.ui.theme.Ink
@@ -69,9 +70,6 @@ private val HERO_HEIGHT = 160.dp
 
 /** Between a row's heading and its cards: room for a focused card's lift and ring. */
 private val HEADING_GAP = 16.dp
-
-/** Below the last row: a focused card's lift, then the television's safe area. */
-private val ROWS_BOTTOM = 40.dp
 
 @Composable
 fun HomeScreen(
@@ -107,20 +105,10 @@ fun HomeScreen(
     val episodeFocus = rememberRowFocus()
     val movieFocus = rememberRowFocus()
 
-    /*
-     * A row coming into focus snaps its heading to the top of the rows. The television's
-     * own rule is a pivot, which left a lower row flush with the bottom of the screen and
-     * the focused card's caption off it. The rows keep that rule for moving sideways.
-     */
+    // A row coming into focus snaps its heading to the top of the rows; see
+    // rememberRowSnap. The rows keep the television's own rule for moving sideways.
     val sideways = LocalBringIntoViewSpec.current
-    val density = LocalDensity.current
-    val rowHead = with(density) { ReelyType.RowTitle.lineHeight.toPx() + HEADING_GAP.toPx() }
-    val rowsScroll = remember(rowHead) {
-        object : BringIntoViewSpec {
-            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float =
-                offset - rowHead
-        }
-    }
+    val rowsScroll = rememberRowSnap(HEADING_GAP)
 
     var menuFor by remember { mutableStateOf<PlexItem?>(null) }
     val menuFocus = remember { FocusRequester() }
