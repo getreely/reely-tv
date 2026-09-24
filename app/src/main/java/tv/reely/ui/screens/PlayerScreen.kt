@@ -1111,52 +1111,31 @@ internal fun Controls(
             // Inside the television's safe area: 48 dp at the sides, 27 dp at the bottom.
             // It sat 10 dp off the bottom edge, where a set that crops the picture could
             // cut the buttons off.
-            .padding(start = 48.dp, end = 48.dp, top = 24.dp, bottom = 27.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(start = 48.dp, end = 48.dp, top = 20.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(verticalAlignment = Alignment.Bottom) {
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = playback.title,
-                    color = Chalk,
-                    style = ReelyType.Headline,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                playback.subtitle?.let {
-                    Text(
-                        text = it,
-                        color = Muted,
-                        style = ReelyType.Meta,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            if (skipLabel != null) {
+        /*
+         * Two rows: the bar, then one row holding everything else — what is playing on
+         * the left, the transport in the middle, the options on the right. The first
+         * version stacked title, subtitle, bar, times and buttons, and at 56 dp buttons
+         * took two fifths of the screen, well over the picture it was there to control.
+         */
+
+        // Skip Intro, right-aligned above the bar, when there is one to offer.
+        if (skipLabel != null) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TvActionButton(
                     label = skipLabel,
                     onClick = onSkipPrompt,
                     emphasised = true,
                     modifier = Modifier
-                        .padding(start = 24.dp)
                         .onFocusChanged { onSkipFocus(it.isFocused) }
                         .focusRequester(skipFocus),
                 )
             }
         }
 
-        if (playback.isLive) {
-            Text(
-                text = "LIVE",
-                color = Ink,
-                style = ReelyType.Label.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp),
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Accent)
-                    .padding(horizontal = 8.dp, vertical = 2.dp),
-            )
-        } else {
+        if (!playback.isLive) {
             Scrubber(
                 positionMs = positionMs,
                 durationMs = durationMs,
@@ -1168,75 +1147,113 @@ internal fun Controls(
             )
         }
 
-        Box(modifier = Modifier.fillMaxWidth()) {
-            // The transport sits in the middle of the screen, where a player's controls
-            // belong. Seeking is the progress bar's job, so there is nothing here for it.
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            // What is playing. Weighted the same as the options opposite, so the
+            // transport between them sits in the middle of the screen.
+            Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (playback.isLive) {
+                        Text(
+                            text = "LIVE",
+                            color = Ink,
+                            style = ReelyType.Label.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp),
+                            modifier = Modifier
+                                .padding(end = 8.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Accent)
+                                .padding(horizontal = 7.dp, vertical = 1.dp),
+                        )
+                    }
+                    Text(
+                        text = playback.title,
+                        color = Chalk,
+                        style = ReelyType.Body,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                playback.subtitle?.let {
+                    Text(
+                        text = it,
+                        color = Muted,
+                        style = ReelyType.Label,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+
             Row(
-                modifier = Modifier.align(Alignment.Center).focusGroup(),
-                horizontalArrangement = Arrangement.spacedBy(20.dp),
+                modifier = Modifier.focusGroup(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TransportButton(
                     onClick = { onSkip(-1) },
                     enabled = canSkipBack,
-                    diameter = 44.dp,
-                    glyph = { SkipGlyph(it, forward = false, size = 20.dp) },
+                    diameter = SMALL_BUTTON,
+                    glyph = { SkipGlyph(it, forward = false, size = 16.dp) },
                 )
                 TransportButton(
                     onClick = onTogglePlay,
                     filled = true,
-                    diameter = 56.dp,
+                    diameter = 44.dp,
                     modifier = Modifier.focusRequester(playFocus),
                     glyph = {
-                        if (playing) PauseGlyph(it, 24.dp) else PlayGlyph(it, 24.dp)
+                        if (playing) PauseGlyph(it, 20.dp) else PlayGlyph(it, 20.dp)
                     },
                 )
                 TransportButton(
                     onClick = { onSkip(1) },
                     enabled = canSkipForward,
-                    diameter = 44.dp,
-                    glyph = { SkipGlyph(it, forward = true, size = 20.dp) },
+                    diameter = SMALL_BUTTON,
+                    glyph = { SkipGlyph(it, forward = true, size = 16.dp) },
                 )
             }
 
-            Row(
-                modifier = Modifier.align(Alignment.CenterEnd).focusGroup(),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (playback.isLive) {
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                Row(
+                    modifier = Modifier.focusGroup(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (playback.isLive) {
+                        TransportButton(
+                            onClick = onAddChannel,
+                            diameter = SMALL_BUTTON,
+                            glyph = { PlusGlyph(it, 16.dp) },
+                        )
+                    }
                     TransportButton(
-                        onClick = onAddChannel,
-                        diameter = 44.dp,
-                        glyph = { PlusGlyph(it, 20.dp) },
+                        onClick = onOpenSubtitles,
+                        diameter = SMALL_BUTTON,
+                        glyph = { SubtitleGlyph(it, 16.dp) },
                     )
-                }
-                TransportButton(
-                    onClick = onOpenSubtitles,
-                    diameter = 44.dp,
-                    glyph = { SubtitleGlyph(it, 20.dp) },
-                )
-                TransportButton(
-                    onClick = onOpenAudio,
-                    diameter = 44.dp,
-                    glyph = { SpeakerGlyph(it, 20.dp) },
-                )
-                TransportButton(
-                    onClick = onOpenStats,
-                    diameter = 44.dp,
-                    glyph = { InfoGlyph(it, 20.dp) },
-                )
-                if (playback.isLive) {
-                    TvActionButton(
-                        label = if (playback.format.label == "MPEG-TS") "HLS" else "TS",
-                        onClick = onToggleFormat,
+                    TransportButton(
+                        onClick = onOpenAudio,
+                        diameter = SMALL_BUTTON,
+                        glyph = { SpeakerGlyph(it, 16.dp) },
                     )
+                    TransportButton(
+                        onClick = onOpenStats,
+                        diameter = SMALL_BUTTON,
+                        glyph = { InfoGlyph(it, 16.dp) },
+                    )
+                    if (playback.isLive) {
+                        TvActionButton(
+                            label = if (playback.format.label == "MPEG-TS") "HLS" else "TS",
+                            onClick = onToggleFormat,
+                        )
+                    }
                 }
             }
         }
-
     }
 }
+
+/** The transport's smaller buttons: the skips and the options. */
+private val SMALL_BUTTON = 36.dp
 
 /**
  * Position, buffer and remaining time — and the only way to scrub. Left and right move
@@ -1257,15 +1274,17 @@ private fun Scrubber(
     val played = (positionMs.toFloat() / total).coerceIn(0f, 1f)
     val buffered = (bufferedMs.toFloat() / total).coerceIn(0f, 1f)
     // Times sit in a column that ticks every second; fixed-width digits stop them jiggling.
-    val times = ReelyType.Meta.copy(fontFeatureSettings = "tnum")
+    val times = ReelyType.Label.copy(fontFeatureSettings = "tnum")
 
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    // The times sit either side of the bar, on its line, rather than on a row of their own.
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text(text = clock(positionMs), color = Chalk, style = times)
         // The box is as tall as the thumb, so the track can thicken on focus without
         // pushing the times or the buttons about.
         BoxWithConstraints(
             contentAlignment = Alignment.CenterStart,
             modifier = Modifier
-                .fillMaxWidth()
+                .weight(1f)
                 .height(SCRUB_THUMB)
                 .focusRequester(focusRequester)
                 .onFocusChanged {
@@ -1283,7 +1302,7 @@ private fun Scrubber(
                     }
                 },
         ) {
-            val track = if (focused) 10.dp else 6.dp
+            val track = if (focused) 8.dp else 5.dp
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1317,20 +1336,15 @@ private fun Scrubber(
                 )
             }
         }
-        Row(modifier = Modifier.fillMaxWidth()) {
-            Text(text = clock(positionMs), color = Chalk, style = times)
-            Box(modifier = Modifier.weight(1f))
-            Text(
-                text = "\u2212" + clock((durationMs - positionMs).coerceAtLeast(0)),
-                color = Muted,
-                style = times,
-            )
-            Text(text = "  /  " + clock(durationMs), color = Faint, style = times)
-        }
+        Text(
+            text = "\u2212" + clock((durationMs - positionMs).coerceAtLeast(0)),
+            color = Muted,
+            style = times,
+        )
     }
 }
 
-private val SCRUB_THUMB = 18.dp
+private val SCRUB_THUMB = 14.dp
 
 // ---------------------------------------------------------------- Track panel
 
