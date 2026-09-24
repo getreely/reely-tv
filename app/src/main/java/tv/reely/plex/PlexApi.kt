@@ -102,6 +102,12 @@ data class PlexItem(
      * so unlike a server's own ordering it can be compared across servers.
      */
     val lastViewedAt: Long = 0,
+    /**
+     * The title's own logo, as Plex serves it — a transparent image, set in the show's
+     * or film's type, shown in place of the title as text. For an episode it is its
+     * show's. Absent when the server has none.
+     */
+    val logo: String? = null,
     /** Which library this came from, so a tab can show only its own library's things. */
     val librarySectionId: String?,
     /**
@@ -183,6 +189,8 @@ data class PlexDetail(
     val grandparentTitle: String?,
     val index: Int?,
     val parentIndex: Int?,
+    /** See [PlexItem.logo]. */
+    val logo: String? = null,
 ) {
     val isShow: Boolean get() = type == "show"
 
@@ -463,6 +471,7 @@ object PlexApi {
                 grandparentTitle = entry.optString("grandparentTitle").takeIf(String::isNotBlank),
                 index = entry.optInt("index").takeIf { it > 0 },
                 parentIndex = entry.optInt("parentIndex").takeIf { it > 0 },
+                logo = logoOf(entry),
             )
         }
 
@@ -752,8 +761,50 @@ object PlexApi {
         viewCount = entry.optInt("viewCount"),
         addedAt = entry.optLong("addedAt"),
         lastViewedAt = entry.optLong("lastViewedAt"),
+        logo = logoOf(entry),
         librarySectionId = entry.optString("librarySectionID").takeIf(String::isNotBlank),
     )
+
+    /** The clearLogo in an item's images, if it has one. */
+    private fun logoOf(entry: JSONObject): String? {
+        val images = entry.optJSONArray("Image") ?: return null
+        return (0 until images.length())
+            .mapNotNull { images.optJSONObject(it) }
+            .firstOrNull { it.optString("type") == "clearLogo" }
+            ?.optString("url")
+            ?.takeIf(String::isNotBlank)
+    }
+
+    /**
+     * Logos for several shows or films at once, by rating key.
+     *
+     * An episode on a server older than about 1.43 does not carry its show's logo, so it
+     * is asked for here — one request for all of them, since the metadata endpoint takes
+     * a comma-separated list. That is what Plex's own web app does. Best effort: a
+     * failure leaves the titles as text.
+     */
+    suspend fun logos(base: String, token: String, ratingKeys: Collection<String>): Map<String, String> =
+        withContext(Dispatchers.IO) {
+            if (ratingKeys.isEmpty()) return@withContext emptyMap()
+            runCatching {
+                val metadata = container("$base/library/metadata/${ratingKeys.joinToString(",")}", token)
+                    .optJSONArray("Metadata") ?: JSONArray()
+                (0 until metadata.length())
+                    .mapNotNull { metadata.optJSONObject(it) }
+                    .mapNotNull { entry -> logoOf(entry)?.let { entry.optString("ratingKey") to it } }
+                    .toMap()
+            }.getOrDefault(emptyMap())
+        }
+
+    /**
+     * A logo at its own size, straight from the server. Not through the image resizer:
+     * that is asked to fill a frame, which is right for a poster and wrong for a logo,
+     * and a logo is small enough not to need resizing at all.
+     */
+    fun logoUrl(base: String, token: String, path: String): String {
+        val separator = if ('?' in path) '&' else '?'
+        return "$base$path${separator}X-Plex-Token=$token"
+    }
 
     private fun tags(entry: JSONObject, field: String): List<String> {
         val array = entry.optJSONArray(field) ?: return emptyList()

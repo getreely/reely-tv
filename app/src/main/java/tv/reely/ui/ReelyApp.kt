@@ -315,6 +315,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 focused = state.focused,
                 imageUrl = viewModel::plexImageUrl,
                 backdropUrl = viewModel::plexBackdropUrl,
+                logoUrl = viewModel::plexLogoUrl,
                 onFocusItem = viewModel::focusItem,
                 onOpenItem = { viewModel.navigate(detailRouteFor(it)) },
                 onPlayItem = { item, resume -> viewModel.play(item, resume = resume) },
@@ -363,6 +364,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                         state = detail,
                         imageUrl = viewModel::plexImageUrl,
                         backdropUrl = viewModel::plexBackdropUrl,
+                logoUrl = viewModel::plexLogoUrl,
                         onPlay = { viewModel.play(it, queue = detail.episodes) },
                         onPlayFromStart = {
                             viewModel.play(it, queue = detail.episodes, resume = false)

@@ -740,17 +740,53 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
             val recentEpisodes = recentEpisodeGroups(showSources)
 
+            // Episodes on an older server do not carry their show's logo; fetch them all
+            // at once so the hero can show the logo rather than the name in type.
+            val showLogos = showLogosFor(onDeck + recentEpisodes.map { group -> group.newest }, servers)
+            fun PlexItem.withShowLogo() =
+                if (logo != null || type != "episode") this
+                else copy(logo = showLogos[serverBase to grandparentRatingKey])
+
             _state.update {
                 it.copy(
                     home = HomeState(
-                        continueWatching = onDeck,
-                        recentEpisodes = recentEpisodes,
+                        continueWatching = onDeck.map { item -> item.withShowLogo() },
+                        recentEpisodes = recentEpisodes.map { group -> group.copy(newest = group.newest.withShowLogo()) },
                         recentMovies = recentMovies,
                         busy = false,
                     )
                 )
             }
         }
+    }
+
+    /**
+     * The logos of the shows these episodes belong to, for those that did not arrive with
+     * one, keyed by server and show. One request per server.
+     */
+    private suspend fun showLogosFor(
+        items: List<PlexItem>,
+        servers: List<Pair<String, String>>,
+    ): Map<Pair<String?, String?>, String> {
+        val missing = items
+            .filter { it.type == "episode" && it.logo == null && it.grandparentRatingKey != null }
+            .groupBy { it.serverBase }
+        val found = mutableMapOf<Pair<String?, String?>, String>()
+        for ((base, episodes) in missing) {
+            val token = servers.firstOrNull { it.first == base }?.second ?: continue
+            val keys = episodes.mapNotNull { it.grandparentRatingKey }.distinct()
+            PlexApi.logos(base ?: continue, token, keys).forEach { (key, logo) -> found[base to key] = logo }
+        }
+        return found
+    }
+
+    /** A title's logo at its own size; see [PlexApi.logoUrl]. */
+    fun plexLogoUrl(serverBase: String?, path: String?): String? {
+        if (path == null) return null
+        val plex = _state.value.plex
+        val base = serverBase ?: plex.baseUrl ?: return null
+        val token = plex.tokenFor(serverBase) ?: return null
+        return PlexApi.logoUrl(base, token, path)
     }
 
     /**

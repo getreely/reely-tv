@@ -243,6 +243,10 @@ fun HeroText(
     summary: String?,
     modifier: Modifier = Modifier,
     summaryMaxLines: Int = 2,
+    /** The title's own logo, shown in place of [title] when it loads. */
+    logoUrl: String? = null,
+    /** A second line under the title, for an episode shown beneath its show's logo. */
+    subtitle: String? = null,
 ) {
     Column(
         modifier = modifier,
@@ -260,13 +264,16 @@ fun HeroText(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Text(
-            text = title,
-            color = Chalk,
-            style = ReelyType.Display,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        TitleArt(url = logoUrl, title = title)
+        if (subtitle != null) {
+            Text(
+                text = subtitle,
+                color = Chalk,
+                style = ReelyType.Headline,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         if (criticRating != null || audienceRating != null || !contentRating.isNullOrBlank() || facts.isNotEmpty()) {
             RatingBadges(
                 criticRating = criticRating,
@@ -287,6 +294,41 @@ fun HeroText(
                 modifier = Modifier.widthIn(max = 560.dp),
             )
         }
+    }
+}
+
+/** Title logos are fitted into this box: 13% of the screen's height at most. */
+private val LOGO_HEIGHT = 72.dp
+private val LOGO_WIDTH = 420.dp
+
+/**
+ * A title's own logo in place of its name — or the name, at display size, when there is
+ * no logo or it will not load.
+ *
+ * Logos come in every shape, long wordmarks and tall stacked ones alike, so they are
+ * fitted into the box and sat on its bottom-left corner rather than cropped to fill it.
+ */
+@Composable
+fun TitleArt(url: String?, title: String, modifier: Modifier = Modifier) {
+    var failed by remember(url) { mutableStateOf(false) }
+    if (url == null || failed) {
+        Text(
+            text = title,
+            color = Chalk,
+            style = ReelyType.Display,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = modifier,
+        )
+    } else {
+        AsyncImage(
+            model = url,
+            contentDescription = title,
+            contentScale = ContentScale.Fit,
+            alignment = Alignment.BottomStart,
+            onError = { failed = true },
+            modifier = modifier.size(width = LOGO_WIDTH, height = LOGO_HEIGHT),
+        )
     }
 }
 

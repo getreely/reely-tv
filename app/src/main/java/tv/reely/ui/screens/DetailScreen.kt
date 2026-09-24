@@ -60,6 +60,7 @@ fun DetailScreen(
     state: DetailState,
     imageUrl: (String?, String?, Int, Int) -> String?,
     backdropUrl: (String?, String?) -> String?,
+    logoUrl: (String?, String?) -> String?,
     onPlay: (PlexItem) -> Unit,
     onPlayFromStart: (PlexItem) -> Unit,
     onPlayDetail: () -> Unit,
@@ -170,16 +171,24 @@ fun DetailScreen(
                 ) {
                     if (state.error != null) ErrorNote(state.error)
 
+                    /*
+                     * The show's logo stays at the top of its own page, with the focused
+                     * episode's title under it. With no logo it is as it was: the show and
+                     * season above, the episode's title as the heading.
+                     */
+                    val logo = logoUrl(state.serverBase, detail.logo)
                     HeroText(
                         eyebrow = when {
-                            episode != null -> listOfNotNull(
+                            episode == null -> null
+                            logo != null -> state.selectedSeason?.title
+                            else -> listOfNotNull(
                                 episode.grandparentTitle,
                                 state.selectedSeason?.title,
                             ).joinToString("  ·  ")
-
-                            else -> null
                         },
-                        title = episode?.title ?: detail.title,
+                        title = if (logo != null) detail.title else episode?.title ?: detail.title,
+                        logoUrl = logo,
+                        subtitle = episode?.title?.takeIf { logo != null },
                         criticRating = if (episode == null) detail.rating else null,
                         audienceRating = if (episode == null) detail.audienceRating else null,
                         contentRating = if (episode == null) detail.contentRating else null,

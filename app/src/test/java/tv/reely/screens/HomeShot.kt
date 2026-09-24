@@ -66,6 +66,7 @@ class HomeShot {
                             focused = cw.first(),
                             imageUrl = { _, path, w, h -> Shots.imageUrl(path, w, h) },
                             backdropUrl = { _, path -> Shots.imageUrl(path, 1280, 720) },
+                            logoUrl = { _, path -> Shots.imageUrl(path, 0, 0) },
                             onFocusItem = {}, onOpenItem = {}, onPlayItem = { _, _ -> }, onToggleWatched = {},
                             onStartLink = {}, onCancelLink = {}, onDismissPlexError = {},
                         )

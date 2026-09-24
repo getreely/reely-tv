@@ -49,8 +49,8 @@ import tv.reely.ui.components.CardMenu
 import tv.reely.ui.components.requestWhenReady
 import tv.reely.ui.theme.Ink
 
-// Sized for the type scale: eyebrow, 36 sp title, details, two lines of summary.
-private val HERO_HEIGHT = 176.dp
+// Sized for the type scale: a 72 dp title logo, details, two lines of summary.
+private val HERO_HEIGHT = 184.dp
 
 @Composable
 fun HomeScreen(
@@ -59,6 +59,7 @@ fun HomeScreen(
     focused: PlexItem?,
     imageUrl: (String?, String?, Int, Int) -> String?,
     backdropUrl: (String?, String?) -> String?,
+    logoUrl: (String?, String?) -> String?,
     onFocusItem: (PlexItem?) -> Unit,
     onOpenItem: (PlexItem) -> Unit,
     onPlayItem: (PlexItem, Boolean) -> Unit,
@@ -103,14 +104,19 @@ fun HomeScreen(
                     .padding(horizontal = 40.dp, vertical = 10.dp),
             ) {
                 if (focused != null) {
+                    // An episode is introduced by its show — the show's logo, or its name —
+                    // with the episode's own title in the details beneath.
+                    val isEpisode = focused.type == "episode" && focused.grandparentTitle != null
                     HeroText(
-                        eyebrow = if (focused.type == "episode") focused.grandparentTitle else null,
-                        title = focused.title,
+                        eyebrow = null,
+                        title = if (isEpisode) focused.grandparentTitle!! else focused.title,
+                        logoUrl = logoUrl(focused.serverBase, focused.logo),
                         criticRating = null,
                         audienceRating = null,
                         contentRating = null,
                         facts = listOfNotNull(
                             focused.caption,
+                            focused.title.takeIf { isEpisode },
                             formatDuration(focused.durationMs).takeIf { it.isNotEmpty() },
                         ),
                         summary = focused.summary,

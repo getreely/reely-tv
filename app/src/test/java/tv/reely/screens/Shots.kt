@@ -128,15 +128,19 @@ object Shots {
         val minutes: Int = 44,
         val progress: Float = 0f,
         val summary: String,
+        /** How its logo is lettered, or null for a title with no logo, which shows as text. */
+        val logo: LogoStyle? = null,
     )
+
+    enum class LogoStyle { WORDMARK, SERIF }
 
     val titles = listOf(
         Title("north", Look(0xFF0E2233.toInt(), 0xFFC98A52.toInt(), 0xFFFFD89C.toInt(), 0xFF0A0F13.toInt()),
             show = "Northbound", title = "The Weigh Station", s = 2, e = 5, minutes = 42, progress = .57f,
-            summary = "Rae takes the overnight haul through the pass. A stop at a lonely weigh station turns up a trailer nobody signed for."),
+            summary = "Rae takes the overnight haul through the pass. A stop at a lonely weigh station turns up a trailer nobody signed for.", logo = LogoStyle.WORDMARK),
         Title("harbor", Look(0xFF0A1330.toInt(), 0xFF35498A.toInt(), 0xFFFFCF73.toInt(), 0xFF060A16.toInt()),
             show = "Harbor Lights", title = "Low Water", s = 1, e = 8, minutes = 51, progress = .39f,
-            summary = "The tide goes out further than anyone has seen it, and what it leaves on the mudflats puts the whole harbour under suspicion."),
+            summary = "The tide goes out further than anyone has seen it, and what it leaves on the mudflats puts the whole harbour under suspicion.", logo = LogoStyle.SERIF),
         Title("shift", Look(0xFF041A1A.toInt(), 0xFF1B5F5A.toInt(), 0xFFBFF7EE.toInt(), 0xFF020D0D.toInt()),
             show = "The Long Shift", title = "Code Grey", s = 4, e = 2, progress = .84f,
             summary = "A power cut takes the fourth floor dark in the middle of a double shift."),
@@ -145,13 +149,13 @@ object Shots {
             summary = "Jules runs the late phone-in show from an empty studio."),
         Title("salt", Look(0xFF15294A.toInt(), 0xFFEE7A47.toInt(), 0xFFFFE2A8.toInt(), 0xFF071120.toInt()),
             title = "Saltwater", year = 2025, minutes = 112, progress = .43f,
-            summary = "Two estranged sisters sail their late father's boat down the coast."),
+            summary = "Two estranged sisters sail their late father's boat down the coast.", logo = LogoStyle.WORDMARK),
         Title("ember", Look(0xFF1A0404.toInt(), 0xFFB8341F.toInt(), 0xFFFFB36B.toInt(), 0xFF0D0202.toInt()),
-            title = "Ember Street", year = 2026, minutes = 118, summary = "A warehouse fire lights up the east side."),
+            title = "Ember Street", year = 2026, minutes = 118, summary = "A warehouse fire lights up the east side.", logo = LogoStyle.WORDMARK),
         Title("field", Look(0xFF2A2010.toInt(), 0xFFD6B04A.toInt(), 0xFFFFF0B8.toInt(), 0xFF130E05.toInt()),
-            title = "Fieldwork", year = 2024, minutes = 101, summary = "One summer on a failing farm."),
+            title = "Fieldwork", year = 2024, minutes = 101, summary = "One summer on a failing farm.", logo = LogoStyle.SERIF),
         Title("orbit", Look(0xFF020207.toInt(), 0xFF1A1240.toInt(), 0xFFC9B8FF.toInt(), 0xFF010104.toInt()),
-            title = "Low Orbit", year = 2025, minutes = 131, summary = "Nine days to get home, and one seat too few."),
+            title = "Low Orbit", year = 2025, minutes = 131, summary = "Nine days to get home, and one seat too few.", logo = LogoStyle.WORDMARK),
         Title("glass", Look(0xFF06130E.toInt(), 0xFF2E6C57.toInt(), 0xFFD4FFE9.toInt(), 0xFF030A07.toInt()),
             title = "Glasshouse", year = 2024, minutes = 96, summary = "A greenhouse locked for thirty years."),
         Title("ferry", Look(0xFF02050E.toInt(), 0xFF18305A.toInt(), 0xFFDFEAFF.toInt(), 0xFF01030A.toInt()),
@@ -170,6 +174,7 @@ object Shots {
             type = if (episode) "episode" else "movie",
             thumb = "poster/$key",
             art = "backdrop/$key",
+            logo = t.logo?.let { "logo/$key" },
             summary = t.summary,
             year = t.year,
             index = t.e,
@@ -193,7 +198,34 @@ object Shots {
     fun imageUrl(path: String?, w: Int, h: Int): String? {
         val (kind, key) = path?.split('/')?.takeIf { it.size == 2 } ?: return null
         val t = titles[key] ?: return null
-        return if (kind == "poster") art("$key-poster", t.look, w, h, t.show ?: t.title)
-        else art("$key-backdrop", t.look, w, h, null)
+        return when (kind) {
+            "poster" -> art("$key-poster", t.look, w, h, t.show ?: t.title)
+            "logo" -> logo(key, t)
+            else -> art("$key-backdrop", t.look, w, h, null)
+        }
+    }
+
+    /** A title logo: the name lettered on a transparent ground, cropped to the lettering. */
+    private fun logo(key: String, t: Title): String? {
+        val style = t.logo ?: return null
+        val file = File(dir, "$key-logo.png")
+        if (file.exists()) return file.toURI().toString()
+        val name = t.show ?: t.title
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFFFFFFFF.toInt()
+            textSize = 120f
+            typeface = when (style) {
+                LogoStyle.WORDMARK -> Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+                LogoStyle.SERIF -> Typeface.create(Typeface.SERIF, Typeface.BOLD_ITALIC)
+            }
+            if (style == LogoStyle.WORDMARK) letterSpacing = 0.08f
+        }
+        val text = if (style == LogoStyle.WORDMARK) name.uppercase() else name
+        val bounds = android.graphics.Rect().also { p.getTextBounds(text, 0, text.length, it) }
+        val pad = 8
+        val bmp = Bitmap.createBitmap(bounds.width() + pad * 2, bounds.height() + pad * 2, Bitmap.Config.ARGB_8888)
+        Canvas(bmp).drawText(text, (pad - bounds.left).toFloat(), (pad - bounds.top).toFloat(), p)
+        file.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        return file.toURI().toString()
     }
 }
