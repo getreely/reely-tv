@@ -24,6 +24,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.widthIn
+import tv.reely.ui.theme.ReelyType
+import tv.reely.ui.components.sheet
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -34,7 +37,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.text.font.FontWeight
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
@@ -45,7 +47,6 @@ import androidx.tv.material3.Text
 import tv.reely.ui.components.PlusGlyph
 import tv.reely.ui.components.TvActionButton
 import tv.reely.ui.theme.Ink
-import tv.reely.ui.theme.Line
 import tv.reely.ui.theme.Chalk
 
 /**
@@ -322,10 +323,9 @@ fun TileMenu(
 ) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(Ink.copy(alpha = 0.97f))
-            .border(1.dp, Line, RoundedCornerShape(14.dp))
-            .padding(20.dp)
+            .widthIn(min = 300.dp)
+            .sheet()
+            .padding(24.dp)
             // Without this the requester has nothing focusable of its own to hand focus
             // to, and every button here would be dead.
             .focusGroup()
@@ -335,9 +335,7 @@ fun TileMenu(
         Text(
             text = name,
             color = Chalk,
-            fontSize = 16.sp,
-            lineHeight = 21.sp,
-            fontWeight = FontWeight.SemiBold,
+            style = ReelyType.RowTitle,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -392,8 +390,7 @@ fun AddTile(focused: Boolean, modifier: Modifier = Modifier) {
             Text(
                 text = "Add a channel",
                 color = if (focused) Chalk else Chalk.copy(alpha = 0.5f),
-                fontSize = 14.sp,
-                lineHeight = 18.sp,
+                style = ReelyType.Label,
                 modifier = Modifier.padding(top = 8.dp),
             )
         }

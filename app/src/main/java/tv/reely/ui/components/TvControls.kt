@@ -52,6 +52,9 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import tv.reely.ui.theme.Accent
+import androidx.compose.foundation.layout.size
+import tv.reely.ui.theme.ReelyType
+import tv.reely.ui.theme.Ink
 import tv.reely.ui.theme.Faint
 import tv.reely.ui.theme.Line
 import tv.reely.ui.theme.Muted
@@ -193,6 +196,8 @@ fun TvListRow(
     onFocus: () -> Unit = {},
 ) {
     var focused by remember { mutableStateOf(false) }
+    // A list is not a row of buttons, so a row at rest is bare rather than a faint pill.
+    val colors = pillColors(focused, selected)
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -200,21 +205,10 @@ fun TvListRow(
                 focused = it.isFocused
                 if (it.isFocused) onFocus()
             }
-            .clip(RoundedCornerShape(8.dp))
-            .background(
-                when {
-                    focused -> Accent.copy(alpha = 0.20f)
-                    selected -> SurfaceHigh
-                    else -> Color.Transparent
-                }
-            )
-            .border(
-                width = 2.dp,
-                color = if (focused) Accent else Color.Transparent,
-                shape = RoundedCornerShape(8.dp),
-            )
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (focused || selected) colors.fill else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -232,14 +226,28 @@ fun TvListRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                color = if (focused || selected) Chalk else Muted,
-                fontSize = 15.sp,
+                color = colors.text,
+                style = ReelyType.Meta,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             if (subtitle != null) {
-                Text(text = subtitle, color = Faint, fontSize = 14.sp, maxLines = 1)
+                Text(
+                    text = subtitle,
+                    color = if (focused) Ink.copy(alpha = 0.7f) else Faint,
+                    style = ReelyType.Label,
+                    maxLines = 1,
+                )
             }
+        }
+        // Which one is on, readable without focus having to be on it.
+        if (selected) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(if (focused) Ink else Accent),
+            )
         }
     }
 }

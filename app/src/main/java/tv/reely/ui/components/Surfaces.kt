@@ -62,6 +62,7 @@ import tv.reely.ui.theme.Ink
 import tv.reely.ui.theme.Muted
 import tv.reely.ui.theme.Chalk
 import tv.reely.ui.theme.ReelyType
+import tv.reely.ui.theme.SurfaceRaised
 
 /**
  * The artwork behind a browse screen, darkened until text sits comfortably on it.
@@ -192,6 +193,15 @@ fun artworkTint(bitmap: Bitmap): Color? {
 fun Modifier.glass(radius: Int = 14) = this
     .clip(RoundedCornerShape(radius.dp))
     .background(Glass)
+    .border(1.dp, GlassEdge, RoundedCornerShape(radius.dp))
+
+/**
+ * A panel laid over the picture. Nearly opaque, unlike [glass]: whatever is playing
+ * behind it can be any brightness, and the text on it still has to read.
+ */
+fun Modifier.sheet(radius: Int = 20) = this
+    .clip(RoundedCornerShape(radius.dp))
+    .background(SurfaceRaised.copy(alpha = 0.95f))
     .border(1.dp, GlassEdge, RoundedCornerShape(radius.dp))
 
 /** A small circular action. The filled one is the only thing carrying colour. */
@@ -475,31 +485,29 @@ fun TransportButton(
     glyph: @Composable (Color) -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
+    // White when focused, like every other control; play keeps its coral otherwise.
     val tint = when {
         !enabled -> Chalk.copy(alpha = 0.25f)
-        filled -> Ink
+        focused || filled -> Ink
         else -> Chalk
     }
     Box(
         modifier = modifier
             .size(diameter)
             .onFocusChanged { focused = it.isFocused }
+            .graphicsLayer { val lift = if (focused) 1.08f else 1f; scaleX = lift; scaleY = lift }
             .clip(RoundedCornerShape(50))
             .background(
                 when {
                     !enabled -> Color.Transparent
+                    focused -> Chalk
                     filled -> Accent
-                    focused -> Chalk.copy(alpha = 0.18f)
                     else -> Glass
                 }
             )
             .border(
-                width = if (focused) 3.dp else 1.dp,
-                color = when {
-                    focused -> Chalk
-                    !enabled -> Color.Transparent
-                    else -> GlassEdge
-                },
+                width = 1.dp,
+                color = if (focused || filled || !enabled) Color.Transparent else GlassEdge,
                 shape = RoundedCornerShape(50),
             )
             .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier),

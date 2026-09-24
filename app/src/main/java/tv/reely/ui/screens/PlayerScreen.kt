@@ -3,10 +3,13 @@ package tv.reely.ui.screens
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -33,6 +36,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -94,6 +99,8 @@ import tv.reely.ui.components.SubtitleGlyph
 import tv.reely.ui.components.TransportButton
 import tv.reely.ui.components.TvActionButton
 import tv.reely.ui.components.TvListRow
+import tv.reely.ui.components.glass
+import tv.reely.ui.components.sheet
 import tv.reely.ui.components.rememberSelectPress
 import tv.reely.ui.components.requestWhenReady
 import tv.reely.xtream.XtreamApi
@@ -102,10 +109,9 @@ import tv.reely.xtream.XtreamChannel
 import tv.reely.ui.theme.Accent
 import tv.reely.ui.theme.Faint
 import tv.reely.ui.theme.Ink
-import tv.reely.ui.theme.Line
 import tv.reely.ui.theme.Muted
 import tv.reely.ui.theme.Chalk
-import tv.reely.ui.theme.SurfaceRaised
+import tv.reely.ui.theme.ReelyType
 
 private const val SEEK_STEP_MS = 10_000L
 private const val CONTROLS_TIMEOUT_MS = 6_000L
@@ -113,7 +119,7 @@ private const val CONTROLS_TIMEOUT_MS = 6_000L
 /** Long enough to read twice from across a room, short enough not to sit on the picture. */
 private const val AUDIO_NOTICE_MS = 9_000L
 
-private enum class Panel { NONE, SUBTITLES, AUDIO, STATS }
+internal enum class Panel { NONE, SUBTITLES, AUDIO, STATS }
 
 private data class TrackChoice(
     val label: String,
@@ -215,6 +221,9 @@ fun PlayerScreen(
     // A film or episode opening is worth showing the transport for; a channel is not,
     // and raising it there cost six seconds of a dead d-pad before the timeout cleared it.
     var controlsVisible by remember { mutableStateOf(!playback.isLive) }
+    // In pixels, as measured; the skip prompt sits on top of it.
+    var controlsHeight by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
     // The scrubber is the top of the control bar, so this is "there is nothing above
     // here to move to" — which is what makes another press of up mean "put these away".
     var atTopOfControls by remember { mutableStateOf(false) }
@@ -825,9 +834,8 @@ fun PlayerScreen(
             Text(
                 text = "Loading…",
                 color = Chalk,
-                fontSize = 15.sp,
-                lineHeight = 20.sp,
-                modifier = Modifier.align(Alignment.Center),
+                style = ReelyType.Meta,
+                modifier = Modifier.align(Alignment.Center).glass(radius = 100).padding(horizontal = 20.dp, vertical = 10.dp),
             )
         }
 
@@ -835,13 +843,11 @@ fun PlayerScreen(
             Box(
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .widthIn(max = 820.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Ink.copy(alpha = 0.92f))
-                    .border(1.dp, Accent.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
-                    .padding(20.dp),
+                    .widthIn(max = 720.dp)
+                    .sheet()
+                    .padding(horizontal = 28.dp, vertical = 22.dp),
             ) {
-                Text(text = message, color = Chalk, fontSize = 15.sp, lineHeight = 22.sp)
+                Text(text = message, color = Chalk, style = ReelyType.Body)
             }
         }
 
@@ -851,14 +857,12 @@ fun PlayerScreen(
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 32.dp)
-                    .widthIn(max = 760.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Ink.copy(alpha = 0.92f))
-                    .border(1.dp, Accent.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                    .padding(top = 27.dp)
+                    .widthIn(max = 720.dp)
+                    .sheet(radius = 16)
+                    .padding(horizontal = 22.dp, vertical = 14.dp),
             ) {
-                Text(text = message, color = Chalk, fontSize = 14.sp, lineHeight = 20.sp)
+                Text(text = message, color = Chalk, style = ReelyType.Meta)
             }
         }
 
@@ -933,7 +937,9 @@ fun PlayerScreen(
                 onOpenAudio = { panel = Panel.AUDIO },
                 onOpenStats = { panel = Panel.STATS },
                 onToggleFormat = onToggleFormat,
-                modifier = Modifier.align(Alignment.BottomStart),
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .onSizeChanged { controlsHeight = it.height },
             )
         }
 
@@ -949,7 +955,12 @@ fun PlayerScreen(
                 emphasised = true,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(end = 40.dp, bottom = if (controlsVisible) 168.dp else 40.dp)
+                    // Measured, not guessed: the transport's height is the type scale's
+                    // and the button's, and a fixed number went stale with either.
+                    .padding(
+                        end = 48.dp,
+                        bottom = if (controlsVisible) with(density) { controlsHeight.toDp() } else 27.dp,
+                    )
                     .focusRequester(skipFocus),
             )
         }
@@ -1030,7 +1041,7 @@ fun PlayerScreen(
 // ---------------------------------------------------------------- Controls
 
 @Composable
-private fun Controls(
+internal fun Controls(
     playback: Playback,
     playing: Boolean,
     positionMs: Long,
@@ -1059,15 +1070,16 @@ private fun Controls(
                     listOf(Color.Transparent, Ink.copy(alpha = 0.85f), Ink.copy(alpha = 0.97f))
                 )
             )
-            .padding(horizontal = 40.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+            // Inside the television's safe area: 48 dp at the sides, 27 dp at the bottom.
+            // It sat 10 dp off the bottom edge, where a set that crops the picture could
+            // cut the buttons off.
+            .padding(start = 48.dp, end = 48.dp, top = 24.dp, bottom = 27.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
             text = playback.title,
             color = Chalk,
-            fontSize = 17.sp,
-            lineHeight = 22.sp,
-            fontWeight = FontWeight.SemiBold,
+            style = ReelyType.Headline,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -1075,8 +1087,7 @@ private fun Controls(
             Text(
                 text = it,
                 color = Muted,
-                fontSize = 14.sp,
-                lineHeight = 19.sp,
+                style = ReelyType.Meta,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1085,11 +1096,12 @@ private fun Controls(
         if (playback.isLive) {
             Text(
                 text = "LIVE",
-                color = Accent,
-                fontSize = 14.sp,
-                lineHeight = 18.sp,
-                letterSpacing = 1.6.sp,
-                fontWeight = FontWeight.Medium,
+                color = Ink,
+                style = ReelyType.Label.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Accent)
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
             )
         } else {
             Scrubber(
@@ -1108,58 +1120,58 @@ private fun Controls(
             // belong. Seeking is the progress bar's job, so there is nothing here for it.
             Row(
                 modifier = Modifier.align(Alignment.Center).focusGroup(),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TransportButton(
                     onClick = { onSkip(-1) },
                     enabled = canSkipBack,
-                    diameter = 36.dp,
-                    glyph = { SkipGlyph(it, forward = false, size = 17.dp) },
+                    diameter = 44.dp,
+                    glyph = { SkipGlyph(it, forward = false, size = 20.dp) },
                 )
                 TransportButton(
                     onClick = onTogglePlay,
                     filled = true,
-                    diameter = 46.dp,
+                    diameter = 56.dp,
                     modifier = Modifier.focusRequester(playFocus),
                     glyph = {
-                        if (playing) PauseGlyph(it, 21.dp) else PlayGlyph(it, 21.dp)
+                        if (playing) PauseGlyph(it, 24.dp) else PlayGlyph(it, 24.dp)
                     },
                 )
                 TransportButton(
                     onClick = { onSkip(1) },
                     enabled = canSkipForward,
-                    diameter = 36.dp,
-                    glyph = { SkipGlyph(it, forward = true, size = 17.dp) },
+                    diameter = 44.dp,
+                    glyph = { SkipGlyph(it, forward = true, size = 20.dp) },
                 )
             }
 
             Row(
                 modifier = Modifier.align(Alignment.CenterEnd).focusGroup(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (playback.isLive) {
                     TransportButton(
                         onClick = onAddChannel,
-                        diameter = 36.dp,
-                        glyph = { PlusGlyph(it, 17.dp) },
+                        diameter = 44.dp,
+                        glyph = { PlusGlyph(it, 20.dp) },
                     )
                 }
                 TransportButton(
                     onClick = onOpenSubtitles,
-                    diameter = 36.dp,
-                    glyph = { SubtitleGlyph(it, 17.dp) },
+                    diameter = 44.dp,
+                    glyph = { SubtitleGlyph(it, 20.dp) },
                 )
                 TransportButton(
                     onClick = onOpenAudio,
-                    diameter = 36.dp,
-                    glyph = { SpeakerGlyph(it, 17.dp) },
+                    diameter = 44.dp,
+                    glyph = { SpeakerGlyph(it, 20.dp) },
                 )
                 TransportButton(
                     onClick = onOpenStats,
-                    diameter = 36.dp,
-                    glyph = { InfoGlyph(it, 17.dp) },
+                    diameter = 44.dp,
+                    glyph = { InfoGlyph(it, 20.dp) },
                 )
                 if (playback.isLive) {
                     TvActionButton(
@@ -1189,14 +1201,19 @@ private fun Scrubber(
 ) {
     var focused by remember { mutableStateOf(false) }
     val total = durationMs.coerceAtLeast(1)
+    val played = (positionMs.toFloat() / total).coerceIn(0f, 1f)
+    val buffered = (bufferedMs.toFloat() / total).coerceIn(0f, 1f)
+    // Times sit in a column that ticks every second; fixed-width digits stop them jiggling.
+    val times = ReelyType.Meta.copy(fontFeatureSettings = "tnum")
 
-    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Box(
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // The box is as tall as the thumb, so the track can thicken on focus without
+        // pushing the times or the buttons about.
+        BoxWithConstraints(
+            contentAlignment = Alignment.CenterStart,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(if (focused) 8.dp else 5.dp)
-                .clip(RoundedCornerShape(5.dp))
-                .background(Chalk.copy(alpha = if (focused) 0.3f else 0.22f))
+                .height(SCRUB_THUMB)
                 .focusRequester(focusRequester)
                 .onFocusChanged {
                     focused = it.isFocused
@@ -1213,37 +1230,54 @@ private fun Scrubber(
                     }
                 },
         ) {
+            val track = if (focused) 10.dp else 6.dp
             Box(
                 modifier = Modifier
-                    .fillMaxWidth((bufferedMs.toFloat() / total).coerceIn(0f, 1f))
-                    .fillMaxHeight()
-                    .background(Chalk.copy(alpha = 0.3f)),
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth((positionMs.toFloat() / total).coerceIn(0f, 1f))
-                    .fillMaxHeight()
-                    .background(Accent),
-            )
+                    .fillMaxWidth()
+                    .height(track)
+                    .clip(CircleShape)
+                    .background(Chalk.copy(alpha = if (focused) 0.28f else 0.2f)),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(buffered)
+                        .fillMaxHeight()
+                        .background(Chalk.copy(alpha = 0.22f)),
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(played)
+                        .fillMaxHeight()
+                        .clip(CircleShape)
+                        .background(Accent),
+                )
+            }
+            if (focused) {
+                // Centred on the playhead, and kept inside the bar at either end.
+                val x = (maxWidth * played - SCRUB_THUMB / 2).coerceIn(0.dp, maxWidth - SCRUB_THUMB)
+                Box(
+                    modifier = Modifier
+                        .offset(x = x)
+                        .size(SCRUB_THUMB)
+                        .clip(CircleShape)
+                        .background(Chalk),
+                )
+            }
         }
         Row(modifier = Modifier.fillMaxWidth()) {
-            Text(text = clock(positionMs), color = Chalk, fontSize = 14.sp, lineHeight = 19.sp)
+            Text(text = clock(positionMs), color = Chalk, style = times)
             Box(modifier = Modifier.weight(1f))
             Text(
-                text = "-" + clock((durationMs - positionMs).coerceAtLeast(0)),
+                text = "\u2212" + clock((durationMs - positionMs).coerceAtLeast(0)),
                 color = Muted,
-                fontSize = 14.sp,
-                lineHeight = 19.sp,
+                style = times,
             )
-            Text(
-                text = "   /   " + clock(durationMs),
-                color = Faint,
-                fontSize = 14.sp,
-                lineHeight = 19.sp,
-            )
+            Text(text = "  /  " + clock(durationMs), color = Faint, style = times)
         }
     }
 }
+
+private val SCRUB_THUMB = 18.dp
 
 // ---------------------------------------------------------------- Track panel
 
@@ -1256,7 +1290,7 @@ private fun Scrubber(
  * because when something will not play, they are the first question.
  */
 @Composable
-private fun StatsPanel(
+internal fun StatsPanel(
     playback: Playback,
     player: ExoPlayer,
     focusRequester: FocusRequester,
@@ -1288,22 +1322,23 @@ private fun StatsPanel(
 
     Column(
         modifier = modifier
-            .width(400.dp)
-            .fillMaxHeight()
-            .background(Ink.copy(alpha = 0.96f))
-            .border(1.dp, Line, RoundedCornerShape(0.dp))
+            .padding(end = 48.dp, top = 27.dp, bottom = 27.dp)
+            .width(420.dp)
+            .sheet()
             .padding(24.dp)
             .focusGroup()
             .focusRequester(focusRequester),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(
-            text = "Playback",
-            color = Chalk,
-            fontSize = 18.sp,
-            lineHeight = 23.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
+        // Close sits beside the heading: at the foot of the panel it fell below the
+        // bottom of the screen once every line here was filled in.
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(text = "Playback", color = Chalk, style = ReelyType.Headline, modifier = Modifier.weight(1f))
+            TvActionButton(label = "Close", onClick = onClose)
+        }
         StatLine(
             "Method",
             when {
@@ -1319,14 +1354,7 @@ private fun StatsPanel(
         StatLine("Source", playback.serverBase?.removePrefix("http://")?.removePrefix("https://")
             ?: "—")
 
-        Text(
-            text = "VIDEO",
-            color = Faint,
-            fontSize = 14.sp,
-            lineHeight = 18.sp,
-            letterSpacing = 1.4.sp,
-            modifier = Modifier.padding(top = 6.dp),
-        )
+        SectionLabel("VIDEO")
         StatLine("Codec", video?.sampleMimeType?.let(::codecName) ?: "—")
         StatLine(
             "Size",
@@ -1338,14 +1366,7 @@ private fun StatsPanel(
         StatLine("Bitrate", bitrate(video?.bitrate ?: -1))
         StatLine("Dropped frames", dropped.toString())
 
-        Text(
-            text = "AUDIO",
-            color = Faint,
-            fontSize = 14.sp,
-            lineHeight = 18.sp,
-            letterSpacing = 1.4.sp,
-            modifier = Modifier.padding(top = 6.dp),
-        )
+        SectionLabel("AUDIO")
         StatLine("Codec", (audio ?: fileAudio)?.sampleMimeType?.let(::codecName) ?: "—")
         if (unplayable) StatLine("Status", "Can't be played on this device")
         StatLine(
@@ -1365,8 +1386,6 @@ private fun StatsPanel(
         // What this device said it plays — by decoder, or passed over HDMI to whatever
         // is plugged in — which is what decided whether the sound above was converted.
         StatLine("Device plays", deviceSound.ifEmpty { "—" })
-
-        TvActionButton(label = "Close", onClick = onClose, emphasised = true)
     }
 }
 
@@ -1376,16 +1395,28 @@ private fun StatLine(label: String, value: String) {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(text = label, color = Muted, fontSize = 14.sp, lineHeight = 19.sp)
+        Text(text = label, color = Muted, style = ReelyType.Label)
         Text(
             text = value,
             color = Chalk,
-            fontSize = 14.sp,
-            lineHeight = 19.sp,
+            style = ReelyType.Label,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 16.dp),
         )
     }
+}
+
+/** The small capitals over a group of lines in a panel. */
+@Composable
+private fun SectionLabel(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = text.uppercase(),
+        color = Faint,
+        style = ReelyType.Label,
+        letterSpacing = 1.4.sp,
+        modifier = modifier.padding(top = 6.dp),
+    )
 }
 
 /** The part of a mime type anybody says out loud. */
@@ -1412,7 +1443,7 @@ private fun bitrate(bits: Int): String = when {
 }
 
 @Composable
-private fun TrackPanel(
+internal fun TrackPanel(
     panel: Panel,
     player: ExoPlayer,
     prefs: PlayerPrefs,
@@ -1428,10 +1459,9 @@ private fun TrackPanel(
 
     Column(
         modifier = modifier
-            .width(400.dp)
-            .fillMaxHeight()
-            .background(Ink.copy(alpha = 0.96f))
-            .border(1.dp, Line, RoundedCornerShape(0.dp))
+            .padding(end = 48.dp, top = 27.dp, bottom = 27.dp)
+            .width(420.dp)
+            .sheet()
             .padding(24.dp)
             .focusGroup()
             .focusRequester(focusRequester),
@@ -1440,9 +1470,7 @@ private fun TrackPanel(
         Text(
             text = if (panel == Panel.SUBTITLES) "Subtitles" else "Audio",
             color = Chalk,
-            fontSize = 21.sp,
-            lineHeight = 27.sp,
-            fontWeight = FontWeight.SemiBold,
+            style = ReelyType.Headline,
         )
 
         if (choices.isEmpty()) {
@@ -1452,8 +1480,7 @@ private fun TrackPanel(
                 else
                     "This file has only one audio track.",
                 color = Muted,
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
+                style = ReelyType.Meta,
             )
         }
 
@@ -1473,14 +1500,7 @@ private fun TrackPanel(
         }
 
         if (panel == Panel.SUBTITLES) {
-            Text(
-                text = "Appearance",
-                color = Faint,
-                fontSize = 14.sp,
-                lineHeight = 18.sp,
-                letterSpacing = 1.4.sp,
-                modifier = Modifier.padding(top = 8.dp),
-            )
+            SectionLabel("Appearance")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TvActionButton(label = "Smaller", onClick = { onNudgeScale(-Settings.SCALE_STEP) })
                 TvActionButton(label = "Bigger", onClick = { onNudgeScale(Settings.SCALE_STEP) })
@@ -1488,8 +1508,7 @@ private fun TrackPanel(
             Text(
                 text = "Size ${(prefs.subtitleScale * 100).toInt()}%",
                 color = Muted,
-                fontSize = 14.sp,
-                lineHeight = 18.sp,
+                style = ReelyType.Label,
             )
             TvActionButton(
                 label = if (prefs.subtitleBackground) "Background: on" else "Background: off",
@@ -1536,7 +1555,7 @@ private fun applyTrack(player: ExoPlayer, trackType: Int, choice: TrackChoice) {
 // ---------------------------------------------------------------- Up next
 
 @Composable
-private fun UpNextCard(
+internal fun UpNextCard(
     item: PlexItem,
     countdownSeconds: Int,
     onPlay: () -> Unit,
@@ -1560,35 +1579,30 @@ private fun UpNextCard(
 
     Column(
         modifier = modifier
-            .padding(40.dp)
+            .padding(end = 48.dp, bottom = 27.dp)
             .width(420.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(SurfaceRaised)
-            .border(1.dp, Line, RoundedCornerShape(12.dp))
-            .padding(20.dp)
+            .sheet()
+            .padding(24.dp)
             .focusGroup(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
             text = if (countdownSeconds > 0) "UP NEXT IN $remaining" else "UP NEXT",
             color = Accent,
-            fontSize = 14.sp,
-            lineHeight = 18.sp,
-            letterSpacing = 1.5.sp,
-            fontWeight = FontWeight.Medium,
+            style = ReelyType.Label,
+            letterSpacing = 1.4.sp,
+            fontWeight = FontWeight.SemiBold,
         )
         Text(
             text = item.title,
             color = Chalk,
-            fontSize = 19.sp,
-            lineHeight = 25.sp,
-            fontWeight = FontWeight.SemiBold,
+            style = ReelyType.Headline,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
         listOfNotNull(item.grandparentTitle, item.caption).joinToString("  ·  ")
             .takeIf { it.isNotBlank() }
-            ?.let { Text(text = it, color = Muted, fontSize = 14.sp, lineHeight = 18.sp) }
+            ?.let { Text(text = it, color = Muted, style = ReelyType.Meta) }
 
         Row(
             modifier = Modifier.padding(top = 6.dp),
