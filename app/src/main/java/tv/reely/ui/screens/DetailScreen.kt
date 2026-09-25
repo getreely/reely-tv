@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import tv.reely.plex.PlexItem
+import tv.reely.plex.formatAirDate
 import tv.reely.plex.formatDuration
 import tv.reely.ui.DetailState
 import tv.reely.core.minimumScrollDistance
@@ -238,6 +239,7 @@ fun DetailScreen(
                             facts = if (episode != null) {
                                 listOfNotNull(
                                     episode.caption,
+                                    formatAirDate(episode.airDate),
                                     formatDuration(episode.durationMs).takeIf { it.isNotEmpty() },
                                 )
                             } else {

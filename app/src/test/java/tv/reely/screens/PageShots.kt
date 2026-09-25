@@ -216,7 +216,7 @@ class PageShots {
         landOn: Int? = null,
     ) {
         val episodes = (1..8).map { i ->
-            Shots.item("north").copy(ratingKey = "ep$i", title = listOf("Pilot", "Mile Marker", "Dead Air", "Crosswind", "The Weigh Station", "Chain Control", "Jackknife", "Last Exit")[i - 1], index = i)
+            Shots.item("north").copy(ratingKey = "ep$i", title = listOf("Pilot", "Mile Marker", "Dead Air", "Crosswind", "The Weigh Station", "Chain Control", "Jackknife", "Last Exit")[i - 1], index = i, airDate = "2024-03-%02d".format(i * 3))
         }
         val seasons = (1..3).map { Shots.item("north").copy(ratingKey = "s$it", title = "Season $it", type = "season", index = it) }
         val north = Shots.titles.getValue("north")

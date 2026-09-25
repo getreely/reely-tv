@@ -111,6 +111,8 @@ data class PlexItem(
     val logo: String? = null,
     /** What the file is — 4K, Dolby Vision, 5.1 — as far as this listing says. */
     val qualities: List<String> = emptyList(),
+    /** When it first aired or was released, as Plex gives it: "2008-09-16". */
+    val airDate: String? = null,
     /** Which library this came from, so a tab can show only its own library's things. */
     val librarySectionId: String?,
     /**
@@ -214,6 +216,25 @@ data class PlexDetail(
             contentRating,
             studio,
         ).joinToString("  ·  ")
+}
+
+/**
+ * "Sep 16, 2008" from Plex's "2008-09-16", in the device's own way of writing a date.
+ * Null for anything that isn't a whole date, rather than showing it half-parsed.
+ */
+fun formatAirDate(date: String?, locale: java.util.Locale = java.util.Locale.getDefault()): String? {
+    val text = date?.take(10)?.takeIf { Regex("""\d{4}-\d{2}-\d{2}""").matches(it) } ?: return null
+    // java.text rather than java.time, which needs Android 8 and this runs on 6. Read and
+    // written in UTC so the date can't slip a day either side of midnight.
+    val utc = java.util.TimeZone.getTimeZone("UTC")
+    val parser = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).apply {
+        timeZone = utc
+        isLenient = false
+    }
+    val parsed = runCatching { parser.parse(text) }.getOrNull() ?: return null
+    return java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM, locale)
+        .apply { timeZone = utc }
+        .format(parsed)
 }
 
 fun formatDuration(millis: Long): String {
@@ -817,6 +838,7 @@ object PlexApi {
         lastViewedAt = entry.optLong("lastViewedAt"),
         logo = logoOf(entry),
         qualities = qualitiesOf(entry),
+        airDate = entry.optString("originallyAvailableAt").takeIf(String::isNotBlank),
         librarySectionId = entry.optString("librarySectionID").takeIf(String::isNotBlank),
     )
 
