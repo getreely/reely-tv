@@ -137,10 +137,10 @@ object Shots {
     val titles = listOf(
         Title("north", Look(0xFF0E2233.toInt(), 0xFFC98A52.toInt(), 0xFFFFD89C.toInt(), 0xFF0A0F13.toInt()),
             show = "Northbound", title = "The Weigh Station", s = 2, e = 5, minutes = 42, progress = .57f,
-            summary = "Rae takes the overnight haul through the pass. A stop at a lonely weigh station turns up a trailer nobody signed for.", logo = LogoStyle.WORDMARK),
+            summary = "Rae takes the overnight haul through the pass. A stop at a lonely weigh station turns up a trailer nobody signed for, a driver nobody remembers hiring, and a manifest written in a hand she knows. By morning the road behind her is closed and the one ahead leads somewhere that isn't on the map.", logo = LogoStyle.WORDMARK),
         Title("harbor", Look(0xFF0A1330.toInt(), 0xFF35498A.toInt(), 0xFFFFCF73.toInt(), 0xFF060A16.toInt()),
             show = "Harbor Lights", title = "Low Water", s = 1, e = 8, minutes = 51, progress = .39f,
-            summary = "The tide goes out further than anyone has seen it, and what it leaves on the mudflats puts the whole harbour under suspicion.", logo = LogoStyle.SERIF),
+            summary = "The tide goes out further than anyone has seen it, and what it leaves on the mudflats puts the whole harbour under suspicion. The harbourmaster wants it quiet, the paper wants it by Friday, and the one witness who saw the boat go out that night has stopped answering the door.", logo = LogoStyle.SERIF),
         Title("shift", Look(0xFF041A1A.toInt(), 0xFF1B5F5A.toInt(), 0xFFBFF7EE.toInt(), 0xFF020D0D.toInt()),
             show = "The Long Shift", title = "Code Grey", s = 4, e = 2, progress = .84f,
             summary = "A power cut takes the fourth floor dark in the middle of a double shift."),

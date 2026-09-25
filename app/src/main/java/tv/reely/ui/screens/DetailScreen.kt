@@ -29,7 +29,6 @@ import tv.reely.ui.components.LocalTint
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
@@ -45,7 +44,7 @@ import tv.reely.ui.components.EmptyNote
 import tv.reely.ui.components.ErrorNote
 import tv.reely.ui.components.HeroText
 import tv.reely.ui.components.IconAction
-import tv.reely.ui.components.InfoGlyph
+import tv.reely.ui.components.ExpandableSummary
 import tv.reely.ui.components.PlayGlyph
 import tv.reely.ui.components.RestartGlyph
 import tv.reely.ui.components.rememberRowFocus
@@ -56,7 +55,6 @@ import tv.reely.ui.components.TrailerGlyph
 import tv.reely.ui.components.TvChip
 import tv.reely.ui.components.EpisodeTile
 import tv.reely.ui.theme.Muted
-import tv.reely.ui.theme.ReelyType
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.runtime.CompositionLocalProvider
@@ -89,7 +87,6 @@ fun DetailScreen(
         return
     }
 
-    var expanded by remember(state.ratingKey) { mutableStateOf(false) }
     val episode = state.focusedEpisode
 
     // Arriving from a row lands on one episode, which in season nineteen is a long way
@@ -245,15 +242,8 @@ fun DetailScreen(
                         if (!summary.isNullOrBlank()) {
                             // Body size at a reading width, like the hero's: at 780 dp a line
                             // was too long to find the start of the next one from the sofa.
-                            Text(
-                                text = summary,
-                                color = Muted,
-                                style = ReelyType.Body,
-                                minLines = if (expanded) 1 else 3,
-                                maxLines = if (expanded) 12 else 3,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.widthIn(max = 640.dp),
-                            )
+                            // Three lines; select it to read the rest.
+                            ExpandableSummary(text = summary, maxWidth = 640.dp)
                         }
 
                         Row(
@@ -302,12 +292,6 @@ fun DetailScreen(
                                     glyph = { TrailerGlyph(it, 20.dp) },
                                 )
                             }
-                            IconAction(
-                                label = if (expanded) "Less" else "Info",
-                                filled = false,
-                                onClick = { expanded = !expanded },
-                                glyph = { InfoGlyph(it, 20.dp) },
-                            )
                         }
                     }
                 }

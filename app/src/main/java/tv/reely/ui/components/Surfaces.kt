@@ -355,7 +355,7 @@ fun HeroText(
     facts: List<String>,
     summary: String?,
     modifier: Modifier = Modifier,
-    summaryMaxLines: Int = 2,
+    summaryMaxLines: Int = 3,
     /** The title's own logo, shown in place of [title] when it loads. */
     logoUrl: String? = null,
     /** A second line under the title, for an episode shown beneath its show's logo. */
@@ -364,10 +364,10 @@ fun HeroText(
     qualities: List<String> = emptyList(),
 ) {
     // Room between the lines: at 6 dp the logo, the facts and the summary read as one
-    // block jammed together on a real set.
+    // block jammed together on a real set. 8 dp since the summary grew to three lines.
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (eyebrow != null) {
             Text(
@@ -417,13 +417,14 @@ fun HeroText(
 }
 
 /** Title logos are fitted into this box: a tenth of the screen's height at most. */
-private val LOGO_HEIGHT = 56.dp
+private val LOGO_HEIGHT = 50.dp
 private val LOGO_WIDTH = 320.dp
 
 /** A title with no logo, sized to sit where one would. */
-private val HeroTitle = ReelyType.Display.copy(fontSize = 30.sp, lineHeight = 36.sp, letterSpacing = (-0.4).sp)
+private val HeroTitle = ReelyType.Display.copy(fontSize = 28.sp, lineHeight = 34.sp, letterSpacing = (-0.4).sp)
 
-private val HeroSummary = ReelyType.Body.copy(fontSize = 16.sp, lineHeight = 23.sp)
+/** Three lines of it on the browse screens, so a size under the detail page's. */
+private val HeroSummary = ReelyType.Body.copy(fontSize = 15.sp, lineHeight = 21.sp)
 
 /**
  * A title's own logo in place of its name — or the name, at display size, when there is

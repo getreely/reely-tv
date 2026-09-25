@@ -52,7 +52,8 @@ import tv.reely.ui.components.TvChip
 import tv.reely.ui.theme.Chalk
 import tv.reely.ui.theme.ReelyType
 
-private val HERO_HEIGHT = 150.dp
+/** A title, its details and three lines of summary. */
+private val HERO_HEIGHT = 156.dp
 
 /**
  * A library tab is its own small home — what you are part-way through, what arrived and
@@ -140,20 +141,22 @@ fun LibraryScreen(
                     .padding(horizontal = 40.dp, vertical = 8.dp),
             ) {
                 if (focused != null) {
+                    // As on Home: an episode goes under its show's name, with its own title
+                    // among the details, which keeps the hero one line shorter than a
+                    // heading above the title would, and leaves room for three lines of summary.
+                    val isEpisode = focused.type == "episode" && focused.grandparentTitle != null
                     HeroText(
-                        eyebrow = if (focused.type == "episode") focused.grandparentTitle else null,
-                        title = focused.title,
+                        eyebrow = null,
+                        title = if (isEpisode) focused.grandparentTitle!! else focused.title,
                         criticRating = null,
                         audienceRating = null,
                         contentRating = null,
                         facts = listOfNotNull(
                             focused.caption,
+                            focused.title.takeIf { isEpisode },
                             formatDuration(focused.durationMs).takeIf { it.isNotEmpty() },
                         ),
                         summary = focused.summary,
-                        // One line: the grid is what this page is for, and two lines at
-                        // body size would push it down.
-                        summaryMaxLines = 1,
                         modifier = Modifier.widthIn(max = 700.dp),
                     )
                 } else {

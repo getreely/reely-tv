@@ -125,6 +125,42 @@ class PageShots {
     }
 
     @Test fun detailShow() {
+        detail()
+        compose.onAllNodesWithText("3. Dead Air").onFirst().requestFocus()
+        Shots.save(compose, "detail-show")
+    }
+
+    private val longSummary =
+        "A long-haul driver takes the jobs nobody else will, on roads that don't appear on any map, and starts to " +
+            "notice who keeps booking her. Every run comes with a sealed envelope and a delivery window measured to " +
+            "the minute, and the clients never meet her at the dock. When a load goes missing outside a weigh station " +
+            "in the mountains, Maren has three days to find it before the people who hired her decide she took it. " +
+            "Her dispatcher stops answering, her truck is flagged at every border crossing, and the only person " +
+            "willing to help is a mechanic who seems to know far more about the cargo than he should. Season two " +
+            "follows her south into the desert, where the roads are emptier and the clients more dangerous."
+
+    /** The summary selected: cut at three lines, with the focus panel around it. */
+    @Test fun detailSummaryFocused() {
+        detail(summary = longSummary)
+        compose.onNodeWithText(longSummary).requestFocus()
+        compose.waitForIdle()
+        Shots.save(compose, "detail-summary-focused")
+    }
+
+    /** And opened, a size down so it all fits. */
+    @OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
+    @Test fun detailSummaryOpen() {
+        detail(summary = longSummary)
+        compose.onNodeWithText(longSummary).requestFocus()
+        compose.waitForIdle()
+        compose.onRoot().performKeyInput { pressKey(androidx.compose.ui.input.key.Key.DirectionCenter) }
+        compose.waitForIdle()
+        Shots.save(compose, "detail-summary-open")
+    }
+
+    private fun detail(
+        summary: String = "A long-haul driver takes the jobs nobody else will, on roads that don't appear on any map, and starts to notice who keeps booking her.",
+    ) {
         val episodes = (1..8).map { i ->
             Shots.item("north").copy(ratingKey = "ep$i", title = listOf("Pilot", "Mile Marker", "Dead Air", "Crosswind", "The Weigh Station", "Chain Control", "Jackknife", "Last Exit")[i - 1], index = i)
         }
@@ -139,7 +175,7 @@ class PageShots {
                             ratingKey = "show-north", serverBase = "http://server", busy = false,
                             detail = PlexDetail(
                                 ratingKey = "show-north", type = "show", title = "Northbound",
-                                summary = "A long-haul driver takes the jobs nobody else will, on roads that don't appear on any map, and starts to notice who keeps booking her.",
+                                summary = summary,
                                 tagline = null, year = 2024, durationMs = 0, viewOffsetMs = 0, contentRating = "TV-14",
                                 rating = 8.1, audienceRating = 8.6, airDate = null, viewCount = 0, studio = "Harbourside",
                                 thumb = "poster/north", art = "backdrop/north", theme = null,
@@ -164,7 +200,5 @@ class PageShots {
             }
         }
         check(north.show == "Northbound")
-        compose.onAllNodesWithText("3. Dead Air").onFirst().requestFocus()
-        Shots.save(compose, "detail-show")
     }
 }

@@ -63,10 +63,10 @@ import tv.reely.ui.theme.Ink
 
 /*
  * Sized so a whole row fits beneath it on a 540 dp screen, focus lift and safe area
- * included: a 56 dp title logo, details, two lines of summary. At 184 dp the row below
+ * included: a 50 dp title logo, details, three lines of summary. At 184 dp the row below
  * ran off the bottom edge and a focused card lost its caption.
  */
-private val HERO_HEIGHT = 160.dp
+private val HERO_HEIGHT = 166.dp
 
 /** Between a row's heading and its cards: room for a focused card's lift and ring. */
 private val HEADING_GAP = 16.dp
