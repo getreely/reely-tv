@@ -249,13 +249,28 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             currentTabFocus.requestWhenReady()
         }
     }
+
+    /*
+     * Opening something from a page — a card, a search result — always goes into the page
+     * it opens. The page being left takes the focused card with it, and focus drops to the
+     * first thing in the window, the search tab, which then reads as the tab row having
+     * been chosen. That is how opening a movie from the Movies tab left the cursor on
+     * Search instead of Play. Set on opening, and spent once focus is in the new page.
+     */
+    var openedFromPage by remember { mutableStateOf(false) }
+    fun open(item: PlexItem) {
+        openedFromPage = true
+        viewModel.navigate(detailRouteFor(item))
+    }
     // The content of a screen is composed in the same pass that asks for its focus, so a
     // single request throws and is lost — and focus then falls back to the first thing in
     // the window, which is the search tab. That is why opening an episode left the cursor
     // up in the tab row. Keep asking for a few frames instead.
     LaunchedEffect(routeKey(state.route), contentReady(state), menuFor) {
-        if (menuFor != null || tabRowHasFocus || !contentReady(state)) return@LaunchedEffect
+        if (menuFor != null || !contentReady(state)) return@LaunchedEffect
+        if (tabRowHasFocus && !openedFromPage) return@LaunchedEffect
         contentFocus.requestWhenReady()
+        openedFromPage = false
     }
 
     Column(
@@ -329,7 +344,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 backdropUrl = viewModel::plexBackdropUrl,
                 logoUrl = viewModel::plexLogoUrl,
                 onFocusItem = viewModel::focusItem,
-                onOpenItem = { viewModel.navigate(detailRouteFor(it)) },
+                onOpenItem = ::open,
                 onPlayItem = { item, resume -> viewModel.play(item, resume = resume) },
                 onToggleWatched = viewModel::toggleWatched,
                 onStartLink = viewModel::startPlexLink,
@@ -346,7 +361,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 imageUrl = viewModel::plexImageUrl,
                 backdropUrl = viewModel::plexBackdropUrl,
                 onFocusItem = viewModel::focusItem,
-                onOpenItem = { viewModel.navigate(detailRouteFor(it)) },
+                onOpenItem = ::open,
                 onStartLink = viewModel::startPlexLink,
                 onCancelLink = viewModel::cancelPlexLink,
                 onDismissPlexError = viewModel::dismissPlexError,
@@ -363,7 +378,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 backdropUrl = viewModel::plexBackdropUrl,
                 onQueryChange = viewModel::setQuery,
                 onFocusItem = viewModel::focusItem,
-                onOpenItem = { viewModel.navigate(detailRouteFor(it)) },
+                onOpenItem = ::open,
                 onPlayChannel = viewModel::playSearchChannel,
             )
 
