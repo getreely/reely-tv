@@ -24,6 +24,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.launch
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.runtime.rememberCoroutineScope
 import tv.reely.ui.theme.Accent
 import tv.reely.ui.components.LocalTint
 import androidx.compose.animation.core.tween
@@ -121,6 +124,24 @@ fun DetailScreen(
     val railFocus = rememberRowFocus()
     var railBroughtTo by remember(state.ratingKey) { mutableStateOf<String?>(null) }
     val page = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    // Set while a landing is placing focus in the rail itself, which scrolls on its own.
+    var landing by remember { mutableStateOf(false) }
+
+    /*
+     * The page's one resting place with the rail in use: the whole rail on screen, names
+     * and the focused tile's lift included, sat at the bottom so as much of the title and
+     * summary above it shows as will fit. Scrolls down to it when the rail is cut off,
+     * and back up to it when coming up from the cast below, which otherwise left the
+     * title and summary off the top: the tile was already in view, so nothing moved.
+     */
+    suspend fun settleOnRail() {
+        val info = page.layoutInfo
+        val rail = info.visibleItemsInfo.firstOrNull { it.key == EPISODE_RAIL } ?: return
+        val bottom = info.viewportEndOffset - info.afterContentPadding
+        val distance = rail.offset + rail.size - bottom
+        if (distance != 0) page.animateScrollBy(distance.toFloat())
+    }
     // Set by choosing a season from its row, and spent once that season's episodes land.
     var seasonChosen by remember(state.ratingKey) { mutableStateOf(false) }
     LaunchedEffect(state.episodes) {
@@ -141,27 +162,28 @@ fun DetailScreen(
              * would have been the wrong half of the problem.
              */
             holdColumn = true
+            landing = true
             railFocus.land(key)
             withFrameNanos { }
             holdColumn = false
+            landing = false
             /*
-             * The rail then comes all the way on screen, its names and the focused tile's
-             * lift included, which is what pressing Right along it used to be needed for:
-             * landing held the page still, and left the bottom of the rail off the edge.
-             * Only as far as that takes, so the title and summary stay as much in view as
-             * they can.
+             * Then the page settles on the rail (see settleOnRail), which is what pressing
+             * Right along it used to be needed for: landing held the page still, and left
+             * the bottom of the rail off the edge.
              *
              * A season picked by hand goes further, and takes the row of seasons up off the
-             * top: it is a move on to that season's episodes.
+             * top: it is a move on to that season's episodes. So only ever down from there.
              */
             runCatching {
-                if (seasonChosen) page.animateScrollToItem(1)
-                val info = page.layoutInfo
-                val rail = info.visibleItemsInfo.firstOrNull { it.key == EPISODE_RAIL }
-                if (rail != null) {
-                    val bottom = info.viewportEndOffset - info.afterContentPadding
-                    val overflow = rail.offset + rail.size - bottom
+                if (seasonChosen) {
+                    page.animateScrollToItem(1)
+                    val info = page.layoutInfo
+                    val rail = info.visibleItemsInfo.firstOrNull { it.key == EPISODE_RAIL }
+                    val overflow = rail?.let { it.offset + it.size - (info.viewportEndOffset - info.afterContentPadding) } ?: 0
                     if (overflow > 0) page.animateScrollBy(overflow.toFloat())
+                } else {
+                    settleOnRail()
                 }
             }
             seasonChosen = false
@@ -326,7 +348,24 @@ fun DetailScreen(
                                     // Coming back down from Play or Watched returns to the
                                     // episode those buttons were acting on, rather than whichever
                                     // tile happens to be nearest the cursor.
-                                    modifier = Modifier.restoreFocusTo(railFocus).focusGroup().then(rowFocused),
+                                    modifier = Modifier
+                                        .onFocusChanged { focus ->
+                                            // Coming into the rail from above or below. The
+                                            // column's own scroll is held for the frame the
+                                            // tile asks to be brought into view, so the page
+                                            // makes one move rather than two.
+                                            if (focus.hasFocus && !landing) {
+                                                holdColumn = true
+                                                scope.launch {
+                                                    withFrameNanos { }
+                                                    holdColumn = false
+                                                    runCatching { settleOnRail() }
+                                                }
+                                            }
+                                        }
+                                        .restoreFocusTo(railFocus)
+                                        .focusGroup()
+                                        .then(rowFocused),
                                     contentPadding = PaddingValues(horizontal = 36.dp),
                                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                                 ) {

@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -205,6 +206,29 @@ class PageShots {
         check(caption <= screen.bottom) { "episode name cut off: $caption > ${screen.bottom}" }
     }
 
+    /**
+     * Down to the cast and back up to the episodes: the page should come back up with
+     * them, so the episode's title and summary are on screen again, not left scrolled
+     * off the top with the rail sitting under the tabs.
+     */
+    @OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
+    @Test fun detailBackUpFromCast() {
+        detail(landOn = 4)
+        compose.waitForIdle()
+        repeat(2) {
+            compose.onRoot().performKeyInput { pressKey(androidx.compose.ui.input.key.Key.DirectionDown) }
+            compose.waitForIdle()
+        }
+        compose.onRoot().performKeyInput { pressKey(androidx.compose.ui.input.key.Key.DirectionUp) }
+        compose.waitForIdle()
+        val page = compose.onNode(androidx.compose.ui.test.hasTestTag("page")).fetchSemanticsNode().boundsInRoot
+        val subtitle = compose.onNode(androidx.compose.ui.test.hasText("The Weigh Station")).fetchSemanticsNode()
+        val caption = bottomOf("5. The Weigh Station")
+        Shots.save(compose, "detail-back-up-from-cast")
+        check(subtitle.positionInRoot.y >= page.top) { "episode title off the top: ${subtitle.positionInRoot.y} < ${page.top}" }
+        check(caption <= page.bottom) { "episode name cut off: $caption > ${page.bottom}" }
+    }
+
     /** Where a piece of text really ends; its bounds in the tree stop at the clip. */
     private fun bottomOf(text: String): Float {
         val node = compose.onAllNodesWithText(text).onFirst().fetchSemanticsNode()
@@ -252,7 +276,7 @@ class PageShots {
                         canSelectOnFocus = { false }, serverName = "Living Room",
                     )
                     DetailScreen(
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).testTag("page"),
                         state = picked!!,
                         imageUrl = { _, path, w, h -> Shots.imageUrl(path, w, h) },
                         backdropUrl = { _, path -> Shots.imageUrl(path, 1280, 720) },
