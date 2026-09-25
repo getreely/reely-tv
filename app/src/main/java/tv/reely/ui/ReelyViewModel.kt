@@ -1286,7 +1286,64 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** The player reached the end of a file. Work out what follows, if anything. */
-    fun onPlaybackEnded() = offerUpNext()
+    /**
+     * The file ran out. Up Next if there is anything to go on to; if not — the newest
+     * episode, the end of a series, a film — the player closes, rather than sitting on
+     * the last frame waiting for Back.
+     */
+    fun onPlaybackEnded() {
+        if (startingNext) return
+        val playback = _state.value.playback ?: return
+        if (playback.isLive) return
+        val next = playback.queue.getOrNull(playback.queueIndex + 1)
+        if (next != null) {
+            _state.update { it.copy(upNext = next) }
+            return
+        }
+        viewModelScope.launch {
+            val following = firstOfNextSeason()
+            // Somebody pressed Back, or picked something else, while that was asked.
+            if (_state.value.playback !== playback) return@launch
+            if (following != null) _state.update { it.copy(upNext = following) }
+            else finishAtEnd(playback)
+        }
+    }
+
+    /**
+     * Out of the player after the last thing there was to watch. An episode goes back to
+     * its show's page, landed on that episode and ticked as watched; if the page
+     * underneath is something else, the show's page is opened. Anything else just closes,
+     * back to the page it was played from.
+     */
+    private fun finishAtEnd(playback: Playback) {
+        val detail = _state.value.detail
+        val finished = playback.queue.firstOrNull { it.ratingKey == playback.ratingKey }
+            ?: detail?.episodes?.firstOrNull { it.ratingKey == playback.ratingKey }
+        val show = finished?.grandparentRatingKey?.takeIf { finished.type == "episode" }
+        if (finished != null && show != null) {
+            val route = _state.value.route
+            if (route is Route.Detail && route.ratingKey == show && detail != null) {
+                val inRail = detail.episodes.firstOrNull { it.ratingKey == finished.ratingKey }
+                val season = detail.seasons.firstOrNull { it.ratingKey == finished.parentRatingKey }
+                when {
+                    inRail != null -> _state.update { it.copy(detail = it.detail?.copy(focusedEpisode = inRail)) }
+                    season != null -> selectSeason(season, focusEpisodeKey = finished.ratingKey)
+                }
+            } else {
+                navigate(
+                    Route.Detail(
+                        ratingKey = show,
+                        seasonKey = finished.parentRatingKey,
+                        episodeKey = finished.ratingKey,
+                        serverBase = finished.serverBase ?: playback.serverBase,
+                    )
+                )
+            }
+        }
+        // Reported as stopped at the very end, which is what marks it watched on the server.
+        stopPlayback(playback.durationMs)
+        playback.ratingKey?.let { applyWatched(it, watched = true) }
+    }
 
     /**
      * The credits have started. Up Next is offered now rather than at the very end, the
