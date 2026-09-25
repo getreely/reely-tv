@@ -348,7 +348,14 @@ data class ReelyState(
      * single-channel player and nothing about it changes.
      */
     val multiview: List<XtreamChannel> = emptyList(),
+    /** The Up Next screen, when it is showing: what it offers. */
     val upNext: PlexItem? = null,
+    /**
+     * What comes after the episode playing, once the credits have started and it has
+     * been looked up. Offered by a Next Episode button, not the Up Next screen itself,
+     * until that is pressed or the episode ends.
+     */
+    val nextEpisode: PlexItem? = null,
     val prefs: PlayerPrefs = PlayerPrefs(),
     val update: UpdateStatus = UpdateStatus.Idle,
 ) {
@@ -1197,6 +1204,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             _state.update {
                 it.copy(
                     upNext = null,
+                    nextEpisode = null,
                     playback = Playback(
                         title = item.title,
                         subtitle = subtitleLineFor(item),
@@ -1295,7 +1303,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         if (startingNext) return
         val playback = _state.value.playback ?: return
         if (playback.isLive) return
-        val next = playback.queue.getOrNull(playback.queueIndex + 1)
+        val next = playback.queue.getOrNull(playback.queueIndex + 1) ?: _state.value.nextEpisode
         if (next != null) {
             _state.update { it.copy(upNext = next) }
             return
@@ -1346,28 +1354,32 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * The credits have started. Up Next is offered now rather than at the very end, the
-     * way Plex does it; the end of the file offers it again to anybody who chose to
-     * watch them.
+     * The credits have started. What comes next is looked up now, for the Next Episode
+     * button, but the Up Next screen waits: it takes over the picture, and the credits
+     * are somebody's to watch until they say otherwise, or the file runs out.
      */
     fun onCreditsReached() {
-        if (_state.value.upNext != null) return
-        offerUpNext()
-    }
-
-    private fun offerUpNext() {
-        // Already on its way: the file running out while the next one loads must not
-        // put Up Next back up and start its countdown again.
         if (startingNext) return
         val playback = _state.value.playback ?: return
         if (playback.isLive) return
-        val next = playback.queue.getOrNull(playback.queueIndex + 1)
-        if (next != null) {
-            _state.update { it.copy(upNext = next) }
+        if (_state.value.nextEpisode != null || _state.value.upNext != null) return
+        val queued = playback.queue.getOrNull(playback.queueIndex + 1)
+        if (queued != null) {
+            _state.update { it.copy(nextEpisode = queued) }
             return
         }
         // End of a season: carry on into the next one, the way a binge actually goes.
-        viewModelScope.launch { _state.update { it.copy(upNext = firstOfNextSeason()) } }
+        viewModelScope.launch {
+            val following = firstOfNextSeason() ?: return@launch
+            if (_state.value.playback !== playback) return@launch
+            _state.update { it.copy(nextEpisode = following) }
+        }
+    }
+
+    /** The Next Episode button: the Up Next screen, with its countdown. */
+    fun showUpNext() {
+        val next = _state.value.nextEpisode ?: return
+        _state.update { it.copy(upNext = next) }
     }
 
     private suspend fun firstOfNextSeason(): PlexItem? {
@@ -1587,7 +1599,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         }
         // A later play of the same thing is a new sitting, so it gets a new identifier.
         timelineSessionFor = null
-        _state.update { it.copy(playback = null, upNext = null) }
+        _state.update { it.copy(playback = null, upNext = null, nextEpisode = null) }
     }
 
     // ---------------------------------------------------------------- Subtitle preferences
@@ -1691,6 +1703,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         _state.update {
             it.copy(
                 upNext = null,
+                nextEpisode = null,
                 playback = Playback(
                     title = channel.name,
                     subtitle = null,
@@ -1795,6 +1808,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         _state.update {
             it.copy(
                 upNext = null,
+                nextEpisode = null,
                 playback = Playback(
                     title = title,
                     subtitle = trailer.title,
@@ -1952,6 +1966,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         _state.update {
             it.copy(
                 upNext = null,
+                nextEpisode = null,
                 playback = Playback(
                     title = channel.name,
                     subtitle = programme?.title ?: live.selectedCategory?.name,

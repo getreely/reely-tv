@@ -9,8 +9,8 @@ enum class SkipPrompt { INTRO, NEXT_EPISODE }
  * The half second off the end of the intro is deliberate: without it the button vanishes
  * under a thumb already on its way to OK, and the press lands on whatever took its place.
  *
- * Credits only offer the next episode when there is one to go to and nothing else is
- * already offering it — the Up Next screen counts, and two ways to do the same thing a few
+ * Credits offer the next episode when there is one to go to and the Up Next screen isn't
+ * already up. Pressing it brings that screen up; two ways to do the same thing a few
  * pixels apart is worse than one.
  */
 fun skipPromptAt(
