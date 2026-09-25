@@ -34,6 +34,12 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import tv.reely.ui.components.isSelect
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.font.FontWeight
@@ -146,7 +152,28 @@ private fun UpNextScreen(
     onDecline: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Box(modifier = modifier.fillMaxSize().background(Ink)) {
+    /*
+     * Any press stops the countdown — moving to Watch credits, going back, anything —
+     * except OK on Play next itself, which is the one press that wants it. Somebody
+     * reaching for the remote is making up their mind, and the next episode starting
+     * under them while they do is the wrong answer. The volume keys don't count.
+     */
+    var held by remember(item.ratingKey) { mutableStateOf(false) }
+    var playFocused by remember { mutableStateOf(false) }
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Ink)
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown &&
+                    event.key !in VOLUME_KEYS &&
+                    !(event.isSelect() && playFocused)
+                ) {
+                    held = true
+                }
+                false
+            },
+    ) {
         AsyncImage(
             model = stillUrl,
             contentDescription = null,
@@ -243,8 +270,16 @@ private fun UpNextScreen(
                 CountdownButton(
                     key = item.ratingKey,
                     seconds = countdownSeconds,
-                    onPlay = onPlay,
-                    modifier = Modifier.focusRequester(focusRequester),
+                    running = !held,
+                    // Pressed, it has done its job: the countdown mustn't then run out
+                    // and ask for the same episode a second time.
+                    onPlay = {
+                        held = true
+                        onPlay()
+                    },
+                    modifier = Modifier
+                        .focusRequester(focusRequester)
+                        .onFocusChanged { playFocused = it.isFocused },
                 )
                 TvActionButton(label = if (ended) "Close" else "Watch credits", onClick = onDecline)
             }
@@ -259,21 +294,30 @@ private fun upNextLine(item: PlexItem): String? = listOfNotNull(
     item.durationMs.takeIf { it > 0 }?.let { "${(it / 60_000).coerceAtLeast(1)} min" },
 ).takeIf { it.isNotEmpty() }?.joinToString("  ·  ")
 
+/** Turning these up or down is not a decision about the next episode. */
+private val VOLUME_KEYS = setOf(Key.VolumeUp, Key.VolumeDown, Key.VolumeMute)
+
 /**
  * Play, filling up as the countdown runs, and playing when it is full. Zero seconds
- * means the countdown is switched off and the button just waits to be pressed.
+ * means the countdown is switched off and the button just waits to be pressed, and so
+ * does a countdown that has been stopped: it empties, and stays empty.
  */
 @Composable
 private fun CountdownButton(
     key: String,
     seconds: Int,
+    running: Boolean,
     onPlay: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val play by rememberUpdatedState(onPlay)
     val progress = remember(key) { Animatable(0f) }
-    LaunchedEffect(key, seconds) {
-        if (seconds <= 0) return@LaunchedEffect
+    val counting = running && seconds > 0
+    LaunchedEffect(key, seconds, counting) {
+        if (!counting) {
+            progress.snapTo(0f)
+            return@LaunchedEffect
+        }
         progress.snapTo(0f)
         progress.animateTo(1f, tween(durationMillis = seconds * 1_000, easing = LinearEasing))
         play()
@@ -293,7 +337,7 @@ private fun CountdownButton(
             .clickable(onClick = onPlay),
         contentAlignment = Alignment.CenterStart,
     ) {
-        if (seconds > 0) {
+        if (counting) {
             Box(
                 modifier = Modifier
                     .matchParentSize()
@@ -306,7 +350,7 @@ private fun CountdownButton(
             )
         }
         Text(
-            text = if (seconds > 0) "Play next  ·  $left" else "Play next",
+            text = if (counting) "Play next  ·  $left" else "Play next",
             color = colors.text,
             style = ReelyType.Meta,
             fontWeight = if (focused) FontWeight.SemiBold else FontWeight.Medium,
