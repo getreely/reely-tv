@@ -1,5 +1,6 @@
 package tv.reely.core
 
+import androidx.media3.decoder.ffmpeg.FfmpegLibrary
 import android.content.Context
 import android.media.MediaCodecList
 import androidx.media3.common.AudioAttributes
@@ -36,9 +37,27 @@ class DeviceAudio(context: Context) {
      * Whether a format, by Plex's name for it, plays here at this many channels. A name
      * this does not recognise answers yes: guessing no would convert audio that may well
      * have played, and the check during playback still catches a silence.
+     *
+     * Three ways count: the device's decoders, passing it over HDMI, and the app's own
+     * FFmpeg decoder. The last is what makes Dolby and DTS play on a device with neither
+     * — without it the server had to convert them, and live channels, with no server to
+     * ask, played silent.
      */
     fun canPlay(codec: String, channels: Int): Boolean {
         val mime = mimeFor(codec) ?: return true
+        return playsNatively(mime, channels) || decodesInApp(mime)
+    }
+
+    /** Only the app's FFmpeg decoder plays it, which the stats panel says. */
+    private fun onlyInApp(codec: String, channels: Int): Boolean {
+        val mime = mimeFor(codec) ?: return false
+        return !playsNatively(mime, channels) && decodesInApp(mime)
+    }
+
+    private fun decodesInApp(mime: String): Boolean =
+        runCatching { FfmpegLibrary.supportsFormat(mime) }.getOrDefault(false)
+
+    private fun playsNatively(mime: String, channels: Int): Boolean {
         if (mime == MimeTypes.AUDIO_AAC || mime in decoders) return true
         val format = Format.Builder()
             .setSampleMimeType(mime)
@@ -54,7 +73,9 @@ class DeviceAudio(context: Context) {
     /** For the stats panel: the formats worth knowing about, and which of them play. */
     fun summary(): String = SUMMARISED
         .filter { (codec, _) -> canPlay(codec, 6) }
-        .joinToString("  ·  ") { (_, label) -> label }
+        .joinToString("  ·  ") { (codec, label) ->
+            if (onlyInApp(codec, 6)) "$label (in app)" else label
+        }
 
     private companion object {
         /** The same as the player's, so passthrough is asked about on the same terms. */

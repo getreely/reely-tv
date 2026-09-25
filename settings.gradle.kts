@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "reely-tv"
 include(":app")
+include(":ffmpeg")

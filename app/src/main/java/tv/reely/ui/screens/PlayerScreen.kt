@@ -1,5 +1,7 @@
 package tv.reely.ui.screens
 
+import androidx.media3.exoplayer.analytics.AnalyticsListener
+import tv.reely.core.renderersFor
 import tv.reely.ui.components.LoadingRing
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
@@ -164,7 +166,7 @@ fun PlayerScreen(
     val view = LocalView.current
 
     val ownPlayer = remember {
-        ExoPlayer.Builder(context)
+        ExoPlayer.Builder(context, renderersFor(context))
             // Quick to start by default; more in hand when asked for — see bufferFor.
             .setLoadControl(bufferFor(prefs.largerBuffer))
             .setAudioAttributes(
@@ -198,6 +200,10 @@ fun PlayerScreen(
 
     var playing by remember { mutableStateOf(false) }
     var positionMs by remember { mutableLongStateOf(0L) }
+    // Which playback positionMs belongs to. It is polled, so for a moment after the next
+    // episode takes over it still holds the last one's — deep in its credits — and read
+    // as the new one's, that put Up Next straight back up over the new episode's intro.
+    var positionFor by remember { mutableStateOf<String?>(null) }
     var durationMs by remember { mutableLongStateOf(0L) }
     var bufferedMs by remember { mutableLongStateOf(0L) }
     var buffering by remember { mutableStateOf(true) }
@@ -215,6 +221,10 @@ fun PlayerScreen(
         }
     }
     var tracksVersion by remember { mutableIntStateOf(0) }
+    // Which decoder took the sound — the device's, or the app's FFmpeg — for the stats
+    // panel. Null while nothing has been decoded, which with sound playing means it is
+    // going out untouched to whatever is on the other end of the HDMI.
+    var audioDecoder by remember { mutableStateOf<String?>(null) }
 
     // A film or episode opening is worth showing the transport for; a channel is not,
     // and raising it there cost six seconds of a dead d-pad before the timeout cleared it.
@@ -304,7 +314,9 @@ fun PlayerScreen(
      * second off the end of the intro keeps the button from flashing away under a thumb
      * already on its way to OK.
      */
-    val prompt = skipPromptAt(
+    // Markers are this episode's; a position still left over from the last one is not.
+    val positionIsCurrent = positionFor == playback.url
+    val prompt = if (!positionIsCurrent) null else skipPromptAt(
         positionMs = positionMs,
         introStartMs = intro?.startMs,
         introEndMs = intro?.endMs,
@@ -323,7 +335,7 @@ fun PlayerScreen(
      * the file has run out. Once per episode: somebody who chose to watch the credits
      * is not asked again until they are over, when the end of the file asks.
      */
-    val inCredits = !playback.isLive && credits != null && positionMs >= credits.startMs
+    val inCredits = !playback.isLive && positionIsCurrent && credits != null && positionMs >= credits.startMs
     var creditsOffered by remember(playback.url) { mutableStateOf(false) }
     LaunchedEffect(inCredits, playback.url) {
         if (inCredits && !creditsOffered) {
@@ -453,7 +465,23 @@ fun PlayerScreen(
         onDispose { exoPlayer.removeListener(listener) }
     }
 
+    DisposableEffect(exoPlayer) {
+        val listener = object : AnalyticsListener {
+            override fun onAudioDecoderInitialized(
+                eventTime: AnalyticsListener.EventTime,
+                decoderName: String,
+                initializedTimestampMs: Long,
+                initializationDurationMs: Long,
+            ) {
+                audioDecoder = decoderName
+            }
+        }
+        exoPlayer.addAnalyticsListener(listener)
+        onDispose { exoPlayer.removeAnalyticsListener(listener) }
+    }
+
     LaunchedEffect(playback.url) {
+        audioDecoder = null
         error = null
         audioNotice = null
         panel = Panel.NONE
@@ -473,6 +501,9 @@ fun PlayerScreen(
 
     LaunchedEffect(exoPlayer) {
         while (true) {
+            val current = currentPlayback
+            val loaded = exoPlayer.currentMediaItem?.localConfiguration?.uri?.toString()
+            positionFor = if (current.isLive || loaded == current.url) current.url else null
             positionMs = exoPlayer.currentPosition.coerceAtLeast(0)
             bufferedMs = exoPlayer.bufferedPosition.coerceAtLeast(0)
             durationMs = exoPlayer.duration.takeIf { it > 0 } ?: playback.durationMs
@@ -1026,6 +1057,7 @@ fun PlayerScreen(
             StatsPanel(
                 playback = playback,
                 player = exoPlayer,
+                audioDecoder = audioDecoder,
                 focusRequester = panelFocus,
                 onClose = { panel = Panel.NONE },
                 modifier = Modifier.align(Alignment.CenterEnd),
@@ -1356,6 +1388,7 @@ private val SCRUB_THUMB = 14.dp
 internal fun StatsPanel(
     playback: Playback,
     player: ExoPlayer,
+    audioDecoder: String? = null,
     focusRequester: FocusRequester,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1431,6 +1464,15 @@ internal fun StatsPanel(
 
         SectionLabel("AUDIO")
         StatLine("Codec", (audio ?: fileAudio)?.sampleMimeType?.let(::codecName) ?: "—")
+        StatLine(
+            "Decoder",
+            when {
+                audioDecoder?.startsWith("ffmpeg") == true -> "In app (FFmpeg)"
+                audioDecoder != null -> "Device"
+                audio != null -> "Passed through"
+                else -> "—"
+            },
+        )
         if (unplayable) StatLine("Status", "Can't be played on this device")
         StatLine(
             "Channels",

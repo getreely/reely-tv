@@ -72,7 +72,7 @@ class PlayerPanelShots {
         val focus = FocusRequester()
         overPicture(focus) {
             Box(Modifier.fillMaxSize()) {
-                StatsPanel(playback, player, focus, onClose = {}, modifier = Modifier.align(Alignment.CenterEnd))
+                StatsPanel(playback, player, focusRequester = focus, onClose = {}, modifier = Modifier.align(Alignment.CenterEnd))
             }
         }
         Shots.save(compose, "player-stats")

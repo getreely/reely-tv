@@ -1,5 +1,6 @@
 package tv.reely.ui.screens
 
+import tv.reely.core.renderersFor
 import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -168,7 +169,7 @@ fun MultiViewGrid(
  * handing out connections freely enough for that.
  */
 fun buildExtraPlayer(context: Context, url: String): ExoPlayer =
-    ExoPlayer.Builder(context)
+    ExoPlayer.Builder(context, renderersFor(context))
         .setLoadControl(
             DefaultLoadControl.Builder()
                 .setBufferDurationsMs(2_000, 30_000, 1_000, 2_000)

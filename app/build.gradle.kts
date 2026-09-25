@@ -19,8 +19,8 @@ android {
         // Keystore-backed credential store needs API 23 and Compose is painful below it.
         minSdk = 23
         targetSdk = 34
-        versionCode = 1109
-        versionName = "0.33.4"
+        versionCode = 1110
+        versionName = "0.34.0"
     }
 
     signingConfigs {
@@ -117,6 +117,9 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.11.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.11.1")
     implementation("androidx.media3:media3-ui:1.11.1")
+    // Software decoding for the sound the device cannot decode itself — Dolby Digital,
+    // Dolby Digital Plus, TrueHD, DTS, MP2 — so it plays instead of playing silent.
+    implementation(project(":ffmpeg"))
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     implementation("com.squareup.okhttp3:okhttp:5.5.0")

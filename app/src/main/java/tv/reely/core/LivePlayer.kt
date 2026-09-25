@@ -28,7 +28,7 @@ class LivePlayer(context: Context) {
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    val player: ExoPlayer = ExoPlayer.Builder(context)
+    val player: ExoPlayer = ExoPlayer.Builder(context, renderersFor(context))
         .setLoadControl(
             // A small start buffer: channel-switch latency is what separates good from bad.
             DefaultLoadControl.Builder()

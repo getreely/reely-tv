@@ -667,6 +667,18 @@ private fun AboutSection() {
             lineHeight = 21.sp,
         )
     }
+    Panel(title = "Sound") {
+        Text(
+            text = "Sound this device cannot decode — Dolby Digital, Dolby Digital Plus, " +
+                "TrueHD, DTS — is decoded by the app itself, using FFmpeg, so it plays " +
+                "instead of playing silent. A television or soundbar that takes it " +
+                "directly is still sent it untouched. FFmpeg is licensed under the LGPL " +
+                "2.1; its licence and notice are included in the app.",
+            color = Muted,
+            fontSize = 14.sp,
+            lineHeight = 21.sp,
+        )
+    }
     Panel(title = "The guide") {
         Text(
             text = "The provider's whole XMLTV guide is read straight into a local database as " +

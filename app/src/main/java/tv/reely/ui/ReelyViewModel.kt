@@ -1134,13 +1134,13 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Play a library item, resuming where Plex says it was left. */
-    fun play(item: PlexItem, queue: List<PlexItem> = emptyList(), resume: Boolean = true) {
+    fun play(item: PlexItem, queue: List<PlexItem> = emptyList(), resume: Boolean = true): Job? {
         val plex = _state.value.plex
         val on = item.serverBase
-        val base = on ?: plex.baseUrl ?: return
-        val token = plex.tokenFor(on) ?: return
+        val base = on ?: plex.baseUrl ?: return null
+        val token = plex.tokenFor(on) ?: return null
 
-        viewModelScope.launch {
+        return viewModelScope.launch {
             val resolved = runCatching { PlexApi.playback(base, token, item.ratingKey) }
                 .getOrElse { failure ->
                     reportPlaybackProblem(failure.readable())
@@ -1282,6 +1282,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun offerUpNext() {
+        // Already on its way: the file running out while the next one loads must not
+        // put Up Next back up and start its countdown again.
+        if (startingNext) return
         val playback = _state.value.playback ?: return
         if (playback.isLive) return
         val next = playback.queue.getOrNull(playback.queueIndex + 1)
@@ -1313,11 +1316,34 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             .firstOrNull()
     }
 
+    /*
+     * Set from choosing the next episode until it is playing, or has failed to.
+     *
+     * Up Next used to be cleared the moment Play was chosen, while the next episode was
+     * still being asked for. For that second the finished episode's credits grew back to
+     * full screen — it looked as though it had started over — and if the file ran out in
+     * that time, the end of it offered Up Next a second time, countdown and all, which
+     * could start the next episode twice. Now the Up Next screen stays until the next
+     * episode replaces it, and anything asking to go again in the meantime is ignored.
+     */
+    private var startingNext = false
+
     fun playUpNext() {
+        if (startingNext) return
         val next = _state.value.upNext ?: return
         val queue = _state.value.playback?.queue.orEmpty()
-        _state.update { it.copy(upNext = null) }
-        play(next, queue = queue.takeIf { list -> list.any { it.ratingKey == next.ratingKey } } ?: emptyList())
+        startingNext = true
+        val job = play(next, queue = queue.takeIf { list -> list.any { it.ratingKey == next.ratingKey } } ?: emptyList())
+        if (job == null) {
+            startingNext = false
+            return
+        }
+        job.invokeOnCompletion {
+            startingNext = false
+            // Playing, it was cleared along with the old playback. Failed, the screen
+            // should not sit there offering what will not play.
+            _state.update { if (it.upNext == next) it.copy(upNext = null) else it }
+        }
     }
 
     fun dismissUpNext() = _state.update { it.copy(upNext = null) }
