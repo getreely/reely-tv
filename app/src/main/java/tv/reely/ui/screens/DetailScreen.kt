@@ -56,9 +56,13 @@ import tv.reely.ui.components.TvChip
 import tv.reely.ui.components.EpisodeTile
 import tv.reely.ui.theme.Muted
 import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.withFrameNanos
+
+/** The episode rail's key in the page, so it can be found to bring into view. */
+private const val EPISODE_RAIL = "episode-rail"
 
 @Composable
 fun DetailScreen(
@@ -127,7 +131,7 @@ fun DetailScreen(
             // offset, so landing on episode one still needed the rail wound back to it.
             runCatching { episodeRail.scrollToItem(index) }
             /*
-             * Focus lands on the episode, but the page stays where it is.
+             * Focus lands on the episode without the page leaping after it.
              *
              * Focus arriving anywhere asks the column to bring it into view, and bringing
              * the rail into view scrolled the season buttons, the title and half the
@@ -140,14 +144,26 @@ fun DetailScreen(
             withFrameNanos { }
             holdColumn = false
             /*
-             * A season picked by hand is a move on to its episodes, so the page follows:
-             * the row of seasons goes up off the top and the episodes come fully into
-             * view. Arriving on the page is different, and stays put — see above.
+             * The rail then comes all the way on screen, its names and the focused tile's
+             * lift included, which is what pressing Right along it used to be needed for:
+             * landing held the page still, and left the bottom of the rail off the edge.
+             * Only as far as that takes, so the title and summary stay as much in view as
+             * they can.
+             *
+             * A season picked by hand goes further, and takes the row of seasons up off the
+             * top: it is a move on to that season's episodes.
              */
-            if (seasonChosen) {
-                seasonChosen = false
-                runCatching { page.animateScrollToItem(1) }
+            runCatching {
+                if (seasonChosen) page.animateScrollToItem(1)
+                val info = page.layoutInfo
+                val rail = info.visibleItemsInfo.firstOrNull { it.key == EPISODE_RAIL }
+                if (rail != null) {
+                    val bottom = info.viewportEndOffset - info.afterContentPadding
+                    val overflow = rail.offset + rail.size - bottom
+                    if (overflow > 0) page.animateScrollBy(overflow.toFloat())
+                }
             }
+            seasonChosen = false
         }
         railBroughtTo = key
     }
@@ -301,7 +317,7 @@ fun DetailScreen(
                         item { Shimmer { EpisodeRailPlaceholder() } }
                     }
                     if (state.episodes.isNotEmpty()) {
-                        item {
+                        item(key = EPISODE_RAIL) {
                             FocusRow { rowFocused ->
                                 LazyRow(
                                     state = episodeRail,

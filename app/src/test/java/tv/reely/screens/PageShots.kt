@@ -7,6 +7,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -158,43 +160,107 @@ class PageShots {
         Shots.save(compose, "detail-summary-open")
     }
 
+    private var picked by androidx.compose.runtime.mutableStateOf<DetailState?>(null)
+    private var onSeason: ((tv.reely.plex.PlexItem) -> Unit)? = null
+
+    /**
+     * Picking a season, as the app does it: the old episodes go, then the new season's
+     * arrive with focus landing on the first. The page should end with every episode's
+     * name on screen, not only once Right has been pressed along the rail.
+     */
+    @OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
+    @Test fun detailSeasonPicked() {
+        detail()
+        val loaded = mutableListOf<DetailState>()
+        onSeason = { season ->
+            val before = picked ?: error("no state")
+            picked = before.copy(selectedSeason = season, episodes = emptyList(), focusedEpisode = null, busy = true)
+            loaded += before.copy(selectedSeason = season, busy = false, focusedEpisode = before.episodes.first())
+        }
+        compose.waitForIdle()
+        compose.onNodeWithText("Season 3").requestFocus()
+        compose.onRoot().performKeyInput { pressKey(androidx.compose.ui.input.key.Key.DirectionCenter) }
+        compose.waitForIdle()
+        picked = loaded.single()
+        compose.waitForIdle()
+        val screen = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val caption = bottomOf("1. Pilot")
+        Shots.save(compose, "detail-season-picked")
+        check(caption <= screen.bottom) { "episode name cut off: $caption > ${screen.bottom}" }
+        check(compose.onAllNodesWithText("Season 1").fetchSemanticsNodes().none { it.boundsInRoot.bottom > 0f }) {
+            "the seasons should have gone up off the top"
+        }
+    }
+
+    /**
+     * Arriving from Home on an episode: focus lands on it in the rail, and the rail
+     * should be all on screen straight away, not only after a press of Right.
+     */
+    @Test fun detailArrivedOnEpisode() {
+        detail(landOn = 4)
+        compose.waitForIdle()
+        val screen = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val caption = bottomOf("5. The Weigh Station")
+        Shots.save(compose, "detail-arrived-on-episode")
+        check(caption <= screen.bottom) { "episode name cut off: $caption > ${screen.bottom}" }
+    }
+
+    /** Where a piece of text really ends; its bounds in the tree stop at the clip. */
+    private fun bottomOf(text: String): Float {
+        val node = compose.onAllNodesWithText(text).onFirst().fetchSemanticsNode()
+        return node.positionInRoot.y + node.size.height
+    }
+
     private fun detail(
         summary: String = "A long-haul driver takes the jobs nobody else will, on roads that don't appear on any map, and starts to notice who keeps booking her.",
+        landOn: Int? = null,
     ) {
         val episodes = (1..8).map { i ->
             Shots.item("north").copy(ratingKey = "ep$i", title = listOf("Pilot", "Mile Marker", "Dead Air", "Crosswind", "The Weigh Station", "Chain Control", "Jackknife", "Last Exit")[i - 1], index = i)
         }
         val seasons = (1..3).map { Shots.item("north").copy(ratingKey = "s$it", title = "Season $it", type = "season", index = it) }
         val north = Shots.titles.getValue("north")
+        picked = DetailState(
+            ratingKey = "show-north", serverBase = "http://server", busy = false,
+            detail = PlexDetail(
+                ratingKey = "show-north", type = "show", title = "Northbound",
+                summary = summary,
+                tagline = null, year = 2024, durationMs = 0, viewOffsetMs = 0, contentRating = "TV-14",
+                rating = 8.1, audienceRating = 8.6, airDate = null, viewCount = 0, studio = "Harbourside",
+                thumb = "poster/north", art = "backdrop/north", theme = null,
+                genres = listOf("Drama", "Thriller"), directors = emptyList(),
+                roles = listOf("Rae Collins" to "Maren Hale", "Tom Okafor" to "Jude Mercer", "Ines Vidal" to "Carla Ruiz", "Sam Park" to "Owen Pike", "Lena Morse" to "Dee Hart", "Ari Stone" to "Cal Ward")
+                    .map { (who, as_) -> PlexRole(name = who, role = as_, thumb = null) },
+                childCount = 3, leafCount = 24, grandparentTitle = null, index = null, parentIndex = null,
+                logo = "logo/north",
+                qualities = listOf("4K", "Dolby Vision", "5.1"),
+            ),
+            seasons = seasons, selectedSeason = seasons[1], episodes = episodes,
+            focusedEpisode = landOn?.let { episodes[it] },
+        )
+        val tabFocus = List(5) { androidx.compose.ui.focus.FocusRequester() }
+        val settingsFocus = androidx.compose.ui.focus.FocusRequester()
         compose.setContent {
             ReelyTheme {
                 Shots.RemoteInput()
-                Box(Modifier.fillMaxSize().background(Ink)) {
+                // Under the bar of tabs, as in the app: the page has 70 dp less to work with
+                // than the whole screen, which is where the rail ran off the bottom.
+                androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().background(Ink)) {
+                    tv.reely.ui.TopBar(
+                        current = tv.reely.ui.Route.Home, onNavigate = {}, onActivate = {}, onTabFocused = {},
+                        onTabPositioned = { _, _ -> }, tabFocus = tabFocus, settingsFocus = settingsFocus,
+                        canSelectOnFocus = { false }, serverName = "Living Room",
+                    )
                     DetailScreen(
-                        state = DetailState(
-                            ratingKey = "show-north", serverBase = "http://server", busy = false,
-                            detail = PlexDetail(
-                                ratingKey = "show-north", type = "show", title = "Northbound",
-                                summary = summary,
-                                tagline = null, year = 2024, durationMs = 0, viewOffsetMs = 0, contentRating = "TV-14",
-                                rating = 8.1, audienceRating = 8.6, airDate = null, viewCount = 0, studio = "Harbourside",
-                                thumb = "poster/north", art = "backdrop/north", theme = null,
-                                genres = listOf("Drama", "Thriller"), directors = emptyList(),
-                                roles = listOf("Rae Collins" to "Maren Hale", "Tom Okafor" to "Jude Mercer", "Ines Vidal" to "Carla Ruiz", "Sam Park" to "Owen Pike", "Lena Morse" to "Dee Hart", "Ari Stone" to "Cal Ward")
-                                    .map { (who, as_) -> PlexRole(name = who, role = as_, thumb = null) },
-                                childCount = 3, leafCount = 24, grandparentTitle = null, index = null, parentIndex = null,
-                                logo = "logo/north",
-                                qualities = listOf("4K", "Dolby Vision", "5.1"),
-                            ),
-                            seasons = seasons, selectedSeason = seasons[1], episodes = episodes,
-                            focusedEpisode = null,
-                        ),
+                        modifier = Modifier.weight(1f),
+                        state = picked!!,
                         imageUrl = { _, path, w, h -> Shots.imageUrl(path, w, h) },
                         backdropUrl = { _, path -> Shots.imageUrl(path, 1280, 720) },
                         logoUrl = { _, path -> Shots.imageUrl(path, 0, 0) },
                         onPlay = {}, onPlayFromStart = {}, onPlayDetail = {}, onPlayDetailFromStart = {},
                         onPlayTrailer = {}, onToggleWatched = {}, onToggleWatchedDetail = {},
-                        onFocusEpisode = {}, onSelectSeason = {},
+                        onFocusEpisode = {},
+                        onSelectSeason = { season -> onSeason?.invoke(season) },
                     )
                 }
             }
