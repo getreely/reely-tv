@@ -81,15 +81,15 @@ object XtreamApi {
         val json = get(credentials, action = null)
         val root = JSONObject(json)
         val user = root.optJSONObject("user_info")
-            ?: error("No Xtream panel answered at that address — check the host and port.")
+            ?: error("Couldn't connect. Check the server address and port.")
 
         // Panels word this differently; treat anything but an explicit 1 as a rejection.
         if (user.optInt("auth", 0) != 1) {
-            error("The panel rejected those credentials.")
+            error("Incorrect username or password.")
         }
         val status = user.optString("status").ifEmpty { "Unknown" }
         if (!status.equals("Active", ignoreCase = true)) {
-            error("The panel reports this account as \"$status\".")
+            error("This account is $status. Contact your provider.")
         }
         XtreamAccount(
             status = status,
@@ -187,8 +187,8 @@ object XtreamApi {
 
         Http.client.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
-            require(response.isSuccessful) { "The panel returned HTTP ${response.code}." }
-            require(body.isNotBlank()) { "The panel returned an empty response." }
+            require(response.isSuccessful) { "Your provider returned an error (${response.code})." }
+            require(body.isNotBlank()) { "Your provider didn't respond. Try again." }
             return body
         }
     }

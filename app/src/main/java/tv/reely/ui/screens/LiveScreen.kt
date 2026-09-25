@@ -1,5 +1,7 @@
 package tv.reely.ui.screens
 
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Row
 import tv.reely.ui.theme.SurfaceRaised
 import tv.reely.ui.theme.ReelyType
 import tv.reely.ui.components.cardRing
@@ -47,7 +49,6 @@ import androidx.tv.material3.Text
 import tv.reely.ui.LiveState
 import tv.reely.ui.components.EmptyNote
 import tv.reely.ui.components.ErrorNote
-import tv.reely.ui.components.HintBar
 import tv.reely.ui.components.SectionHeading
 import tv.reely.ui.components.TvActionButton
 import tv.reely.ui.components.TvTextField
@@ -94,11 +95,7 @@ fun LiveCategoriesScreen(
                 Column(modifier = Modifier.padding(bottom = 8.dp)) {
                     Text(text = "Live TV", color = Chalk, style = ReelyType.Display)
                     Text(
-                        text = buildString {
-                            append("${live.categories.size} categories")
-                            live.account?.let { append("  ·  ${it.maxConnections} connection(s) allowed") }
-                            append("  ·  ${live.format.label}")
-                        },
+                        text = "${live.categories.size} categories",
                         color = Muted,
                         style = ReelyType.Meta,
                         modifier = Modifier.padding(top = 4.dp),
@@ -111,7 +108,7 @@ fun LiveCategoriesScreen(
                         )
                     }
                     if (live.categories.isEmpty() && !live.busy) {
-                        EmptyNote("The panel returned no categories.", modifier = Modifier.padding(top = 12.dp))
+                        EmptyNote("Your provider didn't list any channels.", modifier = Modifier.padding(top = 12.dp))
                     }
                 }
             }
@@ -185,66 +182,56 @@ internal fun XtreamSignInPanel(
     var username by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
 
-    Column(
-        modifier = modifier.padding(horizontal = 48.dp, vertical = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+    /*
+     * Words on the left, the form on the right. Stacked, the three fields and the button
+     * ran past the bottom of the screen — Connect sat at the very edge, and an error
+     * message pushed it and the password field off it altogether.
+     */
+    Row(
+        modifier = modifier.padding(horizontal = 48.dp, vertical = 27.dp),
+        horizontalArrangement = Arrangement.spacedBy(48.dp),
     ) {
-        SectionHeading("Live TV")
-        Text(
-            text = "Sign in to your IPTV provider",
-            color = Chalk,
-            fontSize = 26.sp,
-            lineHeight = 32.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Text(
-            text = "This is your own subscription, and it stays on this device — nothing is sent " +
-                "anywhere else. The library half works without it.",
-            color = Muted,
-            fontSize = 15.sp,
-            lineHeight = 22.sp,
-            modifier = Modifier.widthIn(max = 620.dp),
-        )
-
-        if (live.error != null) {
-            ErrorNote(
-                message = live.error,
-                onDismiss = onDismissError,
-                modifier = Modifier.widthIn(max = 720.dp),
-            )
-        }
-
         Column(
-            modifier = Modifier.widthIn(max = 560.dp).glass(),
+            modifier = Modifier.weight(1f).padding(top = 12.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                TvTextField(
-                    value = host,
-                    onValueChange = { host = it },
-                    label = "Server",
-                    placeholder = "panel.example.com:8080",
-                    keyboardType = KeyboardType.Uri,
-                )
-                TvTextField(value = username, onValueChange = { username = it }, label = "Username")
-                TvTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    label = "Password",
-                    password = true,
-                    imeAction = ImeAction.Done,
-                )
-                TvActionButton(
-                    label = if (live.busy) "Connecting…" else "Connect",
-                    onClick = { onSignIn(host, username, password) },
-                    emphasised = true,
-                )
+            SectionHeading("Live TV")
+            Text(text = "Sign in to your live TV provider", color = Chalk, style = ReelyType.Display.copy(fontSize = 30.sp, lineHeight = 36.sp))
+            Text(
+                text = "Enter the details from your provider. They're stored only on this device.",
+                color = Muted,
+                style = ReelyType.Body,
+            )
+            if (live.error != null) {
+                ErrorNote(message = live.error, onDismiss = onDismissError)
             }
         }
 
-        HintBar("If it fails, the message says which part was wrong — the host, the credentials, or nothing answering.")
+        Column(
+            modifier = Modifier.width(440.dp).glass().padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            TvTextField(
+                value = host,
+                onValueChange = { host = it },
+                label = "Server",
+                placeholder = "provider.example.com:8080",
+                keyboardType = KeyboardType.Uri,
+            )
+            TvTextField(value = username, onValueChange = { username = it }, label = "Username")
+            TvTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = "Password",
+                password = true,
+                imeAction = ImeAction.Done,
+            )
+            TvActionButton(
+                label = if (live.busy) "Connecting…" else "Connect",
+                onClick = { onSignIn(host, username, password) },
+                emphasised = true,
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            )
+        }
     }
 }

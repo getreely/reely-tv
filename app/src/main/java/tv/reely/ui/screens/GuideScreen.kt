@@ -334,12 +334,12 @@ fun GuideScreen(
 }
 
 private fun GuideStatus.describe(): String = when (this) {
-    is GuideStatus.Idle -> "No guide loaded yet."
+    is GuideStatus.Idle -> "No TV guide yet."
     is GuideStatus.Importing ->
-        if (written == 0 && scanned == 0) "Downloading the guide…"
-        else "Importing… $written programmes kept of $scanned read"
+        if (written == 0 && scanned == 0) "Downloading the TV guide…"
+        else "Updating the TV guide…"
 
-    is GuideStatus.Ready -> "$count programmes in the guide"
+    is GuideStatus.Ready -> "TV guide"
     is GuideStatus.Failed -> message
 }
 

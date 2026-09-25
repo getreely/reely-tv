@@ -1,12 +1,36 @@
 package tv.reely.ui.screens
 
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.gestures.animateScrollBy
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import tv.reely.ui.components.requestWhenReady
+import tv.reely.ui.components.pillColors
+import tv.reely.ui.theme.ReelyType
+import tv.reely.ui.theme.Ink
+import tv.reely.ui.theme.Faint
+import tv.reely.ui.theme.Accent
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.FocusRequester
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -42,22 +66,17 @@ import tv.reely.ui.PlayerPrefs
 import tv.reely.ui.PlexState
 import tv.reely.ui.UpdateStatus
 import tv.reely.ui.components.ErrorNote
-import tv.reely.ui.components.FactLine
-import tv.reely.ui.components.SectionHeading
-import tv.reely.ui.components.TvActionButton
 import tv.reely.ui.components.TvChip
-import tv.reely.ui.theme.Line
 import tv.reely.ui.theme.Muted
 import tv.reely.ui.theme.Chalk
 import tv.reely.ui.theme.SurfaceRaised
-import tv.reely.xtream.StreamFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
 private enum class Section(val title: String) {
-    VIDEO("Video"),
+    PLAYBACK("Playback"),
     LIVE_TV("Live TV"),
     PLEX("Plex"),
     UPDATES("Updates"),
@@ -99,9 +118,13 @@ fun SettingsScreen(
     onInstallUpdate: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var section by remember { mutableStateOf(Section.VIDEO) }
+    var section by remember { mutableStateOf(Section.PLAYBACK) }
     val sectionFocus = remember { Section.entries.associateWith { FocusRequester() } }
     var inOptions by remember { mutableStateOf(false) }
+    // The first thing to change on each page, where right from the sections lands —
+    // rather than whatever row happens to sit level with the section, which on two
+    // pages was Sign out.
+    val firstOption = remember { FocusRequester() }
 
     // Back from the options goes back to the section they belong to. Back from the
     // sections leaves Settings, as it always has.
@@ -131,9 +154,7 @@ fun SettingsScreen(
             Text(
                 text = "Settings",
                 color = Chalk,
-                fontSize = 22.sp,
-                lineHeight = 28.sp,
-                fontWeight = FontWeight.SemiBold,
+                style = ReelyType.Headline,
                 modifier = Modifier.padding(bottom = 8.dp),
             )
             Section.entries.forEach { entry ->
@@ -158,11 +179,15 @@ fun SettingsScreen(
                 .padding(start = 26.dp)
                 .verticalScroll(rememberScrollState())
                 .onFocusChanged { inOptions = it.hasFocus }
+                .focusProperties {
+                    onEnter = { runCatching { firstOption.requestFocus() } }
+                }
                 .focusGroup(),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
+            CompositionLocalProvider(LocalFirstOption provides firstOption) {
             when (section) {
-                Section.VIDEO -> VideoSection(
+                Section.PLAYBACK -> PlaybackSection(
                     prefs = prefs,
                     onNudgeSubtitleScale = onNudgeSubtitleScale,
                     onToggleSubtitleBackground = onToggleSubtitleBackground,
@@ -196,19 +221,19 @@ fun SettingsScreen(
 
                 Section.UPDATES -> UpdatesSection(
                     update = update,
-                    updateUrl = updateUrl,
                     onCheck = onCheckForUpdate,
                     onInstall = onInstallUpdate,
                 )
 
                 Section.ABOUT -> AboutSection()
             }
+            }
         }
     }
 }
 
 @Composable
-private fun VideoSection(
+private fun PlaybackSection(
     prefs: PlayerPrefs,
     onNudgeSubtitleScale: (Float) -> Unit,
     onToggleSubtitleBackground: () -> Unit,
@@ -220,125 +245,108 @@ private fun VideoSection(
     onToggleLargerBuffer: () -> Unit,
     onNudgeThemeVolume: (Float) -> Unit,
 ) {
-    Panel(title = "Playback") {
-        FactLine("Mode", playbackModeLabel(prefs.playbackMode))
-        FactLine("Transcode ceiling", bitrateLabel(prefs.maxBitrateKbps))
-        Buttons {
-            TvActionButton(label = "Change mode", onClick = onCyclePlaybackMode)
-            TvActionButton(label = "Change ceiling", onClick = onCycleMaxBitrate)
-        }
+    SettingGroup("Video") {
+        SettingRow(
+            title = "Playback mode",
+            first = true,
+            value = when (prefs.playbackMode) {
+                Settings.MODE_DIRECT -> "Original only"
+                Settings.MODE_TRANSCODE -> "Always convert"
+                else -> "Automatic"
+            },
+            description = when (prefs.playbackMode) {
+                Settings.MODE_DIRECT -> "Always plays the original file. Some may not play."
+                Settings.MODE_TRANSCODE -> "Plex converts everything. Uses more of your server."
+                else -> "Plays the original file. Plex converts it only when needed."
+            },
+            onClick = onCyclePlaybackMode,
+        )
+        SettingRow(
+            title = "Conversion quality",
+            value = if (prefs.maxBitrateKbps <= 0) "Original" else "Up to ${prefs.maxBitrateKbps / 1_000} Mbps",
+            description = "The highest quality Plex uses when it converts a video.",
+            onClick = onCycleMaxBitrate,
+        )
+        SettingRow(
+            title = "Match frame rate",
+            value = onOff(prefs.matchFrameRate),
+            description = "Smoother motion. The screen may blink as it switches.",
+            onClick = onToggleMatchFrameRate,
+        )
+        SettingRow(
+            title = "Buffer",
+            value = if (prefs.largerBuffer) "Larger" else "Normal",
+            description = "Larger helps on a slow or unsteady connection.",
+            onClick = onToggleLargerBuffer,
+        )
     }
 
-    Panel(title = "Subtitles") {
-        FactLine("Size", "${(prefs.subtitleScale * 100).toInt()}%")
-        FactLine("Background", if (prefs.subtitleBackground) "On" else "Off (outlined)")
-        Text(
-            text = "Subtitles start off on everything. Choosing a track in the player turns " +
-                "them on and that choice carries to whatever is played next.",
-            color = Muted,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
+    SettingGroup("Subtitles") {
+        SettingRow(
+            title = "Size",
+            value = "${(prefs.subtitleScale * 100).roundToInt()}%",
+            onClick = { onNudgeSubtitleScale(nextStep(prefs.subtitleScale, SUBTITLE_SIZES)) },
         )
-        Buttons {
-            TvActionButton(
-                label = "Smaller",
-                onClick = { onNudgeSubtitleScale(-Settings.SCALE_STEP) },
-            )
-            TvActionButton(
-                label = "Bigger",
-                onClick = { onNudgeSubtitleScale(Settings.SCALE_STEP) },
-            )
-            TvActionButton(
-                label = if (prefs.subtitleBackground) "Background off" else "Background on",
-                onClick = onToggleSubtitleBackground,
-            )
-        }
+        SettingRow(
+            title = "Background",
+            value = onOff(prefs.subtitleBackground),
+            description = "A dark box behind the text, instead of an outline.",
+            onClick = onToggleSubtitleBackground,
+        )
     }
 
-    Panel(title = "Buffering") {
-        FactLine("Loaded ahead", if (prefs.largerBuffer) "Larger — up to 2 minutes" else "Normal — up to 30 seconds")
-        Text(
-            text = "How much of a film or episode is kept loaded ahead of what is playing. " +
-                "Normal starts things quickest. Larger rides out a slow or uneven connection " +
-                "to the server, at the cost of a second or so more before playing starts. " +
-                "Very high bitrate files, such as 4K remuxes, fill the memory set aside " +
-                "before either limit, so they gain less. Live TV is not affected. Takes " +
-                "effect from the next thing played.",
-            color = Muted,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
+    SettingGroup("Up Next") {
+        SettingRow(
+            title = "Countdown",
+            value = if (prefs.upNextSeconds > 0) "${prefs.upNextSeconds} seconds" else "Off",
+            description = "How long before the next episode starts by itself.",
+            onClick = {
+                val next = UP_NEXT_SECONDS.firstOrNull { it > prefs.upNextSeconds } ?: UP_NEXT_SECONDS.first()
+                onNudgeUpNext(next - prefs.upNextSeconds)
+            },
         )
-        Buttons {
-            TvActionButton(
-                label = if (prefs.largerBuffer) "Use normal" else "Use larger",
-                onClick = onToggleLargerBuffer,
-                emphasised = prefs.largerBuffer,
-            )
-        }
     }
 
-    Panel(title = "Refresh rate") {
-        FactLine("Match the screen to the film", if (prefs.matchFrameRate) "On" else "Off")
-        Text(
-            text = "Film runs at just under twenty-four frames a second and a television " +
-                "sits at sixty, which does not divide — so some frames are held longer " +
-                "than others and slow camera moves stutter. This asks the screen to " +
-                "change rate to suit what is playing, and puts it back afterwards. Turn " +
-                "it off if your television blanks for a second or two while it changes. " +
-                "Live channels are left alone either way.",
-            color = Muted,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
+    SettingGroup("Show pages") {
+        val level = themeLevel(prefs)
+        SettingRow(
+            title = "Theme music",
+            value = THEME_LEVELS.getOrNull(level)?.first ?: "Off",
+            description = "Plays a show's theme song on its page.",
+            onClick = {
+                // Off, then each volume in turn, then off again.
+                val next = level + 1
+                when {
+                    level < 0 -> {
+                        onToggleThemeMusic()
+                        onNudgeThemeVolume(THEME_LEVELS.first().second - prefs.themeVolume)
+                    }
+                    next < THEME_LEVELS.size ->
+                        onNudgeThemeVolume(THEME_LEVELS[next].second - prefs.themeVolume)
+                    else -> onToggleThemeMusic()
+                }
+            },
         )
-        Buttons {
-            TvActionButton(
-                label = if (prefs.matchFrameRate) "Turn off" else "Turn on",
-                onClick = onToggleMatchFrameRate,
-                emphasised = prefs.matchFrameRate,
-            )
-        }
-    }
-
-    Panel(title = "Theme music") {
-        FactLine("Show themes", if (prefs.themeMusic) "On" else "Off")
-        FactLine("Volume", "${(prefs.themeVolume * 100).roundToInt()}%")
-        Text(
-            text = "A show's title music plays quietly under its page, where the server has " +
-                "one. It stops the moment anything is played, and never takes sound away " +
-                "from whatever else the television is doing. A tenth is about right; this " +
-                "is a raw gain, so twice the number is a great deal more than twice as loud.",
-            color = Muted,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
-        )
-        Buttons {
-            TvActionButton(
-                label = if (prefs.themeMusic) "Turn off" else "Turn on",
-                onClick = onToggleThemeMusic,
-                emphasised = prefs.themeMusic,
-            )
-            TvActionButton(
-                label = "Quieter",
-                onClick = { onNudgeThemeVolume(-Settings.THEME_VOLUME_STEP) },
-            )
-            TvActionButton(
-                label = "Louder",
-                onClick = { onNudgeThemeVolume(Settings.THEME_VOLUME_STEP) },
-            )
-        }
-    }
-
-    Panel(title = "Up Next") {
-        FactLine(
-            "Countdown",
-            if (prefs.upNextSeconds > 0) "${prefs.upNextSeconds} seconds" else "Off — waits for you",
-        )
-        Buttons {
-            TvActionButton(label = "Shorter", onClick = { onNudgeUpNext(-Settings.UP_NEXT_STEP) })
-            TvActionButton(label = "Longer", onClick = { onNudgeUpNext(Settings.UP_NEXT_STEP) })
-        }
     }
 }
+
+private val SUBTITLE_SIZES = listOf(0.7f, 0.8f, 0.9f, 1.0f, 1.2f, 1.4f)
+private val UP_NEXT_SECONDS = listOf(0, 5, 10, 15, 20, 30)
+private val THEME_LEVELS = listOf("Quiet" to 0.05f, "Medium" to 0.10f, "Loud" to 0.20f)
+
+/** The change that takes a value to the next of [steps], or back round to the first. */
+private fun nextStep(current: Float, steps: List<Float>): Float {
+    val next = steps.firstOrNull { it > current + 0.01f } ?: steps.first()
+    return next - current
+}
+
+/** Which of [THEME_LEVELS] the theme music is at, or -1 when it is off. */
+private fun themeLevel(prefs: PlayerPrefs): Int {
+    if (!prefs.themeMusic) return -1
+    return THEME_LEVELS.indices.minBy { kotlin.math.abs(THEME_LEVELS[it].second - prefs.themeVolume) }
+}
+
+private fun onOff(on: Boolean) = if (on) "On" else "Off"
 
 @Composable
 private fun LiveSection(
@@ -353,98 +361,67 @@ private fun LiveSection(
     onSignOutXtream: () -> Unit,
 ) {
     if (!live.isConnected) {
-        Panel(title = "Live TV") {
-            Text(
-                text = "No provider configured. The Live TV tab will ask for a panel address.",
-                color = Muted,
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
-            )
+        SettingGroup("Live TV") {
+            SettingRow(title = "Not signed in", description = "Sign in from the Live TV tab.")
         }
         return
     }
 
-    Panel(title = "Refresh") {
-        FactLine("Channels", "${live.categories.size} categories")
-        FactLine("Guide", guide.status.describe())
-        FactLine("Guide last imported", relativeTime(guide.importedAt))
-        Text(
-            text = "Providers add and drop channels without notice, and the guide goes stale " +
-                "on its own. Neither is refetched unless asked.",
-            color = Muted,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
+    if (live.error != null) ErrorNote(live.error)
+
+    SettingGroup("Channels and guide") {
+        SettingRow(
+            title = "Refresh channels",
+            first = true,
+            value = if (live.busy) "Refreshing…" else "${live.categories.size} categories",
+            onClick = onRefreshChannels,
         )
-        Buttons {
-            TvActionButton(
-                label = if (live.busy) "Refreshing…" else "Refresh channels",
-                onClick = onRefreshChannels,
-            )
-            TvActionButton(
-                label = if (guide.status is GuideStatus.Importing) "Importing…" else "Refresh guide",
-                onClick = onRefreshGuide,
-            )
-        }
+        SettingRow(
+            title = "Refresh TV guide",
+            value = guide.status.describe(guide.importedAt),
+            onClick = onRefreshGuide,
+        )
     }
 
-    Panel(title = "Provider") {
-        if (live.error != null) ErrorNote(live.error)
-        FactLine("Panel", live.credentials?.base ?: "—")
-        FactLine("Account", live.account?.status ?: "—")
-        FactLine(
-            "Connections",
-            "${live.account?.activeConnections ?: "?"} of ${live.account?.maxConnections ?: "?"} in use",
+    SettingGroup("Watching") {
+        SettingRow(
+            title = "Stream type",
+            value = live.format.label,
+            description = "Try the other if channels stutter or won't start.",
+            onClick = onToggleFormat,
         )
-        FactLine("Expires", live.account?.expiresAt?.let { epochLabel(it) } ?: "—")
-        FactLine("Stream container", live.format.label)
-        FactLine(
-            "Guide preview",
-            if (prefs.guidePreview) "On — uses one connection while browsing" else "Off",
+        SettingRow(
+            title = "Guide preview",
+            value = onOff(prefs.guidePreview),
+            description = "Plays the highlighted channel in the guide.",
+            onClick = onToggleGuidePreview,
         )
-        Text(
-            text = "HLS fetches the stream a segment at a time, so a moment's trouble costs a " +
-                "segment rather than the whole connection, and a player that falls behind " +
-                "can rejoin by itself. The cost is a slower start and sitting further " +
-                "behind live. MPEG-TS is one continuous connection: quicker onto a channel " +
-                "and closer to the action, with nothing to rejoin when it breaks.",
-            color = Muted,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
-        )
-        FactLine(
-            "Multiview layout",
-            if (prefs.multiviewLayout == Settings.LAYOUT_FOCUS)
-                "Focus — the one you are hearing takes most of the screen"
+        SettingRow(
+            title = "Multiview layout",
+            value = if (prefs.multiviewLayout == Settings.LAYOUT_FOCUS) "Focus" else "Grid",
+            description = if (prefs.multiviewLayout == Settings.LAYOUT_FOCUS)
+                "The channel you're hearing gets most of the screen."
             else
-                "Grid — equal room for each",
+                "Every channel gets an equal share of the screen.",
+            onClick = onToggleMultiviewLayout,
         )
-        Text(
-            text = "Multiview opens one connection per channel, so four tiles needs four of " +
-                "them — and this account allows " +
-                "${live.account?.maxConnections ?: "?"}. In the grid, OK fills the screen " +
-                "with a tile and back returns to it; holding OK swaps what is in it.",
-            color = Muted,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
+    }
+
+    SettingGroup("Provider") {
+        SettingRow(title = "Server", value = live.credentials?.base?.let(::hostOf) ?: "—")
+        SettingRow(
+            title = "Account",
+            value = listOfNotNull(
+                live.account?.status?.replaceFirstChar { it.uppercase() },
+                live.account?.expiresAt?.let { "until ${epochLabel(it)}" },
+            ).joinToString(" · ").ifEmpty { "—" },
         )
-        Buttons {
-            TvActionButton(
-                label = if (prefs.multiviewLayout == Settings.LAYOUT_FOCUS) "Use grid"
-                else "Use focus layout",
-                onClick = onToggleMultiviewLayout,
-            )
-        }
-        Buttons {
-            TvActionButton(
-                label = "Use ${if (live.format == StreamFormat.TS) "HLS" else "MPEG-TS"}",
-                onClick = onToggleFormat,
-            )
-            TvActionButton(
-                label = if (prefs.guidePreview) "Preview off" else "Preview on",
-                onClick = onToggleGuidePreview,
-            )
-            TvActionButton(label = "Sign out", onClick = onSignOutXtream)
-        }
+        SettingRow(
+            title = "Connections",
+            value = "${live.account?.activeConnections ?: "?"} of ${live.account?.maxConnections ?: "?"} in use",
+            description = "Each channel on screen uses one, including the guide preview.",
+        )
+        SettingRow(title = "Sign out of live TV", onClick = onSignOutXtream)
     }
 }
 
@@ -456,285 +433,319 @@ private fun PlexPanel(
     onSignOutPlex: () -> Unit,
 ) {
     if (!plex.isConnected) {
-        Panel(title = "Plex") {
-            Text(
-                text = "Not signed in. The Home, Movies and TV Shows tabs will offer to link an account.",
-                color = Muted,
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
-            )
+        SettingGroup("Plex") {
+            SettingRow(title = "Not signed in", description = "Sign in from the Home tab.")
         }
         return
     }
 
-    Panel(title = "Server") {
-        if (plex.error != null) ErrorNote(plex.error)
-        FactLine("Connected to", plex.serverName ?: "unknown")
-        FactLine("Address", plex.baseUrl ?: "—")
-        FactLine(
-            "Libraries",
-            plex.sections.joinToString(", ") { "${it.title} (${it.type})" }.ifEmpty { "none" },
-        )
-        Buttons {
-            TvActionButton(label = "Sign out of Plex", onClick = onSignOutPlex)
-        }
+    if (plex.error != null) ErrorNote(plex.error)
+
+    SettingGroup("Server") {
+        SettingRow(title = "Server", value = plex.serverName ?: "—")
+        SettingRow(title = "Connection", value = connectionKind(plex.baseUrl))
     }
 
     if (plex.libraryChoices.size > 1) {
-        Panel(title = "Libraries in the tab menu") {
-            Text(
-                text = if (plex.favouriteSections.isEmpty())
-                    "Every library on every server is offered. Pick some and only those will be."
-                else
-                    "Only the picked libraries are offered. Clear them all to go back to " +
-                        "offering every one.",
-                color = Muted,
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
-            )
-            Column(
-                modifier = Modifier.padding(top = 8.dp).focusGroup(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                plex.libraryChoices.forEach { choice ->
-                    val picked = choice.id in plex.favouriteSections
-                    val name = if (plex.namesNeedServer) {
-                        "${choice.section.title} — ${choice.serverName}"
-                    } else {
-                        choice.section.title
-                    }
-                    TvActionButton(
-                        label = "${if (picked) "★" else "☆"}  $name",
-                        onClick = { onToggleFavourite(choice) },
-                        emphasised = picked,
-                    )
-                }
+        SettingGroup(
+            "Libraries",
+            note = "Pinned libraries are the only ones shown in the Movies and TV Shows " +
+                "menus. With none pinned, all of them are.",
+        ) {
+            plex.libraryChoices.forEachIndexed { index, choice ->
+                val pinned = choice.id in plex.favouriteSections
+                SettingRow(
+                    first = index == 0,
+                    title = if (plex.namesNeedServer) "${choice.section.title} · ${choice.serverName}"
+                    else choice.section.title,
+                    value = if (pinned) "Pinned" else "",
+                    onClick = { onToggleFavourite(choice) },
+                )
             }
         }
     }
 
     if (plex.servers.size > 1) {
-        Panel(title = "Other servers") {
-            Text(
-                text = "This account can reach ${plex.servers.size} servers. Their libraries are " +
-                    "offered together in the Movies and TV Shows menus, so picking a library " +
-                    "is usually all that is needed and this is the long way round. Switching " +
-                    "replaces every library, row and page with that server's own.",
-                color = Muted,
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
-            )
-            Column(
-                modifier = Modifier.padding(top = 8.dp).focusGroup(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                plex.servers.forEach { server ->
-                    TvActionButton(
-                        label = if (server.name == plex.serverName) "${server.name} — in use"
-                        else "Switch to ${server.name}",
-                        onClick = { onSwitchServer(server) },
-                        emphasised = server.name == plex.serverName,
-                    )
-                }
+        SettingGroup("Servers") {
+            plex.servers.forEach { server ->
+                val current = server.name == plex.serverName
+                SettingRow(
+                    title = server.name,
+                    value = if (current) "In use" else "Switch",
+                    onClick = { if (!current) onSwitchServer(server) },
+                )
             }
         }
     }
+
+    SettingGroup("Account") {
+        SettingRow(
+            title = "Sign out of Plex",
+            first = plex.libraryChoices.size <= 1,
+            onClick = onSignOutPlex,
+        )
+    }
 }
+
+/** Whether the server is being reached on the home network, which is what matters. */
+private fun connectionKind(base: String?): String {
+    val host = base?.let(::hostOf) ?: return "—"
+    val local = Regex("""^(10|127|192\.168|172\.(1[6-9]|2\d|3[01]))[.-]""")
+    return if (local.containsMatchIn(host.replace('-', '.'))) "Home network" else "Internet"
+}
+
+private fun hostOf(url: String): String =
+    url.substringAfter("://").substringBefore('/').substringBefore(':')
 
 @Composable
 private fun UpdatesSection(
     update: UpdateStatus,
-    updateUrl: String,
     onCheck: () -> Unit,
     onInstall: () -> Unit,
 ) {
-    Panel(title = "This build") {
-        FactLine("Version", "${BuildConfig.VERSION_NAME}  (build ${BuildConfig.VERSION_CODE})")
-        FactLine("Update address", updateUrl)
-        Text(
-            text = "Releases are built and published by GitHub, so this address always " +
-                "points at the newest one.",
-            color = Muted,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
-        )
-    }
-
-    Panel(title = "Check") {
+    SettingGroup("Reely") {
+        SettingRow(title = "Version", value = BuildConfig.VERSION_NAME)
         when (update) {
-            is UpdateStatus.Idle -> Text(
-                text = "Nothing checked yet.",
-                color = Muted,
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
+            is UpdateStatus.Idle ->
+                SettingRow(title = "Check for updates", first = true, onClick = onCheck)
+
+            is UpdateStatus.Checking ->
+                SettingRow(title = "Check for updates", value = "Checking…", first = true, onClick = {})
+
+            is UpdateStatus.UpToDate ->
+                SettingRow(title = "Check for updates", value = "Up to date", first = true, onClick = onCheck)
+
+            is UpdateStatus.Available -> SettingRow(
+                title = "Download and install",
+                value = listOfNotNull(
+                    update.info.versionName?.let { "Version $it" },
+                    update.info.sizeBytes.takeIf { it > 0 }?.let { "${it / 1_048_576} MB" },
+                ).joinToString(" · "),
+                description = "A new version is available.",
+                first = true,
+                onClick = onInstall,
             )
 
-            is UpdateStatus.Checking -> Text(
-                text = "Asking the server what it is holding…",
-                color = Muted,
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
+            is UpdateStatus.Unlabelled -> SettingRow(
+                title = "Download and install",
+                value = update.info.sizeBytes.takeIf { it > 0 }?.let { "${it / 1_048_576} MB" } ?: "",
+                description = "A version is available, but its number couldn't be read.",
+                first = true,
+                onClick = onInstall,
             )
-
-            is UpdateStatus.UpToDate -> Text(
-                text = "This is the build published there. Nothing to download.",
-                color = Muted,
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
-            )
-
-            is UpdateStatus.Available -> {
-                FactLine(
-                    "Published",
-                    "${update.info.versionName ?: "?"}  (build ${update.info.versionCode})",
-                )
-                if (update.info.sizeBytes > 0) {
-                    FactLine("Size", "${update.info.sizeBytes / 1_048_576} MB")
-                }
-                update.info.published?.let { FactLine("Dated", it) }
-                update.info.notes?.let {
-                    Text(text = it, color = Muted, fontSize = 14.sp, lineHeight = 20.sp)
-                }
-            }
-
-            is UpdateStatus.Unlabelled -> {
-                Text(
-                    text = "There is a build at that address, but nothing saying which one. " +
-                        "Whether it is newer than this one cannot be known without " +
-                        "downloading it, so installing it is a decision rather than an " +
-                        "upgrade. Publishing reely-tv.json beside the APK fixes that — " +
-                        "the release build writes one.",
-                    color = Muted,
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                )
-                if (update.info.sizeBytes > 0) {
-                    FactLine("Size", "${update.info.sizeBytes / 1_048_576} MB")
-                }
-                update.info.published?.let { FactLine("Dated", it) }
-            }
 
             is UpdateStatus.Downloading -> {
                 val total = update.total.takeIf { it > 0 } ?: 1
-                FactLine("Downloading", "${update.read * 100 / total}%")
+                SettingRow(title = "Downloading", value = "${update.read * 100 / total}%")
             }
 
-            is UpdateStatus.Handed -> Text(
-                text = "Handed to the installer. Fire OS asks once for permission to install " +
-                    "from Reely before it will go ahead.",
-                color = Muted,
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
+            is UpdateStatus.Handed -> SettingRow(
+                title = "Ready to install",
+                description = "Confirm on the screen that appears. The first time, Fire TV " +
+                    "asks you to allow installs from Reely.",
             )
 
-            is UpdateStatus.Failed -> ErrorNote(update.message)
-        }
-
-        Buttons {
-            TvActionButton(
-                label = if (update is UpdateStatus.Checking) "Checking…" else "Check for update",
-                onClick = onCheck,
-            )
-            when (update) {
-                is UpdateStatus.Available -> TvActionButton(
-                    label = "Download and install",
-                    onClick = onInstall,
-                    emphasised = true,
-                )
-
-                is UpdateStatus.Unlabelled -> TvActionButton(
-                    label = "Install it anyway",
-                    onClick = onInstall,
-                )
-
-                else -> Unit
+            is UpdateStatus.Failed -> {
+                SettingRow(title = "Check for updates", first = true, onClick = onCheck)
+                ErrorNote(update.message)
             }
         }
     }
+}
+
+/** Licences shipped in assets/licenses, and what they cover. */
+private enum class Licence(val title: String, val kind: String, val file: String, val covers: String?) {
+    FFMPEG("FFmpeg", "LGPL 2.1", "ffmpeg-LGPL-2.1.txt", "Decodes Dolby and DTS sound."),
+    GEIST("Geist", "SIL Open Font License", "geist-OFL.txt", "The typeface."),
+    APACHE(
+        "Open-source components",
+        "Apache 2.0",
+        "apache-2.0.txt",
+        "Android Jetpack, Media3, Kotlin, OkHttp and Coil.",
+    ),
 }
 
 @Composable
 private fun AboutSection() {
-    Panel(title = "Playback") {
-        Text(
-            text = "Direct play streams the file as it sits on the server and asks this device " +
-                "to decode it, which is the best picture and no work for the server. When the " +
-                "device cannot decode something, the server re-encodes it on the fly — which " +
-                "is what Auto falls back to, and what Always transcode does from the start. " +
-                "A transcode burns subtitles into the picture, so image subtitles play too.",
-            color = Muted,
-            fontSize = 14.sp,
-            lineHeight = 21.sp,
-        )
+    var reading by remember { mutableStateOf<Licence?>(null) }
+    val open = reading
+    if (open != null) {
+        LicenceText(open, onClose = { reading = null })
+        return
     }
-    Panel(title = "Sound") {
-        Text(
-            text = "Sound this device cannot decode — Dolby Digital, Dolby Digital Plus, " +
-                "TrueHD, DTS — is decoded by the app itself, using FFmpeg, so it plays " +
-                "instead of playing silent. A television or soundbar that takes it " +
-                "directly is still sent it untouched. FFmpeg is licensed under the LGPL " +
-                "2.1; its licence and notice are included in the app.",
-            color = Muted,
-            fontSize = 14.sp,
-            lineHeight = 21.sp,
-        )
-    }
-    Panel(title = "The guide") {
-        Text(
-            text = "The provider's whole XMLTV guide is read straight into a local database as " +
-                "it downloads, so a guide of several hundred thousand programmes never has to " +
-                "fit in memory at once. Only the stretch on screen is held.",
-            color = Muted,
-            fontSize = 14.sp,
-            lineHeight = 21.sp,
-        )
-    }
-}
 
-@Composable
-private fun Panel(title: String, content: @Composable () -> Unit) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(SurfaceRaised)
-            .border(1.dp, Line, RoundedCornerShape(12.dp))
-            .padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.padding(start = 4.dp, bottom = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        SectionHeading(title, modifier = Modifier.padding(bottom = 6.dp))
-        content()
+        Text(text = "reely", color = Accent, fontSize = 40.sp, lineHeight = 44.sp, fontWeight = FontWeight.Bold)
+        Text(text = "Your Plex library and live TV, in one place.", color = Chalk, style = ReelyType.Meta)
+        Text(
+            text = "Version ${BuildConfig.VERSION_NAME}",
+            color = Muted,
+            style = ReelyType.Label,
+        )
     }
+
+    SettingGroup("Licences") {
+        Licence.entries.forEach { licence ->
+            SettingRow(
+                title = licence.title,
+                value = licence.kind,
+                description = licence.covers,
+                first = licence == Licence.entries.first(),
+                onClick = { reading = licence },
+            )
+        }
+    }
+    Text(
+        text = "FFmpeg is used unmodified. Its source is at github.com/FFmpeg/FFmpeg (n6.0.1).",
+        color = Faint,
+        style = ReelyType.Label,
+        modifier = Modifier.padding(start = 4.dp),
+    )
 }
 
+/** A licence's full text, scrolled with up and down; back returns to the list. */
 @Composable
-private fun Buttons(content: @Composable () -> Unit) {
-    Row(
-        modifier = Modifier.padding(top = 8.dp).focusGroup(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        content()
+private fun LicenceText(licence: Licence, onClose: () -> Unit) {
+    val context = LocalContext.current
+    val text = remember(licence) {
+        runCatching {
+            context.assets.open("licenses/${licence.file}").bufferedReader().use { it.readText() }
+        }.getOrDefault("")
+    }
+    val scroll = rememberScrollState()
+    val focus = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
+    BackHandler(onBack = onClose)
+    LaunchedEffect(licence) { focus.requestWhenReady() }
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(text = "${licence.title} · ${licence.kind}", color = Chalk, style = ReelyType.RowTitle)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(360.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(SurfaceRaised)
+                .focusRequester(focus)
+                .focusable()
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    val step = when (event.key) {
+                        Key.DirectionDown -> 240
+                        Key.DirectionUp -> -240
+                        else -> return@onPreviewKeyEvent false
+                    }
+                    scope.launch { scroll.animateScrollBy(step.toFloat()) }
+                    true
+                }
+                .verticalScroll(scroll)
+                .padding(18.dp),
+        ) {
+            Text(text = text, color = Muted, style = ReelyType.Label)
+        }
+        Text(text = "Up and down to scroll · Back to return", color = Faint, style = ReelyType.Label)
     }
 }
 
-private fun GuideStatus.describe(): String = when (this) {
-    is GuideStatus.Idle -> "Not loaded yet"
-    is GuideStatus.Importing ->
-        if (written == 0 && scanned == 0) "Downloading…"
-        else "Importing… $written kept of $scanned read"
+private val LocalFirstOption = staticCompositionLocalOf<FocusRequester?> { null }
 
-    is GuideStatus.Ready -> "$count programmes"
-    is GuideStatus.Failed -> message
+/** A titled block of setting rows, with an optional line of explanation under it. */
+@Composable
+private fun SettingGroup(title: String, note: String? = null, content: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = title.uppercase(),
+            color = Faint,
+            style = ReelyType.Label,
+            letterSpacing = 1.2.sp,
+            modifier = Modifier.padding(start = 4.dp, bottom = 2.dp),
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(SurfaceRaised)
+                .padding(4.dp)
+                .focusGroup(),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) { content() }
+        if (note != null) {
+            Text(text = note, color = Faint, style = ReelyType.Label, modifier = Modifier.padding(start = 4.dp))
+        }
+    }
 }
 
-private fun playbackModeLabel(mode: String): String = when (mode) {
-    Settings.MODE_DIRECT -> "Direct play only"
-    Settings.MODE_TRANSCODE -> "Always transcode"
-    else -> "Auto — transcode only if direct play fails"
+/**
+ * One setting: its name, a line of explanation, and its value on the right. OK changes it.
+ * Without [onClick] it only reports, and focus passes over it.
+ */
+@Composable
+private fun SettingRow(
+    title: String,
+    value: String? = null,
+    description: String? = null,
+    /** The page's first option: where focus lands coming in from the sections. */
+    first: Boolean = false,
+    onClick: (() -> Unit)? = null,
+) {
+    val firstOption = LocalFirstOption.current
+    var focused by remember { mutableStateOf(false) }
+    val colors = pillColors(focused)
+    val base = Modifier
+        .fillMaxWidth()
+        .clip(RoundedCornerShape(10.dp))
+    val row = if (onClick != null) {
+        base
+            .then(if (first && firstOption != null) Modifier.focusRequester(firstOption) else Modifier)
+            .onFocusChanged { focused = it.isFocused }
+            .background(if (focused) colors.fill else Color.Transparent)
+            .clickable(onClick = onClick)
+    } else {
+        base
+    }
+    Row(
+        modifier = row.padding(horizontal = 14.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = title,
+                color = if (focused) Ink else Chalk,
+                style = ReelyType.Meta,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (description != null) {
+                Text(
+                    text = description,
+                    color = if (focused) Ink.copy(alpha = 0.7f) else Muted,
+                    style = ReelyType.Label,
+                )
+            }
+        }
+        if (!value.isNullOrEmpty()) {
+            Text(
+                text = value,
+                color = if (focused) Ink else Muted,
+                style = ReelyType.Meta,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 300.dp),
+            )
+        }
+    }
 }
 
-private fun bitrateLabel(kbps: Int): String =
-    if (kbps <= 0) "Original quality" else "${kbps / 1_000} Mbps"
+private fun GuideStatus.describe(importedAt: Long): String = when (this) {
+    is GuideStatus.Idle -> "Not loaded"
+    is GuideStatus.Importing -> "Updating…"
+    is GuideStatus.Ready -> "Updated ${relativeTime(importedAt)}"
+    is GuideStatus.Failed -> "Couldn't update"
+}
 
 private val dayFormat = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
 
@@ -748,8 +759,10 @@ private fun relativeTime(epochSeconds: Long): String {
     val ago = System.currentTimeMillis() / 1_000 - epochSeconds
     return when {
         ago < 90 -> "just now"
-        ago < 3_600 -> "${ago / 60} minutes ago"
-        ago < 86_400 -> "${ago / 3_600} hours ago"
-        else -> "${ago / 86_400} days ago"
+        ago < 3_600 -> plural(ago / 60, "minute") + " ago"
+        ago < 86_400 -> plural(ago / 3_600, "hour") + " ago"
+        else -> plural(ago / 86_400, "day") + " ago"
     }
 }
+
+private fun plural(count: Long, unit: String) = if (count == 1L) "1 $unit" else "$count ${unit}s"

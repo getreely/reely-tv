@@ -270,7 +270,7 @@ object PlexApi {
             .build()
         Http.client.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
-            require(response.isSuccessful) { "plex.tv returned ${response.code} asking for a link code" }
+            require(response.isSuccessful) { "Couldn't get a sign-in code from Plex (error ${response.code}). Try again." }
             val json = JSONObject(body)
             PlexPin(json.getLong("id"), json.getString("code"))
         }
@@ -303,7 +303,7 @@ object PlexApi {
             .build()
         Http.client.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
-            require(response.isSuccessful) { "plex.tv returned ${response.code} listing servers" }
+            require(response.isSuccessful) { "Couldn't load your Plex servers (error ${response.code}). Try again." }
             val resources = JSONArray(body)
             buildList {
                 for (index in 0 until resources.length()) {
@@ -758,7 +758,7 @@ object PlexApi {
             "&identifier=com.plexapp.plugins.library&X-Plex-Token=$token"
         val request = Request.Builder().url(url).header("accept", "application/json").get().build()
         Http.client.newCall(request).execute().use { response ->
-            require(response.isSuccessful) { "Plex returned ${response.code} marking that watched" }
+            require(response.isSuccessful) { "Plex couldn't update the watched status (error ${response.code})." }
         }
         Unit
     }
@@ -980,7 +980,7 @@ object PlexApi {
             .build()
         Http.client.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
-            require(response.isSuccessful) { "Plex server returned ${response.code}" }
+            require(response.isSuccessful) { "Your Plex server returned an error (${response.code})." }
             return JSONObject(body).optJSONObject("MediaContainer") ?: JSONObject()
         }
     }

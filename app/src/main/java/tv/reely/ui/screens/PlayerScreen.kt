@@ -1432,21 +1432,21 @@ internal fun StatsPanel(
             modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(text = "Playback", color = Chalk, style = ReelyType.Headline, modifier = Modifier.weight(1f))
+            Text(text = "Playback info", color = Chalk, style = ReelyType.Headline, modifier = Modifier.weight(1f))
             TvActionButton(label = "Close", onClick = onClose)
         }
         StatLine(
             "Method",
             when {
                 playback.isLive -> "Direct play  ·  ${playback.format.label}"
-                playback.audioConverted -> "Direct stream  ·  audio converted by server"
+                playback.audioConverted -> "Direct stream  ·  audio converted"
                 playback.transcoding -> "Transcoding"
                 else -> "Direct play"
             },
         )
         // Whether the server sent intro and credits markers at all, which is the only
         // way to tell a server that has not detected them from a button that failed.
-        if (!playback.isLive) StatLine("Skip markers", describeMarkers(playback.markers))
+        if (!playback.isLive) StatLine("Intro & credits", describeMarkers(playback.markers))
         StatLine("Source", playback.serverBase?.removePrefix("http://")?.removePrefix("https://")
             ?: "—")
 
@@ -1473,7 +1473,7 @@ internal fun StatsPanel(
                 else -> "—"
             },
         )
-        if (unplayable) StatLine("Status", "Can't be played on this device")
+        if (unplayable) StatLine("Status", "Not supported on this device")
         StatLine(
             "Channels",
             (audio ?: fileAudio)?.channelCount?.takeIf { it > 0 }?.let { count ->
@@ -1490,7 +1490,7 @@ internal fun StatsPanel(
         StatLine("Bitrate", bitrate(audio?.bitrate ?: -1))
         // What this device said it plays — by decoder, or passed over HDMI to whatever
         // is plugged in — which is what decided whether the sound above was converted.
-        StatLine("Device plays", deviceSound.ifEmpty { "—" })
+        StatLine("Supported audio", deviceSound.ifEmpty { "—" })
     }
 }
 
@@ -1581,9 +1581,9 @@ internal fun TrackPanel(
         if (choices.isEmpty()) {
             Text(
                 text = if (panel == Panel.SUBTITLES)
-                    "This file has no text subtitle tracks. Image subtitles would have to be burned in by the server."
+                    "No subtitles are available for this video."
                 else
-                    "This file has only one audio track.",
+                    "There's only one audio track.",
                 color = Muted,
                 style = ReelyType.Meta,
             )
@@ -1727,13 +1727,13 @@ private fun explainSilence(tracks: Tracks, playback: Playback, prefs: PlayerPref
         ?: "This sound"
     return when {
         playback.isLive ->
-            "No sound: this channel's audio is $sound, which this device can't play."
+            "No sound: this channel's audio ($sound) isn't supported on this device."
         playback.transcoding ->
-            "No sound: the server couldn't convert this file's audio ($sound) into something this device plays."
+            "No sound: Plex couldn't convert this audio ($sound)."
         prefs.playbackMode == Settings.MODE_DIRECT ->
-            "No sound: this file's audio is $sound, which this device can't play. " +
-                "Set playback to Auto in Settings and the server will convert it."
-        else -> "No sound: this file's audio is $sound, which this device can't play."
+            "No sound: this audio ($sound) isn't supported on this device. " +
+                "Set Playback mode to Automatic in Settings to have Plex convert it."
+        else -> "No sound: this audio ($sound) isn't supported on this device."
     }
 }
 
@@ -1754,7 +1754,7 @@ private fun channelLayout(count: Int): String? = when (count) {
 
 /** The server's intro and credits markers, or a plain statement that it sent none. */
 private fun describeMarkers(markers: List<tv.reely.plex.PlexMarker>): String {
-    if (markers.isEmpty()) return "None from the server"
+    if (markers.isEmpty()) return "Not detected"
     return markers.joinToString("  ·  ") { marker ->
         val kind = when {
             marker.isIntro -> "Intro"
@@ -1767,17 +1767,17 @@ private fun describeMarkers(markers: List<tv.reely.plex.PlexMarker>): String {
 
 private fun describe(error: PlaybackException): String = when (val cause = error.cause) {
     is HttpDataSource.InvalidResponseCodeException -> when (cause.responseCode) {
-        401, 403 -> "Refused this stream (HTTP ${cause.responseCode}). Either these credentials " +
-            "aren't valid for it, or every connection your subscription allows is already in use."
+        401, 403 -> "This couldn't be opened. If it's a live channel, your subscription may " +
+            "already be using all its connections — close another stream and try again."
 
-        404 -> "That stream doesn't exist (HTTP 404)."
-        else -> "The server returned HTTP ${cause.responseCode}."
+        404 -> "This isn't available right now."
+        else -> "This couldn't be played (error ${cause.responseCode})."
     }
 
-    is HttpDataSource.HttpDataSourceException ->
-        "Couldn't reach the stream: ${cause.message ?: "no response"}"
+    is HttpDataSource.HttpDataSourceException -> "Couldn't connect. Check your network and try again."
 
-    else -> error.errorCodeName + (error.message?.let { " — $it" } ?: "")
+    // Anything else is the player's own; its code is kept for anybody reporting it.
+    else -> "This couldn't be played (${error.errorCodeName})."
 }
 
 /**

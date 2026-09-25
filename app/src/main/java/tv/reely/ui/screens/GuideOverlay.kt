@@ -404,12 +404,12 @@ private fun ChannelMenu(
         if (canAddTile) {
             TvActionButton(
                 label = if (pickVerb == "Add") "Add beside what is playing"
-                else "Put this channel in that tile",
+                else "Replace the channel in that tile",
                 onClick = onAdd,
             )
         } else {
             Text(
-                text = "Four channels is the most that fit.",
+                text = "You can watch up to four channels at once.",
                 color = Faint,
                 fontSize = 14.sp,
                 lineHeight = 19.sp,

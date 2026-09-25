@@ -299,7 +299,7 @@ fun LibraryScreen(
                     if (view == LibraryView.HOME) {
                         if (home.busy && resumable.isEmpty() && browse.released.isEmpty()) {
                             item(span = { GridItemSpan(maxLineSpan) }) {
-                                EmptyNote("Reading your library…")
+                                EmptyNote("Loading…")
                             }
                         }
                         return@LazyVerticalGrid

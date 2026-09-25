@@ -80,7 +80,7 @@ fun SearchScreen(
                     when {
                         search.busy -> EmptyNote("Searching…")
                         search.query.isBlank() ->
-                            EmptyNote("Films, shows, episodes and live channels, all at once.")
+                            EmptyNote("Search movies, shows and live channels.")
 
                         search.results.isEmpty() && search.channels.isEmpty() ->
                             EmptyNote("Nothing matched \"${search.query}\".")

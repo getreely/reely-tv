@@ -1,5 +1,8 @@
 package tv.reely.screens
 
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.onRoot
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -38,19 +41,29 @@ class PageShots {
 
     @Before fun setUp() { Shots.onlyWhenAsked(); Shots.syncImages() }
 
-    private fun settings() = compose.setContent {
+    private val connectedLive = LiveState(
+        credentials = tv.reely.xtream.XtreamCredentials("http://line.example.tv:8080", "u", "p"),
+        account = tv.reely.xtream.XtreamAccount("Active", "2", "1", "1798761600"),
+        categories = List(24) { tv.reely.xtream.XtreamCategory("c$it", "Category $it") },
+    )
+    private val readyGuide = GuideState(
+        status = tv.reely.ui.GuideStatus.Ready(182_000),
+        importedAt = System.currentTimeMillis() / 1_000 - 3 * 3_600,
+    )
+
+    private fun settings(update: UpdateStatus = UpdateStatus.Idle) = compose.setContent {
         ReelyTheme {
             Shots.RemoteInput()
             Box(Modifier.fillMaxSize().background(Ink)) {
                 SettingsScreen(
                     plex = PlexState(baseUrl = "http://server", serverToken = "t", token = "t", serverName = "Living Room"),
-                    live = LiveState(), guide = GuideState(), prefs = PlayerPrefs(),
+                    live = connectedLive, guide = readyGuide, prefs = PlayerPrefs(themeMusic = true),
                     onSignOutPlex = {}, onSignOutXtream = {}, onSwitchServer = {}, onToggleFavourite = {},
                     onToggleFormat = {}, onNudgeSubtitleScale = {}, onToggleSubtitleBackground = {},
                     onNudgeUpNext = {}, onToggleGuidePreview = {}, onCyclePlaybackMode = {},
                     onCycleMaxBitrate = {}, onToggleMultiviewLayout = {}, onToggleThemeMusic = {},
                     onToggleMatchFrameRate = {}, onToggleLargerBuffer = {}, onNudgeThemeVolume = {}, onRefreshChannels = {},
-                    onRefreshGuide = {}, update = UpdateStatus.Idle,
+                    onRefreshGuide = {}, update = update,
                     updateUrl = "https://github.com/getreely/reely-tv/releases/latest/download/reely-tv.apk",
                     onCheckForUpdate = {}, onInstallUpdate = {},
                 )
@@ -58,13 +71,57 @@ class PageShots {
         }
     }
 
-    @Test fun settingsVideo() { settings(); Shots.save(compose, "settings-video") }
+    /** Onto a section, then right into its options, as the remote does it. */
+    @OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
+    private fun openSection(name: String, @Suppress("UNUSED_PARAMETER") focusOn: String = "") {
+        compose.onNodeWithText(name).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(name).requestFocus()
+        compose.waitForIdle()
+        compose.onRoot().performKeyInput { pressKey(androidx.compose.ui.input.key.Key.DirectionRight) }
+        compose.waitForIdle()
+    }
+
+    @Test fun settingsPlayback() {
+        settings()
+        openSection("Playback")
+        Shots.save(compose, "settings-playback")
+    }
+
+    @Test fun settingsLive() {
+        settings()
+        openSection("Live TV", "Refresh TV guide")
+        Shots.save(compose, "settings-live")
+    }
+
+    @Test fun settingsPlex() {
+        settings()
+        openSection("Plex", "Sign out of Plex")
+        Shots.save(compose, "settings-plex")
+    }
 
     @Test fun settingsUpdates() {
-        settings()
-        compose.onNodeWithText("Updates").performClick()
-        compose.onNodeWithText("Check for update").requestFocus()
+        settings(
+            UpdateStatus.Available(
+                tv.reely.core.UpdateInfo(url = "", versionCode = 1111, versionName = "0.35.0", notes = null, sizeBytes = 14_400_000, published = null),
+            ),
+        )
+        openSection("Updates", "Download and install")
         Shots.save(compose, "settings-updates")
+    }
+
+    @Test fun settingsAbout() {
+        settings()
+        openSection("About", "FFmpeg")
+        Shots.save(compose, "settings-about")
+    }
+
+    @Test fun settingsLicence() {
+        settings()
+        openSection("About")
+        compose.onRoot().performKeyInput { pressKey(androidx.compose.ui.input.key.Key.DirectionCenter) }
+        compose.waitForIdle()
+        Shots.save(compose, "settings-licence")
     }
 
     @Test fun detailShow() {

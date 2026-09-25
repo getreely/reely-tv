@@ -619,7 +619,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             val base = PlexApi.firstReachable(server)
             if (base == null) {
                 updatePlex {
-                    it.copy(busy = false, error = "${server.name} did not answer. Is it awake?")
+                    it.copy(busy = false, error = "Couldn't reach ${server.name}. Make sure it's on and connected.")
                 }
                 return@launch
             }
@@ -648,7 +648,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
             }
-            updatePlex { it.copy(linkCode = null, error = "That link code expired. Start again.") }
+            updatePlex { it.copy(linkCode = null, error = "That code has expired. Try signing in again.") }
         }
     }
 
@@ -668,7 +668,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             updatePlex {
                 it.copy(
                     busy = false,
-                    error = "That account can't see any Plex server. Ask the owner to share the library with it.",
+                    error = "This Plex account doesn't have access to any servers.",
                 )
             }
             return
@@ -694,7 +694,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         updatePlex {
             it.copy(
                 busy = false,
-                error = "Found ${servers.size} server(s) but none answered. Is it awake and reachable?",
+                error = "Couldn't reach your Plex server. Make sure it's on and connected.",
             )
         }
     }
@@ -1043,7 +1043,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             }
             if (detail == null) {
                 _state.update {
-                    it.copy(detail = it.detail?.copy(busy = false, error = "Plex has nothing for that item."))
+                    it.copy(detail = it.detail?.copy(busy = false, error = "This title isn't available."))
                 }
                 return@launch
             }
@@ -1147,7 +1147,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
             if (resolved == null) {
-                reportPlaybackProblem("Plex returned no playable file for \"${item.title}\".")
+                reportPlaybackProblem("\"${item.title}\" can't be played.")
                 return@launch
             }
 
@@ -1761,7 +1761,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     fun signInXtream(host: String, username: String, password: String) {
         val base = XtreamApi.normalizeBase(host)
         if (base.isEmpty() || username.isBlank() || password.isBlank()) {
-            updateLive { it.copy(error = "Host, username and password are all required.") }
+            updateLive { it.copy(error = "Enter the server address, username and password.") }
             return
         }
         viewModelScope.launch {
@@ -2036,7 +2036,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         }
         val credentials = _state.value.live.credentials ?: run {
             _state.update {
-                it.copy(guide = it.guide.copy(status = GuideStatus.Failed("Sign in to a provider first.")))
+                it.copy(guide = it.guide.copy(status = GuideStatus.Failed("Sign in to your live TV provider first.")))
             }
             return
         }

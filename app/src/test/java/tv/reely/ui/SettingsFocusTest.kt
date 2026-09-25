@@ -58,7 +58,7 @@ class SettingsFocusTest {
 
     private fun optionsHaveFocus(): Boolean {
         val focused = compose.onAllNodes(isFocused()).fetchSemanticsNodes()
-        val sections = listOf("Video", "Live TV", "Plex", "Updates", "About", "TV Shows", "Settings tab")
+        val sections = listOf("Playback", "Live TV", "Plex", "Updates", "About", "TV Shows", "Settings tab")
         return focused.isNotEmpty() && focused.none { node ->
             sections.any { name -> hasText(name).matches(node) }
         }
@@ -95,7 +95,7 @@ class SettingsFocusTest {
         open()
         compose.runOnIdle { content.requestFocus() }
         compose.waitForIdle()
-        section("Video").assertIsFocused()
+        section("Playback").assertIsFocused()
     }
 
     @Test fun `left from the options goes back to their section, and sideways never reaches the tabs`() {

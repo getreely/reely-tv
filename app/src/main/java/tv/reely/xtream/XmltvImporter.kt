@@ -45,8 +45,8 @@ object XmltvImporter {
             .build()
 
         Http.bulk.newCall(request).execute().use { response ->
-            require(response.isSuccessful) { "The panel returned HTTP ${response.code} for its guide." }
-            val body = response.body ?: error("The panel sent no guide data.")
+            require(response.isSuccessful) { "Couldn't download the TV guide (error ${response.code})." }
+            val body = response.body ?: error("Your provider didn't send a TV guide.")
 
             val stream = maybeGunzip(BufferedInputStream(body.byteStream(), 64 * 1024))
             val import = store.beginImport()
