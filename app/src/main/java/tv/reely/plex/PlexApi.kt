@@ -259,14 +259,16 @@ object PlexApi {
         if (token != null) header("X-Plex-Token", token)
     }
 
-    suspend fun createPin(clientId: String): PlexPin = withContext(Dispatchers.IO) {
+    /**
+     * A sign-in PIN. The short kind is the four characters typed at plex.tv/link. The
+     * strong kind is a long string nobody could type, which is why it only travels
+     * inside [authUrl] — the address the QR code on the sign-in screen holds.
+     */
+    suspend fun createPin(clientId: String, strong: Boolean = false): PlexPin = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url("$PLEX_TV/api/v2/pins")
             .plexHeaders(clientId)
-            // Not a strong PIN: plex.tv/link takes the short four-character kind.
-            // A strong PIN is a long string meant for the app.plex.tv deep-link flow,
-            // which nobody can type into four boxes on a television.
-            .post(FormBody.Builder().add("strong", "false").build())
+            .post(FormBody.Builder().add("strong", strong.toString()).build())
             .build()
         Http.client.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
@@ -274,6 +276,16 @@ object PlexApi {
             val json = JSONObject(body)
             PlexPin(json.getLong("id"), json.getString("code"))
         }
+    }
+
+    /**
+     * Plex's own sign-in page for a strong PIN: open it on a phone, sign in or just
+     * confirm, and the PIN is approved without typing anything.
+     */
+    fun authUrl(clientId: String, code: String): String {
+        fun enc(value: String) = java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+        return "https://app.plex.tv/auth#?clientID=${enc(clientId)}&code=${enc(code)}" +
+            "&context%5Bdevice%5D%5Bproduct%5D=${enc(PRODUCT)}"
     }
 
     /** Returns the account token once the code has been entered, or null while still pending. */

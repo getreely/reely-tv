@@ -82,6 +82,14 @@ class SignInShots {
         "plex-sign-in-code",
     )
 
+    @Test fun plexSignInScan() = plex(
+        tv.reely.ui.PlexState(
+            linkCode = "K7QM",
+            linkUrl = tv.reely.plex.PlexApi.authUrl("0f3c9a2e-reely-tv", "4k7xq2m9vj3p8wz6rt5ynb1hd"),
+        ),
+        "plex-sign-in-scan",
+    )
+
     @Test fun liveSignIn() = signIn(LiveState(), "live-sign-in")
 
     @Test fun liveSignInError() =

@@ -4,6 +4,7 @@ import tv.reely.ui.theme.Ink
 import tv.reely.ui.theme.SurfaceHigh
 import tv.reely.ui.theme.ReelyType
 import tv.reely.ui.components.LoadingRing
+import tv.reely.ui.components.QrCode
 import tv.reely.ui.components.glass
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.shape.CircleShape
@@ -72,11 +73,13 @@ fun PlexSignInPanel(
             }
         }
 
+        val code = plex.linkCode
+        val scanUrl = plex.linkUrl.takeIf { code != null }
         Column(
-            modifier = Modifier.width(440.dp).glass().padding(24.dp),
+            // Wider while there is a QR code to sit beside the typed code.
+            modifier = Modifier.width(if (scanUrl != null) 560.dp else 440.dp).glass().padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            val code = plex.linkCode
             if (code == null) {
                 Text(
                     text = "You'll get a short code to enter on your phone or computer.",
@@ -90,31 +93,23 @@ fun PlexSignInPanel(
                     modifier = Modifier.fillMaxWidth(),
                 )
             } else {
-                Step(number = 1) {
-                    Text(text = "On your phone or computer, go to", color = Muted, style = ReelyType.Meta)
-                    Text(text = "plex.tv/link", color = Chalk, style = ReelyType.Headline)
-                }
-                Step(number = 2) {
-                    Text(text = "Enter this code", color = Muted, style = ReelyType.Meta)
-                    // One tile a character: easier to read across a room than a word.
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        code.forEach { char ->
-                            Box(
-                                modifier = Modifier
-                                    .size(width = 52.dp, height = 64.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(SurfaceHigh),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = char.toString(),
-                                    color = Chalk,
-                                    fontSize = 34.sp,
-                                    lineHeight = 40.sp,
-                                    fontWeight = FontWeight.Bold,
-                                )
-                            }
+                Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                    if (scanUrl != null) {
+                        // Scanned, it opens Plex's sign-in page with this TV already named:
+                        // sign in or confirm, and nothing needs typing.
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            QrCode(text = scanUrl, size = 136.dp)
+                            Text(text = "Scan with your phone", color = Muted, style = ReelyType.Label)
                         }
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                        if (scanUrl != null) {
+                            Text(text = "Or type the code instead", color = Chalk, style = ReelyType.Label)
+                        }
+                        LinkSteps(code)
                     }
                 }
                 Row(
@@ -129,6 +124,40 @@ fun PlexSignInPanel(
                         modifier = Modifier.weight(1f),
                     )
                     TvActionButton(label = "Cancel", onClick = onCancelLink)
+                }
+            }
+        }
+    }
+}
+
+/** plex.tv/link and the code to type there, as two numbered steps. */
+@Composable
+private fun LinkSteps(code: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        Step(number = 1) {
+            Text(text = "On your phone or computer, go to", color = Muted, style = ReelyType.Meta)
+            Text(text = "plex.tv/link", color = Chalk, style = ReelyType.Headline)
+        }
+        Step(number = 2) {
+            Text(text = "Enter this code", color = Muted, style = ReelyType.Meta)
+            // One tile a character: easier to read across a room than a word.
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                code.forEach { char ->
+                    Box(
+                        modifier = Modifier
+                            .size(width = 52.dp, height = 64.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(SurfaceHigh),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = char.toString(),
+                            color = Chalk,
+                            fontSize = 34.sp,
+                            lineHeight = 40.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
                 }
             }
         }

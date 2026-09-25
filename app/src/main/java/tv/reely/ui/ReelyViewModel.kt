@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -179,6 +180,8 @@ data class PlexState(
     val libraryChoices: List<LibraryChoice> = emptyList(),
     val browse: Map<LibraryKind, BrowseState> = LibraryKind.entries.associateWith { BrowseState() },
     val linkCode: String? = null,
+    /** The same sign-in as a web address, shown as a QR code beside [linkCode]. */
+    val linkUrl: String? = null,
     val busy: Boolean = false,
     val error: String? = null,
     val favouriteSections: Set<String> = emptySet(),
@@ -630,32 +633,46 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     fun startPlexLink() {
         if (linkJob?.isActive == true) return
         linkJob = viewModelScope.launch {
-            updatePlex { it.copy(busy = true, error = null, linkCode = null) }
+            updatePlex { it.copy(busy = true, error = null, linkCode = null, linkUrl = null) }
+            // Two PINs for one sign-in: the short one to type, the strong one for the QR
+            // code. Whichever gets approved first signs in. The QR is a nicety, so if its
+            // PIN can't be had the typed code still works alone.
+            val scanned = async { runCatching { PlexApi.createPin(clientId, strong = true) }.getOrNull() }
             val pin = runCatching { PlexApi.createPin(clientId) }.getOrElse { failure ->
+                scanned.cancel()
                 updatePlex { it.copy(busy = false, error = failure.readable()) }
                 return@launch
             }
-            updatePlex { it.copy(busy = false, linkCode = pin.code) }
+            val strong = scanned.await()
+            updatePlex {
+                it.copy(
+                    busy = false,
+                    linkCode = pin.code,
+                    linkUrl = strong?.let { s -> PlexApi.authUrl(clientId, s.code) },
+                )
+            }
 
             // plex.tv expires a PIN after 15 minutes; stop looking well before that.
             repeat(150) {
                 delay(2_000)
-                val token = runCatching { PlexApi.claimPin(clientId, pin.id) }.getOrNull()
+                val token = listOfNotNull(pin, strong).firstNotNullOfOrNull { candidate ->
+                    runCatching { PlexApi.claimPin(clientId, candidate.id) }.getOrNull()
+                }
                 if (token != null) {
                     store.put(SecureStore.PLEX_TOKEN, token)
-                    updatePlex { it.copy(token = token, linkCode = null) }
+                    updatePlex { it.copy(token = token, linkCode = null, linkUrl = null) }
                     connectServer(token)
                     return@launch
                 }
             }
-            updatePlex { it.copy(linkCode = null, error = "That code has expired. Try signing in again.") }
+            updatePlex { it.copy(linkCode = null, linkUrl = null, error = "That code has expired. Try signing in again.") }
         }
     }
 
     fun cancelPlexLink() {
         linkJob?.cancel()
         linkJob = null
-        updatePlex { it.copy(linkCode = null, busy = false) }
+        updatePlex { it.copy(linkCode = null, linkUrl = null, busy = false) }
     }
 
     private suspend fun connectServer(token: String) {

@@ -126,6 +126,8 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.7.0")
     // Reads the main colour out of the artwork, for the glow behind a browse screen.
     implementation("androidx.palette:palette-ktx:1.0.0")
+    // Draws the QR code on the Plex sign-in screen. Encoding only; no camera, no scanning.
+    implementation("com.google.zxing:core:3.5.3")
 
     testImplementation("junit:junit:4.13.2")
 
