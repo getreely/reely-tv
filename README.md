@@ -1,84 +1,98 @@
 # Reely TV
 
-An Android TV / Fire TV client that puts a Plex library and category-first live TV into one
-app on the television. Each install points at its own Plex server and its own IPTV provider;
-nothing is baked in and no server of ours sits in the path.
+**Your Plex library and live TV, in one app on the television.**
 
-This repository currently holds **the thin spike**, not the app. It exists to answer two
-questions that cannot be settled by reasoning — whether a provider's streams decode
-acceptably on a Firestick, and whether D-pad navigation feels tolerable.
+Reely TV is an app for Android TV and Amazon Fire TV. It plays movies and shows from Plex,
+and live TV from an IPTV subscription, in one app. For live TV there's a channel guide and
+multiview, which puts up to four channels on screen at once.
+
+It connects to your own Plex server and your own TV provider. No service of ours sits
+between you and them.
+
+## Install
+
+1. On a Fire TV, turn on **Settings → My Fire TV → Developer options → Install unknown
+   apps** for the **Downloader** app. On Android TV, allow unknown sources for your file
+   manager or browser.
+2. In Downloader, open
+   `https://github.com/getreely/reely-tv/releases/latest/download/reely-tv.apk`
+   and install it.
+
+After that, Reely updates itself: **Settings → Updates → Check for updates**.
+
+Android 6 or later is needed, which covers Fire OS 6 and every current Fire TV and Android TV
+device.
 
 ## What it does
 
-- **Movies** and **TV Shows** are separate tabs, filled from the Plex libraries of the
-  matching type. Shows drill down show → season → episode.
-- **Live TV** lists the provider's own categories down the left and that category's channels
-  on the right. Category-first browsing is the whole reason this app exists.
-- **Status** reports what is connected and lets you sign out of either half.
-- Either sign-in is skippable. Configure Plex and no provider, or a provider and no Plex,
-  and the app still starts and fills the tabs it can.
+### Plex
+- **Sign in with a QR code** or the four-character code at plex.tv/link.
+- **Home** has Continue Watching and the newest movies and episodes, across every server
+  your account can reach.
+- **Movies** and **TV Shows** each have their own home, the full library (sort, genres,
+  unwatched), and **collections**.
+- **Title pages**: the title's logo and artwork, ratings, the cast and crew, a description
+  you can open in full, "More like this", trailers, seasons and episodes, and air dates.
+- **Plex Home profiles**: "Who's watching?", with PIN-protected profiles.
+- **Skip Intro**, and the **Up Next** screen with a countdown to the next episode. The next
+  episode can be in the next season.
+- **Plays the file as it is** whenever the television can. Dolby Digital, Dolby Digital Plus,
+  DTS and TrueHD audio is decoded in the app when the television can't. When a file won't
+  play, Plex converts it on the server instead, automatically.
+- Subtitles and audio tracks can be chosen while you watch. Subtitle size and background
+  are adjustable.
 
-Sign in to Plex with the plex.tv PIN flow (a code you type at `plex.tv/link`). Sign in to
-live TV with the Xtream panel address, username and password your provider gave you.
+### Live TV
+- Works with **Xtream Codes** providers: the server address, username and password they
+  gave you.
+- Channels grouped by your provider's own categories.
+- **TV guide**, from your provider's own guide data.
+- **Multiview**: up to four channels at once. The sound follows whichever one you move
+  to, and any of them can be made full screen or changed to another channel.
+- Channel up and down from the player, with an on-screen guide while you watch.
 
-## The player is an instrument
+## Privacy
 
-Playback runs through Media3/ExoPlayer, and the overlay reports what the spike needs to know:
-time to first frame, the decoded video and audio formats, buffer depth, and the actual error
-when a stream is refused — a provider at its connection cap looks exactly like a broken app
-unless it says so.
+- Your Plex sign-in and your TV provider login are kept on the device, encrypted with a key
+  held by Android's secure key store. They are only ever sent to Plex and to your provider.
+- Reely has no accounts, no analytics and no advertising, and nothing is sent anywhere else.
+- If the app crashes, a report stays on the device, where you can read or clear it in
+  **Settings → About**.
 
-| Key | On demand | Live |
-| --- | --- | --- |
-| OK / Play-Pause | play / pause | play / pause |
-| Up / Down | cycle subtitle tracks | previous / next channel |
-| Left / Right | seek back / forward | (right) switch MPEG-TS ↔ HLS |
-| Back | leave the player | leave the player |
+## Remote
 
-Channel surfing from the player is deliberate: channel-switch latency is what separates a
-good TV app from a homebrew one, and the overlay times it on every switch.
-
-## Playback, transcoding and subtitles
-
-Playback is **direct play only**. The app asks Plex for the file's part and streams it as it
-sits on disk, so the stick has to decode whatever the file actually contains. Plex does all
-its transcoding server-side, but a server only transcodes when a client *asks* it to, via the
-universal transcoder — and this build never asks. A file the stick cannot decode will fail
-rather than fall back.
-
-Subtitles work for text tracks. Sidecar and separately-served subtitles (SRT, ASS/SSA, WebVTT)
-are sideloaded as selectable tracks, and anything embedded in the container that ExoPlayer can
-read joins the same list. Image-based subtitles (PGS, VOBSUB) are absent by design: those can
-only be burned into the video by the server, which is a transcode.
+| Button | What it does |
+| --- | --- |
+| Arrows | Move around. In the player, show the controls; on the progress bar, left and right skip back and forward. |
+| OK | Choose. In the player, show the controls. |
+| Hold OK | More options for a card, or for a channel in multiview. |
+| Back | Go back. In the player, hide the controls, then leave. |
+| Left / Right on live TV | Previous or next channel. |
+| Down on live TV | The guide. |
 
 ## Building
 
-Needs a JDK 17+ and an Android SDK with platform 35 and build-tools 35.0.0.
+You need JDK 17 or newer, and the Android SDK with platform 37.
 
 ```sh
 echo "sdk.dir=/path/to/android-sdk" > local.properties
 ./gradlew :app:assembleRelease
 ```
 
-The APK lands at `app/build/outputs/apk/release/app-release.apk`. Without a release keystore
-it is signed with the debug key, which is all a sideloaded build needs. To sign it properly,
-set `RELEASE_STORE_FILE`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS` and
-`RELEASE_KEY_PASSWORD` as Gradle properties.
+Without a release keystore the APK is signed with the debug key, which is enough to
+sideload it. To sign it properly, set `RELEASE_STORE_FILE`, `RELEASE_STORE_PASSWORD`,
+`RELEASE_KEY_ALIAS` and `RELEASE_KEY_PASSWORD` as Gradle properties.
 
-Install it with `adb install -r app-release.apk`, or host the file and fetch it with the
-Downloader app. There is no Play Store involved.
+Releases are built by the **Release APK** workflow. It publishes `reely-tv.apk` together
+with `reely-tv.json`, the file the app's update check reads.
 
-`minSdk` is 23, which covers Fire OS 6 and later. Fire OS 5 sticks are excluded: the
-credential store needs the Keystore APIs from API 23.
+Tests: `./gradlew testDebugUnitTest`. Add `-Pscreenshots` to render every screen into
+`app/build/screenshots`.
 
-## Credentials
+## Licences
 
-The IPTV login is the user's own subscription; the Plex login is how they reach a library
-somebody else owns and has shared with them. Both are entered per install, sealed with an
-AES/GCM key held in the Android Keystore, and never leave the device.
+Reely TV uses FFmpeg (LGPL 2.1, unmodified, for audio decoding), the Geist typeface (SIL
+Open Font License), and open-source libraries under the Apache 2.0 licence. The full texts
+are in the app under **Settings → About**.
 
-## Deliberately not here yet
-
-The EPG and any guide UI, Continue Watching and Recently Added hubs, per-group channel
-visibility, recordings, catch-up and favourites, plain M3U/XMLTV providers, and any visual
-polish. See the handoff brief for why each is out.
+Reely TV is not affiliated with Plex, Inc. Plex is a trademark of Plex, Inc.

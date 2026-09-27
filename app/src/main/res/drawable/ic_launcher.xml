@@ -1,16 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- The same mark for launchers older than adaptive icons: square, on the dark ground. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:fillColor="#110D0E"
+        android:fillColor="#FF0A0909"
         android:pathData="M0,0h108v108h-108z" />
     <path
-        android:fillColor="#D85A64"
-        android:pathData="M30,28h48a8,8 0 0 1 8,8v36a8,8 0 0 1 -8,8h-48a8,8 0 0 1 -8,-8v-36a8,8 0 0 1 8,-8z" />
+        android:fillColor="#FFFF5E69"
+        android:pathData="M43.19 66V30H52.72L52.99 37.19Q54.07 33.43 56.15 31.71Q58.23 30 61.52 30H64.81V38.33H61.52Q57.29 38.33 55.28 40.04Q53.26 41.75 53.26 45.78V66Z" />
     <path
-        android:fillColor="#110D0E"
-        android:pathData="M46,40L70,54L46,68z" />
+        android:fillColor="#FFFF5E69"
+        android:pathData="M47.5,72h13a2,2 0 0 1 2,2v0a2,2 0 0 1 -2,2h-13a2,2 0 0 1 -2,-2v0a2,2 0 0 1 2,-2z" />
 </vector>

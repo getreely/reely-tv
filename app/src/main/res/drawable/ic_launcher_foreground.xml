@@ -1,13 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  The launcher icon's mark, inside the adaptive icon's 66dp safe zone: the "r" of the
+  wordmark, and under it the short coral bar that marks the tab you're on.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:fillColor="#D85A64"
-        android:pathData="M34,34h40a7,7 0 0 1 7,7v26a7,7 0 0 1 -7,7h-40a7,7 0 0 1 -7,-7v-26a7,7 0 0 1 7,-7z" />
+        android:fillColor="#FFFF5E69"
+        android:pathData="M43.19 66V30H52.72L52.99 37.19Q54.07 33.43 56.15 31.71Q58.23 30 61.52 30H64.81V38.33H61.52Q57.29 38.33 55.28 40.04Q53.26 41.75 53.26 45.78V66Z" />
     <path
-        android:fillColor="#110D0E"
-        android:pathData="M48,44L68,54L48,64z" />
+        android:fillColor="#FFFF5E69"
+        android:pathData="M47.5,72h13a2,2 0 0 1 2,2v0a2,2 0 0 1 -2,2h-13a2,2 0 0 1 -2,-2v0a2,2 0 0 1 2,-2z" />
 </vector>
