@@ -72,8 +72,8 @@ fun SearchScreen(
                     TvTextField(
                         value = search.query,
                         onValueChange = onQueryChange,
-                        label = "Search your library",
-                        placeholder = "Title, show or episode",
+                        label = "Search",
+                        placeholder = "Movies, shows, episodes and channels",
                         imeAction = ImeAction.Search,
                         modifier = Modifier.widthIn(max = 620.dp),
                     )
@@ -123,6 +123,17 @@ fun SearchScreen(
                             }
                         }
                     }
+                }
+            }
+
+            if (search.results.isNotEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Text(
+                        text = "Movies and shows",
+                        color = Chalk,
+                        style = ReelyType.RowTitle,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
+                    )
                 }
             }
 

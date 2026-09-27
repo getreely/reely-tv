@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -146,11 +147,15 @@ fun GuideRow(
                 )
             } else {
                 Text(
-                    text = name.take(3).uppercase(),
+                    text = channelLabel(name),
                     color = Chalk,
-                    fontSize = 14.sp,
-                    lineHeight = 18.sp,
+                    fontSize = 13.sp,
+                    lineHeight = 16.sp,
                     fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 8.dp),
                 )
             }
         }
@@ -308,4 +313,15 @@ fun GuideNowLine(windowStart: Long, now: Long, scroll: ScrollState) {
             .clip(RoundedCornerShape(50))
             .background(Chalk),
     )
+}
+
+/**
+ * A channel's name to stand in for its logo, when the provider has none: the name itself
+ * rather than its first three letters, which made "Channel 4" CHA and every Sky channel
+ * SKY. A provider's region or group prefix ("UK | ", "US: ", "[DE] ") is left off.
+ */
+fun channelLabel(name: String): String {
+    val trimmed = name.trim()
+    val prefix = Regex("""^(\[[^\]]{1,6}\]|[A-Z0-9]{2,4}\s*[|:\-])\s*""")
+    return trimmed.replace(prefix, "").ifBlank { trimmed }
 }

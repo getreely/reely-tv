@@ -538,8 +538,8 @@ fun EpisodeTile(
 
 /**
  * A live channel as a search result. Providers are erratic about logos, so the tile falls
- * back to the channel's initials on a colour derived from its id — which at least stays
- * the same channel-to-channel.
+ * back to the channel's name on a colour derived from its id — which at least stays the
+ * same channel-to-channel.
  */
 @Composable
 fun ChannelCard(
@@ -581,17 +581,22 @@ fun ChannelCard(
                 )
             } else {
                 Text(
-                    text = name.take(3).uppercase(),
+                    text = channelLabel(name),
                     color = Chalk,
-                    fontSize = 17.sp,
-                    lineHeight = 22.sp,
+                    fontSize = 15.sp,
+                    lineHeight = 19.sp,
                     fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 10.dp),
                 )
             }
         }
         // Fixed height, so a row of these lines up and down-arrow lands where it should.
+        // With no logo the tile already says the name, so under it is only the number.
         Column(modifier = Modifier.height(40.dp).padding(top = 6.dp)) {
-            Text(
+            if (logoUrl != null) Text(
                 text = name,
                 color = if (focused) Chalk else Muted,
                 fontSize = 14.sp,
