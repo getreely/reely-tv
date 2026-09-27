@@ -135,6 +135,10 @@ data class BrowseState(
     val unwatchedOnly: Boolean = false,
     val busy: Boolean = false,
     val error: String? = null,
+    /** Every page of the grid is in: there is nothing more to ask the server for. */
+    val complete: Boolean = false,
+    /** A further page is on its way. */
+    val loadingMore: Boolean = false,
 ) {
     /** True when the grid is showing less than the whole library. */
     val isFiltered: Boolean get() = genreId != null || unwatchedOnly
@@ -325,6 +329,9 @@ data class PlayerPrefs(
 )
 
 /** How often a browsing screen left up asks for what has changed. */
+/** How many titles the library grid asks for at a time. */
+private const val GRID_PAGE = 300
+
 internal const val BROWSE_REFRESH_MS = 5L * 60_000
 
 /** Where a check for a newer build has got to. */
@@ -497,7 +504,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         libraryRefreshedAt[kind] = now
         refreshHome()
         loadReleased(kind, section)
-        loadBrowse(kind)
+        loadBrowse(kind, keep = true)
     }
 
     /** True when there is somewhere to go back to. */
@@ -1062,7 +1069,12 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
      * Fetches the grid for whatever sort and filters are currently set. The server does
      * the work: sorting and filtering here would only ever order the page in hand.
      */
-    private fun loadBrowse(kind: LibraryKind) {
+    /**
+     * The grid from its first page. [keep] is a refresh of the same grid: it asks for as
+     * many as are already showing, so a timer going off doesn't take away the page the
+     * cursor is on.
+     */
+    private fun loadBrowse(kind: LibraryKind, keep: Boolean = false) {
         val plex = _state.value.plex
         val base = plex.baseUrl ?: return
         val token = plex.serverToken ?: return
@@ -1071,19 +1083,54 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
         browseJobs[kind]?.cancel()
         browseJobs[kind] = viewModelScope.launch {
-            updateBrowse(kind) { it.copy(busy = true, error = null) }
-            val path = buildString {
-                append("/library/sections/${section.key}/all?type=${kind.filter}")
-                append("&sort=${browse.sort.key}")
-                browse.genreId?.let { append("&genre=$it") }
-                if (browse.unwatchedOnly) append("&unwatched=1")
-            }
-            val items = runCatching { PlexApi.items(base, token, path, limit = 400) }
+            updateBrowse(kind) { it.copy(busy = true, error = null, loadingMore = false) }
+            val limit = if (keep) maxOf(GRID_PAGE, browse.items.size) else GRID_PAGE
+            val items = runCatching { PlexApi.items(base, token, browsePath(kind, browse, section), limit = limit) }
                 .getOrElse { failure ->
                     updateBrowse(kind) { it.copy(busy = false, error = failure.readable()) }
                     return@launch
                 }
-            updateBrowse(kind) { it.copy(busy = false, items = items) }
+            updateBrowse(kind) { it.copy(busy = false, items = items, complete = items.size < limit) }
+        }
+    }
+
+    private fun browsePath(kind: LibraryKind, browse: BrowseState, section: PlexSection) = buildString {
+        append("/library/sections/${section.key}/all?type=${kind.filter}")
+        append("&sort=${browse.sort.key}")
+        browse.genreId?.let { append("&genre=$it") }
+        if (browse.unwatchedOnly) append("&unwatched=1")
+    }
+
+    /**
+     * The next page of the grid, asked for as the cursor nears the end of what is there.
+     * The grid used to stop at the first 400, which on a big library was most of it
+     * missing with no sign anything was.
+     */
+    fun loadMoreBrowse(kind: LibraryKind) {
+        val plex = _state.value.plex
+        val base = plex.baseUrl ?: return
+        val token = plex.serverToken ?: return
+        val browse = plex.browseFor(kind)
+        val section = browse.section ?: return
+        if (browse.complete || browse.busy || browse.loadingMore || browse.items.isEmpty()) return
+        val offset = browse.items.size
+        updateBrowse(kind) { it.copy(loadingMore = true) }
+        browseJobs[kind] = viewModelScope.launch {
+            val page = runCatching {
+                PlexApi.items(base, token, browsePath(kind, browse, section), limit = GRID_PAGE, offset = offset)
+            }.getOrElse {
+                updateBrowse(kind) { it.copy(loadingMore = false) }
+                return@launch
+            }
+            updateBrowse(kind) { current ->
+                // A filter changed while this was on its way: it belongs to a grid that is gone.
+                if (current.items.size != offset) current.copy(loadingMore = false)
+                else current.copy(
+                    items = (current.items + page).distinctBy { it.listKey },
+                    loadingMore = false,
+                    complete = page.size < GRID_PAGE,
+                )
+            }
         }
     }
 

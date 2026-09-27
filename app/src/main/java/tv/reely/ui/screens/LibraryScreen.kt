@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -79,6 +80,8 @@ fun LibraryScreen(
     onSelectGenre: (String?) -> Unit,
     onDismissBrowseError: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The cursor is near the end of the grid: time for the next page. */
+    onLoadMore: () -> Unit = {},
 ) {
     if (!plex.isConnected) {
         PlexSignInPanel(
@@ -379,7 +382,7 @@ fun LibraryScreen(
                         items(PLACEHOLDER_COUNT) { Shimmer { PosterPlaceholder() } }
                     }
 
-                    items(browse.items, key = { it.listKey }) { item ->
+                    itemsIndexed(browse.items, key = { _, item -> item.listKey }) { index, item ->
                         PosterCard(
                             title = item.title,
                             subtitle = item.caption,
@@ -389,6 +392,8 @@ fun LibraryScreen(
                             onFocus = {
                                 gridFocus.onFocused(item.listKey)
                                 onFocusItem(item)
+                                // Eight rows from the end: the next page is in before it's reached.
+                                if (index >= browse.items.size - LOAD_AHEAD) onLoadMore()
                             },
                             onClick = { onOpenItem(item) },
                             modifier = rowItem(gridFocus, item.listKey),
@@ -418,6 +423,9 @@ private val ROW_HEADING_GAP = 16.dp
 
 /** The grid's side padding, which a row reaches out over to the screen's edge. */
 private val PAGE_MARGIN = 36.dp
+
+/** How near the end of the grid, in titles, the next page is asked for. */
+private const val LOAD_AHEAD = 48
 
 /** Three rows of a six-across grid: a screenful, and no more. */
 private const val PLACEHOLDER_COUNT = 18

@@ -412,6 +412,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onToggleUnwatched = { viewModel.toggleUnwatchedOnly(route.kind) },
                 onSelectGenre = { viewModel.selectGenre(route.kind, it) },
                 onDismissBrowseError = { viewModel.dismissBrowseError(route.kind) },
+                onLoadMore = { viewModel.loadMoreBrowse(route.kind) },
             )
 
             is Route.Search -> SearchScreen(
