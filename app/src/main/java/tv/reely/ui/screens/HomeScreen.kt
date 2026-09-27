@@ -87,6 +87,7 @@ fun HomeScreen(
     onCancelLink: () -> Unit,
     onDismissPlexError: () -> Unit,
     modifier: Modifier = Modifier,
+    onRemoveFromContinueWatching: (PlexItem) -> Unit = {},
 ) {
     if (!plex.isConnected) {
         PlexSignInPanel(
@@ -284,6 +285,11 @@ fun HomeScreen(
                                 ) { menuFor = null; onToggleWatched(item) },
                             )
                             add(CardAction("Details") { menuFor = null; onOpenItem(item) })
+                            if (home.continueWatching.any { it.listKey == item.listKey }) {
+                                add(CardAction("Remove from Continue Watching") {
+                                    menuFor = null; onRemoveFromContinueWatching(item)
+                                })
+                            }
                         },
                         onCancel = { menuFor = null },
                     )

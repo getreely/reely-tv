@@ -390,6 +390,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onOpenItem = ::open,
                 onPlayItem = { item, resume -> viewModel.play(item, resume = resume) },
                 onToggleWatched = viewModel::toggleWatched,
+                onRemoveFromContinueWatching = viewModel::removeFromContinueWatching,
                 onStartLink = viewModel::startPlexLink,
                 onCancelLink = viewModel::cancelPlexLink,
                 onDismissPlexError = viewModel::dismissPlexError,

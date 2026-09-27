@@ -918,6 +918,25 @@ object PlexApi {
         }
 
     /**
+     * Takes something off Continue Watching without marking it watched, as Plex's own
+     * apps offer. What was watched of it is kept.
+     */
+    suspend fun removeFromContinueWatching(base: String, token: String, ratingKey: String) =
+        withContext(Dispatchers.IO) {
+            val request = Request.Builder()
+                .url("$base/actions/removeFromContinueWatching?ratingKey=$ratingKey")
+                .plexHeaders(clientId, token)
+                .put(FormBody.Builder().build())
+                .build()
+            Http.client.newCall(request).execute().use { response ->
+                require(response.isSuccessful) {
+                    "Couldn't remove that from Continue Watching (error ${response.code})."
+                }
+            }
+            Unit
+        }
+
+    /**
      * Marks something watched or unwatched on the server, so every Plex client agrees
      * rather than just this one.
      */

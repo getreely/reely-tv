@@ -1898,6 +1898,22 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Off Continue Watching, here and on the server; put back if the server says no. */
+    fun removeFromContinueWatching(item: PlexItem) {
+        val plex = _state.value.plex
+        val base = item.serverBase ?: plex.baseUrl ?: return
+        val token = plex.tokenFor(item.serverBase) ?: return
+        val before = _state.value.home.continueWatching
+        _state.update { it.copy(home = it.home.copy(continueWatching = before.filterNot { entry -> entry.listKey == item.listKey })) }
+        viewModelScope.launch {
+            val ok = runCatching { PlexApi.removeFromContinueWatching(base, token, item.ratingKey) }.isSuccess
+            if (!ok) {
+                _state.update { it.copy(home = it.home.copy(continueWatching = before)) }
+                reportPlaybackProblem("Couldn't remove that from Continue Watching.")
+            }
+        }
+    }
+
     /** Patches the tick everywhere the same item is on screen. */
     private fun applyWatched(ratingKey: String, watched: Boolean) {
         fun patch(item: PlexItem): PlexItem =
