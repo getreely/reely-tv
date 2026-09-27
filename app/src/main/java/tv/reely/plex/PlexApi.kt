@@ -12,6 +12,19 @@ import java.net.URLEncoder
 
 data class PlexPin(val id: Long, val code: String)
 
+/**
+ * Somebody in a Plex Home, or the account signed in. [protected] means switching to them
+ * asks for their PIN; [admin] is the account that owns the Home.
+ */
+data class PlexHomeUser(
+    val uuid: String,
+    val title: String,
+    val thumb: String?,
+    val protected: Boolean,
+    val admin: Boolean,
+    val restricted: Boolean,
+)
+
 data class PlexServer(
     val name: String,
     val accessToken: String,
@@ -324,6 +337,81 @@ object PlexApi {
             val token = JSONObject(body).optString("authToken")
             token.takeIf { it.isNotEmpty() && it != "null" }
         }
+    }
+
+    /** Who the token belongs to: its name and picture, and its place in a Home. */
+    suspend fun account(clientId: String, token: String): PlexHomeUser? = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url("$PLEX_TV/api/v2/user")
+            .plexHeaders(clientId, token)
+            .get()
+            .build()
+        Http.client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return@withContext null
+            homeUserOf(JSONObject(response.body?.string().orEmpty()))
+        }
+    }
+
+    /**
+     * Everybody in the account's Plex Home, as Plex's own "Who's watching?" lists them.
+     * Empty for an account that isn't in a Home, which is most of them.
+     */
+    suspend fun homeUsers(clientId: String, token: String): List<PlexHomeUser> = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url("$PLEX_TV/api/v2/home/users")
+            .plexHeaders(clientId, token)
+            .get()
+            .build()
+        Http.client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return@withContext emptyList()
+            homeUsersFrom(response.body?.string().orEmpty())
+        }
+    }
+
+    /** The users in a home/users answer, which is either the list or the Home around it. */
+    internal fun homeUsersFrom(body: String): List<PlexHomeUser> {
+        val text = body.trim()
+        val users = runCatching {
+            if (text.startsWith("[")) JSONArray(text) else JSONObject(text).optJSONArray("users")
+        }.getOrNull() ?: return emptyList()
+        return (0 until users.length()).mapNotNull { users.optJSONObject(it)?.let(::homeUserOf) }
+    }
+
+    /**
+     * Becomes another member of the Home, and returns their token. [pin] is theirs, when
+     * they have one; a wrong one comes back as an error that says so.
+     */
+    suspend fun switchHomeUser(clientId: String, token: String, uuid: String, pin: String?): String =
+        withContext(Dispatchers.IO) {
+            val url = "$PLEX_TV/api/v2/home/users/$uuid/switch" +
+                (pin?.let { "?pin=" + URLEncoder.encode(it, "UTF-8") } ?: "")
+            val request = Request.Builder()
+                .url(url)
+                .plexHeaders(clientId, token)
+                .post(FormBody.Builder().build())
+                .build()
+            Http.client.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                require(response.code != 401 && response.code != 403) {
+                    if (pin != null) "That PIN isn't right. Try again." else "Plex didn't allow switching to this profile."
+                }
+                require(response.isSuccessful) { "Couldn't switch profiles (error ${response.code}). Try again." }
+                JSONObject(body).optString("authToken").takeIf { it.isNotBlank() && it != "null" }
+                    ?: error("Couldn't switch profiles. Try again.")
+            }
+        }
+
+    private fun homeUserOf(entry: JSONObject): PlexHomeUser? {
+        val uuid = entry.optString("uuid").takeIf(String::isNotBlank) ?: return null
+        return PlexHomeUser(
+            uuid = uuid,
+            title = entry.optString("title").ifBlank { entry.optString("username") }.ifBlank { "Plex user" },
+            thumb = entry.optString("thumb").takeIf { it.startsWith("http") },
+            // A PIN on the profile. hasPassword is the account's password, not this.
+            protected = entry.optBoolean("protected"),
+            admin = entry.optBoolean("admin"),
+            restricted = entry.optBoolean("restricted"),
+        )
     }
 
     /**

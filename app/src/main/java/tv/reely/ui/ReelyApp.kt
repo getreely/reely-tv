@@ -81,6 +81,7 @@ import tv.reely.ui.theme.Faint
 import tv.reely.ui.theme.Ink
 import tv.reely.ui.theme.Line
 import tv.reely.ui.theme.Muted
+import tv.reely.ui.components.pillColors
 import tv.reely.ui.theme.Chalk
 
 private enum class TabIcon { NONE, SEARCH, GEAR }
@@ -106,6 +107,33 @@ private val settingsDestination = Destination("Settings", Route.Settings, icon =
 @Composable
 fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
+
+    /*
+     * "Who's watching?", over everything else while it is up. Closed by Back, by picking
+     * the profile already in use, or by a switch going through.
+     */
+    var pickingProfile by remember { mutableStateOf(false) }
+    var wasSwitching by remember { mutableStateOf(false) }
+    LaunchedEffect(state.plex.switchingTo, state.plex.switchError) {
+        if (state.plex.switchingTo != null) {
+            wasSwitching = true
+        } else if (wasSwitching) {
+            wasSwitching = false
+            if (state.plex.switchError == null) pickingProfile = false
+        }
+    }
+    if (pickingProfile && state.playback == null) {
+        tv.reely.ui.screens.ProfilePicker(
+            users = state.plex.homeUsers,
+            current = state.plex.user,
+            switchingTo = state.plex.switchingTo,
+            error = state.plex.switchError,
+            onPick = viewModel::switchUser,
+            onDismissError = viewModel::dismissSwitchError,
+            onClose = { pickingProfile = false },
+        )
+        return
+    }
 
     val playback = state.playback
     if (playback != null) {
@@ -315,6 +343,8 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             settingsFocus = settingsFocus,
             canSelectOnFocus = { arrivedByDirectionKey.also { arrivedByDirectionKey = false } },
             serverName = state.plex.serverName,
+            profile = state.plex.user,
+            onProfile = if (state.plex.canSwitchUser) ({ pickingProfile = true }) else null,
         )
 
         if (state.restoring) {
@@ -442,6 +472,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onSignOutPlex = viewModel::signOutPlex,
                 onSignOutXtream = viewModel::signOutXtream,
                 onSwitchServer = viewModel::switchServer,
+                onSwitchProfile = { pickingProfile = true },
                 onToggleFavourite = viewModel::toggleFavouriteLibrary,
                 onToggleFormat = viewModel::toggleFormat,
                 onNudgeSubtitleScale = viewModel::nudgeSubtitleScale,
@@ -592,6 +623,10 @@ internal fun TopBar(
     settingsFocus: FocusRequester,
     canSelectOnFocus: () -> Boolean,
     serverName: String?,
+    /** Whose profile is in use, shown in place of the server's name when known. */
+    profile: tv.reely.plex.PlexHomeUser? = null,
+    /** Opens "Who's watching?"; null when there is nobody else to switch to. */
+    onProfile: (() -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier
@@ -629,7 +664,14 @@ internal fun TopBar(
 
         Box(modifier = Modifier.weight(1f))
 
-        if (serverName != null) {
+        if (profile != null) {
+            ProfileChip(
+                user = profile,
+                onClick = onProfile,
+                onFocused = onTabFocused,
+                modifier = Modifier.padding(end = 6.dp),
+            )
+        } else if (serverName != null) {
             Text(
                 text = serverName,
                 color = Faint,
@@ -649,6 +691,53 @@ internal fun TopBar(
             onFocused = onTabFocused,
             canSelectOnFocus = canSelectOnFocus,
             modifier = Modifier.focusRequester(settingsFocus),
+        )
+    }
+}
+
+/**
+ * The profile in use, top right as Plex has it: a picture and a name. With others in the
+ * Plex Home to switch to it can be selected, and opens "Who's watching?"; with nobody
+ * else it only says whose this is, and focus passes it by.
+ */
+@Composable
+private fun ProfileChip(
+    user: tv.reely.plex.PlexHomeUser,
+    onClick: (() -> Unit)?,
+    onFocused: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val colors = pillColors(focused)
+    val shape = RoundedCornerShape(50)
+    Row(
+        modifier = modifier
+            .clip(shape)
+            .then(
+                if (onClick != null) {
+                    Modifier
+                        .onFocusChanged {
+                            focused = it.isFocused
+                            if (it.isFocused) onFocused()
+                        }
+                        .background(if (focused) colors.fill else Color.Transparent)
+                        .clickable(onClick = onClick)
+                } else {
+                    Modifier
+                },
+            )
+            .padding(start = 6.dp, end = 14.dp, top = 5.dp, bottom = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        tv.reely.ui.screens.Avatar(user, size = 28.dp)
+        Text(
+            text = user.title,
+            color = if (focused) colors.text else Muted,
+            fontSize = 15.sp,
+            lineHeight = 19.sp,
+            fontWeight = if (focused) FontWeight.SemiBold else FontWeight.Medium,
+            maxLines = 1,
         )
     }
 }

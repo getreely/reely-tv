@@ -117,6 +117,8 @@ fun SettingsScreen(
     onCheckForUpdate: () -> Unit,
     onInstallUpdate: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Opens "Who's watching?" to switch Plex Home profiles. */
+    onSwitchProfile: () -> Unit = {},
 ) {
     var section by remember { mutableStateOf(Section.PLAYBACK) }
     val sectionFocus = remember { Section.entries.associateWith { FocusRequester() } }
@@ -214,6 +216,7 @@ fun SettingsScreen(
 
                 Section.PLEX -> PlexPanel(
                     plex = plex,
+                    onSwitchProfile = onSwitchProfile,
                     onSwitchServer = onSwitchServer,
                     onToggleFavourite = onToggleFavourite,
                     onSignOutPlex = onSignOutPlex,
@@ -428,6 +431,7 @@ private fun LiveSection(
 @Composable
 private fun PlexPanel(
     plex: PlexState,
+    onSwitchProfile: () -> Unit,
     onSwitchServer: (PlexServer) -> Unit,
     onToggleFavourite: (LibraryChoice) -> Unit,
     onSignOutPlex: () -> Unit,
@@ -440,6 +444,28 @@ private fun PlexPanel(
     }
 
     if (plex.error != null) ErrorNote(plex.error)
+
+    val user = plex.user
+    if (user != null) {
+        SettingGroup(
+            "Profile",
+            note = if (plex.canSwitchUser) "Each profile in your Plex Home has its own libraries, " +
+                "watch history and Continue Watching." else null,
+        ) {
+            SettingRow(
+                title = user.title,
+                value = if (plex.canSwitchUser) "Switch" else null,
+                description = when {
+                    user.admin -> "Plex Home owner"
+                    user.restricted -> "Managed profile"
+                    plex.canSwitchUser -> "Plex Home member"
+                    else -> "Signed in to Plex"
+                },
+                first = plex.canSwitchUser,
+                onClick = if (plex.canSwitchUser) onSwitchProfile else null,
+            )
+        }
+    }
 
     SettingGroup("Server") {
         SettingRow(title = "Server", value = plex.serverName ?: "—")

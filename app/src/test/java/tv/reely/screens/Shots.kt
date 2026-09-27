@@ -55,6 +55,11 @@ object Shots {
         Coil.setImageLoader(ImageLoader.Builder(context).dispatcher(Dispatchers.Unconfined).build())
     }
 
+    /** A picture when screenshots were asked for; nothing otherwise, so a test can run always. */
+    fun saveIfAsked(compose: ComposeContentTestRule, name: String) {
+        if (System.getProperty("reely.screenshots") == "true") save(compose, name)
+    }
+
     fun save(compose: ComposeContentTestRule, name: String) {
         compose.waitForIdle()
         compose.mainClock.advanceTimeBy(1_500)

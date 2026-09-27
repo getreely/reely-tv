@@ -29,6 +29,7 @@ import tv.reely.plex.PlexApi
 import tv.reely.plex.PlexDetail
 import tv.reely.plex.PlexGenre
 import tv.reely.plex.PlexExtra
+import tv.reely.plex.PlexHomeUser
 import tv.reely.plex.PlexItem
 import tv.reely.plex.PlexMarker
 import tv.reely.plex.PlexSection
@@ -187,8 +188,18 @@ data class PlexState(
     val busy: Boolean = false,
     val error: String? = null,
     val favouriteSections: Set<String> = emptySet(),
+    /** Whose profile this is: the account, or whoever in its Plex Home was switched to. */
+    val user: PlexHomeUser? = null,
+    /** Everybody in the account's Plex Home; empty for an account not in one. */
+    val homeUsers: List<PlexHomeUser> = emptyList(),
+    /** Switching profiles: the one being switched to while it happens. */
+    val switchingTo: PlexHomeUser? = null,
+    val switchError: String? = null,
 ) {
     val isConnected: Boolean get() = baseUrl != null && serverToken != null
+
+    /** Whether there is anybody else to switch to. */
+    val canSwitchUser: Boolean get() = homeUsers.size > 1
 
     fun sectionsFor(kind: LibraryKind): List<PlexSection> = sections.filter { it.type == kind.plexType }
 
@@ -512,7 +523,55 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         // Only the chosen server was ever stored, so the rest have to be asked for again
         // before anything can offer to switch to them.
         loadServerList(token)
+        loadProfiles(token)
     }
+
+    /** Who is signed in, and who else is in their Plex Home to switch to. */
+    private fun loadProfiles(token: String) {
+        viewModelScope.launch {
+            val user = runCatching { PlexApi.account(clientId, token) }.getOrNull()
+            val home = runCatching { PlexApi.homeUsers(clientId, token) }.getOrElse { emptyList() }
+            if (_state.value.plex.token != token) return@launch
+            updatePlex { it.copy(user = user, homeUsers = home) }
+        }
+    }
+
+    /**
+     * Becomes somebody else in the Plex Home, as Plex's own "Who's watching?" does. Their
+     * token replaces the account's, which brings their own libraries, what they're part
+     * way through, and what they've watched — and nothing of anybody else's. Everything
+     * on screen was the last profile's, so it all goes and is read again.
+     */
+    fun switchUser(target: PlexHomeUser, pin: String?) {
+        val plex = _state.value.plex
+        val token = plex.token ?: return
+        if (plex.switchingTo != null) return
+        if (target.uuid == plex.user?.uuid) return
+        updatePlex { it.copy(switchingTo = target, switchError = null) }
+        viewModelScope.launch {
+            val next = runCatching { PlexApi.switchHomeUser(clientId, token, target.uuid, pin) }
+                .getOrElse { failure ->
+                    updatePlex { it.copy(switchingTo = null, switchError = failure.readable()) }
+                    return@launch
+                }
+            stopTheme()
+            store.put(SecureStore.PLEX_TOKEN, next)
+            store.remove(SecureStore.PLEX_SERVER_URI, SecureStore.PLEX_SERVER_TOKEN, SecureStore.PLEX_SERVER_NAME)
+            _state.update {
+                it.copy(
+                    plex = PlexState(token = next, user = target, homeUsers = plex.homeUsers, busy = true),
+                    home = HomeState(),
+                    detail = null,
+                    focused = null,
+                    stack = listOf(Route.Home),
+                )
+            }
+            connectServer(next)
+            loadProfiles(next)
+        }
+    }
+
+    fun dismissSwitchError() = updatePlex { it.copy(switchError = null) }
 
     private fun loadServerList(token: String) {
         viewModelScope.launch {
@@ -664,6 +723,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                     store.put(SecureStore.PLEX_TOKEN, token)
                     updatePlex { it.copy(token = token, linkCode = null, linkUrl = null) }
                     connectServer(token)
+                    loadProfiles(token)
                     return@launch
                 }
             }
