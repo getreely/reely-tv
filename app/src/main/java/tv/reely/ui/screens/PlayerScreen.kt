@@ -421,6 +421,22 @@ fun PlayerScreen(
     val currentPlayback by rememberUpdatedState(playback)
     val currentPrefs by rememberUpdatedState(prefs)
 
+    /*
+     * The listener only hears changes. Live TV shares one player with the guide's preview,
+     * so a channel chosen from the guide can already be playing when this screen opens:
+     * no change ever arrives, and the loading ring, which starts out on, stayed on over a
+     * channel that was playing fine. So read where the player actually is, on opening and
+     * on each new stream, and let the listener take it from there.
+     */
+    LaunchedEffect(exoPlayer, playback.url) {
+        val state = exoPlayer.playbackState
+        // Idle is a stream not started yet, which is loading as far as anybody watching
+        // can tell; only ready (or the end) takes the ring away.
+        buffering = state == Player.STATE_BUFFERING || state == Player.STATE_IDLE
+        playing = exoPlayer.isPlaying
+        if (state == Player.STATE_READY) error = null
+    }
+
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
