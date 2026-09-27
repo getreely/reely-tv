@@ -167,6 +167,7 @@ data class PlexItem(
             ).joinToString(" · ").takeIf { it.isNotEmpty() }
 
             "season" -> leafCount.takeIf { it > 0 }?.let { "$it episodes" }
+            "collection" -> leafCount.takeIf { it > 0 }?.let { if (it == 1) "1 title" else "$it titles" }
             else -> year?.toString()
         }
 
@@ -612,6 +613,14 @@ object PlexApi {
     suspend fun children(base: String, token: String, ratingKey: String): List<PlexItem> =
         items(base, token, "/library/metadata/$ratingKey/children", limit = 400)
 
+    /** A library's collections, as Plex lists them: its own, and smart ones. */
+    suspend fun collections(base: String, token: String, sectionKey: String): List<PlexItem> =
+        items(base, token, "/library/sections/$sectionKey/collections", limit = 500)
+
+    /** What is in a collection, in the collection's own order. */
+    suspend fun collectionItems(base: String, token: String, ratingKey: String): List<PlexItem> =
+        items(base, token, "/library/collections/$ratingKey/children", limit = 500)
+
     suspend fun detail(base: String, token: String, ratingKey: String): PlexDetail? =
         withContext(Dispatchers.IO) {
             val entry = container("$base/library/metadata/$ratingKey", token)
@@ -639,7 +648,10 @@ object PlexApi {
                 roles = roles(entry),
                 writers = tags(entry, "Writer"),
                 childCount = entry.optInt("childCount"),
-                leafCount = entry.optInt("leafCount"),
+                // A collection says how many titles it holds as childCount; a show's is seasons.
+        leafCount = entry.optInt("leafCount").takeIf { it > 0 }
+            ?: entry.optInt("childCount").takeIf { entry.optString("type") == "collection" }
+            ?: 0,
                 grandparentTitle = entry.optString("grandparentTitle").takeIf(String::isNotBlank),
                 index = entry.optInt("index").takeIf { it > 0 },
                 parentIndex = entry.optInt("parentIndex").takeIf { it > 0 },
@@ -949,7 +961,10 @@ object PlexApi {
         grandparentThumb = entry.optString("grandparentThumb").takeIf(String::isNotEmpty),
         durationMs = entry.optLong("duration"),
         viewOffsetMs = entry.optLong("viewOffset"),
-        leafCount = entry.optInt("leafCount"),
+        // A collection says how many titles it holds as childCount; a show's is seasons.
+        leafCount = entry.optInt("leafCount").takeIf { it > 0 }
+            ?: entry.optInt("childCount").takeIf { entry.optString("type") == "collection" }
+            ?: 0,
         viewedLeafCount = entry.optInt("viewedLeafCount"),
         viewCount = entry.optInt("viewCount"),
         addedAt = entry.optLong("addedAt"),

@@ -211,7 +211,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             confirmExit -> confirmExit = false
             menuFor != null -> menuFor = null
             state.stack.size > 1 -> viewModel.goBack()
-            gridRoute != null && gridRoute.view == LibraryView.GRID ->
+            gridRoute != null && gridRoute.view != LibraryView.HOME ->
                 viewModel.navigate(Route.Library(gridRoute.kind, LibraryView.HOME))
 
             else -> confirmExit = true
@@ -554,6 +554,13 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                                 menuFor = null
                                 viewModel.navigate(Route.Library(kind, LibraryView.GRID))
                             },
+                            TabMenuItem(
+                                label = "Collections",
+                                selected = state.route == Route.Library(kind, LibraryView.COLLECTIONS),
+                            ) {
+                                menuFor = null
+                                viewModel.navigate(Route.Library(kind, LibraryView.COLLECTIONS))
+                            },
                         ),
                         // One list. Which server a library sits on is only worth saying
                         // when there is more than one server to tell apart.
@@ -635,7 +642,10 @@ private fun routeKey(route: Route): String = when (route) {
 /** Whether the current screen has anything focusable in it yet. */
 private fun contentReady(state: ReelyState): Boolean = when (val route = state.route) {
     is Route.Home -> !state.plex.isConnected || !state.home.isEmpty
-    is Route.Library -> !state.plex.isConnected || state.plex.browseFor(route.kind).items.isNotEmpty()
+    is Route.Library -> !state.plex.isConnected || when (route.view) {
+        LibraryView.COLLECTIONS -> !state.plex.browseFor(route.kind).collections.isNullOrEmpty()
+        else -> state.plex.browseFor(route.kind).items.isNotEmpty()
+    }
     is Route.Detail -> state.detail?.detail != null
     is Route.Live -> true
     is Route.Search -> true

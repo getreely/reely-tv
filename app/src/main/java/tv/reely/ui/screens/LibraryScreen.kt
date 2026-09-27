@@ -157,7 +157,7 @@ fun LibraryScreen(
                         facts = listOfNotNull(
                             focused.caption,
                             focused.title.takeIf { isEpisode },
-                            formatDuration(focused.durationMs).takeIf { it.isNotEmpty() },
+                            formatDuration(focused.durationMs).takeIf { it.isNotEmpty() && focused.isPlayable },
                         ),
                         summary = focused.summary,
                         modifier = Modifier.widthIn(max = 700.dp),
@@ -306,6 +306,48 @@ fun LibraryScreen(
                         if (home.busy && resumable.isEmpty() && browse.released.isEmpty()) {
                             item(span = { GridItemSpan(maxLineSpan) }) {
                                 EmptyNote("Loading…")
+                            }
+                        }
+                        return@LazyVerticalGrid
+                    }
+
+                    // A library's collections: posters, each opening the collection's page.
+                    if (view == LibraryView.COLLECTIONS) {
+                        val collections = browse.collections
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Column(
+                                modifier = Modifier.padding(top = 12.dp, bottom = 2.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Text(
+                                    text = "Collections",
+                                    color = Chalk,
+                                    style = ReelyType.RowTitle,
+                                    modifier = Modifier.padding(horizontal = 4.dp),
+                                )
+                                if (collections != null && collections.isEmpty()) {
+                                    EmptyNote(
+                                        "No collections in ${browse.section?.title ?: "this library"} yet. " +
+                                            "Collections made in Plex show up here."
+                                    )
+                                }
+                            }
+                        }
+                        if (collections == null) {
+                            items(PLACEHOLDER_COUNT) { Shimmer { PosterPlaceholder() } }
+                        } else {
+                            items(collections, key = { it.listKey }) { collection ->
+                                PosterCard(
+                                    title = collection.title,
+                                    subtitle = collection.caption,
+                                    imageUrl = imageUrl(collection.serverBase, collection.thumb, 300, 450),
+                                    onFocus = {
+                                        gridFocus.onFocused(collection.listKey)
+                                        onFocusItem(collection)
+                                    },
+                                    onClick = { onOpenItem(collection) },
+                                    modifier = rowItem(gridFocus, collection.listKey),
+                                )
                             }
                         }
                         return@LazyVerticalGrid

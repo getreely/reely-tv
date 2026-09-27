@@ -161,4 +161,53 @@ class HomeShot {
         compose.onAllNodesWithText("2 new episodes").onFirst().requestFocus()
         Shots.save(compose, "shows-lower-row")
     }
+
+    /** Movies, Collections: a library's collections as posters. */
+    @Test fun collectionsGrid() {
+        val section = tv.reely.plex.PlexSection("1", "Films", "movie")
+        val collections = listOf("ember" to 4, "field" to 7, "orbit" to 3, "glass" to 12, "ferry" to 2, "cardinal" to 5)
+            .map { (key, count) ->
+                Shots.item(key).copy(ratingKey = "c-$key", type = "collection", leafCount = count,
+                    title = Shots.titles.getValue(key).title + " Collection")
+            }
+        val tabFocus = List(5) { FocusRequester() }
+        val settingsFocus = FocusRequester()
+        compose.setContent {
+            ReelyTheme {
+                Shots.RemoteInput()
+                Column(Modifier.fillMaxSize().background(Ink)) {
+                    TopBar(
+                        current = Route.Library(tv.reely.ui.LibraryKind.MOVIES), onNavigate = {}, onActivate = {},
+                        onTabFocused = {}, onTabPositioned = { _, _ -> }, tabFocus = tabFocus,
+                        settingsFocus = settingsFocus, canSelectOnFocus = { false },
+                        serverName = "Living Room",
+                    )
+                    Box(Modifier.fillMaxWidth().weight(1f)) {
+                        tv.reely.ui.screens.LibraryScreen(
+                            kind = tv.reely.ui.LibraryKind.MOVIES,
+                            view = tv.reely.ui.LibraryView.COLLECTIONS,
+                            plex = PlexState(
+                                baseUrl = "http://server", serverToken = "t", token = "t", serverName = "Living Room",
+                                sections = listOf(section),
+                                browse = tv.reely.ui.LibraryKind.entries.associateWith {
+                                    tv.reely.ui.BrowseState(section = section, collections = collections)
+                                },
+                            ),
+                            home = HomeState(),
+                            focused = collections[1],
+                            imageUrl = { _, path, w, h -> Shots.imageUrl(path, w, h) },
+                            backdropUrl = { _, path -> Shots.imageUrl(path, 1280, 720) },
+                            onFocusItem = {}, onOpenItem = {}, onStartLink = {}, onCancelLink = {},
+                            onDismissPlexError = {}, onCycleSort = {}, onToggleUnwatched = {},
+                            onSelectGenre = {}, onDismissBrowseError = {},
+                        )
+                    }
+                }
+            }
+        }
+        compose.onAllNodes(
+            androidx.compose.ui.test.hasText("Fieldwork Collection") and androidx.compose.ui.test.isFocusable(),
+        ).onFirst().requestFocus()
+        Shots.save(compose, "collections-grid")
+    }
 }

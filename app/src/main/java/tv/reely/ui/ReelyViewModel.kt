@@ -61,7 +61,7 @@ enum class LibraryKind(val plexType: String, val title: String, val filter: Int)
  * what has arrived, or the whole library as a grid. They used to be stacked on one
  * surface, which meant scrolling past the rows to reach the library.
  */
-enum class LibraryView { HOME, GRID }
+enum class LibraryView { HOME, GRID, COLLECTIONS }
 
 /** Where the app is. A back stack rather than a tab index, so details can be left. */
 sealed interface Route {
@@ -135,6 +135,8 @@ data class BrowseState(
     val unwatchedOnly: Boolean = false,
     val busy: Boolean = false,
     val error: String? = null,
+    /** The library's collections, once they have been asked for. */
+    val collections: List<PlexItem>? = null,
     /** Every page of the grid is in: there is nothing more to ask the server for. */
     val complete: Boolean = false,
     /** A further page is on its way. */
@@ -156,6 +158,8 @@ data class DetailState(
     val trailers: List<PlexExtra> = emptyList(),
     /** "More like this", as the server suggests it. */
     val related: List<PlexItem> = emptyList(),
+    /** For a collection's page: what is in it. */
+    val members: List<PlexItem> = emptyList(),
     val busy: Boolean = true,
     val error: String? = null,
 )
@@ -470,6 +474,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         if (route is Route.Detail) loadDetail(route)
         if (route is Route.Home) refreshHome()
         if (route is Route.Library) refreshLibrary(route.kind, force = false)
+        if (route is Route.Library && route.view == LibraryView.COLLECTIONS) loadCollections(route.kind)
         if (route is Route.Live) openGuide()
     }
 
@@ -1015,6 +1020,10 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         loadBrowse(kind)
         loadGenres(kind, section)
         loadReleased(kind, section)
+        val route = _state.value.route
+        if (route is Route.Library && route.kind == kind && route.view == LibraryView.COLLECTIONS) {
+            loadCollections(kind)
+        }
     }
 
     /**
@@ -1134,6 +1143,21 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** The collections in the library the tab is showing. */
+    private fun loadCollections(kind: LibraryKind) {
+        val plex = _state.value.plex
+        val base = plex.baseUrl ?: return
+        val token = plex.serverToken ?: return
+        val section = plex.browseFor(kind).section ?: return
+        viewModelScope.launch {
+            val collections = runCatching { PlexApi.collections(base, token, section.key) }
+                .getOrElse { emptyList() }
+            updateBrowse(kind) {
+                if (it.section?.key != section.key) it else it.copy(collections = collections)
+            }
+        }
+    }
+
     private fun loadGenres(kind: LibraryKind, section: PlexSection) {
         val plex = _state.value.plex
         val base = plex.baseUrl ?: return
@@ -1192,7 +1216,15 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                     else current.copy(detail = current.detail.copy(trailers = trailers))
                 }
             }
-            launch {
+            if (detail.type == "collection") launch {
+                val members = runCatching { PlexApi.collectionItems(base, token, ratingKey) }
+                    .getOrElse { emptyList() }
+                _state.update { current ->
+                    if (current.detail?.ratingKey != ratingKey) current
+                    else current.copy(detail = current.detail.copy(members = members))
+                }
+            }
+            if (detail.type != "collection") launch {
                 val related = runCatching { PlexApi.related(base, token, ratingKey) }
                     .getOrElse { emptyList() }
                 _state.update { current ->

@@ -139,6 +139,8 @@ fun DetailScreen(
     }
     val railFocus = rememberRowFocus()
     val relatedFocus = rememberRowFocus()
+    val membersFocus = rememberRowFocus()
+    val isCollection = detail.type == "collection"
     var railBroughtTo by remember(state.ratingKey) { mutableStateOf<String?>(null) }
     val page = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -285,7 +287,9 @@ fun DetailScreen(
                                 listOfNotNull(
                                     detail.year?.toString(),
                                     detail.childCount.takeIf { it > 0 && detail.isShow }
-                                        ?.let { "$it seasons" },
+                                        ?.let { if (it == 1) "1 season" else "$it seasons" },
+                                    detail.childCount.takeIf { it > 0 && isCollection }
+                                        ?.let { if (it == 1) "1 title" else "$it titles" },
                                     formatDuration(detail.durationMs).takeIf { !detail.isShow && it.isNotEmpty() },
                                     detail.studio,
                                 )
@@ -303,7 +307,8 @@ fun DetailScreen(
                             ExpandableSummary(text = summary, maxWidth = 640.dp)
                         }
 
-                        Row(
+                        // A collection has nothing of its own to play: its titles do.
+                        if (!isCollection) Row(
                             modifier = Modifier.focusGroup(),
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
@@ -350,6 +355,12 @@ fun DetailScreen(
                                 )
                             }
                         }
+                    }
+                }
+
+                if (isCollection && state.members.isNotEmpty()) {
+                    item {
+                        TitleRow("In this collection", state.members, membersFocus, imageUrl, onOpenRelated)
                     }
                 }
 
@@ -445,33 +456,46 @@ fun DetailScreen(
 
                 if (state.related.isNotEmpty()) {
                     item {
-                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                            SectionHeading("More like this", modifier = Modifier.padding(horizontal = 40.dp))
-                            FocusRow { rowFocused ->
-                                LazyRow(
-                                    modifier = Modifier.restoreFocusTo(relatedFocus).focusGroup().then(rowFocused),
-                                    contentPadding = PaddingValues(horizontal = 36.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                                ) {
-                                    items(state.related, key = { it.listKey }) { title ->
-                                        PosterCard(
-                                            title = title.title,
-                                            subtitle = title.caption,
-                                            imageUrl = imageUrl(title.serverBase, title.thumb, 300, 450),
-                                            progress = title.resumeFraction,
-                                            watched = title.isWatched,
-                                            onFocus = { relatedFocus.onFocused(title.listKey) },
-                                            onClick = { onOpenRelated(title) },
-                                            modifier = rowItem(relatedFocus, title.listKey),
-                                            width = 120.dp,
-                                        )
-                                    }
-                                }
-                            }
-                        }
+                        TitleRow("More like this", state.related, relatedFocus, imageUrl, onOpenRelated, width = 120.dp)
                     }
                 }
             }
+            }
+        }
+    }
+}
+
+/** A heading and a row of posters, each opening its own page. */
+@Composable
+private fun TitleRow(
+    heading: String,
+    titles: List<PlexItem>,
+    focus: tv.reely.ui.components.RowFocus,
+    imageUrl: (String?, String?, Int, Int) -> String?,
+    onOpen: (PlexItem) -> Unit,
+    width: androidx.compose.ui.unit.Dp = 132.dp,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        SectionHeading(heading, modifier = Modifier.padding(horizontal = 40.dp))
+        FocusRow { rowFocused ->
+            LazyRow(
+                modifier = Modifier.restoreFocusTo(focus).focusGroup().then(rowFocused),
+                contentPadding = PaddingValues(horizontal = 36.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                items(titles, key = { it.listKey }) { title ->
+                    PosterCard(
+                        title = title.title,
+                        subtitle = title.caption,
+                        imageUrl = imageUrl(title.serverBase, title.thumb, 300, 450),
+                        progress = title.resumeFraction,
+                        watched = title.isWatched,
+                        onFocus = { focus.onFocused(title.listKey) },
+                        onClick = { onOpen(title) },
+                        modifier = rowItem(focus, title.listKey),
+                        width = width,
+                    )
+                }
             }
         }
     }

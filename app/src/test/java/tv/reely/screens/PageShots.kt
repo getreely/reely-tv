@@ -242,6 +242,44 @@ class PageShots {
         Shots.save(compose, "detail-more-like-this")
     }
 
+    /** A collection's page: what it is, and what is in it. */
+    @Test fun detailCollection() {
+        val members = listOf("ember", "field", "orbit", "glass", "ferry", "cardinal").map(Shots::item)
+        compose.setContent {
+            ReelyTheme {
+                Shots.RemoteInput()
+                Box(Modifier.fillMaxSize().background(Ink)) {
+                    DetailScreen(
+                        state = DetailState(
+                            ratingKey = "c1", serverBase = "http://server", busy = false,
+                            detail = PlexDetail(
+                                ratingKey = "c1", type = "collection", title = "Night Drives",
+                                summary = "Films set after dark, on the road, with somewhere to be by morning.",
+                                tagline = null, year = null, durationMs = 0, viewOffsetMs = 0, contentRating = null,
+                                rating = null, audienceRating = null, airDate = null, viewCount = 0, studio = null,
+                                thumb = "poster/orbit", art = "backdrop/ferry", theme = null,
+                                genres = emptyList(), directors = emptyList(), roles = emptyList(),
+                                childCount = members.size, leafCount = 0, grandparentTitle = null, index = null,
+                                parentIndex = null, logo = null, qualities = emptyList(),
+                            ),
+                            members = members,
+                        ),
+                        imageUrl = { _, path, w, h -> Shots.imageUrl(path, w, h) },
+                        backdropUrl = { _, path -> Shots.imageUrl(path, 1280, 720) },
+                        logoUrl = { _, _ -> null },
+                        onPlay = {}, onPlayFromStart = {}, onPlayDetail = {}, onPlayDetailFromStart = {},
+                        onPlayTrailer = {}, onToggleWatched = {}, onToggleWatchedDetail = {},
+                        onFocusEpisode = {}, onSelectSeason = {},
+                    )
+                }
+            }
+        }
+        compose.onAllNodes(
+            androidx.compose.ui.test.hasText("Fieldwork") and androidx.compose.ui.test.isFocusable(),
+        ).onFirst().requestFocus()
+        Shots.save(compose, "detail-collection")
+    }
+
     /** Where a piece of text really ends; its bounds in the tree stop at the clip. */
     private fun bottomOf(text: String): Float {
         val node = compose.onAllNodesWithText(text).onFirst().fetchSemanticsNode()
