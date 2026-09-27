@@ -95,7 +95,8 @@ fun LiveCategoriesScreen(
                 Column(modifier = Modifier.padding(bottom = 8.dp)) {
                     Text(text = "Live TV", color = Chalk, style = ReelyType.Display)
                     Text(
-                        text = "${live.categories.size} categories",
+                        text = "${live.categories.size} categories" +
+                            (if (live.favorites.isNotEmpty()) "  ·  ${live.favorites.size} favorites" else ""),
                         color = Muted,
                         style = ReelyType.Meta,
                         modifier = Modifier.padding(top = 4.dp),
@@ -120,7 +121,7 @@ fun LiveCategoriesScreen(
                 }
             }
 
-            items(live.categories, key = { it.id }) { category ->
+            items(live.shownCategories, key = { it.id }) { category ->
                 CategoryCard(category = category, onClick = { onSelectCategory(category) })
             }
         }

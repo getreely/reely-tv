@@ -99,6 +99,9 @@ fun GuideOverlay(
     canAddTile: Boolean,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Channels marked as favorites, by stream id. */
+    favorites: Set<Int> = emptySet(),
+    onToggleFavorite: (XtreamChannel) -> Unit = {},
 ) {
     // Categories are drawn even with nothing under them: switching to one that is still
     // loading used to take the whole guide off the screen, with no way back to the list.
@@ -361,6 +364,11 @@ fun GuideOverlay(
                     menuFor = null
                     onAddToMultiview(target)
                 },
+                favorite = target.streamId in favorites,
+                onToggleFavorite = {
+                    menuFor = null
+                    onToggleFavorite(target)
+                },
                 onCancel = { menuFor = null },
                 modifier = Modifier.align(Alignment.Center),
             )
@@ -376,6 +384,8 @@ private fun ChannelMenu(
     focusRequester: FocusRequester,
     onWatch: () -> Unit,
     onAdd: () -> Unit,
+    favorite: Boolean,
+    onToggleFavorite: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -415,6 +425,10 @@ private fun ChannelMenu(
                 lineHeight = 19.sp,
             )
         }
+        TvActionButton(
+            label = if (favorite) "Remove from Favorites" else "Add to Favorites",
+            onClick = onToggleFavorite,
+        )
         TvActionButton(label = "Cancel", onClick = onCancel)
     }
 }

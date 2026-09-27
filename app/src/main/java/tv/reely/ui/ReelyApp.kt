@@ -160,6 +160,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             onCredits = viewModel::onCreditsReached,
             onPlayUpNext = viewModel::playUpNext,
             onDismissUpNext = viewModel::dismissUpNext,
+            onToggleFavoriteChannel = viewModel::toggleFavoriteChannel,
             livePlayer = viewModel.livePlayer,
             onStepChannel = viewModel::stepChannel,
             onSelectChannel = viewModel::playChannel,

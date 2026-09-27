@@ -101,6 +101,11 @@ class Settings(context: Context) {
         get() = prefs.getStringSet(FAVOURITE_SECTIONS, emptySet()) ?: emptySet()
         set(value) = prefs.edit().putStringSet(FAVOURITE_SECTIONS, value).apply()
 
+    /** Live channels marked as favorites, by the provider's stream id. */
+    var favoriteChannels: Set<Int>
+        get() = (prefs.getStringSet(FAVORITE_CHANNELS, emptySet()) ?: emptySet()).mapNotNull { it.toIntOrNull() }.toSet()
+        set(value) = prefs.edit().putStringSet(FAVORITE_CHANNELS, value.map { it.toString() }.toSet()).apply()
+
     /** Where a newer build is published. Changeable, but there is a sensible default. */
     var updateUrl: String
         get() = prefs.getString(UPDATE_URL, DEFAULT_UPDATE_URL) ?: DEFAULT_UPDATE_URL
@@ -122,6 +127,7 @@ class Settings(context: Context) {
         private const val MAX_BITRATE = "playback.maxBitrate"
         private const val UPDATE_URL = "update.url"
         private const val FAVOURITE_SECTIONS = "library.favourites"
+        private const val FAVORITE_CHANNELS = "live.favorites"
         private const val STREAM_FORMAT = "live.format"
         private const val MULTIVIEW_LAYOUT = "live.multiview.layout"
         private const val THEME_MUSIC = "theme.music"

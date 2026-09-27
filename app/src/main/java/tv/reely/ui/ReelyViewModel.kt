@@ -255,10 +255,21 @@ data class LiveState(
     val format: StreamFormat = StreamFormat.HLS,
     val busy: Boolean = false,
     val error: String? = null,
+    /** Channels marked as favorites, by stream id. */
+    val favorites: Set<Int> = emptySet(),
 ) {
     val isConnected: Boolean get() = credentials != null && account != null
 
     fun nowNext(streamId: Int): List<XtreamProgramme> = guide[streamId].orEmpty()
+
+    /** The provider's categories, with Favorites first once there are any. */
+    val shownCategories: List<XtreamCategory>
+        get() = if (favorites.isEmpty()) categories else listOf(FAVORITES) + categories
+
+    companion object {
+        /** Not one of the provider's: the channels marked as favorites, from all of them. */
+        val FAVORITES = XtreamCategory(id = "reely:favorites", name = "Favorites")
+    }
 }
 
 data class SearchState(
@@ -447,6 +458,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             ?: android.os.Build.MODEL?.takeIf { it.isNotBlank() }
             ?: "Reely TV"
         updatePlex { it.copy(favouriteSections = settings.favouriteSections) }
+        updateLive { it.copy(favorites = settings.favoriteChannels) }
         viewModelScope.launch {
             restorePlex()
             restoreLive()
@@ -2086,16 +2098,37 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                     focusedChannel = null,
                 )
             }
-            val channels = runCatching { XtreamApi.liveChannels(credentials, category.id) }
-                .getOrElse { failure ->
-                    updateLive { it.copy(busy = false, error = failure.readable()) }
-                    return@launch
-                }
+            val channels = runCatching {
+                if (category.id == LiveState.FAVORITES.id) favoriteChannelList(credentials)
+                else XtreamApi.liveChannels(credentials, category.id)
+            }.getOrElse { failure ->
+                updateLive { it.copy(busy = false, error = failure.readable()) }
+                return@launch
+            }
             updateLive { it.copy(busy = false, channels = channels) }
             _state.update { it.copy(guide = it.guide.copy(channelIndex = 0)) }
             loadGuideWindow()
             channels.firstOrNull()?.let { focusChannel(it) }
         }
+    }
+
+    /** The favorite channels, in the provider's own order, from its whole list. */
+    private suspend fun favoriteChannelList(credentials: XtreamCredentials): List<XtreamChannel> {
+        val all = allChannels ?: XtreamApi.liveChannels(credentials).also { allChannels = it }
+        val favorites = _state.value.live.favorites
+        return all.filter { it.streamId in favorites }
+    }
+
+    /**
+     * Marks a channel as a favorite, or stops. The Favorites list itself is read again the
+     * next time it is opened, not under somebody watching from it.
+     */
+    fun toggleFavoriteChannel(channel: XtreamChannel) {
+        val next = _state.value.live.favorites.let {
+            if (channel.streamId in it) it - channel.streamId else it + channel.streamId
+        }
+        settings.favoriteChannels = next
+        updateLive { it.copy(favorites = next) }
     }
 
     /**
@@ -2387,7 +2420,10 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         store.remove(SecureStore.XTREAM_HOST, SecureStore.XTREAM_USERNAME, SecureStore.XTREAM_PASSWORD)
         channelsJob?.cancel()
         allChannels = null
-        _state.update { it.copy(live = LiveState(), search = it.search.copy(channels = emptyList())) }
+        // Favorites belong to the television, not the login: they stay for the next one.
+        _state.update {
+            it.copy(live = LiveState(favorites = settings.favoriteChannels), search = it.search.copy(channels = emptyList()))
+        }
     }
 
     // ---------------------------------------------------------------- Updates
