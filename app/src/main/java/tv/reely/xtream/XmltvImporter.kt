@@ -35,8 +35,10 @@ object XmltvImporter {
         val keepFrom = nowSeconds - PAST_WINDOW_SECONDS
         val keepTo = nowSeconds + FUTURE_WINDOW_SECONDS
 
+        val url = XtreamApi.xmltvUrl(credentials)
+            ?: error("This playlist doesn't come with a TV guide. Add a guide address when you sign in.")
         val request = Request.Builder()
-            .url(XtreamApi.xmltvUrl(credentials))
+            .url(url)
             // Asking for gzip ourselves means OkHttp will not transparently unwrap it,
             // so the stream is sniffed below instead.
             .header("Accept-Encoding", "gzip")

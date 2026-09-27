@@ -51,6 +51,7 @@ import tv.reely.ui.components.EmptyNote
 import tv.reely.ui.components.ErrorNote
 import tv.reely.ui.components.SectionHeading
 import tv.reely.ui.components.TvActionButton
+import tv.reely.ui.components.TvChip
 import tv.reely.ui.components.TvTextField
 import tv.reely.ui.components.channelTint
 import tv.reely.ui.components.glass
@@ -66,6 +67,7 @@ import tv.reely.xtream.XtreamCategory
 fun LiveCategoriesScreen(
     live: LiveState,
     onSignIn: (host: String, username: String, password: String) -> Unit,
+    onSignInPlaylist: (url: String, guideUrl: String) -> Unit,
     onSelectCategory: (XtreamCategory) -> Unit,
     onDismissError: () -> Unit,
     modifier: Modifier = Modifier,
@@ -74,6 +76,7 @@ fun LiveCategoriesScreen(
         XtreamSignInPanel(
             live = live,
             onSignIn = onSignIn,
+            onSignInPlaylist = onSignInPlaylist,
             onDismissError = onDismissError,
             modifier = modifier.fillMaxSize(),
         )
@@ -176,12 +179,16 @@ private fun CategoryCard(category: XtreamCategory, onClick: () -> Unit) {
 internal fun XtreamSignInPanel(
     live: LiveState,
     onSignIn: (String, String, String) -> Unit,
+    onSignInPlaylist: (String, String) -> Unit,
     onDismissError: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var playlist by rememberSaveable { mutableStateOf(false) }
     var host by rememberSaveable { mutableStateOf("") }
     var username by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
+    var playlistUrl by rememberSaveable { mutableStateOf("") }
+    var guideUrl by rememberSaveable { mutableStateOf("") }
 
     /*
      * Words on the left, the form on the right. Stacked, the three fields and the button
@@ -199,7 +206,12 @@ internal fun XtreamSignInPanel(
             SectionHeading("Live TV")
             Text(text = "Sign in to your live TV provider", color = Chalk, style = ReelyType.Display.copy(fontSize = 30.sp, lineHeight = 36.sp))
             Text(
-                text = "Enter the details from your provider. They're stored only on this device.",
+                text = if (playlist) {
+                    "Enter the playlist address from your provider. Some providers give a TV guide " +
+                        "address as well. Both are stored only on this device."
+                } else {
+                    "Enter the details from your provider. They're stored only on this device."
+                },
                 color = Muted,
                 style = ReelyType.Body,
             )
@@ -212,24 +224,49 @@ internal fun XtreamSignInPanel(
             modifier = Modifier.width(440.dp).glass().padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            TvTextField(
-                value = host,
-                onValueChange = { host = it },
-                label = "Server",
-                placeholder = "provider.example.com:8080",
-                keyboardType = KeyboardType.Uri,
-            )
-            TvTextField(value = username, onValueChange = { username = it }, label = "Username")
-            TvTextField(
-                value = password,
-                onValueChange = { password = it },
-                label = "Password",
-                password = true,
-                imeAction = ImeAction.Done,
-            )
+            // Providers hand out one or the other: a login for their panel, or a playlist.
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TvChip(label = "Xtream Codes login", selected = !playlist, onClick = { playlist = false })
+                TvChip(label = "M3U playlist", selected = playlist, onClick = { playlist = true })
+            }
+            if (playlist) {
+                TvTextField(
+                    value = playlistUrl,
+                    onValueChange = { playlistUrl = it },
+                    label = "Playlist address",
+                    placeholder = "http://provider.example.com/playlist.m3u",
+                    keyboardType = KeyboardType.Uri,
+                )
+                TvTextField(
+                    value = guideUrl,
+                    onValueChange = { guideUrl = it },
+                    label = "TV guide address (optional)",
+                    placeholder = "http://provider.example.com/guide.xml",
+                    keyboardType = KeyboardType.Uri,
+                    imeAction = ImeAction.Done,
+                )
+            } else {
+                TvTextField(
+                    value = host,
+                    onValueChange = { host = it },
+                    label = "Server",
+                    placeholder = "provider.example.com:8080",
+                    keyboardType = KeyboardType.Uri,
+                )
+                TvTextField(value = username, onValueChange = { username = it }, label = "Username")
+                TvTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = "Password",
+                    password = true,
+                    imeAction = ImeAction.Done,
+                )
+            }
             TvActionButton(
                 label = if (live.busy) "Connecting…" else "Connect",
-                onClick = { onSignIn(host, username, password) },
+                onClick = {
+                    if (playlist) onSignInPlaylist(playlistUrl, guideUrl) else onSignIn(host, username, password)
+                },
                 emphasised = true,
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
             )

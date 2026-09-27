@@ -46,7 +46,7 @@ class LiveShot {
             ReelyTheme {
                 Shots.RemoteInput()
                 Box(Modifier.fillMaxSize().background(Ink)) {
-                    LiveCategoriesScreen(live = live, onSignIn = { _, _, _ -> }, onSelectCategory = {}, onDismissError = {})
+                    LiveCategoriesScreen(live = live, onSignIn = { _, _, _ -> }, onSignInPlaylist = { _, _ -> }, onSelectCategory = {}, onDismissError = {})
                 }
             }
         }

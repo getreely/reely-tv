@@ -461,6 +461,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 LiveCategoriesScreen(
                     live = state.live,
                     onSignIn = viewModel::signInXtream,
+                    onSignInPlaylist = viewModel::signInPlaylist,
                     onSelectCategory = viewModel::openCategory,
                     onDismissError = viewModel::dismissLiveError,
                 )

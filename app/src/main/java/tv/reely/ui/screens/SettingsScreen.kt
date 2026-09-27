@@ -51,6 +51,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import tv.reely.xtream.StreamFormat
+import tv.reely.xtream.XtreamApi
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.offset
@@ -418,15 +419,27 @@ private fun LiveSection(
             value = if (live.busy) "Refreshing…" else "${live.categories.size} categories",
             onClick = onRefreshChannels,
         )
-        SettingRow(
-            title = "Refresh TV guide",
-            value = guide.status.describe(guide.importedAt),
-            onClick = onRefreshGuide,
-        )
+        val credentials = live.credentials
+        if (credentials != null && XtreamApi.xmltvUrl(credentials) == null) {
+            SettingRow(
+                title = "TV guide",
+                value = "None",
+                description = "Your playlist doesn't name one. To add one, sign out and sign in " +
+                    "again with a TV guide address.",
+            )
+        } else {
+            SettingRow(
+                title = "Refresh TV guide",
+                value = guide.status.describe(guide.importedAt),
+                onClick = onRefreshGuide,
+            )
+        }
     }
 
+    val playlist = live.credentials?.isPlaylist == true
     SettingGroup("Watching") {
-        ChoiceRow(
+        // A playlist gives each channel's address as it is; there is no choice of type.
+        if (!playlist) ChoiceRow(
             title = "Stream type",
             description = "Try the other if channels stutter or won't start.",
             options = listOf(
@@ -454,15 +467,15 @@ private fun LiveSection(
     }
 
     SettingGroup("Provider") {
-        SettingRow(title = "Server", value = live.credentials?.base?.let(::hostOf) ?: "—")
-        SettingRow(
+        SettingRow(title = if (playlist) "Playlist" else "Server", value = live.credentials?.base?.let(::hostOf) ?: "—")
+        if (!playlist) SettingRow(
             title = "Account",
             value = listOfNotNull(
                 live.account?.status?.replaceFirstChar { it.uppercase() },
                 live.account?.expiresAt?.let { "until ${epochLabel(it)}" },
             ).joinToString(" · ").ifEmpty { "—" },
         )
-        SettingRow(
+        if (!playlist) SettingRow(
             title = "Connections",
             value = "${live.account?.activeConnections ?: "?"} of ${live.account?.maxConnections ?: "?"} in use",
             description = "Each channel on screen uses one, including the guide preview.",

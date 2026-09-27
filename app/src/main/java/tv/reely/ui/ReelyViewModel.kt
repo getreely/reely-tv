@@ -2034,6 +2034,10 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 else StreamFormat.HLS
             )
         }
+        store.get(SecureStore.M3U_URL)?.let { url ->
+            connectXtream(XtreamCredentials.playlist(url, store.get(SecureStore.M3U_GUIDE)), persist = false)
+            return
+        }
         val host = store.get(SecureStore.XTREAM_HOST) ?: return
         val username = store.get(SecureStore.XTREAM_USERNAME) ?: return
         val password = store.get(SecureStore.XTREAM_PASSWORD) ?: return
@@ -2051,6 +2055,29 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Live TV from an M3U playlist. The playlist address a panel hands out (its get.php)
+     * carries the login in it, and signing in with that login instead gets the panel's
+     * own guide and categories, so that is what happens when one is entered.
+     */
+    fun signInPlaylist(url: String, guideUrl: String) {
+        val address = url.trim()
+        if (!address.startsWith("http://", true) && !address.startsWith("https://", true)) {
+            updateLive { it.copy(error = "Enter the playlist's full address, starting with http:// or https://.") }
+            return
+        }
+        val guide = guideUrl.trim().takeIf { it.isNotEmpty() }
+        if (guide != null && !guide.startsWith("http://", true) && !guide.startsWith("https://", true)) {
+            updateLive { it.copy(error = "Enter the guide's full address, starting with http:// or https://.") }
+            return
+        }
+        val panel = panelLoginIn(address)
+        viewModelScope.launch {
+            if (panel != null && guide == null) connectXtream(panel, persist = true)
+            else connectXtream(XtreamCredentials.playlist(address, guide), persist = true)
+        }
+    }
+
     private suspend fun connectXtream(credentials: XtreamCredentials, persist: Boolean) {
         allChannels = null
         updateLive { it.copy(busy = true, error = null) }
@@ -2059,9 +2086,15 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         if (persist) {
-            store.put(SecureStore.XTREAM_HOST, credentials.base)
-            store.put(SecureStore.XTREAM_USERNAME, credentials.username)
-            store.put(SecureStore.XTREAM_PASSWORD, credentials.password)
+            store.remove(*LIVE_KEYS)
+            if (credentials.playlistUrl != null) {
+                store.put(SecureStore.M3U_URL, credentials.playlistUrl)
+                credentials.guideUrl?.let { store.put(SecureStore.M3U_GUIDE, it) }
+            } else {
+                store.put(SecureStore.XTREAM_HOST, credentials.base)
+                store.put(SecureStore.XTREAM_USERNAME, credentials.username)
+                store.put(SecureStore.XTREAM_PASSWORD, credentials.password)
+            }
         }
         val categories = runCatching { XtreamApi.liveCategories(credentials) }.getOrElse { failure ->
             updateLive {
@@ -2090,7 +2123,10 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         allChannels = null
         viewModelScope.launch {
             updateLive { it.copy(busy = true, error = null) }
-            val categories = runCatching { XtreamApi.liveCategories(credentials) }
+            val categories = runCatching {
+                XtreamApi.reload(credentials)
+                XtreamApi.liveCategories(credentials)
+            }
                 .getOrElse { failure ->
                     updateLive { it.copy(busy = false, error = failure.readable()) }
                     return@launch
@@ -2324,7 +2360,13 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             }
             loadGuideWindow()
             val stale = importedAt == 0L || now - importedAt > REFRESH_AFTER_SECONDS
-            if (stale) refreshGuide(force = false)
+            val credentials = _state.value.live.credentials
+            if (credentials != null && XtreamApi.xmltvUrl(credentials) == null) {
+                // A playlist that names no guide: say so, rather than fail at fetching one.
+                if (stored == 0) {
+                    _state.update { it.copy(guide = it.guide.copy(status = GuideStatus.Failed(NO_PLAYLIST_GUIDE))) }
+                }
+            } else if (stale) refreshGuide(force = false)
         }
     }
 
@@ -2438,7 +2480,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
     fun signOutXtream() {
         livePlayer.stop()
-        store.remove(SecureStore.XTREAM_HOST, SecureStore.XTREAM_USERNAME, SecureStore.XTREAM_PASSWORD)
+        store.remove(*LIVE_KEYS)
         channelsJob?.cancel()
         allChannels = null
         // Favorites belong to the television, not the login: they stay for the next one.
@@ -2597,6 +2639,18 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         /** Guide data older than this is worth fetching again. */
         const val REFRESH_AFTER_SECONDS = 6L * 3_600
 
+        const val NO_PLAYLIST_GUIDE =
+            "This playlist doesn't come with a TV guide. Add a guide address when you sign in."
+
+        /** Everything stored for live TV, whichever way it was signed in to. */
+        val LIVE_KEYS = arrayOf(
+            SecureStore.XTREAM_HOST,
+            SecureStore.XTREAM_USERNAME,
+            SecureStore.XTREAM_PASSWORD,
+            SecureStore.M3U_URL,
+            SecureStore.M3U_GUIDE,
+        )
+
         /** The least time between two refreshes of a library caused by passing its tab. */
         const val LIBRARY_REFRESH_GAP_MS = 60_000L
 
@@ -2648,3 +2702,16 @@ private fun PlexDetail.asItem(): PlexItem = PlexItem(
 
 private fun Throwable.readable(): String =
     message?.takeIf { it.isNotBlank() } ?: (this::class.java.simpleName + " while talking to the server")
+
+/**
+ * The Xtream Codes login inside a panel's playlist address
+ * (`http://host:port/get.php?username=…&password=…&type=m3u_plus`), or null for any other.
+ */
+internal fun panelLoginIn(playlistUrl: String): XtreamCredentials? {
+    val uri = runCatching { android.net.Uri.parse(playlistUrl) }.getOrNull() ?: return null
+    if (uri.path?.endsWith("/get.php") != true) return null
+    val username = uri.getQueryParameter("username")?.takeIf { it.isNotBlank() } ?: return null
+    val password = uri.getQueryParameter("password")?.takeIf { it.isNotBlank() } ?: return null
+    val base = playlistUrl.substringBefore("/get.php")
+    return XtreamCredentials(base, username, password)
+}

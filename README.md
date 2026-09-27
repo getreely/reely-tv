@@ -43,9 +43,10 @@ device.
   are adjustable.
 
 ### Live TV
-- Works with **Xtream Codes** providers: the server address, username and password they
-  gave you.
-- Channels grouped by your provider's own categories.
+- Works with **Xtream Codes** providers (the server address, username and password they
+  gave you) and with **M3U playlists**, with or without an XMLTV guide address.
+- Channels grouped by your provider's own categories, or the playlist's groups.
+- **Favorites**: mark channels from any category and they get a category of their own.
 - **TV guide**, from your provider's own guide data.
 - **Multiview**: up to four channels at once. The sound follows whichever one you move
   to, and any of them can be made full screen or changed to another channel.

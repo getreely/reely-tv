@@ -92,5 +92,7 @@ class SecureStore(context: Context) {
         const val XTREAM_HOST = "xtream.host"
         const val XTREAM_USERNAME = "xtream.username"
         const val XTREAM_PASSWORD = "xtream.password"
+        const val M3U_URL = "m3u.url"
+        const val M3U_GUIDE = "m3u.guide"
     }
 }

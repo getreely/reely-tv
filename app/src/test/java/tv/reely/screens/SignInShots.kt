@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -31,7 +33,7 @@ class SignInShots {
 
     @Before fun setUp() { Shots.onlyWhenAsked() }
 
-    private fun signIn(live: LiveState, name: String) {
+    private fun signIn(live: LiveState, name: String, playlist: Boolean = false) {
         val tabFocus = List(5) { FocusRequester() }
         val settingsFocus = FocusRequester()
         compose.setContent {
@@ -43,11 +45,12 @@ class SignInShots {
                         canSelectOnFocus = { false }, serverName = "Living Room",
                     )
                     Box(Modifier.fillMaxWidth().weight(1f)) {
-                        XtreamSignInPanel(live = live, onSignIn = { _, _, _ -> }, onDismissError = {}, modifier = Modifier.fillMaxSize())
+                        XtreamSignInPanel(live = live, onSignIn = { _, _, _ -> }, onSignInPlaylist = { _, _ -> }, onDismissError = {}, modifier = Modifier.fillMaxSize())
                     }
                 }
             }
         }
+        if (playlist) compose.onNodeWithText("M3U playlist").performClick()
         Shots.save(compose, name)
     }
 
@@ -94,4 +97,10 @@ class SignInShots {
 
     @Test fun liveSignInError() =
         signIn(LiveState(error = "Couldn't connect. Check the server address and port."), "live-sign-in-error")
+
+    @Test fun liveSignInPlaylist() = signIn(
+        LiveState(error = "There are no live channels in that playlist."),
+        "live-sign-in-playlist",
+        playlist = true,
+    )
 }

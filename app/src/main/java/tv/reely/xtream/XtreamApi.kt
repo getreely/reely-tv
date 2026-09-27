@@ -15,7 +15,18 @@ data class XtreamCredentials(
     val base: String,
     val username: String,
     val password: String,
-)
+    /** Set when live TV comes from an M3U playlist rather than an Xtream Codes login. */
+    val playlistUrl: String? = null,
+    /** An XMLTV guide entered alongside a playlist, over the one the playlist names. */
+    val guideUrl: String? = null,
+) {
+    val isPlaylist: Boolean get() = playlistUrl != null
+
+    companion object {
+        fun playlist(url: String, guideUrl: String?) =
+            XtreamCredentials(base = url, username = "", password = "", playlistUrl = url, guideUrl = guideUrl)
+    }
+}
 
 data class XtreamAccount(
     val status: String,
@@ -33,6 +44,10 @@ data class XtreamChannel(
     val icon: String?,
     /** Ties this channel to the XMLTV guide. Panels are inconsistent about case. */
     val epgChannelId: String?,
+    /** A playlist channel's own address. Panel channels are addressed by their id. */
+    val url: String? = null,
+    /** A playlist channel's group, which stands in for a panel's category. */
+    val group: String? = null,
 )
 
 enum class StreamFormat(val extension: String, val label: String) {
@@ -77,7 +92,33 @@ object XtreamApi {
         }
     }
 
+    /** The playlist last downloaded, so categories and channels don't fetch it again. */
+    @Volatile
+    private var playlist: Pair<String, M3uPlaylist>? = null
+
+    private suspend fun playlistFor(credentials: XtreamCredentials, fresh: Boolean = false): M3uPlaylist {
+        val url = credentials.playlistUrl ?: error("Not a playlist.")
+        playlist?.takeIf { !fresh && it.first == url }?.let { return it.second }
+        return M3uPlaylist.download(url).also { playlist = url to it }
+    }
+
+    /**
+     * Fetches the channel list again next time it is asked for. A panel is asked every
+     * time anyway; a playlist is kept after the first download until this.
+     */
+    suspend fun reload(credentials: XtreamCredentials) {
+        if (credentials.isPlaylist) playlistFor(credentials, fresh = true)
+    }
+
+    /** A playlist has no account to speak of: this only checks it has channels in it. */
+    private suspend fun openPlaylist(credentials: XtreamCredentials): XtreamAccount {
+        val list = playlistFor(credentials, fresh = true)
+        if (list.channels.isEmpty()) error("There are no live channels in that playlist.")
+        return XtreamAccount(status = "Active", maxConnections = "?", activeConnections = "0", expiresAt = null)
+    }
+
     suspend fun login(credentials: XtreamCredentials): XtreamAccount = withContext(Dispatchers.IO) {
+        if (credentials.isPlaylist) return@withContext openPlaylist(credentials)
         val json = get(credentials, action = null)
         val root = JSONObject(json)
         val user = root.optJSONObject("user_info")
@@ -101,6 +142,9 @@ object XtreamApi {
 
     suspend fun liveCategories(credentials: XtreamCredentials): List<XtreamCategory> =
         withContext(Dispatchers.IO) {
+            if (credentials.isPlaylist) {
+                return@withContext playlistFor(credentials).groups.map { XtreamCategory(id = it, name = it) }
+            }
             val array = JSONArray(get(credentials, "get_live_categories"))
             (0 until array.length()).map { array.getJSONObject(it) }.map {
                 XtreamCategory(
@@ -122,6 +166,11 @@ object XtreamApi {
         credentials: XtreamCredentials,
         categoryId: String? = null,
     ): List<XtreamChannel> = withContext(Dispatchers.IO) {
+        if (credentials.isPlaylist) {
+            val channels = playlistFor(credentials).channels
+            return@withContext if (categoryId == null) channels
+            else channels.filter { (it.group ?: M3uPlaylist.OTHER) == categoryId }
+        }
         val extras = categoryId?.let { arrayOf("category_id" to it) } ?: emptyArray()
         val array = JSONArray(get(credentials, "get_live_streams", *extras))
         (0 until array.length()).map { array.getJSONObject(it) }.mapNotNull {
@@ -148,9 +197,14 @@ object XtreamApi {
             .distinctBy { it.streamId }
     }
 
-    /** Where the provider serves its whole XMLTV guide. */
-    fun xmltvUrl(credentials: XtreamCredentials): String =
-        Uri.parse("${credentials.base}/xmltv.php").buildUpon()
+    /**
+     * Where the provider serves its whole XMLTV guide. For a playlist, the guide entered
+     * with it, else the one it names itself; null when there is neither.
+     */
+    fun xmltvUrl(credentials: XtreamCredentials): String? =
+        if (credentials.isPlaylist) {
+            credentials.guideUrl ?: playlist?.takeIf { it.first == credentials.playlistUrl }?.second?.guideUrl
+        } else Uri.parse("${credentials.base}/xmltv.php").buildUpon()
             .appendQueryParameter("username", credentials.username)
             .appendQueryParameter("password", credentials.password)
             .build()
@@ -160,7 +214,7 @@ object XtreamApi {
         credentials: XtreamCredentials,
         channel: XtreamChannel,
         format: StreamFormat,
-    ): String = with(credentials) {
+    ): String = channel.url ?: with(credentials) {
         "$base/live/${Uri.encode(username)}/${Uri.encode(password)}/${channel.streamId}.${format.extension}"
     }
 
@@ -202,6 +256,8 @@ object XtreamApi {
         streamId: Int,
         limit: Int = 4,
     ): List<XtreamProgramme> = withContext(Dispatchers.IO) {
+        // A playlist has no panel to ask; its guide is the XMLTV one or nothing.
+        if (credentials.isPlaylist) return@withContext emptyList()
         val body = get(
             credentials,
             "get_short_epg",
