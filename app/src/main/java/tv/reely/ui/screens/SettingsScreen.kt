@@ -527,7 +527,7 @@ private fun PlexPanel(
                     first = index == 0,
                     title = if (plex.namesNeedServer) "${choice.section.title} · ${choice.serverName}"
                     else choice.section.title,
-                    value = if (pinned) "Pinned" else "",
+                    switch = pinned,
                     onClick = { onToggleFavourite(choice) },
                 )
             }
