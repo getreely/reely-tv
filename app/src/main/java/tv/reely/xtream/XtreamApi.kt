@@ -181,7 +181,7 @@ object XtreamApi {
 
         val request = Request.Builder()
             .url(url)
-            .header("User-Agent", "ReelyTV/0.1 (Android TV)")
+            .header("User-Agent", "ReelyTV/${tv.reely.BuildConfig.VERSION_NAME} (Android TV)")
             .get()
             .build()
 

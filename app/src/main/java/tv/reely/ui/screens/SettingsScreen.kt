@@ -626,7 +626,7 @@ private fun AboutSection() {
         )
     }
 
-    SettingGroup("Licences") {
+    SettingGroup("Licenses") {
         Licence.entries.forEach { licence ->
             SettingRow(
                 title = licence.title,
@@ -800,7 +800,8 @@ private fun GuideStatus.describe(importedAt: Long): String = when (this) {
     is GuideStatus.Failed -> "Couldn't update"
 }
 
-private val dayFormat = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
+/** A date the way the television's language writes one: "Sep 16, 2026" in American English. */
+private val dayFormat = java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM, Locale.getDefault())
 
 private fun epochLabel(raw: String): String {
     val seconds = raw.toLongOrNull() ?: return raw

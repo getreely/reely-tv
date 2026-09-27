@@ -118,9 +118,9 @@ data class HomeState(
  */
 enum class LibrarySort(val key: String, val label: String) {
     TITLE("titleSort:asc", "A–Z"),
-    ADDED("addedAt:desc", "Recently Added"),
-    RELEASED("year:desc", "Newest First"),
-    RATED("rating:desc", "Top Rated"),
+    ADDED("addedAt:desc", "Recently added"),
+    RELEASED("year:desc", "Newest first"),
+    RATED("rating:desc", "Top rated"),
 }
 
 /** One library grid. No drill-down: opening something goes to its own detail route. */

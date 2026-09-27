@@ -341,7 +341,7 @@ fun TileMenu(
             overflow = TextOverflow.Ellipsis,
         )
         if (canMaximize) {
-            TvActionButton(label = "Maximise", onClick = onMaximize, emphasised = true)
+            TvActionButton(label = "Full screen", onClick = onMaximize, emphasised = true)
         }
         /*
          * The only way to a third channel that does not have to be guessed at.

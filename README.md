@@ -89,10 +89,10 @@ with `reely-tv.json`, the file the app's update check reads.
 Tests: `./gradlew testDebugUnitTest`. Add `-Pscreenshots` to render every screen into
 `app/build/screenshots`.
 
-## Licences
+## Licenses
 
 Reely TV uses FFmpeg (LGPL 2.1, unmodified, for audio decoding), the Geist typeface (SIL
-Open Font License), and open-source libraries under the Apache 2.0 licence. The full texts
+Open Font License), and open-source libraries under the Apache 2.0 license. The full texts
 are in the app under **Settings → About**.
 
 Reely TV is not affiliated with Plex, Inc. Plex is a trademark of Plex, Inc.

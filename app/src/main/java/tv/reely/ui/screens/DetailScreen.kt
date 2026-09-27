@@ -71,6 +71,9 @@ import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.withFrameNanos
 
+/** Room kept under the episode rail when the page settles on it. */
+private val RAIL_BOTTOM_GAP = 14.dp
+
 /** The episode rail's key in the page, so it can be found to bring into view. */
 private const val EPISODE_RAIL = "episode-rail"
 
@@ -154,10 +157,13 @@ fun DetailScreen(
      * and back up to it when coming up from the cast below, which otherwise left the
      * title and summary off the top: the tile was already in view, so nothing moved.
      */
+    // Below the rail, just enough for the focused tile's lift: the list's own bottom padding
+    // was twice that, and pushed the top of the show's logo up under the tabs.
+    val railGap = with(density) { RAIL_BOTTOM_GAP.roundToPx() }
     suspend fun settleOnRail() {
         val info = page.layoutInfo
         val rail = info.visibleItemsInfo.firstOrNull { it.key == EPISODE_RAIL } ?: return
-        val bottom = info.viewportEndOffset - info.afterContentPadding
+        val bottom = info.viewportEndOffset - railGap
         val distance = rail.offset + rail.size - bottom
         if (distance != 0) page.animateScrollBy(distance.toFloat())
     }
@@ -199,7 +205,7 @@ fun DetailScreen(
                     page.animateScrollToItem(1)
                     val info = page.layoutInfo
                     val rail = info.visibleItemsInfo.firstOrNull { it.key == EPISODE_RAIL }
-                    val overflow = rail?.let { it.offset + it.size - (info.viewportEndOffset - info.afterContentPadding) } ?: 0
+                    val overflow = rail?.let { it.offset + it.size - (info.viewportEndOffset - railGap) } ?: 0
                     if (overflow > 0) page.animateScrollBy(overflow.toFloat())
                 } else {
                     settleOnRail()

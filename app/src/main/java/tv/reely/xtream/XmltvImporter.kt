@@ -40,7 +40,7 @@ object XmltvImporter {
             // Asking for gzip ourselves means OkHttp will not transparently unwrap it,
             // so the stream is sniffed below instead.
             .header("Accept-Encoding", "gzip")
-            .header("User-Agent", "ReelyTV/0.4 (Android TV)")
+            .header("User-Agent", "ReelyTV/${tv.reely.BuildConfig.VERSION_NAME} (Android TV)")
             .get()
             .build()
 
