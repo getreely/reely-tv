@@ -50,6 +50,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import tv.reely.xtream.StreamFormat
+import kotlinx.coroutines.delay
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -103,8 +111,8 @@ fun SettingsScreen(
     onToggleSubtitleBackground: () -> Unit,
     onNudgeUpNext: (Int) -> Unit,
     onToggleGuidePreview: () -> Unit,
-    onCyclePlaybackMode: () -> Unit,
-    onCycleMaxBitrate: () -> Unit,
+    onSetPlaybackMode: (String) -> Unit,
+    onSetMaxBitrate: (Int) -> Unit,
     onToggleMultiviewLayout: () -> Unit,
     onToggleThemeMusic: () -> Unit,
     onToggleMatchFrameRate: () -> Unit,
@@ -142,8 +150,12 @@ fun SettingsScreen(
         onEnter = { sectionFocus.getValue(section).requestFocus() }
     }
 
+    var choosing by remember { mutableStateOf<ChoiceRequest?>(null) }
+
+    Box(modifier = modifier.fillMaxSize()) {
+    CompositionLocalProvider(LocalChoices provides { choosing = it }) {
     Row(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 36.dp, vertical = 14.dp)
             .then(toSection)
@@ -194,8 +206,8 @@ fun SettingsScreen(
                     onNudgeSubtitleScale = onNudgeSubtitleScale,
                     onToggleSubtitleBackground = onToggleSubtitleBackground,
                     onNudgeUpNext = onNudgeUpNext,
-                    onCyclePlaybackMode = onCyclePlaybackMode,
-                    onCycleMaxBitrate = onCycleMaxBitrate,
+                    onSetPlaybackMode = onSetPlaybackMode,
+                    onSetMaxBitrate = onSetMaxBitrate,
                     onToggleThemeMusic = onToggleThemeMusic,
                     onToggleMatchFrameRate = onToggleMatchFrameRate,
                     onToggleLargerBuffer = onToggleLargerBuffer,
@@ -233,6 +245,17 @@ fun SettingsScreen(
             }
         }
     }
+    }
+        choosing?.let { request ->
+            ChoicePanel(
+                request = request,
+                onClose = {
+                    choosing = null
+                    runCatching { request.returnTo.requestFocus() }
+                },
+            )
+        }
+    }
 }
 
 @Composable
@@ -241,92 +264,114 @@ private fun PlaybackSection(
     onNudgeSubtitleScale: (Float) -> Unit,
     onToggleSubtitleBackground: () -> Unit,
     onNudgeUpNext: (Int) -> Unit,
-    onCyclePlaybackMode: () -> Unit,
-    onCycleMaxBitrate: () -> Unit,
+    onSetPlaybackMode: (String) -> Unit,
+    onSetMaxBitrate: (Int) -> Unit,
     onToggleThemeMusic: () -> Unit,
     onToggleMatchFrameRate: () -> Unit,
     onToggleLargerBuffer: () -> Unit,
     onNudgeThemeVolume: (Float) -> Unit,
 ) {
     SettingGroup("Video") {
-        SettingRow(
+        ChoiceRow(
             title = "Playback mode",
             first = true,
-            value = when (prefs.playbackMode) {
-                Settings.MODE_DIRECT -> "Original only"
-                Settings.MODE_TRANSCODE -> "Always convert"
-                else -> "Automatic"
-            },
-            description = when (prefs.playbackMode) {
-                Settings.MODE_DIRECT -> "Always plays the original file. Some may not play."
-                Settings.MODE_TRANSCODE -> "Plex converts everything. Uses more of your server."
-                else -> "Plays the original file. Plex converts it only when needed."
-            },
-            onClick = onCyclePlaybackMode,
+            options = listOf(
+                Option(Settings.MODE_AUTO, "Automatic", "Plays the original file. Plex converts it only when needed."),
+                Option(Settings.MODE_DIRECT, "Original only", "Always plays the original file. Some may not play."),
+                Option(Settings.MODE_TRANSCODE, "Always convert", "Plex converts everything. Uses more of your server."),
+            ),
+            selected = prefs.playbackMode.takeIf {
+                it == Settings.MODE_DIRECT || it == Settings.MODE_TRANSCODE
+            } ?: Settings.MODE_AUTO,
+            onSelect = onSetPlaybackMode,
         )
-        SettingRow(
+        ChoiceRow(
             title = "Conversion quality",
-            value = if (prefs.maxBitrateKbps <= 0) "Original" else "Up to ${prefs.maxBitrateKbps / 1_000} Mbps",
             description = "The highest quality Plex uses when it converts a video.",
-            onClick = onCycleMaxBitrate,
+            options = Settings.BITRATE_CHOICES.map { kbps ->
+                Option(
+                    kbps,
+                    if (kbps <= 0) "Original" else "Up to ${kbps / 1_000} Mbps",
+                    when (kbps) {
+                        0 -> "As good as the file itself."
+                        20_000 -> "4K"
+                        12_000 -> "1080p, very high"
+                        8_000 -> "1080p"
+                        4_000 -> "720p"
+                        else -> "For a slow connection"
+                    },
+                )
+            },
+            selected = prefs.maxBitrateKbps.coerceAtLeast(0),
+            onSelect = onSetMaxBitrate,
         )
         SettingRow(
             title = "Match frame rate",
-            value = onOff(prefs.matchFrameRate),
+            switch = prefs.matchFrameRate,
             description = "Smoother motion. The screen may blink as it switches.",
             onClick = onToggleMatchFrameRate,
         )
-        SettingRow(
+        ChoiceRow(
             title = "Buffer",
-            value = if (prefs.largerBuffer) "Larger" else "Normal",
             description = "Larger helps on a slow or unsteady connection.",
-            onClick = onToggleLargerBuffer,
+            options = listOf(
+                Option(false, "Normal", "Starts quickly."),
+                Option(true, "Larger", "Holds up to two minutes ahead. Takes a moment longer to start."),
+            ),
+            selected = prefs.largerBuffer,
+            onSelect = { onToggleLargerBuffer() },
         )
     }
 
     SettingGroup("Subtitles") {
-        SettingRow(
+        ChoiceRow(
             title = "Size",
-            value = "${(prefs.subtitleScale * 100).roundToInt()}%",
-            onClick = { onNudgeSubtitleScale(nextStep(prefs.subtitleScale, SUBTITLE_SIZES)) },
+            options = SUBTITLE_SIZES.map { size ->
+                Option(size, "${(size * 100).roundToInt()}%", if (size == 1.0f) "Standard" else null)
+            },
+            // The nearest step, so a value saved before there were steps still shows as one.
+            selected = SUBTITLE_SIZES.minBy { kotlin.math.abs(it - prefs.subtitleScale) },
+            onSelect = { size -> onNudgeSubtitleScale(size - prefs.subtitleScale) },
         )
         SettingRow(
             title = "Background",
-            value = onOff(prefs.subtitleBackground),
+            switch = prefs.subtitleBackground,
             description = "A dark box behind the text, instead of an outline.",
             onClick = onToggleSubtitleBackground,
         )
     }
 
     SettingGroup("Up Next") {
-        SettingRow(
+        ChoiceRow(
             title = "Countdown",
-            value = if (prefs.upNextSeconds > 0) "${prefs.upNextSeconds} seconds" else "Off",
             description = "How long before the next episode starts by itself.",
-            onClick = {
-                val next = UP_NEXT_SECONDS.firstOrNull { it > prefs.upNextSeconds } ?: UP_NEXT_SECONDS.first()
-                onNudgeUpNext(next - prefs.upNextSeconds)
+            options = UP_NEXT_SECONDS.map { seconds ->
+                Option(
+                    seconds,
+                    if (seconds > 0) "$seconds seconds" else "Off",
+                    if (seconds == 0) "Up Next waits for you to choose." else null,
+                )
             },
+            selected = UP_NEXT_SECONDS.minBy { kotlin.math.abs(it - prefs.upNextSeconds) },
+            onSelect = { seconds -> onNudgeUpNext(seconds - prefs.upNextSeconds) },
         )
     }
 
     SettingGroup("Show pages") {
         val level = themeLevel(prefs)
-        SettingRow(
+        ChoiceRow(
             title = "Theme music",
-            value = THEME_LEVELS.getOrNull(level)?.first ?: "Off",
             description = "Plays a show's theme song on its page.",
-            onClick = {
-                // Off, then each volume in turn, then off again.
-                val next = level + 1
+            options = listOf(Option(-1, "Off")) +
+                THEME_LEVELS.mapIndexed { index, (label, _) -> Option(index, label) },
+            selected = level,
+            onSelect = { chosen ->
                 when {
-                    level < 0 -> {
-                        onToggleThemeMusic()
-                        onNudgeThemeVolume(THEME_LEVELS.first().second - prefs.themeVolume)
+                    chosen < 0 -> if (prefs.themeMusic) onToggleThemeMusic()
+                    else -> {
+                        if (!prefs.themeMusic) onToggleThemeMusic()
+                        onNudgeThemeVolume(THEME_LEVELS[chosen].second - prefs.themeVolume)
                     }
-                    next < THEME_LEVELS.size ->
-                        onNudgeThemeVolume(THEME_LEVELS[next].second - prefs.themeVolume)
-                    else -> onToggleThemeMusic()
                 }
             },
         )
@@ -336,12 +381,6 @@ private fun PlaybackSection(
 private val SUBTITLE_SIZES = listOf(0.7f, 0.8f, 0.9f, 1.0f, 1.2f, 1.4f)
 private val UP_NEXT_SECONDS = listOf(0, 5, 10, 15, 20, 30)
 private val THEME_LEVELS = listOf("Quiet" to 0.05f, "Medium" to 0.10f, "Loud" to 0.20f)
-
-/** The change that takes a value to the next of [steps], or back round to the first. */
-private fun nextStep(current: Float, steps: List<Float>): Float {
-    val next = steps.firstOrNull { it > current + 0.01f } ?: steps.first()
-    return next - current
-}
 
 /** Which of [THEME_LEVELS] the theme music is at, or -1 when it is off. */
 private fun themeLevel(prefs: PlayerPrefs): Int {
@@ -387,26 +426,30 @@ private fun LiveSection(
     }
 
     SettingGroup("Watching") {
-        SettingRow(
+        ChoiceRow(
             title = "Stream type",
-            value = live.format.label,
             description = "Try the other if channels stutter or won't start.",
-            onClick = onToggleFormat,
+            options = listOf(
+                Option(StreamFormat.HLS, StreamFormat.HLS.label, "Works with most providers."),
+                Option(StreamFormat.TS, StreamFormat.TS.label, "Starts faster with some providers."),
+            ),
+            selected = live.format,
+            onSelect = { onToggleFormat() },
         )
         SettingRow(
             title = "Guide preview",
-            value = onOff(prefs.guidePreview),
+            switch = prefs.guidePreview,
             description = "Plays the highlighted channel in the guide.",
             onClick = onToggleGuidePreview,
         )
-        SettingRow(
+        ChoiceRow(
             title = "Multiview layout",
-            value = if (prefs.multiviewLayout == Settings.LAYOUT_FOCUS) "Focus" else "Grid",
-            description = if (prefs.multiviewLayout == Settings.LAYOUT_FOCUS)
-                "The channel you're hearing gets most of the screen."
-            else
-                "Every channel gets an equal share of the screen.",
-            onClick = onToggleMultiviewLayout,
+            options = listOf(
+                Option(Settings.LAYOUT_GRID, "Grid", "Every channel gets an equal share of the screen."),
+                Option(Settings.LAYOUT_FOCUS, "Focus", "The channel you're hearing gets most of the screen."),
+            ),
+            selected = if (prefs.multiviewLayout == Settings.LAYOUT_FOCUS) Settings.LAYOUT_FOCUS else Settings.LAYOUT_GRID,
+            onSelect = { onToggleMultiviewLayout() },
         )
     }
 
@@ -742,6 +785,12 @@ private fun SettingRow(
     description: String? = null,
     /** The page's first option: where focus lands coming in from the sections. */
     first: Boolean = false,
+    /** An on/off setting: drawn as a switch in place of [value]; OK flips it. */
+    switch: Boolean? = null,
+    /** A setting that opens a list of its choices: a chevron after the value says so. */
+    opens: Boolean = false,
+    /** For coming back to this row, as a list it opened closes. */
+    requester: FocusRequester? = null,
     onClick: (() -> Unit)? = null,
 ) {
     val firstOption = LocalFirstOption.current
@@ -753,6 +802,7 @@ private fun SettingRow(
     val row = if (onClick != null) {
         base
             .then(if (first && firstOption != null) Modifier.focusRequester(firstOption) else Modifier)
+            .then(if (requester != null) Modifier.focusRequester(requester) else Modifier)
             .onFocusChanged { focused = it.isFocused }
             .background(if (focused) colors.fill else Color.Transparent)
             .clickable(onClick = onClick)
@@ -780,7 +830,9 @@ private fun SettingRow(
                 )
             }
         }
-        if (!value.isNullOrEmpty()) {
+        if (switch != null) {
+            Switch(on = switch, focused = focused)
+        } else if (!value.isNullOrEmpty()) {
             Text(
                 text = value,
                 color = if (focused) Ink else Muted,
@@ -789,6 +841,186 @@ private fun SettingRow(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.widthIn(max = 300.dp),
             )
+        }
+        if (opens) {
+            Text(text = "›", color = if (focused) Ink else Faint, fontSize = 22.sp, lineHeight = 22.sp)
+        }
+    }
+}
+
+/** On or off at a glance: a track with its knob at one end, coral when on. */
+@Composable
+private fun Switch(on: Boolean, focused: Boolean) {
+    val travel by animateFloatAsState(if (on) 1f else 0f, tween(160), label = "switch")
+    val track = when {
+        on -> Accent
+        focused -> Ink.copy(alpha = 0.22f)
+        else -> Chalk.copy(alpha = 0.18f)
+    }
+    Box(
+        modifier = Modifier
+            .size(width = 44.dp, height = 26.dp)
+            .clip(RoundedCornerShape(50))
+            .background(track)
+            .padding(3.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .offset(x = 18.dp * travel)
+                .size(20.dp)
+                .clip(CircleShape)
+                .background(if (on || !focused) Chalk else Ink.copy(alpha = 0.55f)),
+        )
+    }
+}
+
+/** One of the values a setting can take, with a line on what it does if it needs one. */
+private data class Option<T>(val value: T, val label: String, val description: String? = null)
+
+/**
+ * A setting with several values. OK opens the whole list, the current one ticked and
+ * under the cursor; OK on another picks it, Back leaves it as it was. Pressing OK over and
+ * over to cycle round to the value wanted, as this was, is not how a setting is chosen.
+ */
+@Composable
+private fun <T> ChoiceRow(
+    title: String,
+    options: List<Option<T>>,
+    selected: T,
+    onSelect: (T) -> Unit,
+    description: String? = null,
+    first: Boolean = false,
+) {
+    val openChoices = LocalChoices.current
+    val row = remember { FocusRequester() }
+    val current = options.firstOrNull { it.value == selected }
+    SettingRow(
+        title = title,
+        value = current?.label,
+        description = description ?: current?.description,
+        first = first,
+        opens = true,
+        requester = row,
+        onClick = {
+            openChoices(
+                ChoiceRequest(
+                    title = title,
+                    options = options.map { it.label to it.description },
+                    selected = options.indexOfFirst { it.value == selected }.coerceAtLeast(0),
+                    onPick = { index ->
+                        val value = options[index].value
+                        if (value != selected) onSelect(value)
+                    },
+                    returnTo = row,
+                ),
+            )
+        },
+    )
+}
+
+/** A list of choices asked for by a [ChoiceRow], drawn by the screen over everything. */
+private class ChoiceRequest(
+    val title: String,
+    val options: List<Pair<String, String?>>,
+    val selected: Int,
+    val onPick: (Int) -> Unit,
+    /** Where the cursor goes back to when the list closes: the setting that opened it. */
+    val returnTo: FocusRequester,
+)
+
+private val LocalChoices = staticCompositionLocalOf<(ChoiceRequest) -> Unit> { {} }
+
+/**
+ * The list itself, over a dimmed screen. It holds the cursor while it is up: up off the
+ * top or down off the bottom goes nowhere rather than out into the settings behind it.
+ */
+@Composable
+private fun ChoicePanel(request: ChoiceRequest, onClose: () -> Unit) {
+    BackHandler(onBack = onClose)
+    val start = remember(request) { FocusRequester() }
+    var holding by remember(request) { mutableStateOf(false) }
+    LaunchedEffect(request) {
+        repeat(40) {
+            if (holding) return@LaunchedEffect
+            start.requestWhenReady()
+            delay(50)
+        }
+    }
+    Box(
+        modifier = Modifier.fillMaxSize().background(Ink.copy(alpha = 0.6f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier
+                .width(480.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(SurfaceRaised)
+                .border(1.dp, Chalk.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
+                .padding(horizontal = 16.dp, vertical = 20.dp)
+                .onFocusChanged { holding = it.hasFocus }
+                .focusProperties { onExit = { cancelFocusChange() } }
+                .focusGroup(),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = request.title,
+                color = Chalk,
+                style = ReelyType.RowTitle,
+                modifier = Modifier.padding(start = 12.dp, bottom = 10.dp),
+            )
+            request.options.forEachIndexed { index, (label, description) ->
+                OptionRow(
+                    option = Option(index, label, description),
+                    chosen = index == request.selected,
+                    onClick = {
+                        request.onPick(index)
+                        onClose()
+                    },
+                    modifier = if (index == request.selected) Modifier.focusRequester(start) else Modifier,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun <T> OptionRow(option: Option<T>, chosen: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    var focused by remember { mutableStateOf(false) }
+    val colors = pillColors(focused)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .onFocusChanged { focused = it.isFocused }
+            .background(if (focused) colors.fill else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        // A radio: a ring, filled when this is the one in use.
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .border(2.dp, if (focused) Ink else if (chosen) Accent else Faint, CircleShape)
+                .padding(4.dp)
+                .clip(CircleShape)
+                .background(if (chosen) (if (focused) Ink else Accent) else Color.Transparent),
+        )
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = option.label,
+                color = if (focused) Ink else Chalk,
+                style = ReelyType.Meta,
+                fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Medium,
+            )
+            if (option.description != null) {
+                Text(
+                    text = option.description,
+                    color = if (focused) Ink.copy(alpha = 0.7f) else Muted,
+                    style = ReelyType.Label,
+                )
+            }
         }
     }
 }

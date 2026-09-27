@@ -1717,18 +1717,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(prefs = it.prefs.copy(playbackMode = mode)) }
     }
 
-    /** Direct → Auto → Always transcode, and round again. */
-    fun cyclePlaybackMode() {
-        val choices = listOf(Settings.MODE_DIRECT, Settings.MODE_AUTO, Settings.MODE_TRANSCODE)
-        val next = choices[(choices.indexOf(settings.playbackMode).coerceAtLeast(0) + 1) % choices.size]
-        setPlaybackMode(next)
-    }
-
-    fun cycleMaxBitrate() {
-        val choices = Settings.BITRATE_CHOICES
-        val next = choices[(choices.indexOf(settings.maxBitrateKbps).coerceAtLeast(0) + 1) % choices.size]
-        settings.maxBitrateKbps = next
-        _state.update { it.copy(prefs = it.prefs.copy(maxBitrateKbps = next)) }
+    fun setMaxBitrate(kbps: Int) {
+        settings.maxBitrateKbps = kbps
+        _state.update { it.copy(prefs = it.prefs.copy(maxBitrateKbps = kbps)) }
     }
 
     fun stopPlayback(positionMs: Long = 0) {
