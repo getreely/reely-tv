@@ -136,14 +136,10 @@ fun PlayerScreen(
     upNext: PlexItem?,
     onExit: (Long) -> Unit,
     onEnded: () -> Unit,
-    /** The credits have started: find what comes next, for the Next Episode button. */
+    /** The credits have started: find what comes next, and offer it. */
     onCredits: () -> Unit,
     onPlayUpNext: () -> Unit,
     onDismissUpNext: () -> Unit,
-    /** What comes next, once the credits have started and it has been found. */
-    nextEpisode: PlexItem? = null,
-    /** The Next Episode button: bring up the Up Next screen. */
-    onShowUpNext: () -> Unit = {},
     onStepChannel: (Int) -> Unit,
     onSelectChannel: (Int) -> Unit,
     onOpenCategory: (XtreamCategory) -> Unit,
@@ -325,7 +321,7 @@ fun PlayerScreen(
         introStartMs = intro?.startMs,
         introEndMs = intro?.endMs,
         creditsStartMs = credits?.startMs,
-        canSkipForward = nextEpisode != null,
+        canSkipForward = canSkipForward,
         upNextShowing = upNext != null,
     )
     val skipLabel = when (prompt) {
@@ -335,10 +331,9 @@ fun PlayerScreen(
     }
 
     /*
-     * The credits starting looks up what comes next, and offers it as a Next Episode
-     * button in the corner, like Skip Intro. The Up Next screen only comes up when that
-     * is pressed, or when the file runs out: taking the picture over the moment the
-     * credits began was too soon.
+     * Up Next comes up when the credits start, as it does in Plex, rather than only once
+     * the file has run out. Once per episode: somebody who chose to watch the credits
+     * is not asked again until they are over, when the end of the file asks.
      */
     val inCredits = !playback.isLive && positionIsCurrent && credits != null && positionMs >= credits.startMs
     var creditsOffered by remember(playback.url) { mutableStateOf(false) }
@@ -976,7 +971,7 @@ fun PlayerScreen(
         val controlsShowing = controlsVisible && !guideOpen && tileCount == 1 && !postPlay
         val skip = {
             if (prompt == SkipPrompt.INTRO && intro != null) exoPlayer.seekTo(intro.endMs)
-            else onShowUpNext()
+            else onStepEpisode(1)
         }
         if (controlsShowing) {
             Controls(
