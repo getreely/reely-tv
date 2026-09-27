@@ -1,0 +1,167 @@
+package tv.reely.ui.screens
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.tv.material3.Text
+import kotlinx.coroutines.delay
+import tv.reely.BuildConfig
+import tv.reely.ui.UpdateStatus
+import tv.reely.ui.components.TvActionButton
+import tv.reely.ui.components.requestWhenReady
+import tv.reely.ui.theme.Accent
+import tv.reely.ui.theme.Chalk
+import tv.reely.ui.theme.Ink
+import tv.reely.ui.theme.Muted
+import tv.reely.ui.theme.ReelyType
+import tv.reely.ui.theme.SurfaceRaised
+import kotlin.math.roundToInt
+
+/**
+ * "A new version of Reely is ready": asked once, when the app finds one at startup.
+ * Update now downloads it with the progress showing and hands it to the system installer;
+ * Later puts it off until the next start. It holds the cursor while it is up.
+ */
+@Composable
+fun UpdatePrompt(
+    status: UpdateStatus,
+    onUpdate: () -> Unit,
+    onLater: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    BackHandler(onBack = onLater)
+    val start = remember { FocusRequester() }
+    var holding by remember { mutableStateOf(false) }
+    LaunchedEffect(status is UpdateStatus.Failed) {
+        repeat(40) {
+            if (holding) return@LaunchedEffect
+            start.requestWhenReady()
+            delay(50)
+        }
+    }
+
+    val info = (status as? UpdateStatus.Available)?.info
+    Box(
+        modifier = modifier.fillMaxSize().background(Ink.copy(alpha = 0.72f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier
+                .width(520.dp)
+                .clip(RoundedCornerShape(22.dp))
+                .background(SurfaceRaised)
+                .border(1.dp, Chalk.copy(alpha = 0.12f), RoundedCornerShape(22.dp))
+                .padding(horizontal = 32.dp, vertical = 28.dp)
+                .onFocusChanged { holding = it.hasFocus }
+                .focusProperties { onExit = { cancelFocusChange() } }
+                .focusGroup(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text(text = "reely", color = Accent, fontSize = 30.sp, lineHeight = 34.sp, style = ReelyType.Display)
+            Text(
+                text = when (status) {
+                    is UpdateStatus.Downloading -> "Downloading the update…"
+                    is UpdateStatus.Handed -> "Ready to install"
+                    is UpdateStatus.Failed -> "The update didn't download"
+                    else -> "A new version is available"
+                },
+                color = Chalk,
+                style = ReelyType.Headline,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                text = when (status) {
+                    is UpdateStatus.Downloading -> "It installs as soon as it's here."
+                    is UpdateStatus.Handed -> "Confirm on the screen that appears."
+                    is UpdateStatus.Failed -> status.message
+                    else -> buildString {
+                        append("Version ${info?.versionName ?: "?"} is ready")
+                        info?.sizeBytes?.takeIf { it > 0 }?.let { append(" (${(it / 1_000_000.0).roundToInt()} MB)") }
+                        append(". You have ${BuildConfig.VERSION_NAME}.")
+                    }
+                },
+                color = Muted,
+                style = ReelyType.Body,
+                textAlign = TextAlign.Center,
+            )
+
+            if (status is UpdateStatus.Downloading) {
+                val fraction = if (status.total > 0) (status.read.toFloat() / status.total).coerceIn(0f, 1f) else 0f
+                Box(
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(Chalk.copy(alpha = 0.16f)),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(fraction)
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(Accent),
+                    )
+                }
+                Text(
+                    text = "${(fraction * 100).roundToInt()}%",
+                    color = Muted,
+                    style = ReelyType.Label,
+                )
+                // Something to hold the cursor while it downloads, and a way out.
+                TvActionButton(
+                    label = "Hide",
+                    onClick = onLater,
+                    modifier = Modifier.focusRequester(start),
+                )
+            } else if (status is UpdateStatus.Handed) {
+                TvActionButton(
+                    label = "Close",
+                    onClick = onLater,
+                    modifier = Modifier.focusRequester(start),
+                )
+            } else {
+                Row(
+                    modifier = Modifier.padding(top = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    TvActionButton(
+                        label = if (status is UpdateStatus.Failed) "Try again" else "Update now",
+                        onClick = onUpdate,
+                        emphasised = true,
+                        modifier = Modifier.focusRequester(start),
+                    )
+                    TvActionButton(label = "Later", onClick = onLater)
+                }
+            }
+        }
+    }
+}

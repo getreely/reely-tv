@@ -527,6 +527,15 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 )
             }
 
+            // A newer version found at startup. Not over something playing: it waits.
+            if (state.updatePrompt && !confirmExit) {
+                tv.reely.ui.screens.UpdatePrompt(
+                    status = state.update,
+                    onUpdate = viewModel::installUpdate,
+                    onLater = viewModel::dismissUpdatePrompt,
+                )
+            }
+
             if (confirmExit) {
                 ConfirmExit(
                     onLeave = { activity?.finish() },

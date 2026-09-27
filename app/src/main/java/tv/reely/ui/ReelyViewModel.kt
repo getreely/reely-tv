@@ -346,6 +346,9 @@ data class PlayerPrefs(
 )
 
 /** How often a browsing screen left up asks for what has changed. */
+/** How long after starting the app it looks for a newer version. */
+private const val UPDATE_CHECK_DELAY_MS = 4_000L
+
 /** How many titles the library grid asks for at a time. */
 private const val GRID_PAGE = 300
 
@@ -388,6 +391,8 @@ data class ReelyState(
     val upNext: PlexItem? = null,
     val prefs: PlayerPrefs = PlayerPrefs(),
     val update: UpdateStatus = UpdateStatus.Idle,
+    /** A newer version turned up at startup: ask whether to install it. */
+    val updatePrompt: Boolean = false,
 ) {
     val route: Route get() = stack.last()
 }
@@ -464,7 +469,32 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             restoreLive()
             _state.update { it.copy(restoring = false) }
         }
+        checkForUpdateAtStart()
     }
+
+    /**
+     * A quiet look for a newer version, a few seconds in so it doesn't hold up the first
+     * screen. Found, it asks; not found or not reachable, it says nothing — Settings,
+     * Updates is where a failed check is worth reporting.
+     */
+    private fun checkForUpdateAtStart() {
+        viewModelScope.launch {
+            delay(UPDATE_CHECK_DELAY_MS)
+            if (_state.value.update !is UpdateStatus.Idle) return@launch
+            val info = runCatching { Updater.check(settings.updateUrl) }.getOrNull() ?: return@launch
+            if (!info.describesItself || !info.isNewerThan(BuildConfig.VERSION_CODE)) return@launch
+            _state.update {
+                if (it.update !is UpdateStatus.Idle) it
+                else it.copy(update = UpdateStatus.Available(info), updatePrompt = true)
+            }
+        }
+    }
+
+    /** The build last offered, so a failed download can be tried again. */
+    private var offeredUpdate: tv.reely.core.UpdateInfo? = null
+
+    /** Later: not asked again until the app is next started. */
+    fun dismissUpdatePrompt() = _state.update { it.copy(updatePrompt = false) }
 
     // ---------------------------------------------------------------- Navigation
 
@@ -2455,8 +2485,11 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val info = when (val status = _state.value.update) {
             is UpdateStatus.Available -> status.info
             is UpdateStatus.Unlabelled -> status.info
+            // Try again, after a download that failed: the same build as before.
+            is UpdateStatus.Failed -> offeredUpdate ?: return
             else -> return
         }
+        offeredUpdate = info
         updateJob?.cancel()
         updateJob = viewModelScope.launch {
             _state.update { it.copy(update = UpdateStatus.Downloading(0, info.sizeBytes)) }
