@@ -1,5 +1,29 @@
 package tv.reely.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import tv.reely.plex.PlexLetter
+import tv.reely.ui.components.ChoicePanel
+import tv.reely.ui.components.ChoiceRequest
+import tv.reely.ui.theme.Accent
+import tv.reely.ui.theme.Faint
+import tv.reely.ui.theme.Ink
+import tv.reely.ui.theme.Muted
 import tv.reely.ui.components.ROWS_BOTTOM
 import tv.reely.ui.components.bleed
 import tv.reely.ui.components.rememberMarginScroll
@@ -75,13 +99,15 @@ fun LibraryScreen(
     onStartLink: () -> Unit,
     onCancelLink: () -> Unit,
     onDismissPlexError: () -> Unit,
-    onCycleSort: () -> Unit,
+    onSetSort: (LibrarySort) -> Unit,
     onToggleUnwatched: () -> Unit,
     onSelectGenre: (String?) -> Unit,
     onDismissBrowseError: () -> Unit,
     modifier: Modifier = Modifier,
     /** The cursor is near the end of the grid: time for the next page. */
     onLoadMore: () -> Unit = {},
+    onSelectDecade: (String?) -> Unit = {},
+    onJumpToLetter: (String) -> Unit = {},
 ) {
     if (!plex.isConnected) {
         PlexSignInPanel(
@@ -129,6 +155,23 @@ fun LibraryScreen(
     val sideways = LocalBringIntoViewSpec.current
     val rowSnap = rememberRowSnap(ROW_HEADING_GAP)
     val gridScroll = rememberMarginScroll(above = 14.dp)
+    val gridState = rememberLazyGridState()
+
+    // Sort and decade open a list to choose from, drawn over the page.
+    var choosing by remember { mutableStateOf<ChoiceRequest?>(null) }
+    val sortChip = remember { FocusRequester() }
+    val decadeChip = remember { FocusRequester() }
+
+    // The A–Z rail asked for a letter: bring its first title into view and put the cursor on it.
+    LaunchedEffect(browse.jump) {
+        val jump = browse.jump ?: return@LaunchedEffect
+        val item = browse.items.getOrNull(jump.index) ?: return@LaunchedEffect
+        // The heading comes first in the grid, then the titles.
+        gridState.scrollToItem(1 + jump.index)
+        gridFocus.land(item.listKey)
+    }
+    val showRail = view == LibraryView.GRID && browse.sort == LibrarySort.TITLE &&
+        browse.letters.size > 1 && browse.letters.sumOf { it.count } >= RAIL_MIN_TITLES
 
     Box(modifier = modifier.fillMaxSize()) {
         HeroBackdrop(
@@ -178,6 +221,7 @@ fun LibraryScreen(
             ) {
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 140.dp),
+                    state = gridState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = 36.dp, end = 36.dp, bottom = ROWS_BOTTOM),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -376,7 +420,17 @@ fun LibraryScreen(
                                             TvChip(
                                                 label = "Sort · ${browse.sort.label}",
                                                 selected = browse.sort != LibrarySort.TITLE,
-                                                onClick = onCycleSort,
+                                                onClick = {
+                                                    val sorts = LibrarySort.entries
+                                                    choosing = ChoiceRequest(
+                                                        title = "Sort by",
+                                                        options = sorts.map { it.label to null },
+                                                        selected = sorts.indexOf(browse.sort),
+                                                        onPick = { onSetSort(sorts[it]) },
+                                                        returnTo = sortChip,
+                                                    )
+                                                },
+                                                modifier = Modifier.focusRequester(sortChip),
                                             )
                                         }
                                         item {
@@ -385,6 +439,27 @@ fun LibraryScreen(
                                                 selected = browse.unwatchedOnly,
                                                 onClick = onToggleUnwatched,
                                             )
+                                        }
+                                        if (browse.decades.size > 1) {
+                                            item {
+                                                val decade = browse.decades.firstOrNull { it.id == browse.decade }
+                                                TvChip(
+                                                    label = decade?.title ?: "All decades",
+                                                    selected = decade != null,
+                                                    onClick = {
+                                                        val decades = listOf<String?>(null) + browse.decades.map { it.id }
+                                                        choosing = ChoiceRequest(
+                                                            title = "Decade",
+                                                            options = listOf("All decades" to null) +
+                                                                browse.decades.map { it.title to null },
+                                                            selected = decades.indexOf(browse.decade).coerceAtLeast(0),
+                                                            onPick = { onSelectDecade(decades[it]) },
+                                                            returnTo = decadeChip,
+                                                        )
+                                                    },
+                                                    modifier = Modifier.focusRequester(decadeChip),
+                                                )
+                                            }
                                         }
                                         if (browse.genres.isNotEmpty()) {
                                             item {
@@ -444,8 +519,96 @@ fun LibraryScreen(
                 }
             }
         }
+
+        if (showRail) {
+            val current = focused?.takeIf { view == LibraryView.GRID }?.let(::letterOf)
+            LetterRail(
+                letters = browse.letters,
+                current = current,
+                onJump = onJumpToLetter,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight()
+                    .padding(top = 10.dp, bottom = 10.dp, end = 6.dp),
+            )
+        }
+
+        choosing?.let { request ->
+            ChoicePanel(
+                request = request,
+                onClose = {
+                    choosing = null
+                    runCatching { request.returnTo.requestFocus() }
+                },
+            )
+        }
     }
 }
+
+/** Which letter of the rail a title comes under: "#" for anything but A to Z. */
+internal fun letterOf(item: PlexItem): String {
+    val first = (item.titleSort ?: item.title).trim().firstOrNull()?.uppercaseChar() ?: return "#"
+    return if (first in 'A'..'Z') first.toString() else "#"
+}
+
+private val RAIL_LETTERS = listOf("#") + ('A'..'Z').map { it.toString() }
+
+/**
+ * The A–Z rail down the right of a library in title order. Right from the grid's last
+ * column reaches it; OK on a letter moves the cursor to that letter's first title. Letters
+ * with nothing under them are shown, so the rail keeps its shape, but can't be chosen.
+ */
+@Composable
+private fun LetterRail(
+    letters: List<PlexLetter>,
+    current: String?,
+    onJump: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val present = remember(letters) { letters.map { it.letter.uppercase() }.toSet() }
+    Column(
+        modifier = modifier.width(RAIL_WIDTH).focusGroup(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        RAIL_LETTERS.forEach { letter ->
+            val available = letter in present
+            var focused by remember { mutableStateOf(false) }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .width(RAIL_WIDTH)
+                    .onFocusChanged { focused = it.isFocused }
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (focused) Chalk else Color.Transparent)
+                    .then(
+                        if (available) Modifier.clickable {
+                            // Plex names the letter as it has it; match it back up.
+                            letters.firstOrNull { it.letter.uppercase() == letter }?.let { onJump(it.letter) }
+                        } else Modifier.focusProperties { canFocus = false }
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = letter,
+                    color = when {
+                        focused -> Ink
+                        !available -> Faint.copy(alpha = 0.5f)
+                        letter == current -> Accent
+                        else -> Muted
+                    },
+                    fontSize = 11.sp,
+                    lineHeight = 12.sp,
+                    fontWeight = if (focused || letter == current) FontWeight.Bold else FontWeight.Medium,
+                )
+            }
+        }
+    }
+}
+
+private val RAIL_WIDTH = 24.dp
+
+/** Below this many titles a rail is more in the way than it helps. */
+private const val RAIL_MIN_TITLES = 40
 
 @Composable
 private fun RowBlock(title: String, sideways: BringIntoViewSpec, content: @Composable () -> Unit) {

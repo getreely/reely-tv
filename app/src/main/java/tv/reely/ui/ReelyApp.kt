@@ -410,11 +410,13 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onStartLink = viewModel::startPlexLink,
                 onCancelLink = viewModel::cancelPlexLink,
                 onDismissPlexError = viewModel::dismissPlexError,
-                onCycleSort = { viewModel.cycleSort(route.kind) },
+                onSetSort = { viewModel.setSort(route.kind, it) },
                 onToggleUnwatched = { viewModel.toggleUnwatchedOnly(route.kind) },
                 onSelectGenre = { viewModel.selectGenre(route.kind, it) },
                 onDismissBrowseError = { viewModel.dismissBrowseError(route.kind) },
                 onLoadMore = { viewModel.loadMoreBrowse(route.kind) },
+                onSelectDecade = { viewModel.selectDecade(route.kind, it) },
+                onJumpToLetter = { viewModel.jumpToLetter(route.kind, it) },
             )
 
             is Route.Search -> SearchScreen(

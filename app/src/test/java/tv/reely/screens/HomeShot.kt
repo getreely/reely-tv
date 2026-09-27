@@ -151,7 +151,7 @@ class HomeShot {
                         imageUrl = { _, path, w, h -> Shots.imageUrl(path, w, h) },
                         backdropUrl = { _, path -> Shots.imageUrl(path, 1280, 720) },
                         onFocusItem = {}, onOpenItem = {}, onStartLink = {}, onCancelLink = {},
-                        onDismissPlexError = {}, onCycleSort = {}, onToggleUnwatched = {},
+                        onDismissPlexError = {}, onSetSort = {}, onToggleUnwatched = {},
                         onSelectGenre = {}, onDismissBrowseError = {},
                     )
                     }
@@ -198,7 +198,7 @@ class HomeShot {
                             imageUrl = { _, path, w, h -> Shots.imageUrl(path, w, h) },
                             backdropUrl = { _, path -> Shots.imageUrl(path, 1280, 720) },
                             onFocusItem = {}, onOpenItem = {}, onStartLink = {}, onCancelLink = {},
-                            onDismissPlexError = {}, onCycleSort = {}, onToggleUnwatched = {},
+                            onDismissPlexError = {}, onSetSort = {}, onToggleUnwatched = {},
                             onSelectGenre = {}, onDismissBrowseError = {},
                         )
                     }

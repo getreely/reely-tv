@@ -21,6 +21,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import tv.reely.ui.components.requestWhenReady
 import tv.reely.ui.components.pillColors
+import tv.reely.ui.components.ChoiceRequest
+import tv.reely.ui.components.ChoicePanel
 import tv.reely.ui.theme.ReelyType
 import tv.reely.ui.theme.Ink
 import tv.reely.ui.theme.Faint
@@ -887,6 +889,9 @@ private fun Switch(on: Boolean, focused: Boolean) {
     }
 }
 
+/** How a [ChoiceRow] asks the screen to open its list. */
+private val LocalChoices = staticCompositionLocalOf<(ChoiceRequest) -> Unit> { {} }
+
 /** One of the values a setting can take, with a line on what it does if it needs one. */
 private data class Option<T>(val value: T, val label: String, val description: String? = null)
 
@@ -929,113 +934,6 @@ private fun <T> ChoiceRow(
             )
         },
     )
-}
-
-/** A list of choices asked for by a [ChoiceRow], drawn by the screen over everything. */
-private class ChoiceRequest(
-    val title: String,
-    val options: List<Pair<String, String?>>,
-    val selected: Int,
-    val onPick: (Int) -> Unit,
-    /** Where the cursor goes back to when the list closes: the setting that opened it. */
-    val returnTo: FocusRequester,
-)
-
-private val LocalChoices = staticCompositionLocalOf<(ChoiceRequest) -> Unit> { {} }
-
-/**
- * The list itself, over a dimmed screen. It holds the cursor while it is up: up off the
- * top or down off the bottom goes nowhere rather than out into the settings behind it.
- */
-@Composable
-private fun ChoicePanel(request: ChoiceRequest, onClose: () -> Unit) {
-    BackHandler(onBack = onClose)
-    val start = remember(request) { FocusRequester() }
-    var holding by remember(request) { mutableStateOf(false) }
-    LaunchedEffect(request) {
-        repeat(40) {
-            if (holding) return@LaunchedEffect
-            start.requestWhenReady()
-            delay(50)
-        }
-    }
-    Box(
-        modifier = Modifier.fillMaxSize().background(Ink.copy(alpha = 0.6f)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            modifier = Modifier
-                .width(480.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .background(SurfaceRaised)
-                .border(1.dp, Chalk.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
-                .padding(horizontal = 16.dp, vertical = 20.dp)
-                .onFocusChanged { holding = it.hasFocus }
-                .focusProperties { onExit = { cancelFocusChange() } }
-                .focusGroup(),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                text = request.title,
-                color = Chalk,
-                style = ReelyType.RowTitle,
-                modifier = Modifier.padding(start = 12.dp, bottom = 10.dp),
-            )
-            request.options.forEachIndexed { index, (label, description) ->
-                OptionRow(
-                    option = Option(index, label, description),
-                    chosen = index == request.selected,
-                    onClick = {
-                        request.onPick(index)
-                        onClose()
-                    },
-                    modifier = if (index == request.selected) Modifier.focusRequester(start) else Modifier,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun <T> OptionRow(option: Option<T>, chosen: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    var focused by remember { mutableStateOf(false) }
-    val colors = pillColors(focused)
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .onFocusChanged { focused = it.isFocused }
-            .background(if (focused) colors.fill else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        // A radio: a ring, filled when this is the one in use.
-        Box(
-            modifier = Modifier
-                .size(20.dp)
-                .border(2.dp, if (focused) Ink else if (chosen) Accent else Faint, CircleShape)
-                .padding(4.dp)
-                .clip(CircleShape)
-                .background(if (chosen) (if (focused) Ink else Accent) else Color.Transparent),
-        )
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                text = option.label,
-                color = if (focused) Ink else Chalk,
-                style = ReelyType.Meta,
-                fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Medium,
-            )
-            if (option.description != null) {
-                Text(
-                    text = option.description,
-                    color = if (focused) Ink.copy(alpha = 0.7f) else Muted,
-                    style = ReelyType.Label,
-                )
-            }
-        }
-    }
 }
 
 private fun GuideStatus.describe(importedAt: Long): String = when (this) {

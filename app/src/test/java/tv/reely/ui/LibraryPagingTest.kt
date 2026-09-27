@@ -51,7 +51,7 @@ class LibraryPagingTest {
                         imageUrl = { _, _, _, _ -> null },
                         backdropUrl = { _, _ -> null },
                         onFocusItem = {}, onOpenItem = {}, onStartLink = {}, onCancelLink = {},
-                        onDismissPlexError = {}, onCycleSort = {}, onToggleUnwatched = {},
+                        onDismissPlexError = {}, onSetSort = {}, onToggleUnwatched = {},
                         onSelectGenre = {}, onDismissBrowseError = {},
                         onLoadMore = { asked++ },
                     )

@@ -8,6 +8,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import tv.reely.core.qualityBadges
 import tv.reely.core.Http
+import java.net.URLDecoder
 import java.net.URLEncoder
 
 data class PlexPin(val id: Long, val code: String)
@@ -39,6 +40,9 @@ data class PlexSection(
 
 /** One genre a library can be narrowed to. The id is what the filter takes. */
 data class PlexGenre(val id: String, val title: String)
+
+/** One letter of a library in title order, and how many titles start with it. "#" is digits and the rest. */
+data class PlexLetter(val letter: String, val count: Int)
 
 /**
  * A sidecar or embedded text subtitle Plex is willing to hand over as a separate file.
@@ -132,6 +136,8 @@ data class PlexItem(
     val qualities: List<String> = emptyList(),
     /** When it first aired or was released, as Plex gives it: "2008-09-16". */
     val airDate: String? = null,
+    /** The title as Plex sorts it: "Matrix" for "The Matrix". Absent when it's the title. */
+    val titleSort: String? = null,
     /** Which library this came from, so a tab can show only its own library's things. */
     val librarySectionId: String?,
     /**
@@ -547,8 +553,49 @@ object PlexApi {
         token: String,
         sectionKey: String,
         type: Int,
+    ): List<PlexGenre> = filterValues(base, token, sectionKey, "genre", type)
+
+    /** The decades the library has anything from, newest first: "2020s", "2010s"… */
+    suspend fun decades(
+        base: String,
+        token: String,
+        sectionKey: String,
+        type: Int,
+    ): List<PlexGenre> = filterValues(base, token, sectionKey, "decade", type)
+        .sortedByDescending { it.id.toIntOrNull() ?: 0 }
+
+    /**
+     * How many titles start with each letter, for the grid as it's filtered. In title
+     * order, these counts say exactly where each letter begins.
+     */
+    suspend fun firstCharacters(
+        base: String,
+        token: String,
+        sectionKey: String,
+        type: Int,
+        filters: String,
+    ): List<PlexLetter> = withContext(Dispatchers.IO) {
+        val directories = container("$base/library/sections/$sectionKey/firstCharacter?type=$type$filters", token)
+            .optJSONArray("Directory") ?: JSONArray()
+        (0 until directories.length())
+            .map { directories.getJSONObject(it) }
+            .mapNotNull { entry ->
+                val letter = entry.optString("title")
+                    .ifBlank { runCatching { URLDecoder.decode(entry.optString("key"), "UTF-8") }.getOrDefault("") }
+                    .takeIf(String::isNotBlank) ?: return@mapNotNull null
+                val count = entry.optInt("size").takeIf { it > 0 } ?: return@mapNotNull null
+                PlexLetter(letter, count)
+            }
+    }
+
+    private suspend fun filterValues(
+        base: String,
+        token: String,
+        sectionKey: String,
+        field: String,
+        type: Int,
     ): List<PlexGenre> = withContext(Dispatchers.IO) {
-        val directories = container("$base/library/sections/$sectionKey/genre?type=$type", token)
+        val directories = container("$base/library/sections/$sectionKey/$field?type=$type", token)
             .optJSONArray("Directory") ?: JSONArray()
         (0 until directories.length())
             .map { directories.getJSONObject(it) }
@@ -977,6 +1024,7 @@ object PlexApi {
     private fun parseItem(entry: JSONObject): PlexItem = PlexItem(
         ratingKey = entry.optString("ratingKey"),
         title = entry.optString("title"),
+        titleSort = entry.optString("titleSort").takeIf(String::isNotBlank),
         type = entry.optString("type"),
         thumb = entry.optString("thumb").takeIf(String::isNotEmpty),
         art = entry.optString("art").takeIf(String::isNotEmpty),

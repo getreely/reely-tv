@@ -28,6 +28,7 @@ import tv.reely.core.wrapIndex
 import tv.reely.plex.PlexApi
 import tv.reely.plex.PlexDetail
 import tv.reely.plex.PlexGenre
+import tv.reely.plex.PlexLetter
 import tv.reely.plex.PlexExtra
 import tv.reely.plex.PlexHomeUser
 import tv.reely.plex.PlexItem
@@ -119,9 +120,15 @@ data class HomeState(
 enum class LibrarySort(val key: String, val label: String) {
     TITLE("titleSort:asc", "A–Z"),
     ADDED("addedAt:desc", "Recently added"),
-    RELEASED("year:desc", "Newest first"),
-    RATED("rating:desc", "Top rated"),
+    RELEASED("originallyAvailableAt:desc", "Newest releases"),
+    OLDEST("originallyAvailableAt:asc", "Oldest releases"),
+    RATED("rating:desc", "Critic rating"),
+    AUDIENCE("audienceRating:desc", "Audience rating"),
+    WATCHED("lastViewedAt:desc", "Recently watched"),
 }
+
+/** Where the grid has been asked to move the cursor to: a letter's first title. */
+data class GridJump(val index: Int, val serial: Int)
 
 /** One library grid. No drill-down: opening something goes to its own detail route. */
 data class BrowseState(
@@ -132,7 +139,13 @@ data class BrowseState(
     val genres: List<PlexGenre> = emptyList(),
     val sort: LibrarySort = LibrarySort.TITLE,
     val genreId: String? = null,
+    val decades: List<PlexGenre> = emptyList(),
+    /** A decade's start year, "1990", as Plex filters by it. */
+    val decade: String? = null,
     val unwatchedOnly: Boolean = false,
+    /** Where each letter starts, for the A–Z rail. Only ever for title order. */
+    val letters: List<PlexLetter> = emptyList(),
+    val jump: GridJump? = null,
     val busy: Boolean = false,
     val error: String? = null,
     /** The library's collections, once they have been asked for. */
@@ -143,7 +156,14 @@ data class BrowseState(
     val loadingMore: Boolean = false,
 ) {
     /** True when the grid is showing less than the whole library. */
-    val isFiltered: Boolean get() = genreId != null || unwatchedOnly
+    val isFiltered: Boolean get() = genreId != null || decade != null || unwatchedOnly
+
+    /** Where [letter]'s titles begin in the grid, counting everything before it. */
+    fun letterStart(letter: String): Int? {
+        val at = letters.indexOfFirst { it.letter == letter }
+        if (at < 0) return null
+        return letters.take(at).sumOf { it.count }
+    }
 }
 
 data class DetailState(
@@ -1098,13 +1118,84 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         updatePlex { it.copy(favouriteSections = next) }
     }
 
-    /** Cycles the grid through the orderings a library client actually offers. */
-    fun cycleSort(kind: LibraryKind) {
-        val choices = LibrarySort.entries
-        updateBrowse(kind) {
-            it.copy(sort = choices[(choices.indexOf(it.sort) + 1) % choices.size])
-        }
+    fun setSort(kind: LibraryKind, sort: LibrarySort) {
+        if (_state.value.plex.browseFor(kind).sort == sort) return
+        updateBrowse(kind) { it.copy(sort = sort) }
         loadBrowse(kind)
+    }
+
+    /** Null is every decade. */
+    fun selectDecade(kind: LibraryKind, decade: String?) {
+        if (_state.value.plex.browseFor(kind).decade == decade) return
+        updateBrowse(kind) { it.copy(decade = decade) }
+        loadBrowse(kind)
+    }
+
+    /**
+     * The A–Z rail: puts the cursor on the first title under [letter]. The grid only
+     * holds the pages scrolled through so far, so anything up to there is fetched first.
+     */
+    fun jumpToLetter(kind: LibraryKind, letter: String) {
+        val plex = _state.value.plex
+        val base = plex.baseUrl ?: return
+        val token = plex.serverToken ?: return
+        val browse = plex.browseFor(kind)
+        val section = browse.section ?: return
+        val index = browse.letterStart(letter) ?: return
+        val serial = (browse.jump?.serial ?: 0) + 1
+        if (index < browse.items.size) {
+            updateBrowse(kind) { it.copy(jump = GridJump(index, serial)) }
+            return
+        }
+        if (browse.busy) return
+        val offset = browse.items.size
+        browseJobs[kind]?.cancel()
+        browseJobs[kind] = viewModelScope.launch {
+            updateBrowse(kind) { it.copy(loadingMore = true) }
+            // Up to the letter, and a page past it so there is something to move on to.
+            val limit = index - offset + GRID_PAGE
+            val page = runCatching {
+                PlexApi.items(base, token, browsePath(kind, browse, section), limit = limit, offset = offset)
+            }.getOrElse {
+                updateBrowse(kind) { it.copy(loadingMore = false) }
+                return@launch
+            }
+            updateBrowse(kind) { current ->
+                if (current.items.size != offset) current.copy(loadingMore = false)
+                else {
+                    val items = (current.items + page).distinctBy { it.listKey }
+                    current.copy(
+                        items = items,
+                        loadingMore = false,
+                        complete = page.size < limit,
+                        jump = GridJump(index.coerceAtMost(items.lastIndex), serial),
+                    )
+                }
+            }
+        }
+    }
+
+    private fun loadLetters(kind: LibraryKind) {
+        val plex = _state.value.plex
+        val base = plex.baseUrl ?: return
+        val token = plex.serverToken ?: return
+        val browse = plex.browseFor(kind)
+        val section = browse.section ?: return
+        if (browse.sort != LibrarySort.TITLE) {
+            updateBrowse(kind) { it.copy(letters = emptyList()) }
+            return
+        }
+        viewModelScope.launch {
+            val letters = runCatching {
+                PlexApi.firstCharacters(base, token, section.key, kind.filter, browseFilters(browse))
+            }.getOrElse { emptyList() }
+            updateBrowse(kind) {
+                // Only if nothing has changed the grid's order or filters meanwhile.
+                val same = it.section?.key == section.key && it.sort == browse.sort &&
+                    browseFilters(it) == browseFilters(browse)
+                if (same) it.copy(letters = letters) else it
+            }
+        }
     }
 
     fun toggleUnwatchedOnly(kind: LibraryKind) {
@@ -1135,8 +1226,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val section = browse.section ?: return
 
         browseJobs[kind]?.cancel()
+        if (!keep) loadLetters(kind)
         browseJobs[kind] = viewModelScope.launch {
-            updateBrowse(kind) { it.copy(busy = true, error = null, loadingMore = false) }
+            updateBrowse(kind) { it.copy(busy = true, error = null, loadingMore = false, jump = null) }
             val limit = if (keep) maxOf(GRID_PAGE, browse.items.size) else GRID_PAGE
             val items = runCatching { PlexApi.items(base, token, browsePath(kind, browse, section), limit = limit) }
                 .getOrElse { failure ->
@@ -1147,10 +1239,12 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun browsePath(kind: LibraryKind, browse: BrowseState, section: PlexSection) = buildString {
-        append("/library/sections/${section.key}/all?type=${kind.filter}")
-        append("&sort=${browse.sort.key}")
+    private fun browsePath(kind: LibraryKind, browse: BrowseState, section: PlexSection) =
+        "/library/sections/${section.key}/all?type=${kind.filter}&sort=${browse.sort.key}" + browseFilters(browse)
+
+    private fun browseFilters(browse: BrowseState) = buildString {
         browse.genreId?.let { append("&genre=$it") }
+        browse.decade?.let { append("&decade=$it") }
         if (browse.unwatchedOnly) append("&unwatched=1")
     }
 
@@ -1209,8 +1303,10 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val genres = runCatching { PlexApi.genres(base, token, section.key, kind.filter) }
                 .getOrElse { emptyList() }
+            val decades = runCatching { PlexApi.decades(base, token, section.key, kind.filter) }
+                .getOrElse { emptyList() }
             updateBrowse(kind) {
-                if (it.section?.key != section.key) it else it.copy(genres = genres)
+                if (it.section?.key != section.key) it else it.copy(genres = genres, decades = decades)
             }
         }
     }
