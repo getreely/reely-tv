@@ -305,6 +305,8 @@ data class Playback(
     val queue: List<PlexItem> = emptyList(),
     val queueIndex: Int = -1,
     val markers: List<PlexMarker> = emptyList(),
+    /** The server's scrubbing pictures, `{ms}` for the moment; see [PlexPlayback.previewUrl]. */
+    val previewUrl: String? = null,
     /** True when the server is encoding this rather than handing over the file. */
     val transcoding: Boolean = false,
     /**
@@ -1386,6 +1388,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                         durationMs = item.durationMs,
                         subtitles = if (transcode) emptyList() else resolved.subtitles,
                         markers = resolved.markers,
+                        previewUrl = resolved.previewUrl,
                         serverBase = on,
                         queue = effectiveQueue,
                         queueIndex = effectiveQueue.indexOfFirst { entry -> entry.ratingKey == item.ratingKey },

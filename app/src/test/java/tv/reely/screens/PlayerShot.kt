@@ -98,7 +98,7 @@ class PlayerShot {
                         playFocus = play,
                         scrubberFocus = scrubber,
                         onScrubberFocus = {},
-                        onSeek = {}, onSkip = {}, onTogglePlay = {}, onAddChannel = {},
+                        onSeekTo = {}, onSkip = {}, onTogglePlay = {}, onAddChannel = {},
                         onOpenSubtitles = {}, onOpenAudio = {}, onOpenStats = {}, onToggleFormat = {},
                         skipLabel = if (skip) "Skip Intro" else null,
                         skipFocus = skipFocus,

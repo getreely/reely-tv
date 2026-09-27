@@ -39,6 +39,17 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
+import tv.reely.ui.theme.SurfaceRaised
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.layout.layout
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -990,13 +1001,13 @@ fun PlayerScreen(
                     // The same pair of buttons: a channel when live, an episode when not.
                     if (playback.isLive) onStepChannel(delta) else onStepEpisode(delta)
                 },
-                onSeek = { delta ->
+                onSeekTo = { to ->
                     interaction++
-                    val target = (exoPlayer.currentPosition + delta)
-                        .coerceIn(0, (durationMs - 1_000).coerceAtLeast(0))
+                    val target = to.coerceIn(0, (durationMs - 1_000).coerceAtLeast(0))
                     exoPlayer.seekTo(target)
                     positionMs = target
                 },
+                onScrub = { interaction++ },
                 onTogglePlay = {
                     interaction++
                     // Coming back from a pause on live television means coming back to
@@ -1113,7 +1124,10 @@ internal fun Controls(
     playFocus: FocusRequester,
     scrubberFocus: FocusRequester,
     onScrubberFocus: (Boolean) -> Unit,
-    onSeek: (Long) -> Unit,
+    /** Go to this point in the file: the end of a scrub. */
+    onSeekTo: (Long) -> Unit,
+    /** A press while scrubbing, which is using the controls. */
+    onScrub: () -> Unit = {},
     onSkip: (Int) -> Unit,
     onTogglePlay: () -> Unit,
     onAddChannel: () -> Unit,
@@ -1170,8 +1184,10 @@ internal fun Controls(
                 bufferedMs = bufferedMs,
                 focusRequester = scrubberFocus,
                 onFocusState = onScrubberFocus,
-                onSeek = onSeek,
+                onSeekTo = onSeekTo,
                 onTogglePlay = onTogglePlay,
+                onScrub = onScrub,
+                previewUrl = playback.previewUrl,
             )
         }
 
@@ -1294,19 +1310,41 @@ private fun Scrubber(
     bufferedMs: Long,
     focusRequester: FocusRequester,
     onFocusState: (Boolean) -> Unit,
-    onSeek: (Long) -> Unit,
+    onSeekTo: (Long) -> Unit,
     onTogglePlay: () -> Unit,
+    /** Each press, so the controls stay up while somebody is scrubbing. */
+    onScrub: () -> Unit = {},
+    previewUrl: String? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
     val total = durationMs.coerceAtLeast(1)
-    val played = (positionMs.toFloat() / total).coerceIn(0f, 1f)
+    /*
+     * Where the scrub has got to, before it is committed. Left and right move this, not
+     * the picture: seeking on every press made the player throw away its buffer and
+     * start again at each step, so holding the button was a stutter of half-loaded
+     * frames. It seeks once, when the presses stop or OK is pressed.
+     */
+    var target by remember { mutableStateOf<Long?>(null) }
+    val scope = rememberCoroutineScope()
+    var commit by remember { mutableStateOf<Job?>(null) }
+    fun settle(to: Long) {
+        commit?.cancel()
+        commit = scope.launch {
+            delay(SCRUB_SETTLE_MS)
+            onSeekTo(to)
+            target = null
+        }
+    }
+
+    val shown = target ?: positionMs
+    val played = (shown.toFloat() / total).coerceIn(0f, 1f)
     val buffered = (bufferedMs.toFloat() / total).coerceIn(0f, 1f)
     // Times sit in a column that ticks every second; fixed-width digits stop them jiggling.
     val times = ReelyType.Label.copy(fontFeatureSettings = "tnum")
 
     // The times sit either side of the bar, on its line, rather than on a row of their own.
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text(text = clock(positionMs), color = Chalk, style = times)
+        Text(text = clock(shown), color = Chalk, style = times)
         // The box is as tall as the thumb, so the track can thicken on focus without
         // pushing the times or the buttons about.
         BoxWithConstraints(
@@ -1318,14 +1356,40 @@ private fun Scrubber(
                 .onFocusChanged {
                     focused = it.isFocused
                     onFocusState(it.isFocused)
+                    // Leaving the bar mid-scrub still goes where it was taken.
+                    if (!it.isFocused) target?.let { to -> commit?.cancel(); onSeekTo(to); target = null }
                 }
                 .focusable()
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    val direction = when (event.key) {
+                        Key.DirectionLeft -> -1
+                        Key.DirectionRight -> 1
+                        else -> 0
+                    }
+                    if (direction != 0) {
+                        onScrub()
+                        // Held down, it goes further each step: a minute a step by the time
+                        // somebody is crossing a whole film.
+                        val step = scrubStep(event.nativeKeyEvent.repeatCount)
+                        val next = ((target ?: positionMs) + direction * step)
+                            .coerceIn(0, (durationMs - 1_000).coerceAtLeast(0))
+                        target = next
+                        settle(next)
+                        return@onPreviewKeyEvent true
+                    }
                     when (event.key) {
-                        Key.DirectionLeft -> { onSeek(-SEEK_STEP_MS); true }
-                        Key.DirectionRight -> { onSeek(SEEK_STEP_MS); true }
-                        Key.DirectionCenter, Key.Enter -> { onTogglePlay(); true }
+                        Key.DirectionCenter, Key.Enter -> {
+                            val to = target
+                            if (to != null) {
+                                commit?.cancel()
+                                onSeekTo(to)
+                                target = null
+                            } else {
+                                onTogglePlay()
+                            }
+                            true
+                        }
                         else -> false
                     }
                 },
@@ -1363,14 +1427,82 @@ private fun Scrubber(
                         .background(Chalk),
                 )
             }
+            val scrubbing = target
+            if (focused && scrubbing != null) {
+                ScrubPreview(
+                    atMs = scrubbing,
+                    previewUrl = previewUrl,
+                    centreX = maxWidth * played,
+                    barWidth = maxWidth,
+                )
+            }
         }
         Text(
-            text = "\u2212" + clock((durationMs - positionMs).coerceAtLeast(0)),
+            text = "\u2212" + clock((durationMs - shown).coerceAtLeast(0)),
             color = Muted,
             style = times,
         )
     }
 }
+
+/**
+ * The picture at the scrub point, above the bar, as Plex's own player shows it: the
+ * server's preview for that moment and the time under it. Just the time, in a pill, when
+ * the server has made no previews. Takes no room of its own; it is drawn over the picture.
+ */
+@Composable
+private fun ScrubPreview(atMs: Long, previewUrl: String?, centreX: Dp, barWidth: Dp) {
+    val width = if (previewUrl != null) PREVIEW_WIDTH else 84.dp
+    val height = if (previewUrl != null) PREVIEW_WIDTH * 9 / 16 + 30.dp else 30.dp
+    val left = (centreX - width / 2).coerceIn(0.dp, (barWidth - width).coerceAtLeast(0.dp))
+    Column(
+        modifier = Modifier
+            .layout { measurable, _ ->
+                val placeable = measurable.measure(Constraints.fixed(width.roundToPx(), height.roundToPx()))
+                // No size in the bar's layout: placed above it, clear of the thumb.
+                layout(0, 0) { placeable.place(left.roundToPx(), -(height + 18.dp).roundToPx()) }
+            }
+            .clip(RoundedCornerShape(10.dp))
+            .background(SurfaceRaised.copy(alpha = 0.95f))
+            .border(1.dp, Chalk.copy(alpha = 0.18f), RoundedCornerShape(10.dp)),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        if (previewUrl != null) {
+            // To the nearest two seconds, the spacing Plex makes them at, so a scrub that
+            // comes back past the same moment finds the picture already loaded.
+            val moment = (atMs / 2_000) * 2_000
+            AsyncImage(
+                model = previewUrl.replace("{ms}", moment.toString()),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .background(Ink),
+            )
+        }
+        Box(modifier = Modifier.fillMaxWidth().height(30.dp), contentAlignment = Alignment.Center) {
+            Text(
+                text = clock(atMs),
+                color = Chalk,
+                style = ReelyType.Label.copy(fontFeatureSettings = "tnum"),
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+/** How far one press of left or right moves the scrub, by how long it has been held. */
+internal fun scrubStep(repeatCount: Int): Long = when {
+    repeatCount < 6 -> SEEK_STEP_MS
+    repeatCount < 20 -> 30_000L
+    else -> 60_000L
+}
+
+/** How long after the last press the scrub is taken as where to go. */
+private const val SCRUB_SETTLE_MS = 700L
+
+private val PREVIEW_WIDTH = 240.dp
 
 private val SCRUB_THUMB = 14.dp
 

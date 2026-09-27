@@ -81,6 +81,12 @@ data class PlexPlayback(
     /** The sound that will play, by Plex's name for it — `eac3`, `ac3`, `aac` — if known. */
     val audioCodec: String? = null,
     val audioChannels: Int = 0,
+    /**
+     * Where the server's preview pictures for this file are, with `{ms}` for the moment
+     * wanted; null when it hasn't made any. They are the pictures above the bar while
+     * scrubbing.
+     */
+    val previewUrl: String? = null,
 )
 
 /** A person in the cast, as Plex records them. */
@@ -678,12 +684,17 @@ object PlexApi {
             val key = part.optString("key").takeIf(String::isNotEmpty) ?: return@withContext null
 
             val sound = audioOf(media, part)
+            // Plex makes preview pictures only when the library is set to; "sd" is their
+            // name for the set, and a part without it has none to give.
+            val partId = part.optLong("id").takeIf { it > 0 }
+            val previews = partId != null && part.optString("indexes").split(',').contains("sd")
             PlexPlayback(
                 url = "$base$key?X-Plex-Token=$token",
                 subtitles = subtitlesOf(part, base, token),
                 markers = markersOf(metadata),
                 audioCodec = sound?.first,
                 audioChannels = sound?.second ?: 0,
+                previewUrl = if (previews) "$base/library/parts/$partId/indexes/sd/{ms}?X-Plex-Token=$token" else null,
             )
         }
 

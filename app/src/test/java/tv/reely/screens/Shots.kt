@@ -56,13 +56,14 @@ object Shots {
     }
 
     /** A picture when screenshots were asked for; nothing otherwise, so a test can run always. */
-    fun saveIfAsked(compose: ComposeContentTestRule, name: String) {
-        if (System.getProperty("reely.screenshots") == "true") save(compose, name)
+    fun saveIfAsked(compose: ComposeContentTestRule, name: String, settleMs: Long = 1_500) {
+        if (System.getProperty("reely.screenshots") == "true") save(compose, name, settleMs)
     }
 
-    fun save(compose: ComposeContentTestRule, name: String) {
+    /** [settleMs] lets animations finish first; less for a moment that won't wait. */
+    fun save(compose: ComposeContentTestRule, name: String, settleMs: Long = 1_500) {
         compose.waitForIdle()
-        compose.mainClock.advanceTimeBy(1_500)
+        compose.mainClock.advanceTimeBy(settleMs)
         compose.waitForIdle()
         val dir = System.getProperty("roborazzi.output.dir") ?: "build/screenshots"
         compose.onRoot().captureRoboImage("$dir/$name.png")
