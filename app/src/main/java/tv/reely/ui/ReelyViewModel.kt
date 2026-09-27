@@ -426,6 +426,13 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         PlexApi.clientId = clientId
+        // The name the television was given in its own settings, as Plex's apps use; the
+        // model when there is none, which is still more use than the app's name.
+        PlexApi.deviceName = runCatching {
+            android.provider.Settings.Global.getString(application.contentResolver, "device_name")
+        }.getOrNull()?.takeIf { it.isNotBlank() }
+            ?: android.os.Build.MODEL?.takeIf { it.isNotBlank() }
+            ?: "Reely TV"
         updatePlex { it.copy(favouriteSections = settings.favouriteSections) }
         viewModelScope.launch {
             restorePlex()

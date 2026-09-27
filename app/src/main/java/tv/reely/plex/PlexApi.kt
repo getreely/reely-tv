@@ -275,7 +275,13 @@ object PlexApi {
 
     private const val PLEX_TV = "https://plex.tv"
     private const val PRODUCT = "Reely TV"
-    private const val VERSION = "0.2.0"
+    // What Plex shows for this app in its dashboard and the account's list of devices.
+    private val VERSION = tv.reely.BuildConfig.VERSION_NAME
+    private val PLATFORM_VERSION = android.os.Build.VERSION.RELEASE.orEmpty()
+
+    /** The television's own name, so two sets in one house can be told apart in Plex. */
+    @Volatile
+    var deviceName: String = "Reely TV"
     private const val AUDIO_STREAM = 2
     private const val SUBTITLE_STREAM = 3
 
@@ -290,8 +296,9 @@ object PlexApi {
         header("X-Plex-Version", VERSION)
         header("X-Plex-Client-Identifier", clientId)
         header("X-Plex-Platform", "Android")
-        header("X-Plex-Device", "Android TV")
-        header("X-Plex-Device-Name", "Reely TV")
+        header("X-Plex-Platform-Version", PLATFORM_VERSION)
+        header("X-Plex-Device", android.os.Build.MODEL.orEmpty().ifBlank { "Android TV" })
+        header("X-Plex-Device-Name", deviceName)
         if (token != null) header("X-Plex-Token", token)
     }
 
@@ -1118,8 +1125,9 @@ object PlexApi {
             .header("X-Plex-Product", PRODUCT)
             .header("X-Plex-Version", VERSION)
             .header("X-Plex-Platform", "Android")
-            .header("X-Plex-Device", "Android TV")
-            .header("X-Plex-Device-Name", "Reely TV")
+            .header("X-Plex-Platform-Version", PLATFORM_VERSION)
+            .header("X-Plex-Device", android.os.Build.MODEL.orEmpty().ifBlank { "Android TV" })
+            .header("X-Plex-Device-Name", deviceName)
             .apply { if (clientId.isNotEmpty()) header("X-Plex-Client-Identifier", clientId) }
             .header("X-Plex-Token", token)
             .build()

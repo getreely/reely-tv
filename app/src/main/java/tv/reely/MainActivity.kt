@@ -16,6 +16,7 @@ import tv.reely.ui.theme.ReelyTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        tv.reely.core.CrashLog.install(this)
         setContent {
             ReelyTheme {
                 androidx.compose.foundation.layout.Box(

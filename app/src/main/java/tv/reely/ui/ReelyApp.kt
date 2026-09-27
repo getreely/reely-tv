@@ -27,6 +27,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.widthIn
+import tv.reely.ui.theme.ReelyType
+import tv.reely.ui.theme.SurfaceRaised
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.CornerRadius
@@ -113,6 +117,14 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
      * the profile already in use, or by a switch going through.
      */
     var pickingProfile by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    var crashNotice by remember { mutableStateOf(tv.reely.core.CrashLog.takeUnseen(context)) }
+    LaunchedEffect(crashNotice) {
+        if (crashNotice) {
+            delay(10_000)
+            crashNotice = false
+        }
+    }
     var wasSwitching by remember { mutableStateOf(false) }
     LaunchedEffect(state.plex.switchingTo, state.plex.switchError) {
         if (state.plex.switchingTo != null) {
@@ -494,6 +506,23 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onInstallUpdate = viewModel::installUpdate,
             )
         }
+
+            // Once, after the app fell over last time: an apology, and where the details are.
+            if (crashNotice) {
+                Text(
+                    text = "Reely closed unexpectedly last time. Sorry about that. " +
+                        "The details are in Settings, About.",
+                    color = Chalk,
+                    style = ReelyType.Label,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 40.dp, bottom = 24.dp)
+                        .widthIn(max = 420.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SurfaceRaised.copy(alpha = 0.96f))
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                )
+            }
 
             if (confirmExit) {
                 ConfirmExit(

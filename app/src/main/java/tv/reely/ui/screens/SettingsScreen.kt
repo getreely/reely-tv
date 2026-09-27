@@ -587,16 +587,29 @@ private enum class Licence(val title: String, val kind: String, val file: String
         "Open-source components",
         "Apache 2.0",
         "apache-2.0.txt",
-        "Android Jetpack, Media3, Kotlin, OkHttp and Coil.",
+        "Android Jetpack, Media3, Kotlin, OkHttp, Coil and ZXing.",
     ),
 }
 
 @Composable
 private fun AboutSection() {
+    val context = LocalContext.current
     var reading by remember { mutableStateOf<Licence?>(null) }
+    var crash by remember { mutableStateOf(tv.reely.core.CrashLog.read(context)) }
+    var readingCrash by remember { mutableStateOf(false) }
     val open = reading
     if (open != null) {
-        LicenceText(open, onClose = { reading = null })
+        val text = remember(open) {
+            runCatching {
+                context.assets.open("licenses/${open.file}").bufferedReader().use { it.readText() }
+            }.getOrDefault("")
+        }
+        TextViewer(title = "${open.title} · ${open.kind}", text = text, onClose = { reading = null })
+        return
+    }
+    val report = crash
+    if (readingCrash && report != null) {
+        TextViewer(title = "Problem report", text = report, onClose = { readingCrash = false })
         return
     }
 
@@ -630,25 +643,39 @@ private fun AboutSection() {
         style = ReelyType.Label,
         modifier = Modifier.padding(start = 4.dp),
     )
+    if (report != null) {
+        SettingGroup(
+            "Problem report",
+            note = "Kept on this device only. Nothing is sent anywhere.",
+        ) {
+            SettingRow(
+                title = "Reely closed unexpectedly",
+                description = report.lineSequence().drop(2).firstOrNull(),
+                value = "View",
+                onClick = { readingCrash = true },
+            )
+            SettingRow(
+                title = "Clear the report",
+                onClick = {
+                    tv.reely.core.CrashLog.clear(context)
+                    crash = null
+                },
+            )
+        }
+    }
 }
 
-/** A licence's full text, scrolled with up and down; back returns to the list. */
+/** A long text — a licence, a problem report — scrolled with up and down; back returns. */
 @Composable
-private fun LicenceText(licence: Licence, onClose: () -> Unit) {
-    val context = LocalContext.current
-    val text = remember(licence) {
-        runCatching {
-            context.assets.open("licenses/${licence.file}").bufferedReader().use { it.readText() }
-        }.getOrDefault("")
-    }
+private fun TextViewer(title: String, text: String, onClose: () -> Unit) {
     val scroll = rememberScrollState()
     val focus = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     BackHandler(onBack = onClose)
-    LaunchedEffect(licence) { focus.requestWhenReady() }
+    LaunchedEffect(title) { focus.requestWhenReady() }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(text = "${licence.title} · ${licence.kind}", color = Chalk, style = ReelyType.RowTitle)
+        Text(text = title, color = Chalk, style = ReelyType.RowTitle)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
