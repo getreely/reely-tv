@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -24,6 +25,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
+import tv.reely.ui.theme.ReelyType
+import tv.reely.ui.theme.Faint
+import tv.reely.ui.components.PosterCard
 import kotlinx.coroutines.launch
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.runtime.rememberCoroutineScope
@@ -39,7 +45,7 @@ import tv.reely.plex.PlexItem
 import tv.reely.plex.formatAirDate
 import tv.reely.plex.formatDuration
 import tv.reely.ui.DetailState
-import tv.reely.core.minimumScrollDistance
+import tv.reely.core.marginScrollDistance
 import tv.reely.ui.components.HeroBackdrop
 import tv.reely.ui.components.CastCircle
 import tv.reely.ui.components.FocusRow
@@ -84,6 +90,8 @@ fun DetailScreen(
     onFocusEpisode: (PlexItem?) -> Unit,
     onSelectSeason: (PlexItem) -> Unit,
     modifier: Modifier = Modifier,
+    /** A title in "More like this": its own page. */
+    onOpenRelated: (PlexItem) -> Unit = {},
 ) {
     val detail = state.detail
     if (detail == null) {
@@ -111,17 +119,26 @@ fun DetailScreen(
      * moves between things already in plain sight. Delegating to it was the mistake in
      * the first attempt at this — coming up off the episode row still shifted the page.
      */
-    val pageScroll = remember {
+    /*
+     * With room either side, though: a row's heading above a focused card, and below it
+     * the lift and the caption, which the bare bounds of the card left off the bottom of
+     * the screen on the rows under the episodes.
+     */
+    val density = LocalDensity.current
+    val pageScroll = remember(density) {
+        val above = with(density) { 44.dp.toPx() }
+        val below = with(density) { 28.dp.toPx() }
         object : BringIntoViewSpec {
             override fun calculateScrollDistance(
                 offset: Float,
                 size: Float,
                 containerSize: Float,
             ): Float = if (holdColumn) 0f
-            else minimumScrollDistance(offset, size, containerSize)
+            else marginScrollDistance(offset, size, containerSize, above, below)
         }
     }
     val railFocus = rememberRowFocus()
+    val relatedFocus = rememberRowFocus()
     var railBroughtTo by remember(state.ratingKey) { mutableStateOf<String?>(null) }
     val page = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -393,16 +410,16 @@ fun DetailScreen(
                     }
                 }
 
-                if (detail.genres.isNotEmpty()) {
-                    item {
-                        Text(
-                            text = "Genres   " + detail.genres.joinToString(", "),
-                            color = Muted,
-                            fontSize = 14.sp,
-                            lineHeight = 19.sp,
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 40.dp),
-                        )
-                    }
+                // The credits, the way a film's end card or Plex's own page lists them: what
+                // it is, then who made it. Only the lines there is something to put on.
+                val credits = listOfNotNull(
+                    detail.genres.takeIf { it.isNotEmpty() }?.let { plural("Genre", it.size) to it.take(4).joinToString(", ") },
+                    detail.directors.takeIf { it.isNotEmpty() }?.let { "Directed by" to it.take(3).joinToString(", ") },
+                    detail.writers.takeIf { it.isNotEmpty() }?.let { "Written by" to it.take(3).joinToString(", ") },
+                    detail.studio?.let { (if (detail.isShow) "Network" else "Studio") to it },
+                )
+                if (credits.isNotEmpty()) {
+                    item { Credits(credits, modifier = Modifier.padding(horizontal = 40.dp)) }
                 }
 
                 if (detail.roles.isNotEmpty()) {
@@ -425,8 +442,63 @@ fun DetailScreen(
                         }
                     }
                 }
+
+                if (state.related.isNotEmpty()) {
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            SectionHeading("More like this", modifier = Modifier.padding(horizontal = 40.dp))
+                            FocusRow { rowFocused ->
+                                LazyRow(
+                                    modifier = Modifier.restoreFocusTo(relatedFocus).focusGroup().then(rowFocused),
+                                    contentPadding = PaddingValues(horizontal = 36.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                ) {
+                                    items(state.related, key = { it.listKey }) { title ->
+                                        PosterCard(
+                                            title = title.title,
+                                            subtitle = title.caption,
+                                            imageUrl = imageUrl(title.serverBase, title.thumb, 300, 450),
+                                            progress = title.resumeFraction,
+                                            watched = title.isWatched,
+                                            onFocus = { relatedFocus.onFocused(title.listKey) },
+                                            onClick = { onOpenRelated(title) },
+                                            modifier = rowItem(relatedFocus, title.listKey),
+                                            width = 120.dp,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
             }
         }
     }
 }
+
+/** Label and value, one pair a line, the labels in a column of their own. */
+@Composable
+private fun Credits(lines: List<Pair<String, String>>, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        lines.forEach { (label, value) ->
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(
+                    text = label,
+                    color = Faint,
+                    style = ReelyType.Label,
+                    modifier = Modifier.width(96.dp),
+                )
+                Text(
+                    text = value,
+                    color = Muted,
+                    style = ReelyType.Label,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+private fun plural(word: String, count: Int) = if (count == 1) word else word + "s"

@@ -189,6 +189,8 @@ data class PlexDetail(
     val genres: List<String>,
     val directors: List<String>,
     val roles: List<PlexRole>,
+    /** Who wrote it, as the server lists them. */
+    val writers: List<String> = emptyList(),
     val childCount: Int,
     val leafCount: Int,
     val grandparentTitle: String?,
@@ -540,6 +542,7 @@ object PlexApi {
                 genres = tags(entry, "Genre"),
                 directors = tags(entry, "Director"),
                 roles = roles(entry),
+                writers = tags(entry, "Writer"),
                 childCount = entry.optInt("childCount"),
                 leafCount = entry.optInt("leafCount"),
                 grandparentTitle = entry.optString("grandparentTitle").takeIf(String::isNotBlank),
@@ -774,6 +777,26 @@ object PlexApi {
                         durationMs = entry.optLong("duration"),
                     )
                 }
+        }
+
+    /**
+     * "More like this": what the server's related hubs suggest for a film or show, the
+     * row Plex's own apps put under a title. Films and shows only, the title itself left
+     * out, each once however many hubs it turns up in. Nothing, rather than an error, from
+     * a server too old to have the endpoint: it is a nicety.
+     */
+    suspend fun related(base: String, token: String, ratingKey: String): List<PlexItem> =
+        withContext(Dispatchers.IO) {
+            val hubs = runCatching {
+                container("$base/library/metadata/$ratingKey/related?count=24", token).optJSONArray("Hub")
+            }.getOrNull() ?: return@withContext emptyList()
+            (0 until hubs.length())
+                .mapNotNull { hubs.optJSONObject(it)?.optJSONArray("Metadata") }
+                .flatMap { metadata -> (0 until metadata.length()).map { parseItem(metadata.getJSONObject(it)) } }
+                .filter { it.ratingKey != ratingKey && (it.type == "movie" || it.type == "show") }
+                .distinctBy { it.ratingKey }
+                .take(24)
+                .map { it.copy(serverBase = base) }
         }
 
     /**

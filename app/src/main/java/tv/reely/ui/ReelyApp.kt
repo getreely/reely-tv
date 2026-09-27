@@ -20,6 +20,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -386,7 +387,9 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 val detail = state.detail
                 if (detail == null) {
                     DetailPlaceholder(modifier = Modifier.fillMaxSize())
-                } else {
+                } else key(detail.ratingKey) {
+                    // One title's page to another, from "More like this", starts at the top
+                    // of the new one rather than wherever the last one was scrolled to.
                     DetailScreen(
                         state = detail,
                         imageUrl = viewModel::plexImageUrl,
@@ -403,6 +406,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                         onToggleWatchedDetail = viewModel::toggleWatchedDetail,
                         onFocusEpisode = viewModel::focusEpisode,
                         onSelectSeason = viewModel::selectSeason,
+                        onOpenRelated = ::open,
                     )
                 }
             }

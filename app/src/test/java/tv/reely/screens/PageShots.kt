@@ -213,7 +213,7 @@ class PageShots {
      */
     @OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
     @Test fun detailBackUpFromCast() {
-        detail(landOn = 4)
+        detail(landOn = 4, related = false)
         compose.waitForIdle()
         repeat(2) {
             compose.onRoot().performKeyInput { pressKey(androidx.compose.ui.input.key.Key.DirectionDown) }
@@ -229,6 +229,19 @@ class PageShots {
         check(caption <= page.bottom) { "episode name cut off: $caption > ${page.bottom}" }
     }
 
+    /** The foot of a title's page: its credits, the cast, and More like this. */
+    @OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
+    @Test fun detailMoreLikeThis() {
+        detail(landOn = 0)
+        compose.waitForIdle()
+        repeat(3) {
+            compose.onRoot().performKeyInput { pressKey(androidx.compose.ui.input.key.Key.DirectionDown) }
+            compose.waitForIdle()
+        }
+        compose.onNodeWithText("More like this", ignoreCase = true).assertExists()
+        Shots.save(compose, "detail-more-like-this")
+    }
+
     /** Where a piece of text really ends; its bounds in the tree stop at the clip. */
     private fun bottomOf(text: String): Float {
         val node = compose.onAllNodesWithText(text).onFirst().fetchSemanticsNode()
@@ -238,6 +251,7 @@ class PageShots {
     private fun detail(
         summary: String = "A long-haul driver takes the jobs nobody else will, on roads that don't appear on any map, and starts to notice who keeps booking her.",
         landOn: Int? = null,
+        related: Boolean = true,
     ) {
         val episodes = (1..8).map { i ->
             Shots.item("north").copy(ratingKey = "ep$i", title = listOf("Pilot", "Mile Marker", "Dead Air", "Crosswind", "The Weigh Station", "Chain Control", "Jackknife", "Last Exit")[i - 1], index = i, airDate = "2024-03-%02d".format(i * 3))
@@ -252,7 +266,7 @@ class PageShots {
                 tagline = null, year = 2024, durationMs = 0, viewOffsetMs = 0, contentRating = "TV-14",
                 rating = 8.1, audienceRating = 8.6, airDate = null, viewCount = 0, studio = "Harbourside",
                 thumb = "poster/north", art = "backdrop/north", theme = null,
-                genres = listOf("Drama", "Thriller"), directors = emptyList(),
+                genres = listOf("Drama", "Thriller"), directors = listOf("Ana Reyes"), writers = listOf("Ana Reyes", "Tomas Lind"),
                 roles = listOf("Rae Collins" to "Maren Hale", "Tom Okafor" to "Jude Mercer", "Ines Vidal" to "Carla Ruiz", "Sam Park" to "Owen Pike", "Lena Morse" to "Dee Hart", "Ari Stone" to "Cal Ward")
                     .map { (who, as_) -> PlexRole(name = who, role = as_, thumb = null) },
                 childCount = 3, leafCount = 24, grandparentTitle = null, index = null, parentIndex = null,
@@ -261,6 +275,12 @@ class PageShots {
             ),
             seasons = seasons, selectedSeason = seasons[1], episodes = episodes,
             focusedEpisode = landOn?.let { episodes[it] },
+            related = if (!related) emptyList() else listOf("harbor", "shift", "quiet", "salt", "ember", "field", "orbit", "glass")
+                .map { key ->
+                    val item = Shots.item(key)
+                    val show = Shots.titles.getValue(key).show
+                    if (show != null) item.copy(type = "show", title = show, viewOffsetMs = 0) else item
+                },
         )
         val tabFocus = List(5) { androidx.compose.ui.focus.FocusRequester() }
         val settingsFocus = androidx.compose.ui.focus.FocusRequester()

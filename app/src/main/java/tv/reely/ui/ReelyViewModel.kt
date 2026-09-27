@@ -149,6 +149,8 @@ data class DetailState(
     /** What the text block at the top is describing: the show, or an episode under it. */
     val focusedEpisode: PlexItem? = null,
     val trailers: List<PlexExtra> = emptyList(),
+    /** "More like this", as the server suggests it. */
+    val related: List<PlexItem> = emptyList(),
     val busy: Boolean = true,
     val error: String? = null,
 )
@@ -1074,6 +1076,14 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 _state.update { current ->
                     if (current.detail?.ratingKey != ratingKey) current
                     else current.copy(detail = current.detail.copy(trailers = trailers))
+                }
+            }
+            launch {
+                val related = runCatching { PlexApi.related(base, token, ratingKey) }
+                    .getOrElse { emptyList() }
+                _state.update { current ->
+                    if (current.detail?.ratingKey != ratingKey) current
+                    else current.copy(detail = current.detail.copy(related = related))
                 }
             }
 

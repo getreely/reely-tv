@@ -314,9 +314,10 @@ fun CastCircle(
                 .size(84.dp)
                 .clip(CircleShape)
                 .background(SurfaceHigh)
+                // White, as focus is everywhere else; coral here read as a selection.
                 .border(
                     width = if (focused) 3.dp else 0.dp,
-                    color = if (focused) Accent else Color.Transparent,
+                    color = if (focused) Chalk else Color.Transparent,
                     shape = CircleShape,
                 ),
             contentAlignment = Alignment.Center,
