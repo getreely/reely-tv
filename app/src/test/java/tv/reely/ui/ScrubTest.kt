@@ -41,6 +41,7 @@ class ScrubTest {
     private fun open(previews: Boolean = false) {
         val play = FocusRequester()
         val scrubber = FocusRequester()
+        val skip = FocusRequester()
         compose.mainClock.autoAdvance = false
         compose.setContent {
             ReelyTheme {
@@ -64,7 +65,7 @@ class ScrubTest {
                         onSeekTo = { seeks += it }, onSkip = {}, onTogglePlay = { toggled++ }, onAddChannel = {},
                         onOpenSubtitles = {}, onOpenAudio = {}, onOpenStats = {}, onToggleFormat = {},
                         skipLabel = null,
-                        skipFocus = FocusRequester(),
+                        skipFocus = skip,
                         modifier = Modifier.align(Alignment.BottomStart),
                     )
                 }
