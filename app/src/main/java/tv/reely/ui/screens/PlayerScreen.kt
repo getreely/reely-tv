@@ -779,9 +779,8 @@ fun PlayerScreen(
                         else -> 0
                     }
                     if (dx != 0 || dy != 0) {
-                        // In the focus layout the tiles are a line rather than a grid,
-                        // because the one with the cursor on it is always the big one and
-                        // the rest shuffle up beside it.
+                        // In the focus layout the tiles are a line, left to right: the
+                        // one the cursor is on is the big one, in its own place in the line.
                         val next = if (focusLayout) {
                             (focusedTile + dy + dx).takeIf { it in 0 until slotCount }
                         } else {

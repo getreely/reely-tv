@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -400,11 +401,14 @@ fun AddTile(focused: Boolean, modifier: Modifier = Modifier) {
 
 /**
  * The other way to share a screen: whichever channel you are listening to takes most of
- * it, and the rest line up beside it. Better than an even grid when one game matters and
- * the others are being kept an eye on.
+ * it, and the rest are kept small beside it. Better than an even grid when one game
+ * matters and the others are being kept an eye on.
  *
- * Moving the cursor moves which one is large, so the layout reorders as you go. That is
- * the point of it rather than a side effect.
+ * Every channel keeps its place, left to right. Moving the cursor makes the one it lands
+ * on large where it is: the channels before it close up into a column on its left, the
+ * ones after it into a column on its right. It used to always put the large one on the
+ * left, so moving right to the second channel picked it up and carried it across the
+ * screen, and the first one jumped over to where it had been.
  */
 @Composable
 fun FocusLayout(
@@ -413,18 +417,40 @@ fun FocusLayout(
     modifier: Modifier = Modifier,
     tile: @Composable (index: Int) -> Unit,
 ) {
+    val (before, after) = focusSides(slots, focused)
+    val side = if (before.isNotEmpty() && after.isNotEmpty()) SIDE_BOTH else SIDE_ONE
     Row(
         modifier = modifier.fillMaxSize(),
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        Box(modifier = Modifier.weight(0.7f).fillMaxHeight()) { tile(focused) }
-        Column(
-            modifier = Modifier.weight(0.3f).fillMaxHeight(),
-            verticalArrangement = Arrangement.spacedBy(3.dp),
-        ) {
-            (0 until slots).filter { it != focused }.forEach { index ->
-                Box(modifier = Modifier.weight(1f).fillMaxWidth()) { tile(index) }
-            }
+        if (before.isNotEmpty()) SideColumn(before, Modifier.weight(side), tile)
+        Box(modifier = Modifier.weight(1f - side * listOf(before, after).count { it.isNotEmpty() }).fillMaxHeight()) {
+            tile(focused)
+        }
+        if (after.isNotEmpty()) SideColumn(after, Modifier.weight(side), tile)
+    }
+}
+
+/** The tiles either side of the large one in the focus layout, in their own order. */
+fun focusSides(slots: Int, focused: Int): Pair<List<Int>, List<Int>> {
+    val large = focused.coerceIn(0, (slots - 1).coerceAtLeast(0))
+    return (0 until large).toList() to (large + 1 until slots).toList()
+}
+
+@Composable
+private fun SideColumn(indices: List<Int>, modifier: Modifier, tile: @Composable (index: Int) -> Unit) {
+    Column(
+        modifier = modifier.fillMaxHeight(),
+        verticalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterVertically),
+    ) {
+        // Each the shape of a picture, not stretched to the height of the screen: one
+        // small channel beside the large one used to be a tall strip mostly of black.
+        indices.forEach { index ->
+            Box(modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)) { tile(index) }
         }
     }
 }
+
+/** The share of the width a side column takes: less of it when there's one each side. */
+private const val SIDE_ONE = 0.3f
+private const val SIDE_BOTH = 0.2f

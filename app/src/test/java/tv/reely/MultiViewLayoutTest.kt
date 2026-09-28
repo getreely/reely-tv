@@ -136,4 +136,12 @@ class MultiViewLayoutTest {
         assertTrue(hasSpareCell(tileCount = 3, focusLayout = false))
         assertFalse(hasSpareCell(tileCount = 4, focusLayout = false))
     }
+
+    @Test
+    fun `the large channel stays in its place in the line`() {
+        assertEquals(emptyList<Int>() to listOf(1), tv.reely.ui.screens.focusSides(2, 0))
+        assertEquals(listOf(0) to emptyList<Int>(), tv.reely.ui.screens.focusSides(2, 1))
+        assertEquals(listOf(0) to listOf(2, 3), tv.reely.ui.screens.focusSides(4, 1))
+        assertEquals(listOf(0, 1, 2) to emptyList<Int>(), tv.reely.ui.screens.focusSides(4, 3))
+    }
 }
