@@ -7,6 +7,8 @@ import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 import tv.reely.core.qualityBadges
+import tv.reely.core.versionDetail
+import tv.reely.core.versionLabel
 import tv.reely.core.Http
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -92,6 +94,9 @@ data class PlexPlayback(
      */
     val previewUrl: String? = null,
 )
+
+/** One of a title's files, when it has more than one: a 4K copy and a 1080p one, say. */
+data class PlexVersion(val label: String, val detail: String?)
 
 /** A person in the cast, as Plex records them. */
 data class PlexRole(
@@ -226,6 +231,8 @@ data class PlexDetail(
     val logo: String? = null,
     /** See [PlexItem.qualities]; a full item carries its HDR, which a listing may not. */
     val qualities: List<String> = emptyList(),
+    /** The files it comes in, in the server's order; empty when there is only the one. */
+    val versions: List<PlexVersion> = emptyList(),
 ) {
     val isShow: Boolean get() = type == "show"
 
@@ -710,15 +717,43 @@ object PlexApi {
                 parentIndex = entry.optInt("parentIndex").takeIf { it > 0 },
                 logo = logoOf(entry),
                 qualities = qualitiesOf(entry),
+                versions = versionsOf(entry),
             )
         }
+
+    /** Every file an item has, when it has more than one. */
+    internal fun versionsOf(entry: JSONObject): List<PlexVersion> {
+        val media = entry.optJSONArray("Media") ?: return emptyList()
+        if (media.length() < 2) return emptyList()
+        return (0 until media.length()).mapNotNull { media.optJSONObject(it) }.map { file ->
+            val part = file.optJSONArray("Part")?.optJSONObject(0)
+            val streams = part?.optJSONArray("Stream")
+            val video = streams?.let { list ->
+                (0 until list.length()).mapNotNull { list.optJSONObject(it) }.firstOrNull { it.optInt("streamType") == 1 }
+            }
+            PlexVersion(
+                label = versionLabel(
+                    resolution = file.optString("videoResolution").takeIf(String::isNotBlank),
+                    dolbyVision = video?.optBoolean("DOVIPresent") == true,
+                    transfer = video?.optString("colorTrc")?.takeIf(String::isNotBlank),
+                ),
+                detail = versionDetail(
+                    videoCodec = file.optString("videoCodec"),
+                    audioCodec = file.optString("audioCodec"),
+                    audioChannels = file.optInt("audioChannels"),
+                    bitrateKbps = file.optInt("bitrate"),
+                    sizeBytes = part?.optLong("size") ?: 0,
+                ),
+            )
+        }
+    }
 
     /**
      * Direct-play URL for the first part of an item, plus whatever text subtitles Plex
      * exposes as separate streams. Direct play only: no transcode is requested, so the
      * device has to decode what the file actually contains.
      */
-    suspend fun playback(base: String, token: String, ratingKey: String): PlexPlayback? =
+    suspend fun playback(base: String, token: String, ratingKey: String, mediaIndex: Int = 0): PlexPlayback? =
         withContext(Dispatchers.IO) {
             // includeMarkers asks the server for its intro and credits detection.
             val metadata = container(
@@ -726,7 +761,9 @@ object PlexApi {
                 token,
             )
                 .optJSONArray("Metadata")?.optJSONObject(0) ?: return@withContext null
-            val media = metadata.optJSONArray("Media")?.optJSONObject(0) ?: return@withContext null
+            // The version chosen, when there are several; the first when there aren't.
+            val files = metadata.optJSONArray("Media") ?: return@withContext null
+            val media = files.optJSONObject(mediaIndex) ?: files.optJSONObject(0) ?: return@withContext null
             val part = media.optJSONArray("Part")?.optJSONObject(0) ?: return@withContext null
             val key = part.optString("key").takeIf(String::isNotEmpty) ?: return@withContext null
 
@@ -799,6 +836,7 @@ object PlexApi {
         sessionId: String,
         maxBitrateKbps: Int,
         resolution: String,
+        mediaIndex: Int = 0,
     ): String {
         /*
          * No `offset`, on purpose. With one, the transcode starts part-way in and the
@@ -811,7 +849,7 @@ object PlexApi {
         val path = URLEncoder.encode("/library/metadata/$ratingKey", "UTF-8")
         val bitrate = if (maxBitrateKbps > 0) "&maxVideoBitrate=$maxBitrateKbps" else ""
         return "$base/video/:/transcode/universal/start.m3u8" +
-            "?path=$path&mediaIndex=0&partIndex=0" +
+            "?path=$path&mediaIndex=$mediaIndex&partIndex=0" +
             "&protocol=hls&fastSeek=1&directPlay=0&directStream=1" +
             // Burned in, because a transcode is exactly when the picture subtitles that
             // cannot be sideloaded become playable.
@@ -856,11 +894,12 @@ object PlexApi {
         ratingKey: String,
         sessionId: String,
         audioCodecs: List<String> = listOf("aac"),
+        mediaIndex: Int = 0,
     ): String {
         val path = URLEncoder.encode("/library/metadata/$ratingKey", "UTF-8")
         val profile = URLEncoder.encode(audioConvertProfile(audioCodecs), "UTF-8")
         return "$base/video/:/transcode/universal/start.m3u8" +
-            "?path=$path&mediaIndex=0&partIndex=0" +
+            "?path=$path&mediaIndex=$mediaIndex&partIndex=0" +
             "&protocol=hls&fastSeek=1" +
             "&directPlay=0&directStream=1&directStreamAudio=0" +
             "&subtitles=none&audioBoost=100&location=lan" +

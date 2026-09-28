@@ -180,6 +180,8 @@ data class DetailState(
     val related: List<PlexItem> = emptyList(),
     /** For a collection's page: what is in it. */
     val members: List<PlexItem> = emptyList(),
+    /** Which of the title's files Play uses, when it has several. See [PlexDetail.versions]. */
+    val versionIndex: Int = 0,
     val busy: Boolean = true,
     val error: String? = null,
 )
@@ -349,6 +351,8 @@ data class Playback(
     val audioCodec: String? = null,
     val audioChannels: Int = 0,
     val transcodeSession: String? = null,
+    /** Which of the title's files is playing, for a server fallback to ask for the same one. */
+    val mediaIndex: Int = 0,
 )
 
 data class PlayerPrefs(
@@ -1442,19 +1446,33 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 ?: return
             play(episode, queue = detailState.episodes, resume = resume)
         } else {
-            play(detail.asItem(), resume = resume)
+            play(detail.asItem(), resume = resume, mediaIndex = detailState.versionIndex)
+        }
+    }
+
+    /** The file Play uses on this page, for a title in more than one version. */
+    fun selectVersion(index: Int) {
+        _state.update { current ->
+            val detail = current.detail ?: return@update current
+            val count = detail.detail?.versions?.size ?: 0
+            if (index !in 0 until count) current else current.copy(detail = detail.copy(versionIndex = index))
         }
     }
 
     /** Play a library item, resuming where Plex says it was left. */
-    fun play(item: PlexItem, queue: List<PlexItem> = emptyList(), resume: Boolean = true): Job? {
+    fun play(
+        item: PlexItem,
+        queue: List<PlexItem> = emptyList(),
+        resume: Boolean = true,
+        mediaIndex: Int = 0,
+    ): Job? {
         val plex = _state.value.plex
         val on = item.serverBase
         val base = on ?: plex.baseUrl ?: return null
         val token = plex.tokenFor(on) ?: return null
 
         return viewModelScope.launch {
-            val resolved = runCatching { PlexApi.playback(base, token, item.ratingKey) }
+            val resolved = runCatching { PlexApi.playback(base, token, item.ratingKey, mediaIndex) }
                 .getOrElse { failure ->
                     reportPlaybackProblem(failure.readable())
                     return@launch
@@ -1504,6 +1522,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                                 ratingKey = item.ratingKey,
                                 sessionId = session,
                                 audioCodecs = convert.codecs,
+                                mediaIndex = mediaIndex,
                             )
                         } else if (transcode) {
                             PlexApi.transcodeUrl(
@@ -1514,6 +1533,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                                 sessionId = session,
                                 maxBitrateKbps = it.prefs.maxBitrateKbps,
                                 resolution = RESOLUTION,
+                                mediaIndex = mediaIndex,
                             )
                         } else {
                             resolved.url
@@ -1535,6 +1555,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                         transcodeSession = if (serverWorks) session else null,
                         audioCodec = resolved.audioCodec,
                         audioChannels = resolved.audioChannels,
+                        mediaIndex = mediaIndex,
                     ),
                 )
             }
@@ -1780,6 +1801,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                         sessionId = session,
                         maxBitrateKbps = it.prefs.maxBitrateKbps,
                         resolution = RESOLUTION,
+                        mediaIndex = playback.mediaIndex,
                     ),
                     startPositionMs = positionMs,
                     subtitles = emptyList(),
@@ -1818,6 +1840,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                         clientId = clientId,
                         ratingKey = ratingKey,
                         sessionId = session,
+                        mediaIndex = playback.mediaIndex,
                     ),
                     startPositionMs = positionMs,
                     transcoding = true,

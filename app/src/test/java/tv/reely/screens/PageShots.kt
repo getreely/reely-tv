@@ -280,6 +280,52 @@ class PageShots {
         Shots.save(compose, "detail-collection")
     }
 
+    /** A film in two versions: Quality opens the list of them, the one Play uses ticked. */
+    @Test fun detailVersions() {
+        var picked = -1
+        compose.setContent {
+            ReelyTheme {
+                Shots.RemoteInput()
+                Box(Modifier.fillMaxSize().background(Ink)) {
+                    DetailScreen(
+                        state = DetailState(
+                            ratingKey = "m1", serverBase = "http://server", busy = false,
+                            detail = PlexDetail(
+                                ratingKey = "m1", type = "movie", title = "Low Orbit",
+                                summary = "Two engineers keep a failing station in the sky one more week.",
+                                tagline = null, year = 2023, durationMs = 7_260_000, viewOffsetMs = 0,
+                                contentRating = "PG-13", rating = 7.9, audienceRating = 8.4, airDate = null,
+                                viewCount = 0, studio = null, thumb = "poster/orbit", art = "backdrop/orbit",
+                                theme = null, genres = listOf("Drama"), directors = emptyList(), roles = emptyList(),
+                                childCount = 0, leafCount = 0, grandparentTitle = null, index = null,
+                                parentIndex = null, logo = null, qualities = listOf("4K", "Dolby Vision", "7.1"),
+                                versions = listOf(
+                                    tv.reely.plex.PlexVersion("4K Dolby Vision", "HEVC · TrueHD 7.1 · 58 Mbps · 62.4 GB"),
+                                    tv.reely.plex.PlexVersion("1080p", "H.264 · Dolby Digital 5.1 · 10 Mbps · 9.8 GB"),
+                                ),
+                            ),
+                        ),
+                        imageUrl = { _, path, w, h -> Shots.imageUrl(path, w, h) },
+                        backdropUrl = { _, path -> Shots.imageUrl(path, 1280, 720) },
+                        logoUrl = { _, _ -> null },
+                        onPlay = {}, onPlayFromStart = {}, onPlayDetail = {}, onPlayDetailFromStart = {},
+                        onPlayTrailer = {}, onToggleWatched = {}, onToggleWatchedDetail = {},
+                        onFocusEpisode = {}, onSelectSeason = {},
+                        onSelectVersion = { picked = it },
+                    )
+                }
+            }
+        }
+        // The button is the circle; its name sits under it.
+        compose.onNode(androidx.compose.ui.test.hasText("4K") and androidx.compose.ui.test.hasClickAction()).performClick()
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(300)
+        Shots.saveIfAsked(compose, "detail-quality")
+        compose.onNodeWithText("1080p").performClick()
+        compose.waitForIdle()
+        check(picked == 1) { "picked $picked" }
+    }
+
     /** Where a piece of text really ends; its bounds in the tree stop at the clip. */
     private fun bottomOf(text: String): Float {
         val node = compose.onAllNodesWithText(text).onFirst().fetchSemanticsNode()

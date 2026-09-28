@@ -454,6 +454,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                         onFocusEpisode = viewModel::focusEpisode,
                         onSelectSeason = viewModel::selectSeason,
                         onOpenRelated = ::open,
+                        onSelectVersion = viewModel::selectVersion,
                     )
                 }
             }

@@ -38,6 +38,10 @@ import tv.reely.ui.components.LocalTint
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.text.font.FontWeight
+import tv.reely.ui.components.ChoicePanel
+import tv.reely.ui.components.ChoiceRequest
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
@@ -95,6 +99,8 @@ fun DetailScreen(
     modifier: Modifier = Modifier,
     /** A title in "More like this": its own page. */
     onOpenRelated: (PlexItem) -> Unit = {},
+    /** Which of a title's files Play uses, when there are several. */
+    onSelectVersion: (Int) -> Unit = {},
 ) {
     val detail = state.detail
     if (detail == null) {
@@ -107,6 +113,9 @@ fun DetailScreen(
     }
 
     val episode = state.focusedEpisode
+    // The list of versions, while it is open over the page.
+    var choosing by remember { mutableStateOf<ChoiceRequest?>(null) }
+    val versionButton = remember { FocusRequester() }
 
     // Arriving from a row lands on one episode, which in season nineteen is a long way
     // off the left edge. The rail is brought to it once, when the season's episodes
@@ -351,6 +360,35 @@ fun DetailScreen(
                                 onClick = { if (target != null) onToggleWatched(target) else onToggleWatchedDetail() },
                                 glyph = { CheckGlyph(it, 20.dp) },
                             )
+                            // A title in more than one file (a 4K copy and a 1080p one): which one Play uses.
+                            val versions = detail.versions
+                            if (versions.size > 1 && episode == null && !detail.isShow) {
+                                val chosen = versions.getOrNull(state.versionIndex) ?: versions.first()
+                                IconAction(
+                                    label = "Quality",
+                                    filled = false,
+                                    onClick = {
+                                        choosing = ChoiceRequest(
+                                            title = "Quality",
+                                            options = versions.map { it.label to it.detail },
+                                            selected = state.versionIndex,
+                                            onPick = onSelectVersion,
+                                            returnTo = versionButton,
+                                        )
+                                    },
+                                    modifier = Modifier.focusRequester(versionButton),
+                                    glyph = { color ->
+                                        Text(
+                                            text = chosen.label.substringBefore(' '),
+                                            color = color,
+                                            fontSize = 12.sp,
+                                            lineHeight = 14.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                        )
+                                    },
+                                )
+                            }
                             // Only appears when the server actually has a trailer to play.
                             if (state.trailers.isNotEmpty() && episode == null) {
                                 IconAction(
@@ -466,6 +504,16 @@ fun DetailScreen(
                     }
                 }
             }
+            }
+
+            choosing?.let { request ->
+                ChoicePanel(
+                    request = request,
+                    onClose = {
+                        choosing = null
+                        runCatching { request.returnTo.requestFocus() }
+                    },
+                )
             }
         }
     }
