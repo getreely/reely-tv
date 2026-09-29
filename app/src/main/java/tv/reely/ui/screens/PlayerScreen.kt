@@ -1082,6 +1082,11 @@ fun PlayerScreen(
                     }
                 },
                 update = { playerView ->
+                    // The picture follows whichever player is in use. Start over, or a
+                    // programme again from the guide over a channel, moves from the live
+                    // player to this screen's own; set only once, the picture stayed on
+                    // the stopped live one and went black while the sound played on.
+                    if (playerView.player !== exoPlayer) playerView.player = exoPlayer
                     playerView.subtitleView?.applyStyle(prefs)
                 },
                 modifier = Modifier.fillMaxSize(),
