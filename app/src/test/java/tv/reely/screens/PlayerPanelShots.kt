@@ -68,6 +68,23 @@ class PlayerPanelShots {
         compose.runOnIdle { focus.requestFocus() }
     }
 
+    @Test fun chapters() {
+        val focus = FocusRequester()
+        val names = listOf("Cold Open", "The Pass", "Weigh Station", "Nobody Signed", "Manifest", "The Closure", "Morning")
+        val chapters = names.mapIndexed { i, name ->
+            tv.reely.plex.PlexChapter(name, i * 6 * 60_000L, (i + 1) * 6 * 60_000L, Shots.imageUrl("backdrop/north", 320, 180))
+        }
+        overPicture(focus) {
+            Box(Modifier.fillMaxSize()) {
+                tv.reely.ui.screens.ChapterPanel(
+                    chapters = chapters, positionMs = 14 * 60_000L, focusRequester = focus,
+                    onPick = {}, onClose = {}, modifier = Modifier.align(Alignment.CenterEnd),
+                )
+            }
+        }
+        Shots.save(compose, "player-chapters")
+    }
+
     @Test fun stats() {
         val focus = FocusRequester()
         overPicture(focus) {

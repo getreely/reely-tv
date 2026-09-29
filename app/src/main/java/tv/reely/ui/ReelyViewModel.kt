@@ -369,6 +369,7 @@ data class Playback(
     val transcodeSession: String? = null,
     /** Which of the title's files is playing, for a server fallback to ask for the same one. */
     val mediaIndex: Int = 0,
+    val chapters: List<tv.reely.plex.PlexChapter> = emptyList(),
 )
 
 data class PlayerPrefs(
@@ -1601,6 +1602,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                         subtitles = if (transcode) emptyList() else resolved.subtitles,
                         markers = resolved.markers,
                         previewUrl = resolved.previewUrl,
+                        chapters = resolved.chapters,
                         serverBase = on,
                         queue = effectiveQueue,
                         queueIndex = effectiveQueue.indexOfFirst { entry -> entry.ratingKey == item.ratingKey },

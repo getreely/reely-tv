@@ -80,6 +80,14 @@ data class PlexMarker(
     val isCredits: Boolean get() = type.equals("credits", ignoreCase = true)
 }
 
+/** One of a film's chapters, as the file names them, with the server's picture of it. */
+data class PlexChapter(
+    val title: String,
+    val startMs: Long,
+    val endMs: Long,
+    val thumbUrl: String? = null,
+)
+
 data class PlexPlayback(
     val url: String,
     val subtitles: List<PlexSubtitle>,
@@ -93,6 +101,8 @@ data class PlexPlayback(
      * scrubbing.
      */
     val previewUrl: String? = null,
+    /** The file's chapters, in order; empty when it has none worth offering. */
+    val chapters: List<PlexChapter> = emptyList(),
 )
 
 /** One of a title's files, when it has more than one: a 4K copy and a 1080p one, say. */
@@ -781,6 +791,7 @@ object PlexApi {
                 audioCodec = sound?.first,
                 audioChannels = sound?.second ?: 0,
                 previewUrl = if (previews) "$base/library/parts/$partId/indexes/sd/{ms}?X-Plex-Token=$token" else null,
+                chapters = chaptersOf(metadata, base, token),
             )
         }
 
@@ -1185,6 +1196,26 @@ object PlexApi {
     private fun markerArray(metadata: JSONObject): JSONArray? =
         metadata.optJSONArray("Marker")
             ?: metadata.optJSONObject("Marker")?.let { JSONArray().put(it) }
+
+    /**
+     * The chapters in a file, when the server read any. A single chapter spanning the
+     * whole thing is how some encoders write "no chapters", and is not offered.
+     */
+    internal fun chaptersOf(metadata: JSONObject, base: String, token: String): List<PlexChapter> {
+        val array = metadata.optJSONArray("Chapter")
+            ?: metadata.optJSONObject("Chapter")?.let { JSONArray().put(it) }
+            ?: return emptyList()
+        val chapters = (0 until array.length()).mapNotNull { array.optJSONObject(it) }.mapIndexed { i, entry ->
+            val thumb = entry.optString("thumb").takeIf(String::isNotBlank)
+            PlexChapter(
+                title = entry.optString("tag").takeIf(String::isNotBlank) ?: "Chapter ${entry.optInt("index", i + 1)}",
+                startMs = entry.optLong("startTimeOffset"),
+                endMs = entry.optLong("endTimeOffset"),
+                thumbUrl = thumb?.let { if (it.startsWith("http")) it else "$base$it?X-Plex-Token=$token" },
+            )
+        }.sortedBy { it.startMs }
+        return chapters.takeIf { it.size > 1 }.orEmpty()
+    }
 
     private fun markersOf(metadata: JSONObject): List<PlexMarker> {
         val markers = markerArray(metadata) ?: return emptyList()

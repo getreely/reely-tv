@@ -57,6 +57,24 @@ fun InfoGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) {
     }
 }
 
+/** Three lines with a mark at the start of each: a list of chapters. */
+@Composable
+fun ChaptersGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(size)) {
+        val s = size.toPx()
+        listOf(0.25f, 0.5f, 0.75f).forEach { y ->
+            drawCircle(color, radius = s * 0.065f, center = androidx.compose.ui.geometry.Offset(s * 0.16f, s * y))
+            drawLine(
+                color,
+                start = androidx.compose.ui.geometry.Offset(s * 0.34f, s * y),
+                end = androidx.compose.ui.geometry.Offset(s * 0.88f, s * y),
+                strokeWidth = s * 0.1f,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round,
+            )
+        }
+    }
+}
+
 /** A play mark inside a frame: the film-trailer shape. */
 @Composable
 fun TrailerGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) {

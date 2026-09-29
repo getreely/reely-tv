@@ -100,6 +100,7 @@ import tv.reely.ui.LiveState
 import tv.reely.ui.PlayerPrefs
 import tv.reely.ui.Playback
 import tv.reely.ui.components.MatchFrameRate
+import tv.reely.ui.components.ChaptersGlyph
 import tv.reely.ui.components.InfoGlyph
 import tv.reely.ui.components.PauseGlyph
 import tv.reely.ui.components.PlayGlyph
@@ -130,7 +131,7 @@ private const val CONTROLS_TIMEOUT_MS = 6_000L
 /** Long enough to read twice from across a room, short enough not to sit on the picture. */
 private const val AUDIO_NOTICE_MS = 9_000L
 
-internal enum class Panel { NONE, SUBTITLES, AUDIO, STATS }
+internal enum class Panel { NONE, SUBTITLES, AUDIO, STATS, CHAPTERS }
 
 private data class TrackChoice(
     val label: String,
@@ -1039,6 +1040,7 @@ fun PlayerScreen(
                 onOpenSubtitles = { panel = Panel.SUBTITLES },
                 onOpenAudio = { panel = Panel.AUDIO },
                 onOpenStats = { panel = Panel.STATS },
+                onOpenChapters = if (playback.chapters.isNotEmpty()) ({ panel = Panel.CHAPTERS }) else null,
                 onToggleFormat = onToggleFormat,
                 skipLabel = skipLabel,
                 skipFocus = skipFocus,
@@ -1079,6 +1081,21 @@ fun PlayerScreen(
                 onClose = { panel = Panel.NONE },
                 onNudgeScale = onNudgeSubtitleScale,
                 onToggleBackground = onToggleSubtitleBackground,
+                modifier = Modifier.align(Alignment.CenterEnd),
+            )
+        }
+
+        if (panel == Panel.CHAPTERS) {
+            ChapterPanel(
+                chapters = playback.chapters,
+                positionMs = positionMs,
+                focusRequester = panelFocus,
+                onPick = { chapter ->
+                    exoPlayer.seekTo(chapter.startMs)
+                    positionMs = chapter.startMs
+                    panel = Panel.NONE
+                },
+                onClose = { panel = Panel.NONE },
                 modifier = Modifier.align(Alignment.CenterEnd),
             )
         }
@@ -1154,6 +1171,8 @@ internal fun Controls(
     onOpenAudio: () -> Unit,
     onOpenStats: () -> Unit,
     onToggleFormat: () -> Unit,
+    /** The film's chapters, when it has some. */
+    onOpenChapters: (() -> Unit)? = null,
     /** Skip Intro or Next Episode, when one is being offered; it sits in the title's row. */
     skipLabel: String? = null,
     skipFocus: FocusRequester = remember { FocusRequester() },
@@ -1286,6 +1305,13 @@ internal fun Controls(
                             onClick = onAddChannel,
                             diameter = SMALL_BUTTON,
                             glyph = { PlusGlyph(it, 16.dp) },
+                        )
+                    }
+                    if (onOpenChapters != null) {
+                        TransportButton(
+                            onClick = onOpenChapters,
+                            diameter = SMALL_BUTTON,
+                            glyph = { ChaptersGlyph(it, 16.dp) },
                         )
                     }
                     TransportButton(
@@ -1851,6 +1877,57 @@ private fun buildMediaItem(playback: Playback): MediaItem =
             }
         )
         .build()
+
+/**
+ * The film's chapters, each with the server's picture of it and where it starts. Opens on
+ * the one playing; OK on another goes there.
+ */
+@Composable
+internal fun ChapterPanel(
+    chapters: List<tv.reely.plex.PlexChapter>,
+    positionMs: Long,
+    focusRequester: FocusRequester,
+    onPick: (tv.reely.plex.PlexChapter) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val current = remember(chapters) { currentChapter(chapters, positionMs) }
+    val list = androidx.compose.foundation.lazy.rememberLazyListState(
+        initialFirstVisibleItemIndex = (current - 1).coerceAtLeast(0),
+    )
+    Column(
+        modifier = modifier
+            .padding(end = 48.dp, top = 27.dp, bottom = 27.dp)
+            .width(460.dp)
+            .sheet()
+            .padding(24.dp)
+            .focusGroup(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(text = "Chapters", color = Chalk, style = ReelyType.Headline)
+        LazyColumn(
+            state = list,
+            modifier = Modifier.weight(1f, fill = false),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            itemsIndexed(chapters) { index, chapter ->
+                TvListRow(
+                    title = chapter.title,
+                    subtitle = clock(chapter.startMs),
+                    imageUrl = chapter.thumbUrl,
+                    selected = index == current,
+                    onClick = { onPick(chapter) },
+                    modifier = if (index == current) Modifier.focusRequester(focusRequester) else Modifier,
+                )
+            }
+        }
+        TvActionButton(label = "Close", onClick = onClose)
+    }
+}
+
+/** Which chapter [positionMs] falls in: the last to have started by then. */
+internal fun currentChapter(chapters: List<tv.reely.plex.PlexChapter>, positionMs: Long): Int =
+    chapters.indexOfLast { it.startMs <= positionMs }.coerceAtLeast(0)
 
 private fun clock(millis: Long): String {
     if (millis <= 0) return "0:00"
