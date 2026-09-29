@@ -255,11 +255,56 @@ fun FollowRemovals(row: RowFocus) {
 fun Modifier.restoreFocusTo(row: RowFocus): Modifier =
     this.focusProperties {
         onEnter = {
-            val byArrow = requestedFocusDirection == FocusDirection.Up ||
-                requestedFocusDirection == FocusDirection.Down ||
-                requestedFocusDirection == FocusDirection.Left ||
-                requestedFocusDirection == FocusDirection.Right
-            val remembered = row.entry(byArrow)
-            if (remembered != FocusRequester.Default) remembered.requestFocus()
+            // The app putting the cursor back on one card goes to that card.
+            if (!FocusReturn.active) {
+                val remembered = row.entry(byArrow = requestedFocusDirection.isArrow())
+                if (remembered != FocusRequester.Default) remembered.requestFocus()
+            }
         }
     }
+
+/**
+ * Whether a focus change is the remote's arrows moving the cursor, as opposed to the app
+ * itself putting the cursor somewhere (the row a list was opened from, say).
+ */
+internal fun FocusDirection.isArrow(): Boolean =
+    this == FocusDirection.Up || this == FocusDirection.Down ||
+        this == FocusDirection.Left || this == FocusDirection.Right ||
+        this == FocusDirection.Next || this == FocusDirection.Previous
+
+/**
+ * Keeps the arrows inside a menu, list or question while it's up, so pressing past its
+ * edge can't wander into the screen behind.
+ *
+ * Only the arrows. Stopping every way out also stopped the app putting the cursor back
+ * where it came from as the menu closed; with nowhere left to be, the cursor fell to the
+ * first thing in the window, the search button, every time a setting was chosen. That is
+ * the jump that kept coming back.
+ */
+fun Modifier.keepCursorInside(): Modifier = this.focusProperties {
+    onExit = { if (requestedFocusDirection.isArrow()) cancelFocusChange() }
+}
+
+/**
+ * The app putting the cursor back where it came from, as a list or a menu closes.
+ *
+ * Pages have rules for where the cursor lands on the way in: Settings starts at its
+ * sections, a row at the card it was last on. Those are for the remote's arrows. When a
+ * list closed and the app asked for the row it was opened from, Settings took that as
+ * arriving and sent the cursor to the sections instead, and from there it could end up
+ * anywhere, the search button above all. While this is at work the rules stand aside.
+ */
+object FocusReturn {
+    var active: Boolean = false
+        private set
+
+    /** The cursor onto [target], trying for a few frames while the screen settles. */
+    suspend fun to(target: FocusRequester): Boolean {
+        active = true
+        try {
+            return target.requestWhenReady()
+        } finally {
+            active = false
+        }
+    }
+}

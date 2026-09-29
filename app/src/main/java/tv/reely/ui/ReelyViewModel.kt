@@ -876,7 +876,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     private fun refreshPlexHoldings() {
         val now = System.currentTimeMillis()
         if (now - plexHoldingsAt < PLEX_HOLDINGS_MS) return
-        val choices = _state.value.plex.libraryChoices
+        // Only the libraries switched on here: a server's library that has been turned off
+        // isn't one this television watches from, so what's in it isn't "in the library".
+        val choices = _state.value.plex.homeSources()
         if (choices.isEmpty()) return
         plexHoldingsAt = now
         viewModelScope.launch {
@@ -1757,6 +1759,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         if (!next.remove(choice.id)) next.add(choice.id)
         settings.favouriteSections = next
         updatePlex { it.copy(favouriteSections = next) }
+        // What counts as in the library has changed with it.
+        plexHoldingsAt = 0L
+        refreshPlexHoldings()
     }
 
     fun setSort(kind: LibraryKind, sort: LibrarySort) {

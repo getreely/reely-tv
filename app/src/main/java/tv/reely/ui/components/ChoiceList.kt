@@ -79,7 +79,7 @@ fun ChoicePanel(request: ChoiceRequest, onClose: () -> Unit) {
             modifier = Modifier
                 .align(Alignment.CenterEnd)
                 .onFocusChanged { holding = it.hasFocus }
-                .focusProperties { onExit = { cancelFocusChange() } }
+                .keepCursorInside()
                 .focusGroup(),
         ) {
             MenuHeading(title = request.title)

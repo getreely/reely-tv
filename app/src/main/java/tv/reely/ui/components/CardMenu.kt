@@ -52,7 +52,7 @@ fun CardMenu(
     MenuPanel(
         modifier = modifier
             // Up off the top or down off the bottom stays in the menu.
-            .focusProperties { onExit = { cancelFocusChange() } }
+            .keepCursorInside()
             // Without the group the requester has nothing focusable of its own to hand
             // focus to, and every row here would be dead.
             .focusGroup()

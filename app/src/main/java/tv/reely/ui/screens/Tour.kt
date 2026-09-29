@@ -1,5 +1,6 @@
 package tv.reely.ui.screens
 
+import tv.reely.ui.components.keepCursorInside
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -168,7 +169,7 @@ fun Tour(onDone: () -> Unit, modifier: Modifier = Modifier) {
                 .background(SurfaceRaised)
                 .border(1.dp, Chalk.copy(alpha = 0.12f), RoundedCornerShape(24.dp))
                 .padding(horizontal = 36.dp, vertical = 30.dp)
-                .focusProperties { onExit = { cancelFocusChange() } }
+                .keepCursorInside()
                 .focusGroup(),
             horizontalArrangement = Arrangement.spacedBy(36.dp),
             verticalAlignment = Alignment.CenterVertically,

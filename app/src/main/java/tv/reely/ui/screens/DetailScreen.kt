@@ -1,5 +1,7 @@
 package tv.reely.ui.screens
 
+import tv.reely.ui.components.FocusReturn
+import tv.reely.ui.components.requestWhenReady
 import tv.reely.ui.components.EpisodeRailPlaceholder
 import tv.reely.ui.components.Shimmer
 import tv.reely.ui.components.DetailPlaceholder
@@ -523,12 +525,14 @@ fun DetailScreen(
             }
             }
 
+            // Kept by the screen, so the way back outlives the list that asked for it.
+            val returnScope = androidx.compose.runtime.rememberCoroutineScope()
             choosing?.let { request ->
                 ChoicePanel(
                     request = request,
                     onClose = {
                         choosing = null
-                        runCatching { request.returnTo.requestFocus() }
+                        returnScope.launch { FocusReturn.to(request.returnTo) }
                     },
                 )
             }

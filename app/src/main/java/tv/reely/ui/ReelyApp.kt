@@ -1,5 +1,7 @@
 package tv.reely.ui
 
+import tv.reely.ui.components.isArrow
+import tv.reely.ui.components.keepCursorInside
 import tv.reely.ui.components.DetailPlaceholder
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
@@ -393,7 +395,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     var itemMenuClosed by remember { mutableIntStateOf(0) }
     LaunchedEffect(itemMenu, itemMenuClosed) {
         if (itemMenu != null) itemMenuFocus.requestWhenReady()
-        else if (itemMenuClosed > 0) heldCard.requester?.requestWhenReady()
+        else if (itemMenuClosed > 0) heldCard.requester?.let { tv.reely.ui.components.FocusReturn.to(it) }
     }
     fun closeItemMenu() {
         itemMenu = null
@@ -1189,7 +1191,7 @@ private fun ConfirmExit(
             .padding(24.dp)
             // Nothing leaves this while it is up. A question with two answers should not
             // be escapable by pressing a direction key at the screen behind it.
-            .focusProperties { onExit = { cancelFocusChange() } }
+            .keepCursorInside()
             .focusGroup(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -1230,7 +1232,9 @@ internal fun Modifier.pageArea(upTo: FocusRequester): Modifier = this
     .focusProperties {
         onExit = {
             if (requestedFocusDirection == FocusDirection.Up) upTo.requestFocus()
-            else cancelFocusChange()
+            // Sideways and down off a page go nowhere; the app putting the cursor on a
+            // tab itself (after a list closes, say) is not the remote and goes ahead.
+            else if (requestedFocusDirection.isArrow()) cancelFocusChange()
         }
     }
     .focusGroup()

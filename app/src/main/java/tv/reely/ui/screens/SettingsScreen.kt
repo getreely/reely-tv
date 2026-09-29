@@ -1,5 +1,6 @@
 package tv.reely.ui.screens
 
+import tv.reely.ui.components.FocusReturn
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.gestures.animateScrollBy
@@ -160,7 +161,7 @@ fun SettingsScreen(
      * that section too, rather than on whichever one happened to sit level with the cursor.
      */
     val toSection = Modifier.focusProperties {
-        onEnter = { sectionFocus.getValue(section).requestFocus() }
+        onEnter = { if (!FocusReturn.active) sectionFocus.getValue(section).requestFocus() }
     }
 
     var choosing by remember { mutableStateOf<ChoiceRequest?>(null) }
@@ -207,7 +208,7 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .onFocusChanged { inOptions = it.hasFocus }
                 .focusProperties {
-                    onEnter = { runCatching { firstOption.requestFocus() } }
+                    onEnter = { if (!FocusReturn.active) runCatching { firstOption.requestFocus() } }
                 }
                 .focusGroup(),
             verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -266,12 +267,14 @@ fun SettingsScreen(
         }
     }
     }
+        // Kept by the screen, so the way back outlives the list that asked for it.
+        val returnScope = androidx.compose.runtime.rememberCoroutineScope()
         choosing?.let { request ->
             ChoicePanel(
                 request = request,
                 onClose = {
                     choosing = null
-                    runCatching { request.returnTo.requestFocus() }
+                    returnScope.launch { FocusReturn.to(request.returnTo) }
                 },
             )
         }

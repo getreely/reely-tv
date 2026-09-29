@@ -1,5 +1,8 @@
 package tv.reely.ui.screens
 
+import tv.reely.ui.components.FocusReturn
+import tv.reely.ui.components.requestWhenReady
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -538,12 +541,14 @@ fun LibraryScreen(
             )
         }
 
+        // Kept by the screen, so the way back outlives the list that asked for it.
+        val returnScope = androidx.compose.runtime.rememberCoroutineScope()
         choosing?.let { request ->
             ChoicePanel(
                 request = request,
                 onClose = {
                     choosing = null
-                    runCatching { request.returnTo.requestFocus() }
+                    returnScope.launch { FocusReturn.to(request.returnTo) }
                 },
             )
         }

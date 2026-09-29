@@ -1,5 +1,6 @@
 package tv.reely.ui.screens
 
+import tv.reely.ui.components.keepCursorInside
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -91,7 +92,7 @@ fun UpdatePrompt(
                 .background(SurfaceRaised)
                 .border(1.dp, Chalk.copy(alpha = 0.12f), RoundedCornerShape(22.dp))
                 .padding(horizontal = 32.dp, vertical = 28.dp)
-                .focusProperties { onExit = { cancelFocusChange() } }
+                .keepCursorInside()
                 .focusGroup(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp),
