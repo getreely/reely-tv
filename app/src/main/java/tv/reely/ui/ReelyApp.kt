@@ -785,6 +785,16 @@ internal fun TopBar(
 
         Box(modifier = Modifier.weight(1f))
 
+        // The time, quietly: nobody should have to leave the app to find out how late it is.
+        val context = androidx.compose.ui.platform.LocalContext.current
+        Text(
+            text = tv.reely.ui.components.clockTime(context, tv.reely.ui.components.rememberNow()),
+            color = Faint,
+            fontSize = 16.sp,
+            lineHeight = 20.sp,
+            modifier = Modifier.padding(end = 18.dp),
+        )
+
         if (profile != null) {
             ProfileChip(
                 user = profile,

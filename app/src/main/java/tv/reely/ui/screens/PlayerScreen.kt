@@ -1060,6 +1060,14 @@ fun PlayerScreen(
             else onStepEpisode(1)
         }
         if (controlsShowing) {
+            PlayerClock(
+                endsAtMs = if (!playback.isLive && durationMs > 0) {
+                    (durationMs - positionMs).coerceAtLeast(0)
+                } else {
+                    null
+                },
+                modifier = Modifier.align(Alignment.TopEnd),
+            )
             Controls(
                 playback = playback,
                 playing = playing,
@@ -2081,6 +2089,41 @@ internal fun ChapterPanel(
             }
         }
         TvActionButton(label = "Close", onClick = onClose)
+    }
+}
+
+/**
+ * The time, top right while the controls are up, and for a film or an episode when it
+ * will finish: the two things somebody glancing at the controls late at night wants.
+ * A soft shade behind it keeps it readable over a bright picture.
+ */
+@Composable
+internal fun PlayerClock(endsAtMs: Long?, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val now = tv.reely.ui.components.rememberNow()
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(Brush.verticalGradient(listOf(Ink.copy(alpha = 0.6f), Color.Transparent)))
+            .padding(top = 24.dp, end = 48.dp, bottom = 56.dp, start = 48.dp),
+        contentAlignment = Alignment.TopEnd,
+    ) {
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = tv.reely.ui.components.clockTime(context, now),
+                color = Chalk,
+                fontSize = 26.sp,
+                lineHeight = 30.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            if (endsAtMs != null) {
+                Text(
+                    text = "Ends at " + tv.reely.ui.components.clockTime(context, now + endsAtMs),
+                    color = Muted,
+                    style = ReelyType.Label,
+                )
+            }
+        }
     }
 }
 

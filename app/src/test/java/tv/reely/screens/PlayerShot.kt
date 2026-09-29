@@ -104,6 +104,10 @@ class PlayerShot {
                         skipFocus = skipFocus,
                         modifier = Modifier.align(Alignment.BottomStart),
                     )
+                    tv.reely.ui.screens.PlayerClock(
+                        endsAtMs = 18 * 60_000L - 7_000,
+                        modifier = Modifier.align(Alignment.TopEnd),
+                    )
                 }
             }
         }
