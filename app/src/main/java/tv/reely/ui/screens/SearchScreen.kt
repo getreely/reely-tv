@@ -32,6 +32,7 @@ import tv.reely.ui.components.rememberRowFocus
 import tv.reely.ui.components.rowItem
 import tv.reely.ui.components.restoreFocusTo
 import tv.reely.ui.components.TvTextField
+import tv.reely.ui.components.TvActionButton
 import tv.reely.ui.theme.Chalk
 import tv.reely.ui.theme.ReelyType
 import tv.reely.xtream.XtreamChannel
@@ -48,10 +49,13 @@ fun SearchScreen(
     onPlayChannel: (XtreamChannel) -> Unit,
     modifier: Modifier = Modifier,
     onOpenPerson: (tv.reely.plex.PlexPerson) -> Unit = {},
+    onClearRecent: () -> Unit = {},
 ) {
     val channelFocus = rememberRowFocus("channels")
     val peopleFocus = rememberRowFocus("people")
     val resultFocus = rememberRowFocus("results")
+    val collectionFocus = rememberRowFocus("collections")
+    val recentFocus = rememberRowFocus("recent")
 
     Box(modifier = modifier.fillMaxSize()) {
         HeroBackdrop(
@@ -75,16 +79,24 @@ fun SearchScreen(
                         value = search.query,
                         onValueChange = onQueryChange,
                         label = "Search",
-                        placeholder = "Movies, shows, people and channels",
+                        placeholder = "Movies, shows, people, collections and channels",
                         imeAction = ImeAction.Search,
                         modifier = Modifier.widthIn(max = 620.dp),
                     )
                     when {
                         search.busy -> EmptyNote("Searching…")
-                        search.query.isBlank() ->
-                            EmptyNote("Search movies, shows, people and live channels.")
+                        search.query.isBlank() && search.recent.isNotEmpty() -> RecentSearches(
+                            recent = search.recent,
+                            focus = recentFocus,
+                            onPick = onQueryChange,
+                            onClear = onClearRecent,
+                        )
 
-                        search.results.isEmpty() && search.channels.isEmpty() && search.people.isEmpty() ->
+                        search.query.isBlank() ->
+                            EmptyNote("Search movies, shows, people, collections and live channels.")
+
+                        search.results.isEmpty() && search.channels.isEmpty() && search.people.isEmpty() &&
+                            search.collections.isEmpty() ->
                             EmptyNote("Nothing matched \"${search.query}\".")
 
                         else -> EmptyNote(
@@ -93,6 +105,8 @@ fun SearchScreen(
                                 "${search.channels.size} live channels".takeIf { search.channels.isNotEmpty() },
                                 (if (search.people.size == 1) "1 person" else "${search.people.size} people")
                                     .takeIf { search.people.isNotEmpty() },
+                                (if (search.collections.size == 1) "1 collection" else "${search.collections.size} collections")
+                                    .takeIf { search.collections.isNotEmpty() },
                             ).joinToString("  ·  ")
                         )
                     }
@@ -183,6 +197,37 @@ fun SearchScreen(
                 )
             }
 
+            // Collections after the titles themselves: typing "bond" is usually after a film,
+            // and the collection of all of them is the next best thing.
+            if (search.collections.isNotEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Column(
+                        modifier = Modifier.padding(top = 14.dp, bottom = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(text = "Collections", color = Chalk, style = ReelyType.RowTitle)
+                        LazyRow(
+                            modifier = Modifier.restoreFocusTo(collectionFocus).focusGroup(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            items(search.collections, key = { "collection:" + it.listKey }) { item ->
+                                PosterCard(
+                                    title = item.title,
+                                    subtitle = item.caption,
+                                    imageUrl = imageUrl(item.serverBase, item.thumb, 300, 450),
+                                    onFocus = {
+                                        collectionFocus.onFocused(item.listKey)
+                                        onFocusItem(item)
+                                    },
+                                    onClick = { onOpenItem(item) },
+                                    modifier = rowItem(collectionFocus, item.listKey),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             if (search.more.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     Text(
@@ -207,6 +252,41 @@ fun SearchScreen(
                     },
                     onClick = { onOpenItem(item) },
                     modifier = rowItem(resultFocus, item.listKey),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * What was searched for lately, offered again while the box is empty: one press to run
+ * one, and one to forget them all.
+ */
+@Composable
+private fun RecentSearches(
+    recent: List<String>,
+    focus: tv.reely.ui.components.RowFocus,
+    onPick: (String) -> Unit,
+    onClear: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(text = "Recent searches", color = Chalk, style = ReelyType.RowTitle)
+        LazyRow(
+            modifier = Modifier.restoreFocusTo(focus).focusGroup(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            items(recent, key = { it }) { words ->
+                TvActionButton(
+                    label = words,
+                    onClick = { onPick(words) },
+                    modifier = rowItem(focus, words),
+                )
+            }
+            item(key = "reely:clear") {
+                TvActionButton(
+                    label = "Clear",
+                    onClick = onClear,
+                    modifier = rowItem(focus, "reely:clear"),
                 )
             }
         }

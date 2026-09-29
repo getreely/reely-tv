@@ -77,3 +77,16 @@ object SearchMatch {
             .split(Regex("[^\\p{L}\\p{N}]+"))
             .filter { it.isNotEmpty() }
 }
+
+/** How many searches the empty search box offers again. */
+const val RECENT_SEARCH_LIMIT = 8
+
+/**
+ * [recent] with [query] put first, once: the same words in another case, or with more
+ * space around them, are the same search and not a second one.
+ */
+fun rememberedSearches(recent: List<String>, query: String, limit: Int = RECENT_SEARCH_LIMIT): List<String> {
+    val words = query.trim().replace(Regex("\\s+"), " ")
+    if (words.isEmpty()) return recent
+    return (listOf(words) + recent.filterNot { it.equals(words, ignoreCase = true) }).take(limit)
+}

@@ -92,4 +92,32 @@ class TileSurfaceTest {
         assertTrue(rects[0].right < rects[1].left && rects[1].right < rects[2].left)
         assertTrue(rects[2].bottom < rects[3].top)
     }
+
+    @Test
+    fun `moving a tile moves its picture instead of handing it to another channel`() {
+        val built = mutableMapOf<Int, View>()
+        var order by androidx.compose.runtime.mutableStateOf(listOf(0, 1, 2))
+        val shown = mutableMapOf<Int, View>()
+        compose.setContent {
+            MultiViewGrid(slots = 3, order = order, modifier = Modifier.fillMaxSize()) { tile ->
+                AndroidView(
+                    factory = { context -> View(context).also { built[tile] = it } },
+                    update = { shown[tile] = it },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+        compose.waitForIdle()
+        val before = built.toMap()
+        fun onScreen(view: View) = IntArray(2).also { view.getLocationInWindow(it) }.let { it[0] to it[1] }
+        val firstPlace = onScreen(before.getValue(0))
+        order = listOf(1, 0, 2)
+        compose.waitForIdle()
+        // The same views, each still showing its own tile.
+        assertEquals(before, shown.toMap())
+        assertEquals(3, built.size)
+        // Tile 0 is now where tile 1 was: to the right of the first place.
+        val moved = onScreen(before.getValue(0))
+        assertTrue("$firstPlace -> $moved", moved.first > firstPlace.first)
+    }
 }

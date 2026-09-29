@@ -424,7 +424,11 @@ data class SearchState(
     val more: List<PlexItem> = emptyList(),
     /** Actors whose name matches, whose page shows what else they're in. */
     val people: List<tv.reely.plex.PlexPerson> = emptyList(),
+    /** Collections whose name matches: "Marvel", "James Bond", whatever the server keeps. */
+    val collections: List<PlexItem> = emptyList(),
     val busy: Boolean = false,
+    /** What was searched for lately, newest first, to offer again when the box is empty. */
+    val recent: List<String> = emptyList(),
 )
 
 sealed interface GuideStatus {
@@ -575,6 +579,8 @@ data class SubtitleSearch(
 )
 
 data class ReelyState(
+    /** Channels saved to open side by side again, the main one first. */
+    val savedMultiview: List<tv.reely.core.SavedChannel> = emptyList(),
     /** Subtitles being looked for online, for what's playing. */
     val subtitleSearch: SubtitleSearch? = null,
     /** Programmes to be told about when they start, soonest first. */
@@ -687,6 +693,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             ?: "Reely TV"
         updatePlex { it.copy(favouriteSections = settings.favouriteSections) }
         updateLive { it.copy(favorites = settings.favoriteChannels, recent = settings.recentChannels) }
+        _state.update {
+            it.copy(search = it.search.copy(recent = settings.recentSearches), savedMultiview = settings.savedMultiview)
+        }
         viewModelScope.launch {
             restorePlex()
             restoreLive()
@@ -923,7 +932,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val kind = if (title.isShow) "show" else "movie"
             val found = servers.firstNotNullOfOrNull { (base, token) ->
-                runCatching { PlexApi.searchAll(base, token, title.title).first }.getOrNull()
+                runCatching { PlexApi.searchAll(base, token, title.title).items }.getOrNull()
                     ?.firstOrNull { item ->
                         item.type == kind && item.title.equals(title.title, ignoreCase = true) &&
                             (title.year == null || item.year == null || item.year == title.year)
@@ -2692,7 +2701,12 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         searchJob?.cancel()
         if (query.isBlank()) {
             _state.update {
-                it.copy(search = it.search.copy(results = emptyList(), channels = emptyList(), busy = false))
+                it.copy(
+                    search = it.search.copy(
+                        results = emptyList(), more = emptyList(), channels = emptyList(),
+                        people = emptyList(), collections = emptyList(), busy = false,
+                    )
+                )
             }
             return
         }
@@ -2712,13 +2726,14 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             // Every pinned server, merged. Searching one of two libraries and calling it
             // "your library" is the thing this whole change is about.
             val found = servers.map { (base, token) ->
-                runCatching { PlexApi.searchAll(base, token, query) }.getOrElse { emptyList<PlexItem>() to emptyList() }
+                runCatching { PlexApi.searchAll(base, token, query) }.getOrElse { tv.reely.plex.PlexFound() }
             }
-            val (matches, others) = tv.reely.core.SearchMatch.split(query, found.flatMap { it.first })
+            val (matches, others) = tv.reely.core.SearchMatch.split(query, found.flatMap { it.items })
             // Nothing by name, a misspelling most likely: then Plex's own guesses are the results.
             val results = matches.ifEmpty { others }
             val more = if (matches.isEmpty()) emptyList() else others
-            val people = found.flatMap { it.second }.distinctBy { it.name.lowercase() }.take(PEOPLE_RESULTS)
+            val people = found.flatMap { it.people }.distinctBy { it.name.lowercase() }.take(PEOPLE_RESULTS)
+            val collections = found.flatMap { it.collections }.distinctBy { it.title.lowercase() }
             // Channels are matched here rather than asked of the panel: the panel has no
             // search, and the whole list is already in hand.
             val channels = allChannels.orEmpty()
@@ -2728,11 +2743,28 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 if (current.search.query != query) current
                 else current.copy(
                     search = current.search.copy(
-                        results = results, more = more, channels = channels, people = people, busy = false,
+                        results = results, more = more, channels = channels, people = people,
+                        collections = collections, busy = false,
                     )
                 )
             }
         }
+    }
+
+    /**
+     * Keeps what's in the search box as a recent search. Called when something it found is
+     * opened: that's a search that worked, and the one worth offering again. What was only
+     * typed on the way to it isn't.
+     */
+    fun rememberSearch() {
+        val next = tv.reely.core.rememberedSearches(settings.recentSearches, _state.value.search.query)
+        settings.recentSearches = next
+        _state.update { it.copy(search = it.search.copy(recent = next)) }
+    }
+
+    fun clearRecentSearches() {
+        settings.recentSearches = emptyList()
+        _state.update { it.copy(search = it.search.copy(recent = emptyList())) }
     }
 
     /** Pulls the whole channel list once, so search has something to match against. */
@@ -3199,6 +3231,61 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clearMultiview() = _state.update { it.copy(multiview = emptyList()) }
+
+    /** The channel the player itself is on, when live: the one the rest sit beside. */
+    private fun mainChannelId(): Int? {
+        val state = _state.value
+        val playback = state.playback?.takeIf { it.isLive } ?: return null
+        return state.live.channels.getOrNull(playback.channelIndex)?.streamId
+            // Tuned from search or by number, outside the open category: every tune is
+            // remembered first in Recently watched, so that is the one.
+            ?: state.live.recent.firstOrNull()
+    }
+
+    /**
+     * Keeps the channels up now, in the places they're in ([order] is the tiles left to
+     * right: 0 the main one, then the others by their place in [ReelyState.multiview]).
+     * There's one saved set: saving again replaces it.
+     */
+    fun saveMultiview(order: List<Int>) {
+        val state = _state.value
+        val playback = state.playback?.takeIf { it.isLive } ?: return
+        val main = mainChannelId() ?: return
+        val set = order.mapNotNull { tile ->
+            if (tile == 0) tv.reely.core.SavedChannel(main, playback.title)
+            else state.multiview.getOrNull(tile - 1)?.let { tv.reely.core.SavedChannel(it.streamId, it.name) }
+        }.distinctBy { it.streamId }
+        if (set.size < 2) return
+        settings.savedMultiview = set
+        _state.update { it.copy(savedMultiview = set) }
+    }
+
+    /** What to call the saved set in the menu, or null when it's what is already up. */
+    fun savedMultiviewLabel(): String? {
+        val state = _state.value
+        val saved = state.savedMultiview.takeIf { it.size > 1 } ?: return null
+        val up = listOfNotNull(mainChannelId()) + state.multiview.map { it.streamId }
+        if (saved.map { it.streamId }.toSet() == up.toSet()) return null
+        val first = saved.first().name.ifBlank { "Channel" }
+        return if (saved.size == 2) "$first and 1 more" else "$first and ${saved.size - 1} more"
+    }
+
+    /** Puts the saved channels up, the main one in the player and the rest beside it. */
+    fun openSavedMultiview() {
+        val saved = _state.value.savedMultiview.takeIf { it.size > 1 } ?: return
+        val credentials = _state.value.live.credentials ?: return
+        viewModelScope.launch {
+            val known = _state.value.live.channels + (
+                allChannels ?: runCatching { XtreamApi.liveChannels(credentials) }.getOrNull()?.also { allChannels = it }
+                    .orEmpty()
+                )
+            // A channel the provider has since dropped is left out rather than failing the lot.
+            val channels = saved.mapNotNull { s -> known.firstOrNull { it.streamId == s.streamId } }
+            if (channels.isEmpty()) return@launch
+            _state.update { it.copy(multiview = channels.drop(1).take(MAX_EXTRA_TILES)) }
+            tuneChannel(channels.first())
+        }
+    }
 
     fun toggleMultiviewLayout() {
         val next = if (settings.multiviewLayout == Settings.LAYOUT_FOCUS) Settings.LAYOUT_GRID

@@ -131,4 +131,44 @@ class LiveShot {
         }
         Shots.save(compose, "search")
     }
+
+    /** An empty search box, with what was searched for lately to run again. */
+    @Test fun searchRecent() {
+        compose.setContent {
+            ReelyTheme {
+                Shots.RemoteInput()
+                Box(Modifier.fillMaxSize().background(Ink)) {
+                    tv.reely.ui.screens.SearchScreen(
+                        search = tv.reely.ui.SearchState(recent = listOf("bond", "nfl", "the office", "planet earth")),
+                        focused = null,
+                        imageUrl = { _, path, w, h -> Shots.imageUrl(path, w, h) },
+                        backdropUrl = { _, path -> Shots.imageUrl(path, 1280, 720) },
+                        onQueryChange = {}, onFocusItem = {}, onOpenItem = {}, onPlayChannel = {},
+                    )
+                }
+            }
+        }
+        Shots.save(compose, "search-recent")
+    }
+
+    /** Titles first, then the collections whose names match. */
+    @Test fun searchCollections() {
+        val results = listOf("north", "harbor", "shift").map(Shots::item)
+        val collections = listOf("ember", "orbit").map { Shots.item(it).copy(type = "collection", leafCount = 12) }
+        compose.setContent {
+            ReelyTheme {
+                Shots.RemoteInput()
+                Box(Modifier.fillMaxSize().background(Ink)) {
+                    tv.reely.ui.screens.SearchScreen(
+                        search = tv.reely.ui.SearchState(query = "no", results = results, collections = collections),
+                        focused = results[0],
+                        imageUrl = { _, path, w, h -> Shots.imageUrl(path, w, h) },
+                        backdropUrl = { _, path -> Shots.imageUrl(path, 1280, 720) },
+                        onQueryChange = {}, onFocusItem = {}, onOpenItem = {}, onPlayChannel = {},
+                    )
+                }
+            }
+        }
+        Shots.save(compose, "search-collections")
+    }
 }

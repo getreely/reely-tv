@@ -112,9 +112,11 @@ fun hasSpareCell(tileCount: Int, focusLayout: Boolean): Boolean =
 fun MultiViewGrid(
     slots: Int,
     modifier: Modifier = Modifier,
+    /** Which tile is in each place, left to right; see [TileLayout]. */
+    order: List<Int> = (0 until slots).toList(),
     tile: @Composable (index: Int) -> Unit,
 ) {
-    TileLayout(slots = slots, modifier = modifier, tile = tile) { width, height, gap ->
+    TileLayout(slots = slots, order = order, modifier = modifier, tile = tile) { width, height, gap ->
         gridRects(slots, width, height, gap)
     }
 }
@@ -161,6 +163,12 @@ fun gridRects(slots: Int, width: Int, height: Int, gap: Int): List<IntRect> {
 @Composable
 private fun TileLayout(
     slots: Int,
+    /**
+     * Which tile is in each place: order[place] is the tile. Tiles are composed by what
+     * they are and only placed by this, so moving one to another place moves its picture
+     * rather than handing the picture it had to a different channel.
+     */
+    order: List<Int>,
     modifier: Modifier = Modifier,
     tile: @Composable (index: Int) -> Unit,
     rects: (width: Int, height: Int, gap: Int) -> List<IntRect>,
@@ -177,13 +185,37 @@ private fun TileLayout(
         val height = constraints.maxHeight
         val placed = rects(width, height, TILE_GAP.roundToPx())
         val placeables = measurables.mapIndexed { index, measurable ->
-            val rect = placed.getOrNull(index) ?: IntRect.Zero
+            val place = order.indexOf(index).takeIf { it >= 0 } ?: index
+            val rect = placed.getOrNull(place) ?: IntRect.Zero
             measurable.measure(Constraints.fixed(rect.width.coerceAtLeast(0), rect.height.coerceAtLeast(0))) to rect
         }
         layout(width, height) {
             placeables.forEach { (placeable, rect) -> placeable.place(rect.left, rect.top) }
         }
     }
+}
+
+/**
+ * Where each of [count] tiles goes, carried over from [order] (the tile in each place):
+ * tiles still up keep their places, tiles gone drop out, and new ones join at the end.
+ */
+fun tileOrder(order: List<Int>, count: Int): List<Int> {
+    val kept = order.filter { it in 0 until count }.distinct()
+    return kept + (0 until count).filter { it !in kept }
+}
+
+/**
+ * [order] once tile [gone] has been closed. The tiles after it in the list of channels
+ * each move down one, so their numbers do too; their places don't change.
+ */
+fun withoutTile(order: List<Int>, gone: Int): List<Int> =
+    order.filter { it != gone }.map { if (it > gone) it - 1 else it }
+
+/** [order] with the tile in place [from] swapped with its neighbour [delta] places along. */
+fun movedTile(order: List<Int>, from: Int, delta: Int): List<Int> {
+    val to = from + delta
+    if (from !in order.indices || to !in order.indices) return order
+    return order.toMutableList().apply { this[from] = this[to].also { this[to] = this[from] } }
 }
 
 /** The line between tiles. */
@@ -352,6 +384,16 @@ fun TileMenu(
     onClose: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Whether there's a place before and after this tile's to move it into. */
+    canMoveBack: Boolean = false,
+    canMoveOn: Boolean = false,
+    onMove: (delta: Int) -> Unit = {},
+    /** Offered with more than one channel up. */
+    canSave: Boolean = false,
+    onSave: () -> Unit = {},
+    /** The saved set's channels, when there's one that isn't what's already up. */
+    saved: String? = null,
+    onOpenSaved: () -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -390,9 +432,22 @@ fun TileMenu(
                 emphasised = !canMaximize,
             )
         }
-        TvActionButton(label = "Replace channel", onClick = onReplace)
-        // The main tile is the player itself; closing it would be closing the screen.
-        if (canClose) TvActionButton(label = "Close channel", onClick = onClose)
+        // Paired where they go together, so the menu fits the screen with everything on.
+        androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TvActionButton(label = "Replace channel", onClick = onReplace)
+            // The main tile is the player itself; closing it would be closing the screen.
+            if (canClose) TvActionButton(label = "Close channel", onClick = onClose)
+        }
+        // Left and right, as the tiles run in both layouts: the focus layout is a line,
+        // and the grid reads across then down.
+        if (canMoveBack || canMoveOn) {
+            androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (canMoveBack) TvActionButton(label = "Move left", onClick = { onMove(-1) })
+                if (canMoveOn) TvActionButton(label = "Move right", onClick = { onMove(1) })
+            }
+        }
+        if (canSave) TvActionButton(label = "Save these channels", onClick = onSave)
+        if (saved != null) TvActionButton(label = "Open saved: $saved", onClick = onOpenSaved)
         TvActionButton(label = "Cancel", onClick = onCancel)
     }
 }
@@ -443,11 +498,13 @@ fun AddTile(focused: Boolean, modifier: Modifier = Modifier) {
 @Composable
 fun FocusLayout(
     slots: Int,
+    /** The place the cursor is on, not which tile is there. */
     focused: Int,
     modifier: Modifier = Modifier,
+    order: List<Int> = (0 until slots).toList(),
     tile: @Composable (index: Int) -> Unit,
 ) {
-    TileLayout(slots = slots, modifier = modifier, tile = tile) { width, height, gap ->
+    TileLayout(slots = slots, order = order, modifier = modifier, tile = tile) { width, height, gap ->
         focusRects(slots, focused, width, height, gap)
     }
 }

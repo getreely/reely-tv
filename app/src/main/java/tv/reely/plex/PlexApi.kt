@@ -124,6 +124,13 @@ data class PlexPlayback(
 /** An actor who turned up in a search. */
 data class PlexPerson(val id: String, val name: String, val thumb: String?, val serverBase: String?)
 
+/** What one server found for a search: titles, the people named, and collections. */
+data class PlexFound(
+    val items: List<PlexItem> = emptyList(),
+    val people: List<PlexPerson> = emptyList(),
+    val collections: List<PlexItem> = emptyList(),
+)
+
 /** One of a title's files, when it has more than one: a 4K copy and a 1080p one, say. */
 data class PlexVersion(val label: String, val detail: String?)
 
@@ -1063,19 +1070,23 @@ object PlexApi {
 
     /** Searches the whole library at once — films, shows and episodes together. */
     suspend fun search(base: String, token: String, query: String): List<PlexItem> =
-        searchAll(base, token, query).first
+        searchAll(base, token, query).items
 
     /**
      * Titles and people for a search. Plex answers with a hub per kind; actors come in
      * their own hub, as tags with the id a library is filtered by (see [withActor]).
      */
-    suspend fun searchAll(base: String, token: String, query: String): Pair<List<PlexItem>, List<PlexPerson>> =
+    suspend fun searchAll(base: String, token: String, query: String): PlexFound =
         withContext(Dispatchers.IO) {
-            if (query.isBlank()) return@withContext emptyList<PlexItem>() to emptyList()
+            if (query.isBlank()) return@withContext PlexFound()
             val encoded = URLEncoder.encode(query.trim(), "UTF-8")
             val hubs = container("$base/hubs/search?query=$encoded&limit=30", token)
                 .optJSONArray("Hub") ?: JSONArray()
-            itemsFromHubs(hubs, base) to peopleFromHubs(hubs, base)
+            PlexFound(
+                items = itemsFromHubs(hubs, base),
+                people = peopleFromHubs(hubs, base),
+                collections = itemsFromHubs(hubs, base, setOf("collection")),
+            )
         }
 
     internal fun peopleFromHubs(hubs: JSONArray, base: String): List<PlexPerson> = buildList {
@@ -1092,8 +1103,11 @@ object PlexApi {
         }
     }.distinctBy { it.id }
 
-    private fun itemsFromHubs(hubs: JSONArray, base: String): List<PlexItem> {
-        val wanted = setOf("movie", "show", "episode")
+    internal fun itemsFromHubs(
+        hubs: JSONArray,
+        base: String,
+        wanted: Set<String> = setOf("movie", "show", "episode"),
+    ): List<PlexItem> {
         return buildList {
             for (index in 0 until hubs.length()) {
                 val metadata = hubs.getJSONObject(index).optJSONArray("Metadata") ?: continue

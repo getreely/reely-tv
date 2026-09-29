@@ -155,6 +155,24 @@ class Settings(context: Context) {
         get() = prefs.getString(RECENT_CHANNELS, "").orEmpty().split(',').mapNotNull { it.toIntOrNull() }
         set(value) = prefs.edit().putString(RECENT_CHANNELS, value.joinToString(",")).apply()
 
+    /**
+     * The channels saved to come back to together, in the places they were in, the main
+     * one first. A line each, the provider's stream id then the name to show for it.
+     */
+    var savedMultiview: List<SavedChannel>
+        get() = prefs.getString(SAVED_MULTIVIEW, "").orEmpty().lines().mapNotNull { line ->
+            val id = line.substringBefore('\t').toIntOrNull() ?: return@mapNotNull null
+            SavedChannel(id, line.substringAfter('\t', ""))
+        }
+        set(value) = prefs.edit()
+            .putString(SAVED_MULTIVIEW, value.joinToString("\n") { "${it.streamId}\t${it.name.replace('\n', ' ')}" })
+            .apply()
+
+    /** What was searched for lately, newest first. One a line: a search can have a comma in it. */
+    var recentSearches: List<String>
+        get() = prefs.getString(RECENT_SEARCHES, "").orEmpty().lines().filter { it.isNotBlank() }
+        set(value) = prefs.edit().putString(RECENT_SEARCHES, value.joinToString("\n")).apply()
+
     /** Where a newer build is published. Changeable, but there is a sensible default. */
     var updateUrl: String
         get() = prefs.getString(UPDATE_URL, DEFAULT_UPDATE_URL) ?: DEFAULT_UPDATE_URL
@@ -186,6 +204,8 @@ class Settings(context: Context) {
         private const val FAVOURITE_SECTIONS = "library.favourites"
         private const val FAVORITE_CHANNELS = "live.favorites"
         private const val RECENT_CHANNELS = "live.recent"
+        private const val RECENT_SEARCHES = "search.recent"
+        private const val SAVED_MULTIVIEW = "live.multiview.saved"
         private const val STREAM_FORMAT = "live.format"
         private const val MULTIVIEW_LAYOUT = "live.multiview.layout"
         private const val THEME_MUSIC = "theme.music"
@@ -229,3 +249,6 @@ class Settings(context: Context) {
         val BITRATE_CHOICES = listOf(0, 20_000, 12_000, 8_000, 4_000, 2_000)
     }
 }
+
+/** A channel in the saved multiview: enough to find it again, and to name it meanwhile. */
+data class SavedChannel(val streamId: Int, val name: String)

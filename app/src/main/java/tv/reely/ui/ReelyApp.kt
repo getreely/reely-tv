@@ -229,6 +229,11 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             onClearTiles = viewModel::clearMultiview,
             onReplaceTile = viewModel::replaceInMultiview,
             onCollapseToChannel = viewModel::collapseToChannel,
+            onSaveMultiview = viewModel::saveMultiview,
+            savedMultiview = remember(state.savedMultiview, state.multiview, state.playback, state.live.recent) {
+                viewModel.savedMultiviewLabel()
+            },
+            onOpenSavedMultiview = viewModel::openSavedMultiview,
             onStepEpisode = viewModel::stepEpisode,
             onDecodeFailure = viewModel::retryWithTranscode,
             onConvertAudio = viewModel::convertAudio,
@@ -569,9 +574,11 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 backdropUrl = viewModel::plexBackdropUrl,
                 onQueryChange = viewModel::setQuery,
                 onFocusItem = viewModel::focusItem,
-                onOpenItem = ::open,
-                onPlayChannel = viewModel::playSearchChannel,
+                onOpenItem = { item -> viewModel.rememberSearch(); open(item) },
+                onPlayChannel = { channel -> viewModel.rememberSearch(); viewModel.playSearchChannel(channel) },
+                onClearRecent = viewModel::clearRecentSearches,
                 onOpenPerson = { person ->
+                    viewModel.rememberSearch()
                     openedFromPage = true
                     viewModel.navigate(Route.Person(person.id, person.name, person.thumb, person.serverBase))
                 },

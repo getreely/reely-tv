@@ -117,6 +117,7 @@ class PlayerPanelShots {
                     name = "BBC One", focusRequester = focus, canClose = true, canAdd = true,
                     canMaximize = true, onMaximize = {}, onAdd = {}, onReplace = {}, onClose = {},
                     onCancel = {}, modifier = Modifier.align(Alignment.Center),
+                    canMoveBack = true, canMoveOn = true, canSave = true, saved = "NFL 01 and 2 more",
                 )
             }
         }

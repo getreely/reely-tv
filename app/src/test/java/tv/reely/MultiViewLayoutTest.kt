@@ -144,4 +144,29 @@ class MultiViewLayoutTest {
         assertEquals(listOf(0) to listOf(2, 3), tv.reely.ui.screens.focusSides(4, 1))
         assertEquals(listOf(0, 1, 2) to emptyList<Int>(), tv.reely.ui.screens.focusSides(4, 3))
     }
+
+    @Test
+    fun `tiles keep their places as channels come and go`() {
+        // Nothing moved yet: in the order they came.
+        assertEquals(listOf(0, 1, 2), tv.reely.ui.screens.tileOrder(listOf(0), 3))
+        // The third channel was moved to the front; a fourth joins at the end.
+        assertEquals(listOf(2, 0, 1, 3), tv.reely.ui.screens.tileOrder(listOf(2, 0, 1), 4))
+        // Down to the main channel alone.
+        assertEquals(listOf(0), tv.reely.ui.screens.tileOrder(listOf(2, 0, 1), 1))
+    }
+
+    @Test
+    fun `closing a tile leaves the others where they are`() {
+        // Places hold 2, 0, 1, 3; tile 1 is closed, so 2 and 3 become 1 and 2.
+        assertEquals(listOf(1, 0, 2), tv.reely.ui.screens.withoutTile(listOf(2, 0, 1, 3), 1))
+    }
+
+    @Test
+    fun `moving a tile swaps it with its neighbour`() {
+        assertEquals(listOf(1, 0, 2), tv.reely.ui.screens.movedTile(listOf(0, 1, 2), 0, 1))
+        assertEquals(listOf(0, 2, 1), tv.reely.ui.screens.movedTile(listOf(0, 1, 2), 2, -1))
+        // Off either end: nothing happens.
+        assertEquals(listOf(0, 1, 2), tv.reely.ui.screens.movedTile(listOf(0, 1, 2), 0, -1))
+        assertEquals(listOf(0, 1, 2), tv.reely.ui.screens.movedTile(listOf(0, 1, 2), 2, 1))
+    }
 }

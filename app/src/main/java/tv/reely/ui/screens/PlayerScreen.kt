@@ -184,6 +184,11 @@ fun PlayerScreen(
     onClearTiles: () -> Unit,
     onReplaceTile: (Int, XtreamChannel) -> Unit,
     onCollapseToChannel: (XtreamChannel) -> Unit,
+    /** Saves the channels up now, in their places (tiles left to right; 0 is the main one). */
+    onSaveMultiview: (List<Int>) -> Unit = {},
+    /** The saved set, named for the menu, or null when it's what's up already. */
+    savedMultiview: String? = null,
+    onOpenSavedMultiview: () -> Unit = {},
     onStepEpisode: (Int) -> Unit,
     onDecodeFailure: (Long) -> Unit,
     /** The file's sound cannot be played here; ask the server to convert just that. */
@@ -316,14 +321,22 @@ fun PlayerScreen(
     val hasSpare = hasSpareCell(tileCount, focusLayout)
     val slotCount = tileCount + if (hasSpare) 1 else 0
     val addSlot = if (hasSpare) tileCount else -1
+    // focusedTile is a place on screen. Which tile is in each place is `places`: tiles can
+    // be moved, and each keeps its own picture as it goes (see TileLayout).
     var focusedTile by remember { mutableIntStateOf(0) }
     if (focusedTile >= slotCount) focusedTile = 0
+    var order by remember { mutableStateOf(listOf(0)) }
+    val places = tileOrder(order, tileCount) + (if (hasSpare) listOf(addSlot) else emptyList())
+    /** The tile in [place]. */
+    fun tileIn(place: Int): Int = places.getOrElse(place) { place }
+    val focusedId = tileIn(focusedTile)
 
     // One tile filling the screen without the others being torn down. Choosing a tile
     // used to collapse the grid to that channel, which meant the only way back was
     // building it again — and rebuilding it costs the provider connections it had
     // already granted.
     var zoomed by remember { mutableStateOf<Int?>(null) }
+    // Held by which tile it is, not where: moving tiles about doesn't change what's zoomed.
     if (zoomed != null && (tileCount == 1 || zoomed!! > tiles.size)) zoomed = null
 
     // The extra channels' players, kept by the screen rather than by the tiles that draw
@@ -347,8 +360,8 @@ fun PlayerScreen(
     }
 
     // Only the tile with the cursor on it is heard.
-    LaunchedEffect(focusedTile, tileCount) {
-        exoPlayer.volume = if (focusedTile == 0) 1f else 0f
+    LaunchedEffect(focusedId, tileCount) {
+        exoPlayer.volume = if (focusedId == 0) 1f else 0f
     }
     var interaction by remember { mutableIntStateOf(0) }
     /*
@@ -896,10 +909,10 @@ fun PlayerScreen(
 
                                 // Fills the screen with this one and leaves the rest
                                 // running behind it. Again, or back, returns to the grid.
-                                else -> zoomed = if (zoomed == focusedTile) null else focusedTile
+                                else -> zoomed = if (zoomed == focusedId) null else focusedId
                             }
                         },
-                        onHold = { if (focusedTile != addSlot) tileMenu = focusedTile },
+                        onHold = { if (focusedId != addSlot) tileMenu = focusedId },
                     )
                     if (handled) return@onPreviewKeyEvent true
                 }
@@ -934,10 +947,11 @@ fun PlayerScreen(
                             true
                         }
                         // A tile beside the main one is the first thing back takes away.
-                        focusedTile in 1..tiles.size -> {
-                            val index = focusedTile - 1
-                            focusedTile = 0
-                            onRemoveTile(index)
+                        focusedId in 1..tiles.size -> {
+                            order = withoutTile(places.filter { it < tileCount }, focusedId)
+                            // Onto the main channel, wherever it has been moved to.
+                            focusedTile = order.indexOf(0).coerceAtLeast(0)
+                            onRemoveTile(focusedId - 1)
                             true
                         }
                         // Back from Up Next is the button beside Play: during the
@@ -1109,11 +1123,11 @@ fun PlayerScreen(
         // One description of a tile, drawn either into the grid or over the whole screen.
         val tileAt: @Composable (Int) -> Unit = { index ->
             when {
-                index == addSlot -> AddTile(focused = focusedTile == index)
+                index == addSlot -> AddTile(focused = focusedId == index)
 
                 index == 0 -> TileFrame(
                     name = playback.title,
-                    focused = focusedTile == 0,
+                    focused = focusedId == 0,
                     aspectRatio = rememberVideoAspect(exoPlayer),
                     content = mainSurface,
                 )
@@ -1122,12 +1136,12 @@ fun PlayerScreen(
                     val extra = tiles[index - 1]
                     val player = extraUrls.getOrNull(index - 1)?.let { extraPlayers[it] }
                     if (player == null) {
-                        TileFrame(name = extra.name, focused = focusedTile == index) {}
+                        TileFrame(name = extra.name, focused = focusedId == index) {}
                     } else {
                         ExtraTile(
                             player = player,
                             name = extra.name,
-                            focused = focusedTile == index,
+                            focused = focusedId == index,
                         )
                     }
                 }
@@ -1155,10 +1169,11 @@ fun PlayerScreen(
             FocusLayout(
                 slots = slotCount,
                 focused = focusedTile,
+                order = places,
                 modifier = Modifier.fillMaxSize(),
             ) { tileAt(it) }
         } else {
-            MultiViewGrid(slots = slotCount, modifier = Modifier.fillMaxSize()) { tileAt(it) }
+            MultiViewGrid(slots = slotCount, order = places, modifier = Modifier.fillMaxSize()) { tileAt(it) }
         }
 
         /*
@@ -1229,7 +1244,7 @@ fun PlayerScreen(
                 pickVerb = guideRequest.verb,
                 onSelect = { index ->
                     guideRequest = GuideRequest.Closed
-                    focusedTile = 0
+                    focusedTile = places.indexOf(0).coerceAtLeast(0)
                     onSelectChannel(index)
                 },
                 onAddToMultiview = { channel ->
@@ -1469,6 +1484,7 @@ fun PlayerScreen(
         }
 
         tileMenu?.let { slot ->
+            val place = places.indexOf(slot)
             TileMenu(
                 name = if (slot == 0) playback.title
                 else tiles.getOrNull(slot - 1)?.name.orEmpty(),
@@ -1491,9 +1507,31 @@ fun PlayerScreen(
                 },
                 onClose = {
                     tileMenu = null
-                    val index = slot - 1
+                    order = withoutTile(places.filter { it < tileCount }, slot)
+                    focusedTile = order.indexOf(0).coerceAtLeast(0)
+                    onRemoveTile(slot - 1)
+                },
+                // Never into the spare cell: that stays last, where it's looked for.
+                canMoveBack = tileCount > 1 && place > 0,
+                canMoveOn = tileCount > 1 && place in 0 until tileCount - 1,
+                onMove = { delta ->
+                    tileMenu = null
+                    order = movedTile(places.filter { it < tileCount }, place, delta)
+                    // The cursor goes with the tile, so moving it again is one more hold.
+                    focusedTile = place + delta
+                },
+                canSave = tileCount > 1,
+                onSave = {
+                    tileMenu = null
+                    onSaveMultiview(places.filter { it < tileCount })
+                },
+                saved = savedMultiview,
+                onOpenSaved = {
+                    tileMenu = null
+                    order = listOf(0)
                     focusedTile = 0
-                    onRemoveTile(index)
+                    zoomed = null
+                    onOpenSavedMultiview()
                 },
                 onCancel = { tileMenu = null },
                 modifier = Modifier.align(Alignment.Center),
