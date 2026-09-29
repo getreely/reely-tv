@@ -89,6 +89,7 @@ class SecureStore(context: Context) {
         const val PLEX_SERVER_URI = "plex.server_uri"
         const val PLEX_SERVER_TOKEN = "plex.server_token"
 
+        const val REELY_URL = "reely.url"
         const val XTREAM_HOST = "xtream.host"
         const val XTREAM_USERNAME = "xtream.username"
         const val XTREAM_PASSWORD = "xtream.password"

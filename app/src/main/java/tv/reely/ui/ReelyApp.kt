@@ -75,6 +75,8 @@ import tv.reely.ui.components.requestWhenReady
 import tv.reely.ui.screens.DetailScreen
 import tv.reely.ui.screens.PersonScreen
 import tv.reely.ui.screens.PlaylistScreen
+import tv.reely.ui.screens.RequestsScreen
+import tv.reely.ui.screens.RequestTitleScreen
 import tv.reely.ui.screens.GuideScreen
 import tv.reely.ui.screens.HomeScreen
 import tv.reely.ui.screens.LiveCategoriesScreen
@@ -104,6 +106,7 @@ private val destinations = listOf(
     Destination("Movies", Route.Library(LibraryKind.MOVIES)),
     Destination("TV Shows", Route.Library(LibraryKind.SHOWS)),
     Destination("Live TV", Route.Live),
+    Destination("Request", Route.Requests),
 )
 
 /** Settings sits apart from the destinations, over on the right where a gear belongs. */
@@ -498,6 +501,30 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 }
             }
 
+            is Route.Requests -> RequestsScreen(
+                requests = state.requests,
+                onConnect = viewModel::connectReely,
+                onDismissError = viewModel::dismissRequestsError,
+                onQueryChange = viewModel::setRequestQuery,
+                onOpen = { title ->
+                    openedFromPage = true
+                    viewModel.navigate(Route.RequestTitle(title))
+                },
+            )
+
+            is Route.RequestTitle -> {
+                val page = state.requestDetail
+                if (page != null && page.title.key == route.title.key) {
+                    RequestTitleScreen(
+                        page = page,
+                        status = state.requests.statusOf(page.title),
+                        onToggleSeason = viewModel::toggleRequestSeason,
+                        onToggleAll = viewModel::toggleAllRequestSeasons,
+                        onRequest = viewModel::submitRequest,
+                    )
+                }
+            }
+
             is Route.Playlist -> {
                 val playlist = state.playlist
                 if (playlist != null && playlist.route == route) {
@@ -555,6 +582,8 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onSignOutXtream = viewModel::signOutXtream,
                 onSwitchServer = viewModel::switchServer,
                 onSwitchProfile = { pickingProfile = true },
+                requests = state.requests,
+                onDisconnectReely = viewModel::disconnectReely,
                 onToggleFavourite = viewModel::toggleFavouriteLibrary,
                 onToggleFormat = viewModel::toggleFormat,
                 onNudgeSubtitleScale = viewModel::nudgeSubtitleScale,
@@ -714,6 +743,8 @@ private fun routeKey(route: Route): String = when (route) {
     is Route.Detail -> "detail:${route.serverBase}:${route.ratingKey}:${route.episodeKey}"
     is Route.Person -> "person:${route.serverBase}:${route.id}"
     is Route.Playlist -> "playlist:${route.serverBase}:${route.ratingKey}"
+    is Route.Requests -> "requests"
+    is Route.RequestTitle -> "request:${route.title.key}"
     is Route.Live -> "live"
     is Route.Search -> "search"
     is Route.Settings -> "settings"
@@ -730,6 +761,8 @@ private fun contentReady(state: ReelyState): Boolean = when (val route = state.r
     // Something to put the cursor on: a title, or nothing at all once it's known there are none.
     is Route.Person -> state.person?.let { !it.busy } == true
     is Route.Playlist -> state.playlist?.let { !it.busy } == true
+    is Route.Requests -> state.requests.server == null || !state.requests.loading
+    is Route.RequestTitle -> state.requestDetail?.let { !it.busy } == true
     is Route.Live -> true
     is Route.Search -> true
     is Route.Settings -> true
@@ -776,7 +809,7 @@ internal fun TopBar(
                 onFocused = onTabFocused,
                 canSelectOnFocus = canSelectOnFocus,
                 modifier = Modifier
-                    .focusRequester(tabFocus[index])
+                    .then(tabFocus.getOrNull(index)?.let { Modifier.focusRequester(it) } ?: Modifier)
                     .onGloballyPositioned {
                         onTabPositioned(destination.route, it.positionInRoot().x.toInt())
                     },

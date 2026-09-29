@@ -86,6 +86,12 @@ sealed interface Route {
         val serverBase: String? = null,
     ) : Route
 
+    /** Asking for films and shows the server doesn't have, through Reely. */
+    data object Requests : Route
+
+    /** One title's page in Requests, before it is asked for. */
+    data class RequestTitle(val title: tv.reely.requests.RequestTitle) : Route
+
     /** A playlist: what is in it, to play from the top or shuffled. */
     data class Playlist(
         val ratingKey: String,
@@ -101,6 +107,39 @@ sealed interface Route {
         val serverBase: String? = null,
     ) : Route
 }
+
+/** The Request tab: Reely, where somebody asks for what the server doesn't have. */
+data class RequestsState(
+    /** Reely's address, once one has been given. */
+    val server: String? = null,
+    val connected: Boolean = false,
+    val connecting: Boolean = false,
+    val error: String? = null,
+    val rows: List<tv.reely.requests.RequestRow> = emptyList(),
+    val loading: Boolean = false,
+    val query: String = "",
+    val results: List<tv.reely.requests.RequestTitle> = emptyList(),
+    val searching: Boolean = false,
+    /** What this account has asked for, and where each has got to. */
+    val mine: List<tv.reely.requests.RequestRecord> = emptyList(),
+) {
+    /** The state of this account's request for [title], if it made one. */
+    fun statusOf(title: tv.reely.requests.RequestTitle): String? =
+        mine.firstOrNull { it.title.key == title.key }?.status
+}
+
+/** A title's page in Requests. */
+data class RequestDetailState(
+    val title: tv.reely.requests.RequestTitle,
+    val detail: tv.reely.requests.RequestDetail? = null,
+    val busy: Boolean = true,
+    val error: String? = null,
+    /** The seasons picked, for a show. */
+    val chosen: Set<Int> = emptySet(),
+    val sending: Boolean = false,
+    /** What came of asking, to say on the page. */
+    val outcome: String? = null,
+)
 
 /** A playlist's page. */
 data class PlaylistState(
@@ -456,6 +495,8 @@ data class ReelyState(
     val detail: DetailState? = null,
     val person: PersonState? = null,
     val playlist: PlaylistState? = null,
+    val requests: RequestsState = RequestsState(),
+    val requestDetail: RequestDetailState? = null,
     val live: LiveState = LiveState(),
     val guide: GuideState = GuideState(),
     val search: SearchState = SearchState(),
@@ -547,6 +588,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             restorePlex()
             restoreLive()
+            restoreRequests()
             _state.update { it.copy(restoring = false) }
         }
         checkForUpdateAtStart()
@@ -584,7 +626,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             // Settings is not one of those: it is somewhere you step into from wherever
             // you were and expect to come back from, so it grows the stack like a page.
             val stack = when {
-                route is Route.Detail || route is Route.Person || route is Route.Playlist -> current.stack + route
+                route is Route.Detail || route is Route.Person || route is Route.Playlist ||
+                    route is Route.RequestTitle -> current.stack + route
                 route !is Route.Settings -> listOf(route)
                 current.route is Route.Settings -> current.stack
                 else -> current.stack + route
@@ -598,6 +641,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         if (route is Route.Detail) loadDetail(route)
         if (route is Route.Person) loadPerson(route)
         if (route is Route.Playlist) loadPlaylist(route)
+        if (route is Route.Requests) loadRequests()
+        if (route is Route.RequestTitle) loadRequestTitle(route.title)
         if (route is Route.Home) refreshHome()
         if (route is Route.Library) refreshLibrary(route.kind, force = false)
         if (route is Route.Library && route.view == LibraryView.COLLECTIONS) loadCollections(route.kind)
@@ -650,6 +695,176 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         if (route is Route.Detail) loadDetail(route) else stopTheme()
         if (route is Route.Person && _state.value.person?.route != route) loadPerson(route)
         if (route is Route.Playlist && _state.value.playlist?.route != route) loadPlaylist(route)
+        // Back from a title's page: what was asked for there shows in Your requests.
+        if (route is Route.Requests) refreshMyRequests()
+    }
+
+    // ---------------------------------------------------------------- Requests (Reely)
+
+    private var reely: tv.reely.requests.ReelyRequests? = null
+    private var requestSearchJob: Job? = null
+
+    private fun reelyFor(address: String) =
+        tv.reely.requests.ReelyRequests(address) { _state.value.plex.token }
+
+    private suspend fun restoreRequests() {
+        val address = store.get(SecureStore.REELY_URL) ?: return
+        reely = reelyFor(address)
+        _state.update { it.copy(requests = it.requests.copy(server = address)) }
+    }
+
+    /** Connects to Reely at [address], signing in with the Plex account in use. */
+    fun connectReely(address: String) {
+        if (!tv.reely.requests.ReelyRequests.isValid(address)) {
+            _state.update { it.copy(requests = it.requests.copy(error = "Enter Reely's address, like reely.example.com or 192.168.1.20:8788.")) }
+            return
+        }
+        val client = reelyFor(address)
+        _state.update { it.copy(requests = it.requests.copy(connecting = true, error = null)) }
+        viewModelScope.launch {
+            val problem = client.signIn()
+            if (problem != null) {
+                _state.update { it.copy(requests = it.requests.copy(connecting = false, error = problem)) }
+                return@launch
+            }
+            reely = client
+            store.put(SecureStore.REELY_URL, client.base)
+            _state.update {
+                it.copy(requests = RequestsState(server = client.base, connected = true))
+            }
+            loadRequests()
+        }
+    }
+
+    fun disconnectReely() {
+        store.remove(SecureStore.REELY_URL)
+        reely = null
+        requestSearchJob?.cancel()
+        _state.update { it.copy(requests = RequestsState(), requestDetail = null) }
+    }
+
+    fun dismissRequestsError() = _state.update { it.copy(requests = it.requests.copy(error = null)) }
+
+    /** Reely's discovery rows and this account's requests. */
+    fun loadRequests() {
+        val client = reely ?: return
+        _state.update { it.copy(requests = it.requests.copy(loading = it.requests.rows.isEmpty(), error = null)) }
+        viewModelScope.launch {
+            val rows = async { runCatching { client.explore() } }
+            val mine = async { runCatching { client.myRequests() } }
+            val found = rows.await()
+            _state.update { current ->
+                current.copy(
+                    requests = current.requests.copy(
+                        connected = found.isSuccess || current.requests.connected,
+                        loading = false,
+                        rows = found.getOrElse { current.requests.rows },
+                        mine = mine.await().getOrElse { current.requests.mine },
+                        error = found.exceptionOrNull()?.readable(),
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun refreshMyRequests() {
+        val client = reely ?: return
+        viewModelScope.launch {
+            val mine = runCatching { client.myRequests() }.getOrNull() ?: return@launch
+            _state.update { it.copy(requests = it.requests.copy(mine = mine)) }
+        }
+    }
+
+    fun setRequestQuery(query: String) {
+        _state.update { it.copy(requests = it.requests.copy(query = query)) }
+        requestSearchJob?.cancel()
+        val client = reely ?: return
+        if (query.isBlank()) {
+            _state.update { it.copy(requests = it.requests.copy(results = emptyList(), searching = false)) }
+            return
+        }
+        requestSearchJob = viewModelScope.launch {
+            _state.update { it.copy(requests = it.requests.copy(searching = true)) }
+            // Typing on a remote is slow; wait for a pause rather than asking per letter.
+            delay(400)
+            val results = runCatching { client.search(query) }
+            _state.update { current ->
+                if (current.requests.query != query) current
+                else current.copy(
+                    requests = current.requests.copy(
+                        results = results.getOrElse { emptyList() },
+                        searching = false,
+                        error = results.exceptionOrNull()?.readable(),
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun loadRequestTitle(title: tv.reely.requests.RequestTitle) {
+        val client = reely ?: return
+        _state.update { it.copy(requestDetail = RequestDetailState(title)) }
+        viewModelScope.launch {
+            val result = runCatching { client.detail(title) }
+            _state.update { current ->
+                val page = current.requestDetail?.takeIf { it.title.key == title.key } ?: return@update current
+                val detail = result.getOrNull()
+                current.copy(
+                    requestDetail = page.copy(
+                        detail = detail,
+                        busy = false,
+                        error = result.exceptionOrNull()?.readable(),
+                        // Every season to start with: asking for a show is usually asking for all of it.
+                        chosen = detail?.seasons?.map { it.number }?.toSet().orEmpty(),
+                    ),
+                )
+            }
+        }
+    }
+
+    /** In or out of the request, for one season of a show. */
+    fun toggleRequestSeason(number: Int) = _state.update { current ->
+        val page = current.requestDetail ?: return@update current
+        val chosen = if (number in page.chosen) page.chosen - number else page.chosen + number
+        current.copy(requestDetail = page.copy(chosen = chosen, outcome = null))
+    }
+
+    /** Every season, or, when every season is already picked, none. */
+    fun toggleAllRequestSeasons() = _state.update { current ->
+        val page = current.requestDetail ?: return@update current
+        val all = page.detail?.seasons?.map { it.number }?.toSet().orEmpty()
+        current.copy(requestDetail = page.copy(chosen = if (page.chosen == all) emptySet() else all, outcome = null))
+    }
+
+    /** Asks Reely for the title on the page: a film, or the seasons picked of a show. */
+    fun submitRequest() {
+        val client = reely ?: return
+        val page = _state.value.requestDetail ?: return
+        val detail = page.detail ?: return
+        val title = detail.title
+        val allSeasons = detail.seasons.map { it.number }.toSet()
+        // Every season is the whole show, which also takes in seasons still to come.
+        val seasons = if (!title.isShow || page.chosen == allSeasons) null else page.chosen.sorted()
+        if (title.isShow && page.chosen.isEmpty()) {
+            _state.update { it.copy(requestDetail = page.copy(outcome = "Pick at least one season.")) }
+            return
+        }
+        _state.update { it.copy(requestDetail = page.copy(sending = true, outcome = null)) }
+        viewModelScope.launch {
+            val outcome = runCatching { client.request(title, seasons) }
+                .getOrElse { tv.reely.requests.RequestOutcome.Refused(it.readable()) }
+            val message = when (outcome) {
+                is tv.reely.requests.RequestOutcome.Sent ->
+                    if (outcome.approved) "Approved. It's on its way." else "Requested. You'll see it here once it's approved."
+                tv.reely.requests.RequestOutcome.AlreadyRequested -> "This has already been requested."
+                is tv.reely.requests.RequestOutcome.Refused -> outcome.message
+            }
+            _state.update { current ->
+                val now = current.requestDetail?.takeIf { it.title.key == page.title.key } ?: return@update current
+                current.copy(requestDetail = now.copy(sending = false, outcome = message))
+            }
+            refreshMyRequests()
+        }
     }
 
     private fun loadPlaylist(route: Route.Playlist) {

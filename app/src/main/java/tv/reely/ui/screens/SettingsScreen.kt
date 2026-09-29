@@ -89,6 +89,7 @@ import kotlin.math.roundToInt
 private enum class Section(val title: String) {
     PLAYBACK("Playback"),
     LIVE_TV("Live TV"),
+    REQUESTS("Requests"),
     PLEX("Plex"),
     UPDATES("Updates"),
     ABOUT("About"),
@@ -130,6 +131,8 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
     /** Opens "Who's watching?" to switch Plex Home profiles. */
     onSwitchProfile: () -> Unit = {},
+    requests: tv.reely.ui.RequestsState = tv.reely.ui.RequestsState(),
+    onDisconnectReely: () -> Unit = {},
 ) {
     var section by remember { mutableStateOf(Section.PLAYBACK) }
     val sectionFocus = remember { Section.entries.associateWith { FocusRequester() } }
@@ -228,6 +231,8 @@ fun SettingsScreen(
                     onToggleGuidePreview = onToggleGuidePreview,
                     onSignOutXtream = onSignOutXtream,
                 )
+
+                Section.REQUESTS -> RequestsSection(requests, onDisconnectReely)
 
                 Section.PLEX -> PlexPanel(
                     plex = plex,
@@ -483,6 +488,25 @@ private fun LiveSection(
             description = "Each channel on screen uses one, including the guide preview.",
         )
         SettingRow(title = "Sign out of live TV", onClick = onSignOutXtream)
+    }
+}
+
+/** Reely, where the Request tab sends what's asked for: where it is, and the way out. */
+@Composable
+private fun RequestsSection(requests: tv.reely.ui.RequestsState, onDisconnect: () -> Unit) {
+    val server = requests.server
+    if (server == null) {
+        SettingGroup("Requests") {
+            SettingRow(title = "Not connected", description = "Connect to Reely from the Request tab.")
+        }
+        return
+    }
+    SettingGroup(
+        "Reely",
+        note = "Requests go to Reely, signed in with your Plex account.",
+    ) {
+        SettingRow(title = "Server", value = hostOf(server))
+        SettingRow(title = "Disconnect", first = true, onClick = onDisconnect)
     }
 }
 

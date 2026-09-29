@@ -379,7 +379,7 @@ private fun EpisodeGroupCard(
 }
 
 @Composable
-private fun PosterRow(
+internal fun PosterRow(
     title: String,
     rowFocus: tv.reely.ui.components.RowFocus,
     /** How the row scrolls along itself: the screen's own rule, not the rows' snap. */
