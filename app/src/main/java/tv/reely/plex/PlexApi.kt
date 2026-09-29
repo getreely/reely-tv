@@ -103,6 +103,11 @@ data class PlexPlayback(
     val previewUrl: String? = null,
     /** The file's chapters, in order; empty when it has none worth offering. */
     val chapters: List<PlexChapter> = emptyList(),
+    /** The file's part, which a choice of sound or subtitles is saved against. */
+    val partId: Long? = null,
+    /** The sound and subtitle streams, in the file's order, with the server's choice marked. */
+    val audioStreams: List<tv.reely.core.PlexStream> = emptyList(),
+    val subtitleStreams: List<tv.reely.core.PlexStream> = emptyList(),
 )
 
 /** An actor who turned up in a search. */
@@ -322,8 +327,8 @@ object PlexApi {
     /** The television's own name, so two sets in one house can be told apart in Plex. */
     @Volatile
     var deviceName: String = "Reely TV"
-    private const val AUDIO_STREAM = 2
-    private const val SUBTITLE_STREAM = 3
+    internal const val AUDIO_STREAM = 2
+    internal const val SUBTITLE_STREAM = 3
 
     // Plex's own type filters, used when asking a section for one kind of thing.
     const val TYPE_MOVIE = 1
@@ -822,7 +827,29 @@ object PlexApi {
                 audioChannels = sound?.second ?: 0,
                 previewUrl = if (previews) "$base/library/parts/$partId/indexes/sd/{ms}?X-Plex-Token=$token" else null,
                 chapters = chaptersOf(metadata, base, token),
+                partId = partId,
+                audioStreams = streamsOf(part, AUDIO_STREAM),
+                subtitleStreams = streamsOf(part, SUBTITLE_STREAM),
             )
+        }
+
+    /**
+     * Saves a choice of sound or subtitles for this account, as Plex's own apps do, so
+     * it is what plays next time here or anywhere else. Subtitles off is stream 0.
+     */
+    suspend fun selectStream(base: String, token: String, partId: Long, audioStreamId: String? = null, subtitleStreamId: String? = null) =
+        withContext(Dispatchers.IO) {
+            val choice = listOfNotNull(
+                audioStreamId?.let { "audioStreamID=$it" },
+                subtitleStreamId?.let { "subtitleStreamID=$it" },
+            )
+            if (choice.isEmpty()) return@withContext false
+            val request = Request.Builder()
+                .url("$base/library/parts/$partId?${choice.joinToString("&")}&allParts=1")
+                .plexHeaders(clientId, token)
+                .put(FormBody.Builder().build())
+                .build()
+            runCatching { Http.client.newCall(request).execute().use { it.isSuccessful } }.getOrDefault(false)
         }
 
     /**
@@ -1348,6 +1375,22 @@ object PlexApi {
             is String -> value == "1" || value.equals("true", ignoreCase = true)
             else -> false
         }
+
+    internal fun streamsOf(part: JSONObject, type: Int): List<tv.reely.core.PlexStream> {
+        val streams = part.optJSONArray("Stream") ?: return emptyList()
+        return (0 until streams.length())
+            .map { streams.getJSONObject(it) }
+            .filter { it.optInt("streamType") == type }
+            .mapNotNull { stream ->
+                tv.reely.core.PlexStream(
+                    id = stream.optString("id").takeIf(String::isNotEmpty) ?: return@mapNotNull null,
+                    language = stream.optString("languageTag").takeIf(String::isNotEmpty)
+                        ?: stream.optString("languageCode").takeIf(String::isNotEmpty),
+                    selected = isSelected(stream),
+                    external = stream.optString("key").isNotEmpty(),
+                )
+            }
+    }
 
     private fun subtitlesOf(part: JSONObject, base: String, token: String): List<PlexSubtitle> {
         val streams = part.optJSONArray("Stream") ?: return emptyList()

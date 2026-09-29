@@ -122,6 +122,7 @@ fun SettingsScreen(
     onToggleThemeMusic: () -> Unit,
     onToggleMatchFrameRate: () -> Unit,
     onToggleLargerBuffer: () -> Unit,
+    onToggleSkipIntros: () -> Unit,
     onNudgeThemeVolume: (Float) -> Unit,
     onRefreshChannels: () -> Unit,
     onRefreshGuide: () -> Unit,
@@ -219,6 +220,7 @@ fun SettingsScreen(
                     onToggleThemeMusic = onToggleThemeMusic,
                     onToggleMatchFrameRate = onToggleMatchFrameRate,
                     onToggleLargerBuffer = onToggleLargerBuffer,
+                    onToggleSkipIntros = onToggleSkipIntros,
                     onNudgeThemeVolume = onNudgeThemeVolume,
                 )
 
@@ -281,6 +283,7 @@ private fun PlaybackSection(
     onToggleThemeMusic: () -> Unit,
     onToggleMatchFrameRate: () -> Unit,
     onToggleLargerBuffer: () -> Unit,
+    onToggleSkipIntros: () -> Unit,
     onNudgeThemeVolume: (Float) -> Unit,
 ) {
     SettingGroup("Video") {
@@ -353,9 +356,15 @@ private fun PlaybackSection(
         )
     }
 
-    SettingGroup("Up Next") {
+    SettingGroup("Episodes") {
+        SettingRow(
+            title = "Skip intros",
+            switch = prefs.skipIntros,
+            description = "Goes straight past an episode's intro when Plex has found it.",
+            onClick = onToggleSkipIntros,
+        )
         ChoiceRow(
-            title = "Countdown",
+            title = "Up Next",
             description = "How long before the next episode starts by itself.",
             options = UP_NEXT_SECONDS.map { seconds ->
                 Option(

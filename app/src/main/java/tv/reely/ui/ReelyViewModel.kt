@@ -464,6 +464,10 @@ data class Playback(
     /** Which of the title's files is playing, for a server fallback to ask for the same one. */
     val mediaIndex: Int = 0,
     val chapters: List<tv.reely.plex.PlexChapter> = emptyList(),
+    /** The file's part, and its sound and subtitle streams with the server's choice marked. */
+    val partId: Long? = null,
+    val audioStreams: List<tv.reely.core.PlexStream> = emptyList(),
+    val subtitleStreams: List<tv.reely.core.PlexStream> = emptyList(),
 )
 
 data class PlayerPrefs(
@@ -478,6 +482,8 @@ data class PlayerPrefs(
     val themeVolume: Float = Settings.DEFAULT_THEME_VOLUME,
     val matchFrameRate: Boolean = true,
     val largerBuffer: Boolean = false,
+    /** Straight past an episode's intro, where the server has marked one. */
+    val skipIntros: Boolean = false,
     /** Home's rows switched off in Settings; see HomeRow. */
     val hiddenHomeRows: Set<String> = emptySet(),
 )
@@ -579,6 +585,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 themeVolume = settings.themeVolume,
                 matchFrameRate = settings.matchFrameRate,
                 largerBuffer = settings.largerBuffer,
+                skipIntros = settings.skipIntros,
                 hiddenHomeRows = settings.hiddenHomeRows,
             )
         )
@@ -1980,6 +1987,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                         markers = resolved.markers,
                         previewUrl = resolved.previewUrl,
                         chapters = resolved.chapters,
+                        partId = resolved.partId,
+                        audioStreams = resolved.audioStreams,
+                        subtitleStreams = resolved.subtitleStreams,
                         serverBase = on,
                         queue = effectiveQueue,
                         queueIndex = effectiveQueue.indexOfFirst { entry -> entry.ratingKey == item.ratingKey },
@@ -2197,6 +2207,21 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                     sessionId = session,
                 )
             }
+        }
+    }
+
+    /**
+     * Saves a sound or subtitle choice made in the player to Plex, so the next episode,
+     * and any other Plex app, starts with it. Subtitles off is stream "0".
+     */
+    fun saveStreamChoice(audioStreamId: String? = null, subtitleStreamId: String? = null) {
+        val playback = _state.value.playback ?: return
+        val partId = playback.partId ?: return
+        val plex = _state.value.plex
+        val base = playback.serverBase ?: plex.baseUrl ?: return
+        val token = plex.tokenFor(playback.serverBase) ?: return
+        viewModelScope.launch {
+            PlexApi.selectStream(base, token, partId, audioStreamId, subtitleStreamId)
         }
     }
 
@@ -3146,6 +3171,12 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         settings.hiddenHomeRows = next
         _state.update { it.copy(prefs = it.prefs.copy(hiddenHomeRows = next)) }
         if (row.fromReely && row.id !in next) loadRequests()
+    }
+
+    fun toggleSkipIntros() {
+        val next = !settings.skipIntros
+        settings.skipIntros = next
+        _state.update { it.copy(prefs = it.prefs.copy(skipIntros = next)) }
     }
 
     fun toggleLargerBuffer() {

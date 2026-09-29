@@ -57,7 +57,7 @@ class SettingsChoiceTest {
                         onNudgeUpNext = {}, onToggleGuidePreview = {},
                         onSetPlaybackMode = { modes += it; prefs = prefs.copy(playbackMode = it) },
                         onSetMaxBitrate = {}, onToggleMultiviewLayout = {}, onToggleThemeMusic = {},
-                        onToggleMatchFrameRate = {}, onToggleLargerBuffer = {}, onNudgeThemeVolume = {}, onRefreshChannels = {},
+                        onToggleMatchFrameRate = {}, onToggleLargerBuffer = {}, onToggleSkipIntros = {}, onNudgeThemeVolume = {}, onRefreshChannels = {},
                         onRefreshGuide = {}, update = UpdateStatus.Idle, updateUrl = "https://example",
                         onCheckForUpdate = {}, onInstallUpdate = {},
                     )

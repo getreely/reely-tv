@@ -67,16 +67,24 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(MATCH_FRAME_RATE, true)
         set(value) = prefs.edit().putBoolean(MATCH_FRAME_RATE, value).apply()
 
-    /**
-     * Keep more of a film or episode loaded ahead of what is playing. Off by default: the
-     * ordinary amount starts things quickest, and only a slow or uneven connection to the
-     * server needs more in hand.
-     */
     /** Home's rows switched off, by the row's id; see HomeRow. */
     var hiddenHomeRows: Set<String>
         get() = prefs.getStringSet(HIDDEN_HOME_ROWS, emptySet()) ?: emptySet()
         set(value) = prefs.edit().putStringSet(HIDDEN_HOME_ROWS, value).apply()
 
+    /**
+     * Past an episode's intro without being asked, where the server has found one. Off by
+     * default, as in Plex: the button is always there, and some people like the theme.
+     */
+    var skipIntros: Boolean
+        get() = prefs.getBoolean(SKIP_INTROS, false)
+        set(value) = prefs.edit().putBoolean(SKIP_INTROS, value).apply()
+
+    /**
+     * Keep more of a film or episode loaded ahead of what is playing. Off by default: the
+     * ordinary amount starts things quickest, and only a slow or uneven connection to the
+     * server needs more in hand.
+     */
     var largerBuffer: Boolean
         get() = prefs.getBoolean(LARGER_BUFFER, false)
         set(value) = prefs.edit().putBoolean(LARGER_BUFFER, value).apply()
@@ -135,6 +143,7 @@ class Settings(context: Context) {
         private const val MATCH_FRAME_RATE = "playback.matchFrameRate"
         private const val LARGER_BUFFER = "playback.largerBuffer"
         private const val HIDDEN_HOME_ROWS = "home.hiddenRows"
+        private const val SKIP_INTROS = "playback.skipIntros"
         private const val MAX_BITRATE = "playback.maxBitrate"
         private const val UPDATE_URL = "update.url"
         private const val FAVOURITE_SECTIONS = "library.favourites"

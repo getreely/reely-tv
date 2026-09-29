@@ -80,6 +80,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.Tracks
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -97,6 +98,11 @@ import tv.reely.core.DeviceAudio
 import tv.reely.core.Settings
 import tv.reely.core.SilentAudio
 import tv.reely.core.silentAudio
+import tv.reely.core.PlayerTrack
+import tv.reely.core.PlexStream
+import tv.reely.core.playerTrackFor
+import tv.reely.core.plexStreamFor
+import tv.reely.core.sidecarId
 import tv.reely.plex.PlexItem
 import tv.reely.ui.GuideState
 import tv.reely.ui.LiveState
@@ -136,6 +142,7 @@ private const val CONTROLS_TIMEOUT_MS = 6_000L
 
 /** Long enough to read twice from across a room, short enough not to sit on the picture. */
 private const val AUDIO_NOTICE_MS = 9_000L
+private const val SKIP_NOTICE_MS = 2_500L
 
 internal enum class Panel { NONE, SUBTITLES, AUDIO, STATS, CHAPTERS }
 
@@ -143,6 +150,8 @@ private data class TrackChoice(
     val label: String,
     val group: Tracks.Group?,
     val selected: Boolean,
+    /** Where the track is among all of its type, as [playerTracks] lists them; null for Off. */
+    val trackIndex: Int? = null,
 )
 
 @Composable
@@ -178,6 +187,8 @@ fun PlayerScreen(
     onReportProgress: (Long, Boolean) -> Unit,
     onNudgeSubtitleScale: (Float) -> Unit,
     onToggleSubtitleBackground: () -> Unit,
+    /** A sound or subtitle choice to keep with Plex: stream ids, "0" for subtitles off. */
+    onSaveStreamChoice: (audio: String?, subtitle: String?) -> Unit = { _, _ -> },
     imageUrl: (String?, String?, Int, Int) -> String?,
     logoUrl: (String?, String?) -> String?,
     modifier: Modifier = Modifier,
@@ -359,6 +370,26 @@ fun PlayerScreen(
         canSkipForward = canSkipForward,
         upNextShowing = upNext != null,
     )
+    /*
+     * Past the intro without being asked, when that's what Settings says. Once per
+     * episode: going back into the intro afterwards is somebody wanting to hear it.
+     */
+    var introSkipped by remember(playback.url) { mutableStateOf(false) }
+    var skipNotice by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(prompt == SkipPrompt.INTRO, prefs.skipIntros) {
+        if (prompt == SkipPrompt.INTRO && prefs.skipIntros && !introSkipped && intro != null) {
+            introSkipped = true
+            exoPlayer.seekTo(intro.endMs)
+            skipNotice = "Intro skipped"
+        }
+    }
+    // Its own effect: the one above is cancelled by the seek it makes.
+    LaunchedEffect(skipNotice) {
+        if (skipNotice != null) {
+            delay(SKIP_NOTICE_MS)
+            skipNotice = null
+        }
+    }
     val skipLabel = when (prompt) {
         SkipPrompt.INTRO -> "Skip Intro"
         SkipPrompt.NEXT_EPISODE -> "Next Episode"
@@ -441,6 +472,8 @@ fun PlayerScreen(
      * composition, which meant its "already transcoding" test was false forever.
      */
     val currentPlayback by rememberUpdatedState(playback)
+    // The file whose server-chosen tracks have been applied, so it happens once.
+    var serverChoiceFor by remember { mutableStateOf<String?>(null) }
     val currentPrefs by rememberUpdatedState(prefs)
 
     /*
@@ -477,6 +510,12 @@ fun PlayerScreen(
             override fun onTracksChanged(tracks: Tracks) {
                 tracksVersion++
                 val now = currentPlayback
+                // Once per file, the sound and subtitles Plex has chosen for this account.
+                // Not for a conversion, where the server has already applied them.
+                if (!now.isLive && !now.transcoding && serverChoiceFor != now.url && !tracks.isEmpty) {
+                    serverChoiceFor = now.url
+                    applyServerChoice(exoPlayer, now)
+                }
                 when (
                     silentAudio(
                         hasAudio = tracks.containsType(C.TRACK_TYPE_AUDIO),
@@ -1005,7 +1044,7 @@ fun PlayerScreen(
 
         // At the top, away from the transport and the skip prompt, and gone on its own:
         // the picture is still playing and this is only saying why it is quiet.
-        audioNotice?.let { message ->
+        (audioNotice ?: skipNotice)?.let { message ->
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -1144,6 +1183,21 @@ fun PlayerScreen(
                 prefs = prefs,
                 tracksVersion = tracksVersion,
                 focusRequester = panelFocus,
+                onPicked = { trackType, trackIndex ->
+                    if (!playback.transcoding) {
+                        val tracks = playerTracks(exoPlayer, trackType).map { it.second }
+                        if (trackType == C.TRACK_TYPE_AUDIO) {
+                            trackIndex?.let { plexStreamFor(playback.audioStreams, tracks, it) }
+                                ?.let { onSaveStreamChoice(it.id, null) }
+                        } else {
+                            val stream = trackIndex?.let { plexStreamFor(playback.subtitleStreams, tracks, it) }
+                            when {
+                                trackIndex == null -> onSaveStreamChoice(null, "0")
+                                stream != null -> onSaveStreamChoice(null, stream.id)
+                            }
+                        }
+                    }
+                },
                 onClose = { panel = Panel.NONE },
                 onNudgeScale = onNudgeSubtitleScale,
                 onToggleBackground = onToggleSubtitleBackground,
@@ -1900,6 +1954,8 @@ internal fun TrackPanel(
     focusRequester: FocusRequester,
     onClose: () -> Unit,
     onNudgeScale: (Float) -> Unit,
+    /** After a track is chosen: its type, and where it is among them (null for Off). */
+    onPicked: (Int, Int?) -> Unit = { _, _ -> },
     onToggleBackground: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1943,7 +1999,10 @@ internal fun TrackPanel(
                     subtitle = null,
                     imageUrl = null,
                     selected = choice.selected,
-                    onClick = { applyTrack(player, trackType, choice) },
+                    onClick = {
+                        applyTrack(player, trackType, choice)
+                        onPicked(trackType, choice.trackIndex)
+                    },
                 )
             }
         }
@@ -1970,22 +2029,56 @@ internal fun TrackPanel(
 }
 
 private fun trackChoices(player: ExoPlayer, trackType: Int): List<TrackChoice> {
-    val groups = player.currentTracks.groups.filter { it.type == trackType && it.isSupported }
+    val all = player.currentTracks.groups.filter { it.type == trackType }
+    val groups = all.withIndex().filter { it.value.isSupported }
     if (groups.isEmpty()) return emptyList()
 
-    val anySelected = groups.any { it.isSelected }
+    val anySelected = groups.any { it.value.isSelected }
     val options = mutableListOf<TrackChoice>()
     if (trackType == C.TRACK_TYPE_TEXT) {
         options += TrackChoice(label = "Off", group = null, selected = !anySelected)
     }
-    groups.forEachIndexed { index, group ->
+    groups.forEachIndexed { index, (trackIndex, group) ->
         val format = group.getTrackFormat(0)
         val label = format.label
             ?: format.language
             ?: "Track ${index + 1}"
-        options += TrackChoice(label = label, group = group, selected = group.isSelected)
+        options += TrackChoice(label = label, group = group, selected = group.isSelected, trackIndex = trackIndex)
     }
     return options
+}
+
+/** Every track of a type, supported or not, in the player's order, as [playerTrackFor] reads them. */
+private fun playerTracks(player: ExoPlayer, trackType: Int): List<Pair<Tracks.Group, PlayerTrack>> =
+    player.currentTracks.groups.filter { it.type == trackType }.map { group ->
+        val format = group.getTrackFormat(0)
+        group to PlayerTrack(
+            id = format.id,
+            language = format.language,
+            sidecar = format.id?.contains(sidecarId("")) == true,
+        )
+    }
+
+/**
+ * Plays the sound and subtitles the server has selected for this account: what its
+ * language settings ask for, or what was last picked for this title in any Plex app.
+ * Without a subtitle chosen there, the player's own choice stands, which is none unless
+ * one was picked earlier in this sitting.
+ */
+private fun applyServerChoice(player: ExoPlayer, playback: Playback) {
+    var builder: TrackSelectionParameters.Builder? = null
+    fun choose(trackType: Int, streams: List<PlexStream>) {
+        val tracks = playerTracks(player, trackType)
+        val index = playerTrackFor(streams, tracks.map { it.second }) ?: return
+        val group = tracks[index].first
+        if (!group.isSupported || group.isSelected) return
+        builder = (builder ?: player.trackSelectionParameters.buildUpon())
+            .setTrackTypeDisabled(trackType, false)
+            .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, 0))
+    }
+    choose(C.TRACK_TYPE_AUDIO, playback.audioStreams)
+    choose(C.TRACK_TYPE_TEXT, playback.subtitleStreams)
+    builder?.let { player.trackSelectionParameters = it.build() }
 }
 
 private fun applyTrack(player: ExoPlayer, trackType: Int, choice: TrackChoice) {
@@ -2037,6 +2130,8 @@ private fun buildMediaItem(playback: Playback): MediaItem =
         .setSubtitleConfigurations(
             playback.subtitles.map { subtitle ->
                 MediaItem.SubtitleConfiguration.Builder(android.net.Uri.parse(subtitle.url))
+                    // Tells the track apart from the file's own, and says which stream it is.
+                    .setId(sidecarId(subtitle.id))
                     .setMimeType(subtitle.mimeType)
                     .setLanguage(subtitle.language)
                     .setLabel(subtitle.label)

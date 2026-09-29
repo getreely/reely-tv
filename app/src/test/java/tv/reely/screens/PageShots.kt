@@ -65,7 +65,7 @@ class PageShots {
                     onToggleFormat = {}, onNudgeSubtitleScale = {}, onToggleSubtitleBackground = {},
                     onNudgeUpNext = {}, onToggleGuidePreview = {}, onSetPlaybackMode = {},
                     onSetMaxBitrate = {}, onToggleMultiviewLayout = {}, onToggleThemeMusic = {},
-                    onToggleMatchFrameRate = {}, onToggleLargerBuffer = {}, onNudgeThemeVolume = {}, onRefreshChannels = {},
+                    onToggleMatchFrameRate = {}, onToggleLargerBuffer = {}, onToggleSkipIntros = {}, onNudgeThemeVolume = {}, onRefreshChannels = {},
                     onRefreshGuide = {}, update = update,
                     updateUrl = "https://github.com/getreely/reely-tv/releases/latest/download/reely-tv.apk",
                     onCheckForUpdate = {}, onInstallUpdate = {},
