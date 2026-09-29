@@ -589,51 +589,50 @@ private fun UpdatesSection(
 ) {
     SettingGroup("Reely") {
         SettingRow(title = "Version", value = BuildConfig.VERSION_NAME)
-        when (update) {
-            is UpdateStatus.Idle ->
-                SettingRow(title = "Check for updates", first = true, onClick = onCheck)
-
-            is UpdateStatus.Checking ->
-                SettingRow(title = "Check for updates", value = "Checking…", first = true, onClick = {})
-
-            is UpdateStatus.UpToDate ->
-                SettingRow(title = "Check for updates", value = "Up to date", first = true, onClick = onCheck)
-
-            is UpdateStatus.Available -> SettingRow(
-                title = "Download and install",
-                value = listOfNotNull(
-                    update.info.versionName?.let { "Version $it" },
-                    update.info.sizeBytes.takeIf { it > 0 }?.let { "${it / 1_048_576} MB" },
-                ).joinToString(" · "),
-                description = "A new version is available.",
-                first = true,
-                onClick = onInstall,
+        /*
+         * One row that changes what it says, not a different row for each state. Pressing
+         * Check for updates turned it into Checking…, a new row, and the one pressed went
+         * with the cursor on it, which then turned up on Search. It stays pressable while
+         * it's busy, doing nothing, so the cursor has something to stay on.
+         */
+        val size = { bytes: Long -> bytes.takeIf { it > 0 }?.let { "${it / 1_048_576} MB" } }
+        val (title, value, description) = when (update) {
+            is UpdateStatus.Idle, is UpdateStatus.Failed -> Triple("Check for updates", null, null)
+            is UpdateStatus.Checking -> Triple("Check for updates", "Checking…", null)
+            is UpdateStatus.UpToDate -> Triple("Check for updates", "Up to date", null)
+            is UpdateStatus.Available -> Triple(
+                "Download and install",
+                listOfNotNull(update.info.versionName?.let { "Version $it" }, size(update.info.sizeBytes))
+                    .joinToString(" · "),
+                "A new version is available.",
             )
-
-            is UpdateStatus.Unlabelled -> SettingRow(
-                title = "Download and install",
-                value = update.info.sizeBytes.takeIf { it > 0 }?.let { "${it / 1_048_576} MB" } ?: "",
-                description = "A version is available, but its number couldn't be read.",
-                first = true,
-                onClick = onInstall,
+            is UpdateStatus.Unlabelled -> Triple(
+                "Download and install",
+                size(update.info.sizeBytes) ?: "",
+                "A version is available, but its number couldn't be read.",
             )
-
             is UpdateStatus.Downloading -> {
                 val total = update.total.takeIf { it > 0 } ?: 1
-                SettingRow(title = "Downloading", value = "${update.read * 100 / total}%")
+                Triple("Downloading", "${update.read * 100 / total}%", null)
             }
-
-            is UpdateStatus.Handed -> SettingRow(
-                title = "Ready to install",
-                description = "Confirm on the screen that appears. The first time, Fire TV " +
-                    "asks you to allow installs from Reely.",
+            is UpdateStatus.Handed -> Triple(
+                "Ready to install",
+                null,
+                "Confirm on the screen that appears. The first time, Fire TV asks you to allow installs from Reely.",
             )
-
-            is UpdateStatus.Failed -> {
-                SettingRow(title = "Check for updates", first = true, onClick = onCheck)
-                ErrorNote(update.message)
-            }
         }
+        SettingRow(
+            title = title,
+            value = value,
+            description = description,
+            first = true,
+            onClick = when (update) {
+                is UpdateStatus.Available, is UpdateStatus.Unlabelled -> onInstall
+                is UpdateStatus.Idle, is UpdateStatus.UpToDate, is UpdateStatus.Failed -> onCheck
+                else -> ({})
+            },
+        )
+        if (update is UpdateStatus.Failed) ErrorNote(update.message)
     }
 }
 

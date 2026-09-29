@@ -57,11 +57,21 @@ fun UpdatePrompt(
     modifier: Modifier = Modifier,
 ) {
     BackHandler(onBack = onLater)
-    val start = remember { FocusRequester() }
-    var holding by remember { mutableStateOf(false) }
-    LaunchedEffect(status is UpdateStatus.Failed) {
+    // Each stage has its own button — Update now, then Hide while it downloads, then
+    // Close — and the one pressed goes when the next arrives, so the cursor is put on
+    // the new one every time rather than left with nowhere to be.
+    val stage = when (status) {
+        is UpdateStatus.Downloading -> 1
+        is UpdateStatus.Handed -> 2
+        is UpdateStatus.Failed -> 3
+        else -> 0
+    }
+    val start = remember(stage) { FocusRequester() }
+    var landed by remember(stage) { mutableStateOf(false) }
+    val startButton = Modifier.focusRequester(start).onFocusChanged { if (it.isFocused) landed = true }
+    LaunchedEffect(stage) {
         repeat(40) {
-            if (holding) return@LaunchedEffect
+            if (landed) return@LaunchedEffect
             start.requestWhenReady()
             delay(50)
         }
@@ -79,7 +89,6 @@ fun UpdatePrompt(
                 .background(SurfaceRaised)
                 .border(1.dp, Chalk.copy(alpha = 0.12f), RoundedCornerShape(22.dp))
                 .padding(horizontal = 32.dp, vertical = 28.dp)
-                .onFocusChanged { holding = it.hasFocus }
                 .focusProperties { onExit = { cancelFocusChange() } }
                 .focusGroup(),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -140,13 +149,13 @@ fun UpdatePrompt(
                 TvActionButton(
                     label = "Hide",
                     onClick = onLater,
-                    modifier = Modifier.focusRequester(start),
+                    modifier = startButton,
                 )
             } else if (status is UpdateStatus.Handed) {
                 TvActionButton(
                     label = "Close",
                     onClick = onLater,
-                    modifier = Modifier.focusRequester(start),
+                    modifier = startButton,
                 )
             } else {
                 Row(
@@ -157,7 +166,7 @@ fun UpdatePrompt(
                         label = if (status is UpdateStatus.Failed) "Try again" else "Update now",
                         onClick = onUpdate,
                         emphasised = true,
-                        modifier = Modifier.focusRequester(start),
+                        modifier = startButton,
                     )
                     TvActionButton(label = "Later", onClick = onLater)
                 }

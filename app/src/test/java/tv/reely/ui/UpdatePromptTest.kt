@@ -3,6 +3,8 @@ package tv.reely.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -78,5 +80,26 @@ class UpdatePromptTest {
         open(UpdateStatus.Downloading(read = 7_350_000, total = 14_700_000))
         compose.onNodeWithText("50%").assertExists()
         Shots.saveIfAsked(compose, "update-downloading")
+    }
+
+    @Test fun `the cursor follows the prompt from Update now to Hide`() {
+        var status by androidx.compose.runtime.mutableStateOf<UpdateStatus>(UpdateStatus.Available(info))
+        compose.setContent {
+            ReelyTheme {
+                Shots.RemoteInput()
+                Box(Modifier.fillMaxSize().background(Ink)) {
+                    UpdatePrompt(status = status, onUpdate = { status = UpdateStatus.Downloading(0, 100) }, onLater = { laters++ })
+                }
+            }
+        }
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(2_500)
+        press(Key.DirectionCenter)
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.onNode(androidx.compose.ui.test.hasText("Hide") and androidx.compose.ui.test.isFocused()).assertExists()
+        // And OK on it is Hide, not nothing.
+        press(Key.DirectionCenter)
+        assertEquals(1, laters)
     }
 }

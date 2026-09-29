@@ -315,10 +315,26 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
         openedFromPage = false
     }
 
+    /*
+     * The net under all of it. When whatever has the cursor is taken off the screen — a
+     * button that turns into a different button once pressed, a row that changes what it
+     * is, a panel closing — the cursor has nowhere to be, and the next press of a key
+     * puts it on the first thing in the window: Search. Whenever nothing in the app has
+     * focus, it goes back where the person was: the tab they were on, or the page.
+     */
+    var appHasFocus by remember { mutableStateOf(true) }
+    LaunchedEffect(appHasFocus) {
+        if (appHasFocus) return@LaunchedEffect
+        // Give anything that is moving the cursor on purpose a moment to do it first.
+        delay(FOCUS_RESCUE_DELAY_MS)
+        if (tabRowHasFocus) currentTabFocus.requestWhenReady() else contentFocus.requestWhenReady()
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Ink)
+            .onFocusChanged { appHasFocus = it.hasFocus }
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
                     arrivedByDirectionKey = event.key == Key.DirectionUp ||
@@ -923,3 +939,6 @@ internal fun Modifier.pageArea(upTo: FocusRequester): Modifier = this
         }
     }
     .focusGroup()
+
+/** How long nothing may have the cursor before it is put back. See the net in ReelyApp. */
+private const val FOCUS_RESCUE_DELAY_MS = 120L
