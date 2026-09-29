@@ -342,8 +342,13 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     // single request throws and is lost — and focus then falls back to the first thing in
     // the window, which is the search tab. That is why opening an episode left the cursor
     // up in the tab row. Keep asking for a few frames instead.
-    LaunchedEffect(routeKey(state.route), contentReady(state), menuFor) {
-        if (menuFor != null || !contentReady(state)) return@LaunchedEffect
+    // The tour of the remote, once, when there's a library to get around. After the update
+    // prompt, which has something to say first.
+    val touring = !state.prefs.tourSeen && state.plex.isConnected && !state.restoring &&
+        !state.updatePrompt
+    LaunchedEffect(routeKey(state.route), contentReady(state), menuFor, touring) {
+        // Not while the tour is up: it has the cursor, and this would take it from under it.
+        if (menuFor != null || touring || !contentReady(state)) return@LaunchedEffect
         if (tabRowHasFocus && !openedFromPage) return@LaunchedEffect
         // Back to a screen: the card the cursor was on. Somewhere new: the top of it.
         val back = !openedFromPage && screenFocus[routeKey(state.route)]?.restore() == true
@@ -642,6 +647,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onCheckForUpdate = viewModel::checkForUpdate,
                 onInstallUpdate = viewModel::installUpdate,
                 onOpenInstaller = viewModel::openInstaller,
+                onTakeTour = viewModel::replayTour,
             )
         }
         }
@@ -662,6 +668,10 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                         .background(SurfaceRaised.copy(alpha = 0.96f))
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                 )
+            }
+
+            if (touring && !confirmExit) {
+                tv.reely.ui.screens.Tour(onDone = viewModel::finishTour)
             }
 
             // A newer version found at startup. Not over something playing: it waits.

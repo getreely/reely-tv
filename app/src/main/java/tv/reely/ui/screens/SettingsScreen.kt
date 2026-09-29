@@ -131,6 +131,7 @@ fun SettingsScreen(
     onCheckForUpdate: () -> Unit,
     onInstallUpdate: () -> Unit,
     onOpenInstaller: () -> Unit = {},
+    onTakeTour: () -> Unit = {},
     modifier: Modifier = Modifier,
     /** Opens "Who's watching?" to switch Plex Home profiles. */
     onSwitchProfile: () -> Unit = {},
@@ -256,7 +257,7 @@ fun SettingsScreen(
                     onOpenInstaller = onOpenInstaller,
                 )
 
-                Section.ABOUT -> AboutSection()
+                Section.ABOUT -> AboutSection(onTakeTour = onTakeTour)
             }
             }
         }
@@ -719,7 +720,7 @@ private enum class Licence(val title: String, val kind: String, val file: String
 }
 
 @Composable
-private fun AboutSection() {
+private fun AboutSection(onTakeTour: () -> Unit = {}) {
     val context = LocalContext.current
     var reading by remember { mutableStateOf<Licence?>(null) }
     var crash by remember { mutableStateOf(tv.reely.core.CrashLog.read(context)) }
@@ -753,13 +754,21 @@ private fun AboutSection() {
         )
     }
 
+    SettingGroup("Help") {
+        SettingRow(
+            title = "Take the tour",
+            description = "How to get around with the remote.",
+            first = true,
+            onClick = onTakeTour,
+        )
+    }
+
     SettingGroup("Licenses") {
         Licence.entries.forEach { licence ->
             SettingRow(
                 title = licence.title,
                 value = licence.kind,
                 description = licence.covers,
-                first = licence == Licence.entries.first(),
                 onClick = { reading = licence },
             )
         }

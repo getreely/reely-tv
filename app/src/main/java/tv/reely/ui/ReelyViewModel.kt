@@ -497,6 +497,8 @@ data class PlayerPrefs(
     val largerBuffer: Boolean = false,
     /** Straight past an episode's intro, where the server has marked one. */
     val skipIntros: Boolean = false,
+    /** The tour of the remote has been taken or skipped; see Tour. */
+    val tourSeen: Boolean = true,
     /** Home's rows switched off in Settings; see HomeRow. */
     val hiddenHomeRows: Set<String> = emptySet(),
 )
@@ -609,6 +611,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 matchFrameRate = settings.matchFrameRate,
                 largerBuffer = settings.largerBuffer,
                 skipIntros = settings.skipIntros,
+                tourSeen = settings.tourSeen,
                 hiddenHomeRows = settings.hiddenHomeRows,
             )
         )
@@ -3247,6 +3250,17 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         settings.hiddenHomeRows = next
         _state.update { it.copy(prefs = it.prefs.copy(hiddenHomeRows = next)) }
         if (row.fromReely && row.id !in next) loadRequests()
+    }
+
+    /** The tour finished or skipped: not shown again unless asked for. */
+    fun finishTour() {
+        settings.tourSeen = true
+        _state.update { it.copy(prefs = it.prefs.copy(tourSeen = true)) }
+    }
+
+    /** The tour again, from Settings. */
+    fun replayTour() {
+        _state.update { it.copy(prefs = it.prefs.copy(tourSeen = false)) }
     }
 
     fun toggleSkipIntros() {

@@ -72,6 +72,11 @@ class Settings(context: Context) {
         get() = prefs.getStringSet(HIDDEN_HOME_ROWS, emptySet()) ?: emptySet()
         set(value) = prefs.edit().putStringSet(HIDDEN_HOME_ROWS, value).apply()
 
+    /** Whether the tour of the remote has been taken, or skipped. Shown once until it has. */
+    var tourSeen: Boolean
+        get() = prefs.getBoolean(TOUR_SEEN, false)
+        set(value) = prefs.edit().putBoolean(TOUR_SEEN, value).apply()
+
     /**
      * Past an episode's intro without being asked, where the server has found one. Off by
      * default, as in Plex: the button is always there, and some people like the theme.
@@ -144,6 +149,7 @@ class Settings(context: Context) {
         private const val LARGER_BUFFER = "playback.largerBuffer"
         private const val HIDDEN_HOME_ROWS = "home.hiddenRows"
         private const val SKIP_INTROS = "playback.skipIntros"
+        private const val TOUR_SEEN = "tour.seen"
         private const val MAX_BITRATE = "playback.maxBitrate"
         private const val UPDATE_URL = "update.url"
         private const val FAVOURITE_SECTIONS = "library.favourites"
