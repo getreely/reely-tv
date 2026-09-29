@@ -70,9 +70,13 @@ class PlayerShot {
     /** The same with focus moved up onto the bar, as it is while scrubbing. */
     @Test fun scrubbing() = shot("player-scrubbing") { _, scrubber -> scrubber.requestFocus() }
 
+    /** Live, with a programme on and Start over offered: the row of round buttons. */
+    @Test fun liveControls() = shot("player-live-controls", live = true) { play, _ -> play.requestFocus() }
+
     private fun shot(
         name: String,
         skip: Boolean = false,
+        live: Boolean = false,
         focus: (play: FocusRequester, scrubber: FocusRequester) -> Unit,
     ) {
         val play = FocusRequester()
@@ -88,7 +92,12 @@ class PlayerShot {
                         modifier = Modifier.fillMaxSize(),
                     )
                     Controls(
-                        playback = Playback(title = "The Weigh Station", subtitle = "Northbound  ·  S2 · E5", url = "", isLive = false, durationMs = 42 * 60_000L),
+                        playback = if (live) {
+                            Playback(title = "Hurricanes vs Golden Knights", subtitle = "NHL 01", url = "", isLive = true)
+                        } else {
+                            Playback(title = "The Weigh Station", subtitle = "Northbound  ·  S2 · E5", url = "", isLive = false, durationMs = 42 * 60_000L)
+                        },
+                        onStartOver = if (live) ({}) else null,
                         playing = !skip,
                         positionMs = 24 * 60_000L + 7_000,
                         durationMs = 42 * 60_000L,

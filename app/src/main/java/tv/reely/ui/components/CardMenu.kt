@@ -8,15 +8,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 
 /** One thing a card's menu can do. */
 data class CardAction(
@@ -52,26 +48,9 @@ fun CardMenu(
     progress: Float? = null,
 ) {
     BackHandler(onBack = onCancel)
-    /*
-     * A hold opens this menu while the finger is still down, and by the time the key
-     * comes up this has taken focus — so the release lands on a row here. The card that
-     * opened it cannot swallow it, because it is no longer the thing receiving keys. So
-     * the rest of that hold is thrown away: its release, and the repeats that keep coming
-     * while the finger stays down. Counting a repeat as a press of its own was what let go
-     * of the key onto the first row.
-     */
-    val stray = remember { StraySelect() }
-
+    // The rest of the hold that opened it is thrown away by the panel; see MenuPanel.
     MenuPanel(
         modifier = modifier
-            .onPreviewKeyEvent { event ->
-                if (!event.isSelect()) return@onPreviewKeyEvent false
-                when (event.type) {
-                    KeyEventType.KeyDown -> stray.down(event.nativeKeyEvent.repeatCount)
-                    KeyEventType.KeyUp -> stray.up()
-                    else -> false
-                }
-            }
             // Up off the top or down off the bottom stays in the menu.
             .focusProperties { onExit = { cancelFocusChange() } }
             // Without the group the requester has nothing focusable of its own to hand

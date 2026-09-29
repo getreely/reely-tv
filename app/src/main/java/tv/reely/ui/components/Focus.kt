@@ -10,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -95,9 +96,17 @@ class RowFocus(private val screen: ScreenFocus? = null) {
     /** The card last on, whether or not it is on screen now. */
     internal val rememberedKey: String? get() = remembered
 
+    /**
+     * The first card on screen, for a row that hasn't had the cursor yet. Rows that give
+     * positions know it for certain (keyAt[0]); for the rest it's the first card to
+     * appear, since a row lays its cards out from the start.
+     */
+    private var firstSeen: String? = null
+
     fun onPresent(key: String, index: Int = -1) {
         present += key
         if (index >= 0) keyAt[index] = key
+        if (firstSeen == null || index == 0) firstSeen = key
     }
 
     fun onGone(key: String, index: Int = -1) {
@@ -105,6 +114,7 @@ class RowFocus(private val screen: ScreenFocus? = null) {
         // present, and a screen coming back puts the cursor on it once it's composed.
         present -= key
         if (index >= 0 && keyAt[index] == key) keyAt.remove(index)
+        if (firstSeen == key) firstSeen = null
         val justLost = blurredKey == key && System.nanoTime() - blurredAt < JUST_LOST_NS && focusedKey == null
         if (focusedKey == key || justLost) {
             focusedKey = null
@@ -140,11 +150,22 @@ class RowFocus(private val screen: ScreenFocus? = null) {
     }
 
     /**
-     * Where focus should land on the way in. Only ever an item that is still there;
-     * anything else defers to the ordinary focus search.
+     * Where focus should land on the way in: the card last on, or for a row not yet
+     * visited, its first card, as every streaming app does. Only ever an item that is
+     * still there; anything else defers to the ordinary focus search.
+     *
+     * The first card used to be left to the focus search, which takes whatever sits
+     * straight below the cursor. A row scrolls to keep its card a third of the way in, so
+     * down from any row landed on the third card of the next, every time.
      */
-    fun entry(): FocusRequester =
-        remembered?.takeIf { it in present }?.let { requesters[it] } ?: FocusRequester.Default
+    fun entry(byArrow: Boolean = true): FocusRequester {
+        remembered?.takeIf { it in present }?.let { key -> requesters[key]?.let { return it } }
+        // Only for the cursor moved in by the remote. Code asking for one card (a show's
+        // page opening on the episode that was playing) gets that card.
+        if (!byArrow) return FocusRequester.Default
+        val first = keyAt[0]?.takeIf { it in present } ?: firstSeen?.takeIf { it in present }
+        return first?.let { requesterFor(it) } ?: FocusRequester.Default
+    }
 
     /** Puts the cursor on one item directly, for arriving at a row from somewhere else. */
     suspend fun land(key: String) {
@@ -234,7 +255,11 @@ fun FollowRemovals(row: RowFocus) {
 fun Modifier.restoreFocusTo(row: RowFocus): Modifier =
     this.focusProperties {
         onEnter = {
-            val remembered = row.entry()
+            val byArrow = requestedFocusDirection == FocusDirection.Up ||
+                requestedFocusDirection == FocusDirection.Down ||
+                requestedFocusDirection == FocusDirection.Left ||
+                requestedFocusDirection == FocusDirection.Right
+            val remembered = row.entry(byArrow)
             if (remembered != FocusRequester.Default) remembered.requestFocus()
         }
     }

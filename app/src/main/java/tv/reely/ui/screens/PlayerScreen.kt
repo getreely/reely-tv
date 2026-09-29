@@ -114,6 +114,7 @@ import tv.reely.ui.components.InfoGlyph
 import tv.reely.ui.components.PauseGlyph
 import tv.reely.ui.components.PlayGlyph
 import tv.reely.ui.components.PlusGlyph
+import tv.reely.ui.components.RestartGlyph
 import tv.reely.ui.components.SkipGlyph
 import tv.reely.ui.components.isSelect
 import tv.reely.ui.components.SpeakerGlyph
@@ -1747,13 +1748,14 @@ internal fun Controls(
                         modifier = Modifier.focusRequester(panelButtons.getValue(Panel.STATS)),
                         glyph = { InfoGlyph(it, 16.dp) },
                     )
+                    // Round, like the rest of the row. Words here made one button twice the
+                    // size of the others and the row looked crammed; the stream format that
+                    // sat beside it is a setting, and lives in Settings, Live TV.
                     if (playback.isLive && onStartOver != null) {
-                        TvActionButton(label = "Start over", onClick = onStartOver)
-                    }
-                    if (playback.isLive) {
-                        TvActionButton(
-                            label = if (playback.format.label == "MPEG-TS") "HLS" else "TS",
-                            onClick = onToggleFormat,
+                        TransportButton(
+                            onClick = onStartOver,
+                            diameter = SMALL_BUTTON,
+                            glyph = { RestartGlyph(it, 16.dp) },
                         )
                     }
                 }

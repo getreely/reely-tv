@@ -35,6 +35,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -107,8 +110,23 @@ fun MenuPanel(
 ) {
     val arrival = remember { Animatable(1f) }
     LaunchedEffect(Unit) { arrival.animateTo(0f, tween(220, easing = FastOutSlowInEasing)) }
+    /*
+     * Most menus here are opened by holding OK, so they arrive with OK still down: the
+     * repeats of that hold, and its release, land on the first row and press it. Every
+     * panel throws the rest of that hold away, and takes OK only once it's pressed
+     * afresh. A menu opened by a plain press never sees any of this.
+     */
+    val stray = remember { StraySelect() }
     Column(
         modifier = modifier
+            .onPreviewKeyEvent { event ->
+                if (!event.isSelect()) return@onPreviewKeyEvent false
+                when (event.type) {
+                    KeyEventType.KeyDown -> stray.down(event.nativeKeyEvent.repeatCount)
+                    KeyEventType.KeyUp -> stray.up()
+                    else -> false
+                }
+            }
             .fillMaxHeight()
             .width(width)
             .graphicsLayer {

@@ -80,6 +80,11 @@ class GuideMenuTest {
         )
         compose.onRoot().performKeyPress(event(android.view.KeyEvent.ACTION_DOWN, 0))
         compose.onRoot().performKeyPress(event(android.view.KeyEvent.ACTION_DOWN, 1))
+        // As a remote does it: the menu is up and has the cursor while OK is still held,
+        // repeating, and only then let go. Those have to go nowhere.
+        compose.waitForIdle()
+        compose.onRoot().performKeyPress(event(android.view.KeyEvent.ACTION_DOWN, 2))
+        compose.onRoot().performKeyPress(event(android.view.KeyEvent.ACTION_DOWN, 3))
         compose.onRoot().performKeyPress(event(android.view.KeyEvent.ACTION_UP, 0))
         compose.waitForIdle()
     }
