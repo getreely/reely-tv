@@ -247,6 +247,7 @@ fun LibraryScreen(
                                                 onFocusItem(item)
                                             },
                                             onClick = { onOpenItem(item) },
+                                            onLongPress = holdFor(item),
                                             modifier = rowItem(resumeFocus, item.listKey),
                                         )
                                     }
@@ -277,6 +278,7 @@ fun LibraryScreen(
                                                 onFocusItem(movie)
                                             },
                                             onClick = { onOpenItem(movie) },
+                                            onLongPress = holdFor(movie),
                                             modifier = rowItem(recentFocus, movie.listKey),
                                         )
                                     }
@@ -310,6 +312,7 @@ fun LibraryScreen(
                                                 onFocusItem(group.newest)
                                             },
                                             onClick = { onOpenItem(group.newest) },
+                                            onLongPress = holdFor(group.newest),
                                             modifier = rowItem(recentFocus, group.listKey),
                                         )
                                     }
@@ -338,6 +341,7 @@ fun LibraryScreen(
                                                 onFocusItem(item)
                                             },
                                             onClick = { onOpenItem(item) },
+                                            onLongPress = holdFor(item),
                                             modifier = rowItem(releasedFocus, item.listKey),
                                         )
                                     }
@@ -513,6 +517,7 @@ fun LibraryScreen(
                                 if (index >= browse.items.size - LOAD_AHEAD) onLoadMore()
                             },
                             onClick = { onOpenItem(item) },
+                            onLongPress = holdFor(item),
                             modifier = rowItem(gridFocus, item.listKey),
                         )
                     }

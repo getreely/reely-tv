@@ -193,6 +193,7 @@ fun SearchScreen(
                         onFocusItem(item)
                     },
                     onClick = { onOpenItem(item) },
+                    onLongPress = holdFor(item),
                     modifier = rowItem(resultFocus, item.listKey),
                 )
             }
@@ -251,6 +252,7 @@ fun SearchScreen(
                         onFocusItem(item)
                     },
                     onClick = { onOpenItem(item) },
+                    onLongPress = holdFor(item),
                     modifier = rowItem(resultFocus, item.listKey),
                 )
             }

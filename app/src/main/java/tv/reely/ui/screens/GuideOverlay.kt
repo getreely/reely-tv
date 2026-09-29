@@ -45,6 +45,14 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import tv.reely.ui.components.MenuPanel
+import tv.reely.ui.components.MenuHeading
+import tv.reely.ui.components.MenuItem
+import tv.reely.ui.components.MenuScrim
+import tv.reely.ui.components.PlayGlyph
+import tv.reely.ui.components.TilesGlyph
+import tv.reely.ui.components.ClockGlyph
+import tv.reely.ui.components.HeartGlyph
 import tv.reely.ui.components.GuideNowLine
 import tv.reely.ui.components.GuideRow
 import tv.reely.ui.components.isSelect
@@ -370,6 +378,7 @@ fun GuideOverlay(
         }
 
         menuFor?.let { target ->
+            MenuScrim()
             // The programme under the cursor on that channel, if it's still to come.
             val upcoming = target.epgChannelId?.let { programmes[it] }.orEmpty()
                 .firstOrNull { it.isOnAt(focusTime) }?.takeIf { it.start > now }
@@ -398,7 +407,7 @@ fun GuideOverlay(
                     onToggleFavorite(target)
                 },
                 onCancel = { menuFor = null },
-                modifier = Modifier.align(Alignment.Center),
+                modifier = Modifier.align(Alignment.CenterEnd),
             )
         }
     }
@@ -421,53 +430,35 @@ private fun ChannelMenu(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
+    MenuPanel(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(Ink.copy(alpha = 0.97f))
-            .border(1.dp, Line, RoundedCornerShape(14.dp))
-            .padding(20.dp)
             // Without this the requester has nothing focusable of its own to give focus
-            // to, so the request quietly did nothing and every button here was dead.
+            // to, so the request quietly did nothing and every row here was dead.
             .focusGroup()
             .focusRequester(focusRequester),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            text = channel.name,
-            color = Chalk,
-            fontSize = 16.sp,
-            lineHeight = 21.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+        MenuHeading(title = channel.name)
+        MenuItem(label = "Watch this channel", icon = { PlayGlyph(it, size = 20.dp) }, onClick = onWatch)
+        MenuItem(
+            label = if (pickVerb == "Add") "Add beside what's playing" else "Put it in that tile",
+            // Replacing a tile never adds one, so only adding is held to the limit.
+            detail = if (canAddTile || pickVerb != "Add") null else "You can watch up to four channels at once.",
+            icon = { TilesGlyph(it, size = 20.dp) },
+            onClick = { if (canAddTile || pickVerb != "Add") onAdd() },
         )
-        TvActionButton(label = "Watch this channel", onClick = onWatch, emphasised = true)
-        if (canAddTile) {
-            TvActionButton(
-                label = if (pickVerb == "Add") "Add beside what is playing"
-                else "Replace the channel in that tile",
-                onClick = onAdd,
-            )
-        } else {
-            Text(
-                text = "You can watch up to four channels at once.",
-                color = Faint,
-                fontSize = 14.sp,
-                lineHeight = 19.sp,
-            )
-        }
         if (upcoming != null) {
-            TvActionButton(
-                label = if (reminded) "Cancel the reminder" else "Remind me: ${upcoming.title}",
+            MenuItem(
+                label = if (reminded) "Cancel the reminder" else "Remind me",
+                detail = upcoming.title,
+                icon = { ClockGlyph(it, size = 20.dp) },
                 onClick = onToggleReminder,
             )
         }
-        TvActionButton(
+        MenuItem(
             label = if (favorite) "Remove from Favorites" else "Add to Favorites",
+            icon = { HeartGlyph(it, size = 20.dp) },
             onClick = onToggleFavorite,
         )
-        TvActionButton(label = "Cancel", onClick = onCancel)
     }
 }
 

@@ -1,5 +1,6 @@
 package tv.reely.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
@@ -47,7 +48,7 @@ class SettingsChoiceTest {
         compose.setContent {
             ReelyTheme {
                 Shots.RemoteInput()
-                Box(Modifier.fillMaxSize()) {
+                Box(Modifier.fillMaxSize().background(tv.reely.ui.theme.Ink)) {
                     SettingsScreen(
                         plex = PlexState(), live = LiveState(), guide = GuideState(), prefs = prefs,
                         onSignOutPlex = {}, onSignOutXtream = {}, onSwitchServer = {}, onToggleFavourite = {},

@@ -362,3 +362,63 @@ fun PlusGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) {
         )
     }
 }
+
+/** An x: take this off, or close. */
+@Composable
+fun CrossGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(size)) {
+        val s = size.toPx()
+        val stroke = s * 0.12f
+        val cap = androidx.compose.ui.graphics.StrokeCap.Round
+        drawLine(color, androidx.compose.ui.geometry.Offset(s * 0.24f, s * 0.24f), androidx.compose.ui.geometry.Offset(s * 0.76f, s * 0.76f), stroke, cap)
+        drawLine(color, androidx.compose.ui.geometry.Offset(s * 0.76f, s * 0.24f), androidx.compose.ui.geometry.Offset(s * 0.24f, s * 0.76f), stroke, cap)
+    }
+}
+
+/** A clock face: something to do at a time, or a reminder. */
+@Composable
+fun ClockGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(size)) {
+        val s = size.toPx()
+        val cap = androidx.compose.ui.graphics.StrokeCap.Round
+        drawCircle(color, radius = s * 0.38f, style = Stroke(width = s * 0.1f))
+        drawLine(color, center, center + androidx.compose.ui.geometry.Offset(0f, -s * 0.22f), s * 0.1f, cap)
+        drawLine(color, center, center + androidx.compose.ui.geometry.Offset(s * 0.16f, s * 0.08f), s * 0.1f, cap)
+    }
+}
+
+/** Four squares: more than one picture at once. */
+@Composable
+fun TilesGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(size)) {
+        val s = size.toPx()
+        val cell = s * 0.34f
+        val gap = s * 0.1f
+        val start = (s - cell * 2 - gap) / 2
+        listOf(0, 1).forEach { r ->
+            listOf(0, 1).forEach { c ->
+                drawRoundRect(
+                    color,
+                    topLeft = androidx.compose.ui.geometry.Offset(start + c * (cell + gap), start + r * (cell + gap)),
+                    size = androidx.compose.ui.geometry.Size(cell, cell),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(s * 0.06f),
+                    style = Stroke(width = s * 0.09f),
+                )
+            }
+        }
+    }
+}
+
+/** Two arrows pointing apart: move this along. */
+@Composable
+fun ArrowGlyph(color: Color, left: Boolean, size: Dp = 18.dp, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(size)) {
+        val s = size.toPx()
+        val cap = androidx.compose.ui.graphics.StrokeCap.Round
+        val dir = if (left) -1f else 1f
+        val tip = androidx.compose.ui.geometry.Offset(s * 0.5f + dir * s * 0.3f, s * 0.5f)
+        drawLine(color, androidx.compose.ui.geometry.Offset(s * 0.5f - dir * s * 0.3f, s * 0.5f), tip, s * 0.1f, cap)
+        drawLine(color, tip, tip + androidx.compose.ui.geometry.Offset(-dir * s * 0.2f, -s * 0.2f), s * 0.1f, cap)
+        drawLine(color, tip, tip + androidx.compose.ui.geometry.Offset(-dir * s * 0.2f, s * 0.2f), s * 0.1f, cap)
+    }
+}

@@ -56,8 +56,10 @@ class ChoiceRequest(
 )
 
 /**
- * The list itself, over a dimmed screen. It holds the cursor while it is up: up off the
- * top or down off the bottom goes nowhere rather than out into the screen behind it.
+ * The list itself: a panel from the right, like every other menu here (see Menus.kt),
+ * with the value in use ticked and the cursor starting on it. It holds the cursor while
+ * it is up: up off the top or down off the bottom goes nowhere rather than out into the
+ * screen behind it.
  */
 @Composable
 fun ChoicePanel(request: ChoiceRequest, onClose: () -> Unit) {
@@ -71,38 +73,26 @@ fun ChoicePanel(request: ChoiceRequest, onClose: () -> Unit) {
             delay(50)
         }
     }
-    Box(
-        modifier = Modifier.fillMaxSize().background(Ink.copy(alpha = 0.6f)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
+    Box(modifier = Modifier.fillMaxSize()) {
+        MenuScrim()
+        MenuPanel(
             modifier = Modifier
-                .width(480.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .background(SurfaceRaised)
-                .border(1.dp, Chalk.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
-                .padding(horizontal = 16.dp, vertical = 20.dp)
+                .align(Alignment.CenterEnd)
                 .onFocusChanged { holding = it.hasFocus }
                 .focusProperties { onExit = { cancelFocusChange() } }
                 .focusGroup(),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            Text(
-                text = request.title,
-                color = Chalk,
-                style = ReelyType.RowTitle,
-                modifier = Modifier.padding(start = 12.dp, bottom = 10.dp),
-            )
+            MenuHeading(title = request.title)
             // A long list (a library's decades, say) scrolls rather than running off the screen.
             Column(
-                modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 request.options.forEachIndexed { index, (label, description) ->
-                    OptionRow(
+                    MenuItem(
                         label = label,
-                        description = description,
-                        chosen = index == request.selected,
+                        detail = description,
+                        checked = index == request.selected,
                         onClick = {
                             request.onPick(index)
                             onClose()
@@ -110,54 +100,6 @@ fun ChoicePanel(request: ChoiceRequest, onClose: () -> Unit) {
                         modifier = if (index == request.selected) Modifier.focusRequester(start) else Modifier,
                     )
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun OptionRow(
-    label: String,
-    description: String?,
-    chosen: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var focused by remember { mutableStateOf(false) }
-    val colors = pillColors(focused)
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .onFocusChanged { focused = it.isFocused }
-            .background(if (focused) colors.fill else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        // A radio: a ring, filled when this is the one in use.
-        Box(
-            modifier = Modifier
-                .size(20.dp)
-                .border(2.dp, if (focused) Ink else if (chosen) Accent else Faint, CircleShape)
-                .padding(4.dp)
-                .clip(CircleShape)
-                .background(if (chosen) (if (focused) Ink else Accent) else Color.Transparent),
-        )
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                text = label,
-                color = if (focused) Ink else Chalk,
-                style = ReelyType.Meta,
-                fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Medium,
-            )
-            if (description != null) {
-                Text(
-                    text = description,
-                    color = if (focused) Ink.copy(alpha = 0.7f) else Muted,
-                    style = ReelyType.Label,
-                )
             }
         }
     }

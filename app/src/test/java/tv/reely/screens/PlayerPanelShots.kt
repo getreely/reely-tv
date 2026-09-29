@@ -113,10 +113,11 @@ class PlayerPanelShots {
         val focus = FocusRequester()
         overPicture(focus) {
             Box(Modifier.fillMaxSize()) {
+                tv.reely.ui.components.MenuScrim(strength = 0.8f)
                 TileMenu(
                     name = "BBC One", focusRequester = focus, canClose = true, canAdd = true,
                     canMaximize = true, onMaximize = {}, onAdd = {}, onReplace = {}, onClose = {},
-                    onCancel = {}, modifier = Modifier.align(Alignment.Center),
+                    onCancel = {}, modifier = Modifier.align(Alignment.CenterEnd),
                     canMoveBack = true, canMoveOn = true, canSave = true, saved = "NFL 01 and 2 more",
                 )
             }

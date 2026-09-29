@@ -252,8 +252,11 @@ fun HomeScreen(
                         if (home.recentEpisodes.isNotEmpty() && HomeRow.EPISODES.id !in hidden) {
                             item {
                                 PosterRow(title = "Recently Added Episodes", rowFocus = episodeFocus, sideways = sideways) {
-                                    items(home.recentEpisodes, key = { it.listKey }) { group ->
-                                        EpisodeGroupCard(group, imageUrl, episodeFocus, onFocusItem, onOpenItem)
+                                    itemsIndexed(home.recentEpisodes, key = { _, it -> it.listKey }) { index, group ->
+                                        EpisodeGroupCard(group, imageUrl, episodeFocus, onFocusItem, onOpenItem, index) { newest ->
+                                            menuFrom = Triple(episodeFocus, group.listKey, index)
+                                            menuFor = newest
+                                        }
                                     }
                                 }
                             }
@@ -301,6 +304,10 @@ fun HomeScreen(
                                                 onFocusItem(item)
                                             },
                                             onClick = { onOpenItem(item) },
+                                            onLongPress = {
+                                                menuFrom = Triple(watchlistFocus, item.listKey, index)
+                                                menuFor = item
+                                            }.takeIf { hasItemMenu(item) },
                                             modifier = rowItem(watchlistFocus, item.listKey, index),
                                         )
                                     }
@@ -379,42 +386,24 @@ fun HomeScreen(
             // Drawn last so it sits over the rows. A row clips its children, so a menu
             // raised inside one would appear cut in half.
             menuFor?.let { item ->
-                Box(
-                    modifier = Modifier.fillMaxSize().background(Ink.copy(alpha = 0.55f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CardMenu(
-                        title = item.rowTitle,
-                        subtitle = episodeLine(item) ?: item.caption,
-                        focusRequester = menuFocus,
-                        actions = buildList {
-                            val resumable = (item.resumeFraction ?: 0f) > 0f
-                            add(
-                                CardAction(
-                                    label = if (resumable) "Resume" else "Play",
-                                    emphasised = true,
-                                ) { menuFor = null; onPlayItem(item, true) },
-                            )
-                            if (resumable) {
-                                add(CardAction("Play from the beginning") {
-                                    menuFor = null; onPlayItem(item, false)
-                                })
-                            }
-                            add(
-                                CardAction(
-                                    if (item.isWatched) "Mark unwatched" else "Mark watched",
-                                ) { menuFor = null; onToggleWatched(item) },
-                            )
-                            add(CardAction("Details") { menuFor = null; onOpenItem(item) })
-                            if (home.continueWatching.any { it.listKey == item.listKey }) {
-                                add(CardAction("Remove from Continue Watching") {
-                                    menuFor = null; onRemoveFromContinueWatching(item)
-                                })
-                            }
+                ItemMenu(
+                    item = item,
+                    focusRequester = menuFocus,
+                    backdropUrl = backdropUrl,
+                    logoUrl = logoUrl,
+                    actions = itemMenuActions(
+                        item = item,
+                        onPlay = { resume -> menuFor = null; onPlayItem(item, resume) },
+                        onToggleWatched = { menuFor = null; onToggleWatched(item) },
+                        onDetails = { menuFor = null; onOpenItem(item) },
+                        onRemoveFromContinueWatching = if (home.continueWatching.any { it.listKey == item.listKey }) {
+                            { menuFor = null; onRemoveFromContinueWatching(item) }
+                        } else {
+                            null
                         },
-                        onCancel = { menuFor = null },
-                    )
-                }
+                    ),
+                    onCancel = { menuFor = null },
+                )
             }
 
         }
@@ -477,6 +466,10 @@ private fun EpisodeGroupCard(
     rowFocus: tv.reely.ui.components.RowFocus,
     onFocusItem: (PlexItem?) -> Unit,
     onOpenItem: (PlexItem) -> Unit,
+    /** Its place in the row, so the cursor can find its way back if it goes. */
+    index: Int = -1,
+    /** Holding OK: the menu for the newest episode, which the menu names. */
+    onHold: (PlexItem) -> Unit = {},
 ) {
     val newest = group.newest
     PosterCard(
@@ -490,7 +483,8 @@ private fun EpisodeGroupCard(
         },
         // Whether one episode arrived or twelve, this opens the show at the newest one.
         onClick = { onOpenItem(newest) },
-        modifier = rowItem(rowFocus, group.listKey),
+        onLongPress = { onHold(newest) },
+        modifier = rowItem(rowFocus, group.listKey, index),
     )
 }
 

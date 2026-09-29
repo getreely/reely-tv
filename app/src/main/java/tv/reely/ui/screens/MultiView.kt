@@ -1,5 +1,16 @@
 package tv.reely.ui.screens
 
+import tv.reely.ui.components.MenuPanel
+import tv.reely.ui.components.MenuHeading
+import tv.reely.ui.components.MenuItem
+import tv.reely.ui.components.MenuSection
+import tv.reely.ui.components.PlayGlyph
+import tv.reely.ui.components.TilesGlyph
+import tv.reely.ui.components.ArrowGlyph
+import tv.reely.ui.components.HeartGlyph
+import tv.reely.ui.components.CrossGlyph
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import tv.reely.core.renderersFor
 import android.content.Context
 import androidx.compose.foundation.background
@@ -395,60 +406,45 @@ fun TileMenu(
     saved: String? = null,
     onOpenSaved: () -> Unit = {},
 ) {
-    Column(
+    MenuPanel(
         modifier = modifier
-            .widthIn(min = 300.dp)
-            .sheet()
-            .padding(24.dp)
             // Without this the requester has nothing focusable of its own to hand focus
-            // to, and every button here would be dead.
+            // to, and every row here would be dead.
             .focusGroup()
             .focusRequester(focusRequester),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            text = name,
-            color = Chalk,
-            style = ReelyType.RowTitle,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        if (canMaximize) {
-            TvActionButton(label = "Full screen", onClick = onMaximize, emphasised = true)
-        }
-        /*
-         * The only way to a third channel that does not have to be guessed at.
-         *
-         * The spare cell covers one case — a grid with exactly three channels up — and
-         * the transport's own button disappears the moment there is more than one. That
-         * left holding OK on a channel in the guide, which nobody would think to try, so
-         * the side-by-side layout stopped at two channels and looked like its limit.
-         */
-        if (canAdd) {
-            TvActionButton(
-                label = "Add another channel",
-                onClick = onAdd,
-                // The obvious thing to want from a menu opened on the only channel up.
-                emphasised = !canMaximize,
-            )
-        }
-        // Paired where they go together, so the menu fits the screen with everything on.
-        androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TvActionButton(label = "Replace channel", onClick = onReplace)
-            // The main tile is the player itself; closing it would be closing the screen.
-            if (canClose) TvActionButton(label = "Close channel", onClick = onClose)
-        }
-        // Left and right, as the tiles run in both layouts: the focus layout is a line,
-        // and the grid reads across then down.
-        if (canMoveBack || canMoveOn) {
-            androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (canMoveBack) TvActionButton(label = "Move left", onClick = { onMove(-1) })
-                if (canMoveOn) TvActionButton(label = "Move right", onClick = { onMove(1) })
+        MenuHeading(title = name)
+        // With everything on offer it's more than the screen's height: it scrolls, and
+        // the row with the cursor is always in view.
+        Column(
+            modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            if (canMaximize) {
+                MenuItem(label = "Full screen", icon = { PlayGlyph(it, size = 20.dp) }, onClick = onMaximize)
             }
+            /*
+             * The only way to a third channel that does not have to be guessed at.
+             *
+             * The spare cell covers one case — a grid with exactly three channels up — and
+             * the transport's own button disappears the moment there is more than one. That
+             * left holding OK on a channel in the guide, which nobody would think to try, so
+             * the side-by-side layout stopped at two channels and looked like its limit.
+             */
+            if (canAdd) {
+                MenuItem(label = "Add another channel", icon = { PlusGlyph(it, size = 18.dp) }, onClick = onAdd)
+            }
+            MenuItem(label = "Replace channel", icon = { TilesGlyph(it, size = 20.dp) }, onClick = onReplace)
+            // Left and right, as the tiles run in both layouts: the focus layout is a line,
+            // and the grid reads across then down.
+            if (canMoveBack) MenuItem(label = "Move left", icon = { ArrowGlyph(it, left = true, size = 20.dp) }, onClick = { onMove(-1) })
+            if (canMoveOn) MenuItem(label = "Move right", icon = { ArrowGlyph(it, left = false, size = 20.dp) }, onClick = { onMove(1) })
+            if (canSave || saved != null) MenuSection("Saved channels")
+            if (canSave) MenuItem(label = "Save these channels", icon = { HeartGlyph(it, size = 20.dp) }, onClick = onSave)
+            if (saved != null) MenuItem(label = "Open saved", detail = saved, icon = { TilesGlyph(it, size = 20.dp) }, onClick = onOpenSaved)
+            // The main tile is the player itself; closing it would be closing the screen.
+            if (canClose) MenuItem(label = "Close channel", icon = { CrossGlyph(it, size = 20.dp) }, onClick = onClose)
         }
-        if (canSave) TvActionButton(label = "Save these channels", onClick = onSave)
-        if (saved != null) TvActionButton(label = "Open saved: $saved", onClick = onOpenSaved)
-        TvActionButton(label = "Cancel", onClick = onCancel)
     }
 }
 

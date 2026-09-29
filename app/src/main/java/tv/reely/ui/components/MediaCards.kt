@@ -38,6 +38,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import tv.reely.ui.theme.Accent
 import tv.reely.ui.theme.Faint
 import tv.reely.ui.theme.Ink
@@ -81,7 +83,11 @@ fun ProgressStrip(fraction: Float, modifier: Modifier = Modifier) {
 private fun Modifier.cardPress(onClick: () -> Unit, onLongPress: (() -> Unit)?): Modifier {
     if (onLongPress == null) return this.clickable(onClick = onClick)
     val press = rememberSelectPress()
+    // So the menu the hold opens can hand the cursor back to this card when it closes.
+    val own = remember { FocusRequester() }
+    val held = LocalHeldCard.current
     return this
+        .focusRequester(own)
         /*
          * A hold opens a menu, the menu takes focus, and this card stops receiving keys —
          * so the release never arrives here. Forgetting the press on the way out is what
@@ -89,7 +95,12 @@ private fun Modifier.cardPress(onClick: () -> Unit, onLongPress: (() -> Unit)?):
          * CardMenu swallows that orphaned release so it cannot press a button instead.
          */
         .onFocusChanged { if (!it.isFocused) press.reset() }
-        .onPreviewKeyEvent { event -> press.handle(event, onPress = onClick, onHold = onLongPress) }
+        .onPreviewKeyEvent { event ->
+            press.handle(event, onPress = onClick, onHold = {
+                held.requester = own
+                onLongPress()
+            })
+        }
         .clickable(onClick = onClick)
 }
 

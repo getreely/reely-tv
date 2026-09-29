@@ -122,6 +122,13 @@ import tv.reely.ui.components.SubtitleGlyph
 import tv.reely.ui.components.TransportButton
 import tv.reely.ui.components.TvActionButton
 import tv.reely.ui.components.TvListRow
+import tv.reely.ui.components.MenuPanel
+import tv.reely.ui.components.MenuHeading
+import tv.reely.ui.components.MenuItem
+import tv.reely.ui.components.MenuSection
+import tv.reely.ui.components.MenuScrim
+import tv.reely.ui.components.SearchGlyph
+import tv.reely.ui.components.MoonGlyph
 import tv.reely.ui.components.sheet
 import tv.reely.ui.components.rememberSelectPress
 import tv.reely.ui.components.requestWhenReady
@@ -1347,6 +1354,9 @@ fun PlayerScreen(
             )
         }
 
+        // The shade every menu has behind it, darkest by the panel; see Menus.kt.
+        if (panel != Panel.NONE) MenuScrim(strength = 0.8f)
+
         /*
          * The track menus. Deleted by the same rework that took the transport, and
          * missed when that was put back — so choosing subtitles or audio set the state
@@ -1485,6 +1495,7 @@ fun PlayerScreen(
 
         tileMenu?.let { slot ->
             val place = places.indexOf(slot)
+            MenuScrim(strength = 0.8f)
             TileMenu(
                 name = if (slot == 0) playback.title
                 else tiles.getOrNull(slot - 1)?.name.orEmpty(),
@@ -1534,7 +1545,7 @@ fun PlayerScreen(
                     onOpenSavedMultiview()
                 },
                 onCancel = { tileMenu = null },
-                modifier = Modifier.align(Alignment.Center),
+                modifier = Modifier.align(Alignment.CenterEnd),
             )
         }
 
@@ -2084,16 +2095,7 @@ internal fun StatsPanel(
         !player.currentTracks.isTypeSelected(C.TRACK_TYPE_AUDIO)
     val dropped = remember(tick) { player.videoDecoderCounters?.droppedBufferCount ?: 0 }
 
-    Column(
-        modifier = modifier
-            .padding(end = 48.dp, top = 27.dp, bottom = 27.dp)
-            .width(420.dp)
-            .sheet()
-            .padding(24.dp)
-            .focusGroup()
-            .focusRequester(focusRequester),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
+    MenuPanel(modifier = modifier.focusGroup().focusRequester(focusRequester)) {
         // Close sits beside the heading: at the foot of the panel it fell below the
         // bottom of the screen once every line here was filled in.
         Row(
@@ -2285,21 +2287,8 @@ internal fun TrackPanel(
     val trackType = if (panel == Panel.SUBTITLES) C.TRACK_TYPE_TEXT else C.TRACK_TYPE_AUDIO
     val choices = remember(tracksVersion, panel) { trackChoices(player, trackType) }
 
-    Column(
-        modifier = modifier
-            .padding(end = 48.dp, top = 27.dp, bottom = 27.dp)
-            .width(420.dp)
-            .sheet()
-            .padding(24.dp)
-            .focusGroup()
-            .focusRequester(focusRequester),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Text(
-            text = if (panel == Panel.SUBTITLES) "Subtitles" else "Audio",
-            color = Chalk,
-            style = ReelyType.Headline,
-        )
+    MenuPanel(modifier = modifier.focusGroup().focusRequester(focusRequester)) {
+        MenuHeading(title = if (panel == Panel.SUBTITLES) "Subtitles" else "Audio")
 
         if (choices.isEmpty()) {
             Text(
@@ -2309,49 +2298,53 @@ internal fun TrackPanel(
                     "There's only one audio track.",
                 color = Muted,
                 style = ReelyType.Meta,
+                modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
             )
         }
 
         LazyColumn(
             modifier = Modifier.weight(1f, fill = false),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             itemsIndexed(choices) { _, choice ->
-                TvListRow(
-                    title = choice.label,
-                    subtitle = null,
-                    imageUrl = null,
-                    selected = choice.selected,
+                MenuItem(
+                    label = choice.label,
+                    checked = choice.selected,
                     onClick = {
                         applyTrack(player, trackType, choice)
                         onPicked(trackType, choice.trackIndex)
                     },
                 )
             }
-        }
-
-        if (panel == Panel.SUBTITLES && onFindSubtitles != null) {
-            TvActionButton(label = "Find subtitles online", onClick = onFindSubtitles)
-        }
-
-        if (panel == Panel.SUBTITLES) {
-            SectionLabel("Appearance")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TvActionButton(label = "Smaller", onClick = { onNudgeScale(-Settings.SCALE_STEP) })
-                TvActionButton(label = "Bigger", onClick = { onNudgeScale(Settings.SCALE_STEP) })
+            if (panel == Panel.SUBTITLES && onFindSubtitles != null) {
+                item {
+                    MenuItem(
+                        label = "Find subtitles online",
+                        icon = { SearchGlyph(it, size = 20.dp) },
+                        onClick = onFindSubtitles,
+                    )
+                }
             }
-            Text(
-                text = "Size ${(prefs.subtitleScale * 100).toInt()}%",
-                color = Muted,
-                style = ReelyType.Label,
-            )
-            TvActionButton(
-                label = if (prefs.subtitleBackground) "Background: on" else "Background: off",
-                onClick = onToggleBackground,
-            )
+            if (panel == Panel.SUBTITLES) {
+                item { MenuSection("Appearance") }
+                item {
+                    MenuItem(
+                        label = "Bigger text",
+                        value = "${(prefs.subtitleScale * 100).toInt()}%",
+                        icon = { PlusGlyph(it, size = 18.dp) },
+                        onClick = { onNudgeScale(Settings.SCALE_STEP) },
+                    )
+                }
+                item { MenuItem(label = "Smaller text", onClick = { onNudgeScale(-Settings.SCALE_STEP) }) }
+                item {
+                    MenuItem(
+                        label = "Background",
+                        value = if (prefs.subtitleBackground) "On" else "Off",
+                        onClick = onToggleBackground,
+                    )
+                }
+            }
         }
-
-        TvActionButton(label = "Close", onClick = onClose)
     }
 }
 
@@ -2505,33 +2498,35 @@ internal fun ChapterPanel(
     val list = androidx.compose.foundation.lazy.rememberLazyListState(
         initialFirstVisibleItemIndex = (current - 1).coerceAtLeast(0),
     )
-    Column(
-        modifier = modifier
-            .padding(end = 48.dp, top = 27.dp, bottom = 27.dp)
-            .width(460.dp)
-            .sheet()
-            .padding(24.dp)
-            .focusGroup(),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Text(text = "Chapters", color = Chalk, style = ReelyType.Headline)
+    MenuPanel(modifier = modifier.focusGroup(), width = 500.dp) {
+        MenuHeading(title = "Chapters")
         LazyColumn(
             state = list,
             modifier = Modifier.weight(1f, fill = false),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             itemsIndexed(chapters) { index, chapter ->
-                TvListRow(
-                    title = chapter.title,
-                    subtitle = clock(chapter.startMs),
-                    imageUrl = chapter.thumbUrl,
-                    selected = index == current,
+                MenuItem(
+                    label = chapter.title,
+                    detail = clock(chapter.startMs),
+                    checked = index == current,
+                    // The chapter's own picture, where the server made one.
+                    icon = chapter.thumbUrl?.let { url ->
+                        {
+                            coil.compose.AsyncImage(
+                                model = url,
+                                contentDescription = null,
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                modifier = Modifier.width(64.dp).height(36.dp)
+                                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(6.dp)),
+                            )
+                        }
+                    },
                     onClick = { onPick(chapter) },
                     modifier = if (index == current) Modifier.focusRequester(focusRequester) else Modifier,
                 )
             }
         }
-        TvActionButton(label = "Close", onClick = onClose)
     }
 }
 
@@ -2548,17 +2543,10 @@ internal fun SubtitleSearchPanel(
     modifier: Modifier = Modifier,
 ) {
     val languageName = java.util.Locale(search.language).displayLanguage.ifBlank { search.language }
-    Column(
-        modifier = modifier
-            .padding(end = 48.dp, top = 27.dp, bottom = 27.dp)
-            .width(460.dp)
-            .sheet()
-            .padding(24.dp)
-            .focusGroup(),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Text(text = "Find subtitles", color = Chalk, style = ReelyType.Headline)
+    MenuPanel(modifier = modifier.focusGroup(), width = 500.dp) {
+        MenuHeading(title = "Find subtitles")
         Text(
+            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
             text = when {
                 search.busy -> "Looking for $languageName subtitles…"
                 search.error != null -> search.error
@@ -2574,25 +2562,23 @@ internal fun SubtitleSearchPanel(
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             itemsIndexed(search.results, key = { _, it -> it.key }) { index, result ->
-                TvListRow(
-                    title = result.title,
-                    subtitle = listOfNotNull(
+                MenuItem(
+                    label = result.title,
+                    detail = listOfNotNull(
                         result.provider,
                         "For the hard of hearing".takeIf { result.hearingImpaired },
                         "Forced".takeIf { result.forced },
                     ).joinToString("  ·  ").ifBlank { null },
-                    imageUrl = null,
-                    selected = result.key == search.adding,
+                    checked = result.key == search.adding,
                     onClick = { if (search.adding == null) onPick(result) },
                     modifier = if (index == 0) Modifier.focusRequester(focusRequester) else Modifier,
                 )
             }
         }
-        TvActionButton(
-            label = "Close",
-            onClick = onClose,
-            modifier = if (search.results.isEmpty()) Modifier.focusRequester(focusRequester) else Modifier,
-        )
+        // Something for the cursor to be on while it looks, or when it found nothing.
+        if (search.results.isEmpty()) {
+            MenuItem(label = "Close", onClick = onClose, modifier = Modifier.focusRequester(focusRequester))
+        }
     }
 }
 
@@ -2621,35 +2607,20 @@ internal fun SleepPanel(
         sleep.endOfEpisode -> 0
         else -> -1
     }
-    Column(
-        modifier = modifier
-            .padding(end = 48.dp, top = 27.dp, bottom = 27.dp)
-            .width(420.dp)
-            .sheet()
-            .padding(24.dp)
-            .focusGroup(),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Text(text = "Sleep timer", color = Chalk, style = ReelyType.Headline)
-        sleep?.atMs?.let {
-            Text(
-                text = "Stops at ${tv.reely.ui.components.clockTime(context, it)}.",
-                color = Muted,
-                style = ReelyType.Meta,
-            )
-        }
+    MenuPanel(modifier = modifier.focusGroup()) {
+        MenuHeading(
+            title = "Sleep timer",
+            subtitle = sleep?.atMs?.let { "Stops at ${tv.reely.ui.components.clockTime(context, it)}." },
+        )
         options.forEachIndexed { index, (minutes, label) ->
-            val selected = minutes == chosen
-            TvListRow(
-                title = label,
-                subtitle = null,
-                imageUrl = null,
-                selected = selected,
+            MenuItem(
+                label = label,
+                checked = minutes == chosen,
+                icon = if (minutes == null) null else ({ MoonGlyph(it, size = 20.dp) }),
                 onClick = { onPick(minutes) },
                 modifier = if (index == 0) Modifier.focusRequester(focusRequester) else Modifier,
             )
         }
-        TvActionButton(label = "Close", onClick = onClose)
     }
 }
 

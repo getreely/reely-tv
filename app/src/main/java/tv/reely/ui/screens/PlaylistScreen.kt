@@ -98,6 +98,7 @@ fun PlaylistScreen(
                     watched = item.isWatched,
                     onFocus = { gridFocus.onFocused(item.listKey) },
                     onClick = { onOpenItem(item) },
+                    onLongPress = holdFor(item),
                     modifier = rowItem(gridFocus, item.listKey),
                 )
             }

@@ -1,0 +1,319 @@
+package tv.reely.ui.components
+
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.tv.material3.Text
+import coil.compose.AsyncImage
+import tv.reely.ui.theme.Accent
+import tv.reely.ui.theme.Chalk
+import tv.reely.ui.theme.Faint
+import tv.reely.ui.theme.GlassEdge
+import tv.reely.ui.theme.Ink
+import tv.reely.ui.theme.Muted
+import tv.reely.ui.theme.ReelyType
+
+/*
+ * The one way this app draws a menu, from a poster's held-OK options to the player's
+ * subtitles and a setting's choices.
+ *
+ * It's the shape the big streaming apps settled on for a television: a panel that slides
+ * in from the right edge and runs the full height of the screen, over a shade that darkens
+ * towards it, with a plain list of full-width rows. The row the cursor is on turns white
+ * with dark text; the rest are bare. There's no Cancel at the bottom: Back closes it, as
+ * it closes everything else.
+ *
+ * Menus used to be boxes in the middle of the screen with a stack of pill buttons in
+ * them, each sized to its own words, which read as a form rather than a menu.
+ */
+
+/** The panel's fill: the app's own near-black, just short of opaque. */
+private val PanelFill = Color(0xF7121011)
+
+/** How wide a menu panel is unless it says otherwise. */
+val MENU_WIDTH = 460.dp
+
+/**
+ * The shade behind a menu: light on the left, where the screen can still be seen, and
+ * dark by the panel so its edge reads. [strength] darkens it all, for a busy screen.
+ */
+@Composable
+fun MenuScrim(modifier: Modifier = Modifier, strength: Float = 1f) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(
+                Brush.horizontalGradient(
+                    0f to Ink.copy(alpha = 0.25f * strength),
+                    0.55f to Ink.copy(alpha = 0.55f * strength),
+                    1f to Ink.copy(alpha = 0.9f * strength),
+                )
+            ),
+    )
+}
+
+/**
+ * The panel itself: the full height of whatever it's placed in, [width] wide, sliding in
+ * from the right as it arrives. The caller positions it (usually CenterEnd) and adds its
+ * own focus handling; this is how it looks.
+ */
+@Composable
+fun MenuPanel(
+    modifier: Modifier = Modifier,
+    width: Dp = MENU_WIDTH,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val arrival = remember { Animatable(1f) }
+    LaunchedEffect(Unit) { arrival.animateTo(0f, tween(220, easing = FastOutSlowInEasing)) }
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .width(width)
+            .graphicsLayer {
+                translationX = arrival.value * 64.dp.toPx()
+                alpha = 1f - arrival.value
+            }
+            .background(PanelFill)
+            .drawBehind {
+                // A hairline down the inner edge, so the panel ends rather than fades.
+                drawLine(GlassEdge, Offset(0f, 0f), Offset(0f, size.height), strokeWidth = 1.dp.toPx())
+            }
+            .padding(horizontal = 28.dp, vertical = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        content = content,
+    )
+}
+
+/** A menu's title and, under it, a line saying what it's about. */
+@Composable
+fun MenuHeading(title: String, subtitle: String? = null, modifier: Modifier = Modifier) {
+    Column(modifier = modifier.padding(start = 4.dp, bottom = 14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = title,
+            color = Chalk,
+            style = ReelyType.Headline,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (!subtitle.isNullOrBlank()) {
+            Text(text = subtitle, color = Muted, style = ReelyType.Meta, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+/**
+ * A title's own picture at the top of its menu, with its logo (or its name) over the
+ * bottom of it and, when it's part watched, how far along.
+ */
+@Composable
+fun MenuArtHeader(
+    title: String,
+    meta: String?,
+    imageUrl: String?,
+    logoUrl: String? = null,
+    progress: Float? = null,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.padding(bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // Wider than a screen's shape, cropped: at 16:9 the picture took half the panel's
+        // height and pushed the last rows off the bottom.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(ART_HEIGHT)
+                .clip(RoundedCornerShape(14.dp))
+                .background(Chalk.copy(alpha = 0.06f)),
+        ) {
+            if (imageUrl != null) {
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Brush.verticalGradient(0.35f to Color.Transparent, 1f to Ink.copy(alpha = 0.9f))),
+            )
+            if (logoUrl != null) {
+                AsyncImage(
+                    model = logoUrl,
+                    contentDescription = title,
+                    contentScale = ContentScale.Fit,
+                    alignment = Alignment.BottomStart,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(14.dp)
+                        .height(44.dp)
+                        .widthIn(max = 260.dp),
+                )
+            } else {
+                Text(
+                    text = title,
+                    color = Chalk,
+                    style = ReelyType.Headline,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
+                )
+            }
+            if (progress != null && progress > 0f) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .background(Chalk.copy(alpha = 0.25f)),
+                ) {
+                    Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(progress).background(Accent))
+                }
+            }
+        }
+        if (logoUrl != null) {
+            // The logo is the title in its own lettering; the name is still said, smaller.
+            Text(text = title, color = Chalk, style = ReelyType.RowTitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        if (!meta.isNullOrBlank()) {
+            Text(text = meta, color = Muted, style = ReelyType.Meta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+/** The height of the picture at the top of a title's menu. */
+private val ART_HEIGHT = 150.dp
+
+/** A small heading inside a menu, over the rows that belong to it. */
+@Composable
+fun MenuSection(label: String, modifier: Modifier = Modifier) {
+    Text(
+        text = label.uppercase(),
+        color = Faint,
+        fontSize = 13.sp,
+        lineHeight = 16.sp,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 1.2.sp,
+        modifier = modifier.padding(start = 16.dp, top = 16.dp, bottom = 6.dp),
+    )
+}
+
+/**
+ * One row of a menu: an optional glyph, the words, and on the right either a value
+ * ("On", "125%") or a check when it's the one chosen. White with dark text under the
+ * cursor, bare otherwise.
+ */
+@Composable
+fun MenuItem(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** Drawn in the colour it's handed, which changes with focus. */
+    icon: (@Composable (Color) -> Unit)? = null,
+    detail: String? = null,
+    value: String? = null,
+    checked: Boolean = false,
+    onFocus: () -> Unit = {},
+) {
+    var focused by remember { mutableStateOf(false) }
+    val lift by animateFloatAsState(if (focused) 1.02f else 1f, tween(120), label = "lift")
+    val text = if (focused) Ink else Chalk.copy(alpha = 0.92f)
+    val quiet = if (focused) Ink.copy(alpha = 0.62f) else Muted
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 50.dp)
+            .graphicsLayer {
+                scaleX = lift
+                scaleY = lift
+            }
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (focused) Chalk else Color.Transparent)
+            .onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) onFocus()
+            }
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        if (icon != null) {
+            // At least a glyph's width; a picture (a chapter's, say) takes what it needs.
+            Box(modifier = Modifier.widthIn(min = 24.dp).heightIn(min = 24.dp), contentAlignment = Alignment.Center) {
+                icon(if (focused) Ink else Chalk.copy(alpha = 0.8f))
+            }
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = label,
+                color = text,
+                fontSize = 18.sp,
+                lineHeight = 23.sp,
+                fontWeight = if (checked || focused) FontWeight.SemiBold else FontWeight.Medium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (!detail.isNullOrBlank()) {
+                Text(text = detail, color = quiet, style = ReelyType.Label, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        if (value != null) {
+            Text(text = value, color = quiet, style = ReelyType.Meta, maxLines = 1)
+        }
+        if (checked) {
+            CheckGlyph(color = if (focused) Ink else Accent, size = 20.dp)
+        }
+    }
+}
+
+/**
+ * The card a hold of OK was on, so a menu that opens from it can put the cursor back when
+ * it closes. Every card records itself here as its hold fires; see cardPress.
+ */
+class HeldCard {
+    var requester: FocusRequester? = null
+}
+
+val LocalHeldCard = staticCompositionLocalOf { HeldCard() }

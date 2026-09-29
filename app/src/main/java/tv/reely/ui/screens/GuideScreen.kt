@@ -1,5 +1,13 @@
 package tv.reely.ui.screens
 
+import tv.reely.ui.components.MenuPanel
+import tv.reely.ui.components.MenuHeading
+import tv.reely.ui.components.MenuItem
+import tv.reely.ui.components.MenuScrim
+import tv.reely.ui.components.PlayGlyph
+import tv.reely.ui.components.TilesGlyph
+import tv.reely.ui.components.ClockGlyph
+import tv.reely.ui.components.HeartGlyph
 import tv.reely.ui.components.GUIDE_ROW_HEIGHT
 import tv.reely.ui.components.GUIDE_CHANNEL_COLUMN
 import tv.reely.ui.components.placeholder
@@ -212,8 +220,9 @@ fun GuideScreen(
         onBackToCategories()
     }
 
+    Box(modifier = modifier.fillMaxSize()) {
     Column(
-        modifier = modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
@@ -382,49 +391,51 @@ fun GuideScreen(
 
             GuideNowLine(windowStart = guide.windowStart, now = now, scroll = scroll)
 
-            if (menuOpen && channel != null) {
-                val upcoming = selected?.takeIf { it.start > now }
-                val reminded = upcoming != null &&
-                    reminders.any { it.streamId == channel.streamId && it.start == upcoming.start }
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .widthIn(max = 460.dp)
-                        .glass()
-                        .padding(20.dp)
-                        .focusGroup()
-                        .focusRequester(menuFocus),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text(text = channel.name, color = Chalk, style = ReelyType.Body, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                    TvActionButton(
-                        label = "Watch",
-                        emphasised = true,
-                        onClick = {
-                            menuOpen = false
-                            onPlaySelected()
-                        },
-                    )
-                    TvActionButton(
-                        label = if (channel.streamId in favorites) "Remove from Favorites" else "Add to Favorites",
-                        onClick = {
-                            menuOpen = false
-                            onToggleFavorite(channel)
-                        },
-                    )
-                    if (upcoming != null) {
-                        TvActionButton(
-                            label = if (reminded) "Cancel the reminder" else "Remind me: ${upcoming.title}",
-                            onClick = {
-                                menuOpen = false
-                                onToggleReminder(channel, upcoming)
-                            },
-                        )
-                    }
-                    TvActionButton(label = "Cancel", onClick = { menuOpen = false })
-                }
+        }
+    }
+
+    // Over the whole screen, from the right, like every other menu; see Menus.kt.
+    if (menuOpen && channel != null) {
+        val upcoming = selected?.takeIf { it.start > now }
+        val reminded = upcoming != null &&
+            reminders.any { it.streamId == channel.streamId && it.start == upcoming.start }
+        MenuScrim()
+        MenuPanel(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .focusGroup()
+                .focusRequester(menuFocus),
+        ) {
+            MenuHeading(title = channel.name, subtitle = selected?.let { "${it.title}  ·  ${guideTimeRange(it)}" })
+            MenuItem(
+                label = "Watch",
+                icon = { PlayGlyph(it, size = 20.dp) },
+                onClick = {
+                    menuOpen = false
+                    onPlaySelected()
+                },
+            )
+            MenuItem(
+                label = if (channel.streamId in favorites) "Remove from Favorites" else "Add to Favorites",
+                icon = { HeartGlyph(it, size = 20.dp) },
+                onClick = {
+                    menuOpen = false
+                    onToggleFavorite(channel)
+                },
+            )
+            if (upcoming != null) {
+                MenuItem(
+                    label = if (reminded) "Cancel the reminder" else "Remind me",
+                    detail = if (reminded) upcoming.title else "${upcoming.title}, ${guideTimeRange(upcoming)}",
+                    icon = { ClockGlyph(it, size = 20.dp) },
+                    onClick = {
+                        menuOpen = false
+                        onToggleReminder(channel, upcoming)
+                    },
+                )
             }
         }
+    }
     }
 }
 

@@ -385,6 +385,20 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
      * Search instead of Play. Set on opening, and spent once focus is in the new page.
      */
     var openedFromPage by remember { mutableStateOf(false) }
+    // The held-OK menu for a title, from whichever screen it was held on (Home keeps its
+    // own). The card that was held is remembered by the card itself, for the way back.
+    var itemMenu by remember { mutableStateOf<PlexItem?>(null) }
+    val heldCard = remember { tv.reely.ui.components.HeldCard() }
+    val itemMenuFocus = remember { FocusRequester() }
+    var itemMenuClosed by remember { mutableIntStateOf(0) }
+    LaunchedEffect(itemMenu, itemMenuClosed) {
+        if (itemMenu != null) itemMenuFocus.requestWhenReady()
+        else if (itemMenuClosed > 0) heldCard.requester?.requestWhenReady()
+    }
+    fun closeItemMenu() {
+        itemMenu = null
+        itemMenuClosed++
+    }
     fun open(item: PlexItem) {
         openedFromPage = true
         viewModel.navigate(
@@ -516,7 +530,11 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
         ) {
         val screenKey = routeKey(state.route)
         screenState.SaveableStateProvider(screenKey) {
-        CompositionLocalProvider(LocalScreenFocus provides screenFocus.getOrPut(screenKey) { ScreenFocus() }) {
+        CompositionLocalProvider(
+            LocalScreenFocus provides screenFocus.getOrPut(screenKey) { ScreenFocus() },
+            tv.reely.ui.screens.LocalItemMenu provides { item -> itemMenu = item },
+            tv.reely.ui.components.LocalHeldCard provides heldCard,
+        ) {
         when (val route = state.route) {
             is Route.Home -> HomeScreen(
                 plex = state.plex,
@@ -842,6 +860,22 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 )
             }
         }
+    }
+
+    itemMenu?.let { item ->
+        tv.reely.ui.screens.ItemMenu(
+            item = item,
+            focusRequester = itemMenuFocus,
+            backdropUrl = viewModel::plexBackdropUrl,
+            logoUrl = viewModel::plexLogoUrl,
+            actions = tv.reely.ui.screens.itemMenuActions(
+                item = item,
+                onPlay = { resume -> closeItemMenu(); viewModel.play(item, resume = resume) },
+                onToggleWatched = { closeItemMenu(); viewModel.toggleWatched(item) },
+                onDetails = { itemMenu = null; open(item) },
+            ),
+            onCancel = ::closeItemMenu,
+        )
     }
 
     // A reminder, low on the right over whatever screen is up, with the cursor on Watch.

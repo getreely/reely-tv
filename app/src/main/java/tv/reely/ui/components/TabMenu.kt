@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -43,38 +44,25 @@ fun TabMenu(
     focusRequester: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
+    // Dropped from its tab rather than slid in from the side, since it belongs to the tab,
+    // but with the same rows as every other menu (see Menus.kt).
     Column(
         modifier = modifier
             .width(TAB_MENU_WIDTH)
-            .clip(RoundedCornerShape(14.dp))
-            .background(Ink.copy(alpha = 0.97f))
-            .border(1.dp, Line, RoundedCornerShape(14.dp))
-            .padding(14.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xF7121011))
+            .border(1.dp, tv.reely.ui.theme.GlassEdge, RoundedCornerShape(16.dp))
+            .padding(10.dp)
             .focusGroup()
             .focusRequester(focusRequester),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        groups.forEachIndexed { index, (heading, items) ->
-            if (items.isEmpty()) return@forEachIndexed
-            SectionHeading(
-                heading,
-                modifier = Modifier.padding(top = if (index == 0) 0.dp else 8.dp, bottom = 2.dp),
-            )
+        groups.forEach { (heading, items) ->
+            if (items.isEmpty()) return@forEach
+            MenuSection(heading)
             items.forEach { item ->
-                TvChip(
-                    label = item.label,
-                    selected = item.selected,
-                    onClick = item.onClick,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                MenuItem(label = item.label, checked = item.selected, onClick = item.onClick)
             }
         }
-        Text(
-            text = "Back closes this",
-            color = tv.reely.ui.theme.Faint,
-            fontSize = 14.sp,
-            lineHeight = 18.sp,
-            modifier = Modifier.padding(top = 8.dp),
-        )
     }
 }

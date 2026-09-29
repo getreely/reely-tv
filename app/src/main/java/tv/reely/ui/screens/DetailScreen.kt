@@ -471,6 +471,7 @@ fun DetailScreen(
                                                 onFocusEpisode(entry)
                                             },
                                             onClick = { onPlay(entry) },
+                                            onLongPress = holdFor(entry.copy(serverBase = entry.serverBase ?: state.serverBase)),
                                             modifier = rowItem(railFocus, entry.ratingKey),
                                         )
                                     }
@@ -562,6 +563,7 @@ private fun TitleRow(
                         watched = title.isWatched,
                         onFocus = { focus.onFocused(title.listKey) },
                         onClick = { onOpen(title) },
+                        onLongPress = holdFor(title),
                         modifier = rowItem(focus, title.listKey),
                         width = width,
                     )

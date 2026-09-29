@@ -41,7 +41,13 @@ class HomeShot {
     /** Focus down in a lower row: the page scrolls, and the lifted card must stay whole. */
     @Test fun homeLowerRow() = homeWithFocusOn("2 new episodes", "home-lower-row")
 
-    private fun homeWithFocusOn(title: String, name: String, last: Boolean = false) {
+    /** Holding OK on a half-watched episode: its own still, where it's up to, and what to do. */
+    @Test fun itemMenuEpisode() = homeWithFocusOn("Harbor Lights", "menu-episode", menuFor = Shots.item("harbor"))
+
+    /** And on a film, with its logo over its backdrop. */
+    @Test fun itemMenuMovie() = homeWithFocusOn("Harbor Lights", "menu-movie", menuFor = Shots.item("ember"))
+
+    private fun homeWithFocusOn(title: String, name: String, last: Boolean = false, menuFor: tv.reely.plex.PlexItem? = null) {
         val cw = listOf("north", "harbor", "shift", "quiet", "salt").map(Shots::item)
         val movies = listOf("ember", "field", "orbit", "glass", "ferry", "cardinal").map(Shots::item)
         val groups = listOf("north", "harbor", "shift").map { key ->
@@ -55,6 +61,7 @@ class HomeShot {
         // Made outside the composition: a focus handle belongs to whoever holds it.
         val tabFocus = List(5) { FocusRequester() }
         val settingsFocus = FocusRequester()
+        val menuFocus = FocusRequester()
         compose.setContent {
             ReelyTheme {
                 Shots.RemoteInput()
@@ -78,10 +85,28 @@ class HomeShot {
                         )
                     }
                 }
+                menuFor?.let { item ->
+                    tv.reely.ui.screens.ItemMenu(
+                        item = item,
+                        actions = tv.reely.ui.screens.itemMenuActions(
+                            item = item, onPlay = {}, onToggleWatched = {}, onDetails = {},
+                            onRemoveFromContinueWatching = {}.takeIf { item.type == "episode" },
+                        ),
+                        focusRequester = menuFocus,
+                        backdropUrl = { _, path -> Shots.imageUrl(path, 1280, 720) },
+                        logoUrl = { _, path -> Shots.imageUrl(path, 0, 0) },
+                        onCancel = {},
+                    )
+                }
             }
         }
-        val matches = compose.onAllNodesWithText(title)
-        (if (last) matches.onLast() else matches.onFirst()).requestFocus()
+        if (menuFor != null) {
+            compose.runOnIdle { menuFocus.requestFocus() }
+            compose.waitForIdle()
+        } else {
+            val matches = compose.onAllNodesWithText(title)
+            (if (last) matches.onLast() else matches.onFirst()).requestFocus()
+        }
         Shots.save(compose, name)
     }
 

@@ -106,7 +106,7 @@ class GuideMenuTest {
         holdOk()
         press(Key.DirectionDown)
         press(Key.DirectionDown)
-        compose.onNode(isFocused() and hasText("Remind me: The Late Show")).assertExists()
+        compose.onNode(isFocused() and hasText("Remind me") and hasText("The Late Show", substring = true)).assertExists()
         press(Key.DirectionCenter)
         assertEquals(listOf(later), reminded)
     }
