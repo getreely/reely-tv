@@ -317,18 +317,29 @@ data class LiveState(
     val error: String? = null,
     /** Channels marked as favorites, by stream id. */
     val favorites: Set<Int> = emptySet(),
+    /** Channels most recently tuned to, newest first, by stream id. */
+    val recent: List<Int> = emptyList(),
 ) {
     val isConnected: Boolean get() = credentials != null && account != null
 
     fun nowNext(streamId: Int): List<XtreamProgramme> = guide[streamId].orEmpty()
 
-    /** The provider's categories, with Favorites first once there are any. */
+    /** The provider's categories, after Favorites and Recently watched once there are any. */
     val shownCategories: List<XtreamCategory>
-        get() = if (favorites.isEmpty()) categories else listOf(FAVORITES) + categories
+        get() = listOfNotNull(
+            FAVORITES.takeIf { favorites.isNotEmpty() },
+            RECENT.takeIf { recent.isNotEmpty() },
+        ) + categories
 
     companion object {
         /** Not one of the provider's: the channels marked as favorites, from all of them. */
         val FAVORITES = XtreamCategory(id = "reely:favorites", name = "Favorites")
+
+        /** Nor this: the channels last tuned to, the latest first. */
+        val RECENT = XtreamCategory(id = "reely:recent", name = "Recently watched")
+
+        /** How many channels Recently watched keeps. */
+        const val RECENT_LIMIT = 20
     }
 }
 
@@ -532,7 +543,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             ?: android.os.Build.MODEL?.takeIf { it.isNotBlank() }
             ?: "Reely TV"
         updatePlex { it.copy(favouriteSections = settings.favouriteSections) }
-        updateLive { it.copy(favorites = settings.favoriteChannels) }
+        updateLive { it.copy(favorites = settings.favoriteChannels, recent = settings.recentChannels) }
         viewModelScope.launch {
             restorePlex()
             restoreLive()
@@ -2172,6 +2183,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val live = _state.value.live
         val credentials = live.credentials ?: return
         val index = live.channels.indexOfFirst { it.streamId == channel.streamId }
+        rememberChannel(channel)
         _state.update {
             it.copy(
                 upNext = null,
@@ -2449,6 +2461,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             }
             val channels = runCatching {
                 if (category.id == LiveState.FAVORITES.id) favoriteChannelList(credentials)
+                else if (category.id == LiveState.RECENT.id) recentChannelList(credentials)
                 else XtreamApi.liveChannels(credentials, category.id)
             }.getOrElse { failure ->
                 updateLive { it.copy(busy = false, error = failure.readable()) }
@@ -2462,6 +2475,21 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** The favorite channels, in the provider's own order, from its whole list. */
+    /** The channels last tuned to, the latest first, as far as the provider still has them. */
+    private suspend fun recentChannelList(credentials: XtreamCredentials): List<XtreamChannel> {
+        val all = allChannels ?: XtreamApi.liveChannels(credentials).also { allChannels = it }
+        val byId = all.associateBy { it.streamId }
+        return _state.value.live.recent.mapNotNull { byId[it] }
+    }
+
+    /** Puts a channel at the top of Recently watched. */
+    private fun rememberChannel(channel: XtreamChannel) {
+        val next = (listOf(channel.streamId) + _state.value.live.recent.filter { it != channel.streamId })
+            .take(LiveState.RECENT_LIMIT)
+        settings.recentChannels = next
+        updateLive { it.copy(recent = next) }
+    }
+
     private suspend fun favoriteChannelList(credentials: XtreamCredentials): List<XtreamChannel> {
         val all = allChannels ?: XtreamApi.liveChannels(credentials).also { allChannels = it }
         val favorites = _state.value.live.favorites
@@ -2504,6 +2532,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val live = _state.value.live
         val credentials = live.credentials ?: return
         val channel = live.channels.getOrNull(index) ?: return
+        rememberChannel(channel)
         val now = System.currentTimeMillis() / 1000
         val programme = live.nowNext(channel.streamId).firstOrNull { it.progressAt(now) != null }
         _state.update {
@@ -2777,7 +2806,10 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         allChannels = null
         // Favorites belong to the television, not the login: they stay for the next one.
         _state.update {
-            it.copy(live = LiveState(favorites = settings.favoriteChannels), search = it.search.copy(channels = emptyList()))
+            it.copy(
+                live = LiveState(favorites = settings.favoriteChannels, recent = settings.recentChannels),
+                search = it.search.copy(channels = emptyList()),
+            )
         }
     }
 

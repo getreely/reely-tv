@@ -17,4 +17,10 @@ class FavoritesTest {
         val live = LiveState(categories = listOf(sport, news), favorites = setOf(101))
         assertEquals(listOf(LiveState.FAVORITES, sport, news), live.shownCategories)
     }
+
+    @Test fun `Recently watched follows Favorites`() {
+        val live = LiveState(categories = listOf(sport, news), favorites = setOf(101), recent = listOf(7, 3))
+        assertEquals(listOf(LiveState.FAVORITES, LiveState.RECENT, sport, news), live.shownCategories)
+        assertEquals(listOf(LiveState.RECENT, sport), LiveState(categories = listOf(sport), recent = listOf(7)).shownCategories)
+    }
 }
