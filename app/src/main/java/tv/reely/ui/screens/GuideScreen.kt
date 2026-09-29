@@ -109,6 +109,12 @@ fun GuideScreen(
     onBackToCategories: () -> Unit,
     livePlayer: LivePlayer,
     modifier: Modifier = Modifier,
+    /**
+     * Whether to put the cursor in the guide once its channels are in. Not when the Live TV
+     * tab was only reached by moving along the tabs: the cursor is on its way somewhere
+     * else, to Settings say, and pulling it down into the guide stopped it there.
+     */
+    takeFocus: Boolean = true,
 ) {
     var now by remember { mutableLongStateOf(System.currentTimeMillis() / 1000) }
     LaunchedEffect(Unit) {
@@ -170,7 +176,7 @@ fun GuideScreen(
         rows.animateScrollToItem(guide.channelIndex.coerceAtLeast(0))
     }
     LaunchedEffect(live.channels.size) {
-        if (live.channels.isNotEmpty()) gridFocus.requestWhenReady()
+        if (live.channels.isNotEmpty() && takeFocus) gridFocus.requestWhenReady()
     }
 
     BackHandler {

@@ -269,6 +269,9 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     // tabs, silently navigating somewhere nobody asked for. So whenever the tab row does
     // not own focus, focus is put back into the content as soon as it has something in it.
     var tabRowHasFocus by remember { mutableStateOf(true) }
+    // The page on screen was reached by the cursor moving along the tabs, and the cursor
+    // is still up there. A page must not pull it down into itself: see GuideScreen.
+    var cameByTabs by remember { mutableStateOf(false) }
 
 
 
@@ -360,6 +363,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             onNavigate = { route ->
                 if (route != state.stack.first()) {
                     menuFor = null
+                    cameByTabs = true
                     viewModel.navigate(route)
                 }
             },
@@ -397,6 +401,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                     if (it.hasFocus) {
                         tabRowHasFocus = false
                         arrivedByDirectionKey = false
+                        cameByTabs = false
                     }
                 },
         ) {
@@ -523,6 +528,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 )
             } else {
                 GuideScreen(
+                    takeFocus = !cameByTabs,
                     live = state.live,
                     guide = state.guide,
                     previewEnabled = state.prefs.guidePreview,

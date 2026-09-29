@@ -1667,71 +1667,77 @@ internal fun StatsPanel(
             Text(text = "Playback info", color = Chalk, style = ReelyType.Headline, modifier = Modifier.weight(1f))
             TvActionButton(label = "Close", onClick = onClose)
         }
+
+        /*
+         * What somebody watching wants to know: whether it's the original or converted,
+         * what the picture and sound are, and how much is coming down the wire. The rest,
+         * down to decoder names and dropped frames, is for when something won't play, and
+         * waits behind More details. The server's address was here too, and has gone:
+         * it's no use to anyone watching and nothing to put on a screen.
+         */
         StatLine(
-            "Method",
+            "Playing",
             when {
-                playback.isLive -> "Direct play  ·  ${playback.format.label}"
-                playback.audioConverted -> "Direct stream  ·  audio converted"
-                playback.transcoding -> "Transcoding"
-                else -> "Direct play"
+                playback.isLive -> "Live  ·  ${playback.format.label}"
+                playback.audioConverted -> "Original picture, sound converted by your server"
+                playback.transcoding -> "Converted by your server"
+                else -> "Original quality"
             },
         )
-        // Whether the server sent intro and credits markers at all, which is the only
-        // way to tell a server that has not detected them from a button that failed.
-        if (!playback.isLive) StatLine("Intro & credits", describeMarkers(playback.markers))
-        // The pictures above the bar while scrubbing are the server's to make, and only
-        // when the library is set to (Plex: the library's Advanced settings, "Generate
-        // video preview thumbnails"). Said here so their absence isn't a mystery.
-        if (!playback.isLive) {
+        StatLine("Picture", video?.let(::pictureSummary) ?: "—")
+        StatLine(
+            "Sound",
+            when {
+                unplayable -> "Not supported on this device"
+                else -> (audio ?: fileAudio)?.let(::soundSummary) ?: "—"
+            },
+        )
+        StatLine("Bitrate", bitrate(video?.bitrate?.takeIf { it > 0 }?.plus(audio?.bitrate?.coerceAtLeast(0) ?: 0) ?: -1))
+
+        var details by remember { mutableStateOf(false) }
+        TvActionButton(
+            label = if (details) "Fewer details" else "More details",
+            onClick = { details = !details },
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        if (details) {
+            if (!playback.isLive) {
+                // Whether the server sent intro and credits markers at all, which is the
+                // only way to tell one that hasn't detected them from a button that failed.
+                StatLine("Intro & credits", describeMarkers(playback.markers))
+                // The pictures above the bar while scrubbing are the server's to make, and
+                // only when the library is set to.
+                StatLine("Scrubbing previews", if (playback.previewUrl != null) "Available" else "Not made by the server")
+            }
+            SectionLabel("VIDEO")
+            StatLine("Codec", video?.sampleMimeType?.let(::codecName) ?: "—")
             StatLine(
-                "Scrubbing previews",
-                if (playback.previewUrl != null) "Available" else "None — turn them on in the library's settings in Plex",
+                "Size",
+                video?.takeIf { it.width > 0 }?.let { format ->
+                    val fps = format.frameRate.takeIf { it > 0f }?.let { "  ·  %.3g fps".format(it) }.orEmpty()
+                    "${format.width} × ${format.height}$fps"
+                } ?: "—",
             )
+            StatLine("Bitrate", bitrate(video?.bitrate ?: -1))
+            StatLine("Dropped frames", dropped.toString())
+
+            SectionLabel("AUDIO")
+            StatLine("Codec", (audio ?: fileAudio)?.sampleMimeType?.let(::codecName) ?: "—")
+            StatLine(
+                "Decoder",
+                when {
+                    audioDecoder?.startsWith("ffmpeg") == true -> "In app (FFmpeg)"
+                    audioDecoder != null -> "Device"
+                    audio != null -> "Passed through"
+                    else -> "—"
+                },
+            )
+            StatLine("Rate", audio?.sampleRate?.takeIf { it > 0 }?.let { "$it Hz" } ?: "—")
+            StatLine("Bitrate", bitrate(audio?.bitrate ?: -1))
+            // What this device said it plays, by decoder or passed over HDMI, which is
+            // what decided whether the sound above was converted.
+            StatLine("Supported audio", deviceSound.ifEmpty { "—" })
         }
-        StatLine("Source", playback.serverBase?.removePrefix("http://")?.removePrefix("https://")
-            ?: "—")
-
-        SectionLabel("VIDEO")
-        StatLine("Codec", video?.sampleMimeType?.let(::codecName) ?: "—")
-        StatLine(
-            "Size",
-            video?.takeIf { it.width > 0 }?.let { format ->
-                val fps = format.frameRate.takeIf { it > 0f }?.let { "  ·  %.3g fps".format(it) }.orEmpty()
-                "${format.width} × ${format.height}$fps"
-            } ?: "—",
-        )
-        StatLine("Bitrate", bitrate(video?.bitrate ?: -1))
-        StatLine("Dropped frames", dropped.toString())
-
-        SectionLabel("AUDIO")
-        StatLine("Codec", (audio ?: fileAudio)?.sampleMimeType?.let(::codecName) ?: "—")
-        StatLine(
-            "Decoder",
-            when {
-                audioDecoder?.startsWith("ffmpeg") == true -> "In app (FFmpeg)"
-                audioDecoder != null -> "Device"
-                audio != null -> "Passed through"
-                else -> "—"
-            },
-        )
-        if (unplayable) StatLine("Status", "Not supported on this device")
-        StatLine(
-            "Channels",
-            (audio ?: fileAudio)?.channelCount?.takeIf { it > 0 }?.let { count ->
-                when (count) {
-                    1 -> "Mono"
-                    2 -> "Stereo"
-                    6 -> "5.1"
-                    8 -> "7.1"
-                    else -> "$count channels"
-                }
-            } ?: "—",
-        )
-        StatLine("Rate", audio?.sampleRate?.takeIf { it > 0 }?.let { "$it Hz" } ?: "—")
-        StatLine("Bitrate", bitrate(audio?.bitrate ?: -1))
-        // What this device said it plays — by decoder, or passed over HDMI to whatever
-        // is plugged in — which is what decided whether the sound above was converted.
-        StatLine("Supported audio", deviceSound.ifEmpty { "—" })
     }
 }
 
@@ -1780,6 +1786,39 @@ private fun codecName(mime: String): String = when (mime.substringAfter('/')) {
     "vnd.dts" -> "DTS"
     "vnd.dts.hd" -> "DTS-HD"
     else -> mime.substringAfter('/').uppercase()
+}
+
+/** "4K  ·  HDR10  ·  24 fps", from what the player is actually showing. */
+internal fun pictureSummary(format: androidx.media3.common.Format): String? {
+    if (format.height <= 0) return null
+    val size = when {
+        format.height >= 2000 || format.width >= 3800 -> "4K"
+        format.height >= 1000 || format.width >= 1900 -> "1080p"
+        format.height >= 700 || format.width >= 1260 -> "720p"
+        else -> "SD"
+    }
+    val range = when {
+        format.sampleMimeType == androidx.media3.common.MimeTypes.VIDEO_DOLBY_VISION -> "Dolby Vision"
+        format.colorInfo?.colorTransfer == C.COLOR_TRANSFER_ST2084 -> "HDR10"
+        format.colorInfo?.colorTransfer == C.COLOR_TRANSFER_HLG -> "HLG"
+        else -> null
+    }
+    val fps = format.frameRate.takeIf { it > 0f }?.let { "%.3g fps".format(it) }
+    return listOfNotNull(size, range, fps).joinToString("  ·  ")
+}
+
+/** "Dolby Digital Plus  ·  5.1". */
+internal fun soundSummary(format: androidx.media3.common.Format): String? {
+    val codec = format.sampleMimeType?.let(::codecName) ?: return null
+    val layout = when (format.channelCount) {
+        1 -> "Mono"
+        2 -> "Stereo"
+        6 -> "5.1"
+        8 -> "7.1"
+        in 3..Int.MAX_VALUE -> "${format.channelCount} channels"
+        else -> null
+    }
+    return listOfNotNull(codec, layout).joinToString("  ·  ")
 }
 
 private fun bitrate(bits: Int): String = when {
