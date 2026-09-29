@@ -73,7 +73,7 @@ fun RequestsScreen(
                     value = requests.query,
                     onValueChange = onQueryChange,
                     label = "Request",
-                    placeholder = "Find a film or a show to ask for",
+                    placeholder = "Find a movie or show to ask for",
                     imeAction = ImeAction.Search,
                     modifier = Modifier.widthIn(max = 620.dp),
                 )
@@ -116,7 +116,7 @@ private fun TitleRow(
         items(titles, key = { it.key }) { title ->
             PosterCard(
                 title = title.title,
-                subtitle = requestLabel(requests.statusOf(title)) ?: title.year?.toString(),
+                subtitle = requests.badgeFor(title) ?: title.year?.toString(),
                 imageUrl = title.poster,
                 onFocus = { focus.onFocused(title.key) },
                 onClick = { onOpen(title) },
@@ -153,12 +153,12 @@ private fun ConnectReely(
         ) {
             SectionHeading("Requests")
             Text(
-                text = "Ask for films and shows",
+                text = "Ask for movies and shows",
                 color = Chalk,
                 style = ReelyType.Display.copy(fontSize = 30.sp, lineHeight = 36.sp),
             )
             Text(
-                text = "Requests go to Reely, the server owner's app for adding films and shows. " +
+                text = "Requests go to Reely, the server owner's app for adding movies and shows. " +
                     "Enter its address; you're signed in with your Plex account.",
                 color = Muted,
                 style = ReelyType.Body,

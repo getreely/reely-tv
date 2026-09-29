@@ -79,7 +79,7 @@ class RequestShots {
             RequestsScreen(
                 RequestsState(
                     server = "http://reely.local", connected = true,
-                    rows = listOf(RequestRow("movies", "Trending films", films), RequestRow("shows", "Trending shows", shows)),
+                    rows = listOf(RequestRow("movies", "Trending Movies", films), RequestRow("shows", "Trending Shows", shows)),
                     mine = listOf(
                         RequestRecord(9, shows[1], "pending", listOf(1)),
                         RequestRecord(4, films[2], "approved", null),

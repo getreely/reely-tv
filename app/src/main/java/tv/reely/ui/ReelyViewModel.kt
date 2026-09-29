@@ -122,10 +122,28 @@ data class RequestsState(
     val searching: Boolean = false,
     /** What this account has asked for, and where each has got to. */
     val mine: List<tv.reely.requests.RequestRecord> = emptyList(),
+    /** What Reely holds and what's been asked for, to mark posters with. */
+    val marks: tv.reely.requests.TitleMarks = tv.reely.requests.TitleMarks(),
 ) {
     /** The state of this account's request for [title], if it made one. */
     fun statusOf(title: tv.reely.requests.RequestTitle): String? =
         mine.firstOrNull { it.title.key == title.key }?.status
+
+    /**
+     * What a poster says under its title, as Reely's own Explore marks it — what Reely
+     * holds first (Downloading, In library, Partial), then this account's own request
+     * (Approved, Declined), then anybody's open request.
+     */
+    fun badgeFor(title: tv.reely.requests.RequestTitle): String? {
+        val mark = marks.badge(title)
+        if (mark != null && mark != "Requested") return mark
+        return when (statusOf(title)) {
+            "approved" -> "Approved"
+            "denied" -> "Declined"
+            "pending" -> "Requested"
+            else -> mark
+        }
+    }
 }
 
 /** A title's page in Requests. */
@@ -460,7 +478,23 @@ data class PlayerPrefs(
     val themeVolume: Float = Settings.DEFAULT_THEME_VOLUME,
     val matchFrameRate: Boolean = true,
     val largerBuffer: Boolean = false,
+    /** Home's rows switched off in Settings; see HomeRow. */
+    val hiddenHomeRows: Set<String> = emptySet(),
 )
+
+/**
+ * Home's rows, each of which can be switched off in Settings. The ids are what's kept,
+ * so they stay the same whatever the rows come to be called.
+ */
+enum class HomeRow(val id: String, val title: String, val fromReely: Boolean = false) {
+    CONTINUE("continue", "Continue Watching"),
+    EPISODES("episodes", "Recently Added Episodes"),
+    MOVIES("movies", "Recently Added Movies"),
+    WATCHLIST("watchlist", "Watchlist"),
+    PLAYLISTS("playlists", "Playlists"),
+    TRENDING("trending", "Trending", fromReely = true),
+    POPULAR("popular", "Popular", fromReely = true),
+}
 
 /** How often a browsing screen left up asks for what has changed. */
 /** How long after starting the app it looks for a newer version. */
@@ -545,6 +579,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 themeVolume = settings.themeVolume,
                 matchFrameRate = settings.matchFrameRate,
                 largerBuffer = settings.largerBuffer,
+                hiddenHomeRows = settings.hiddenHomeRows,
             )
         )
     )
@@ -752,6 +787,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val rows = async { runCatching { client.explore() } }
             val mine = async { runCatching { client.myRequests() } }
+            val marks = async { runCatching { client.marks() } }
             val found = rows.await()
             _state.update { current ->
                 current.copy(
@@ -760,6 +796,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                         loading = false,
                         rows = found.getOrElse { current.requests.rows },
                         mine = mine.await().getOrElse { current.requests.mine },
+                        marks = marks.await().getOrElse { current.requests.marks },
                         error = found.exceptionOrNull()?.readable(),
                     ),
                 )
@@ -771,7 +808,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val client = reely ?: return
         viewModelScope.launch {
             val mine = runCatching { client.myRequests() }.getOrNull() ?: return@launch
-            _state.update { it.copy(requests = it.requests.copy(mine = mine)) }
+            val marks = runCatching { client.marks() }.getOrNull()
+            _state.update { it.copy(requests = it.requests.copy(mine = mine, marks = marks ?: it.requests.marks)) }
         }
     }
 
@@ -1280,6 +1318,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
             val servers = sources.map { it.baseUrl to it.token }.distinct()
             refreshWatchlist(servers)
+            // Reely's rows, when Home shows any of them.
+            val hidden = _state.value.prefs.hiddenHomeRows
+            if (HomeRow.entries.any { it.fromReely && it.id !in hidden }) loadRequests()
             val playlists = servers.flatMap { (base, token) ->
                 runCatching { PlexApi.playlists(base, token) }.getOrElse { emptyList() }
             }
@@ -3097,6 +3138,14 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         settings.themeMusic = next
         _state.update { it.copy(prefs = it.prefs.copy(themeMusic = next)) }
         if (!next) themePlayer.silence() else startTheme()
+    }
+
+    /** A row of Home on or off. */
+    fun toggleHomeRow(row: HomeRow) {
+        val next = settings.hiddenHomeRows.let { if (row.id in it) it - row.id else it + row.id }
+        settings.hiddenHomeRows = next
+        _state.update { it.copy(prefs = it.prefs.copy(hiddenHomeRows = next)) }
+        if (row.fromReely && row.id !in next) loadRequests()
     }
 
     fun toggleLargerBuffer() {

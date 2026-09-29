@@ -57,7 +57,7 @@ fun RequestTitleScreen(
             Text(text = page.title.title, color = Chalk, style = ReelyType.Display)
             val facts = listOfNotNull(
                 page.title.year?.toString(),
-                if (page.title.isShow) "Show" else "Film",
+                if (page.title.isShow) "Show" else "Movie",
                 detail?.runtime?.let { "${it / 60}h ${it % 60}m".removePrefix("0h ") },
                 detail?.status,
                 detail?.genres?.take(3)?.joinToString(", ")?.takeIf { it.isNotEmpty() },

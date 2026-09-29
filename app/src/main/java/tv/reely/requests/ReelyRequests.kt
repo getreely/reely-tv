@@ -13,7 +13,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import tv.reely.core.Http
 
-/** Something that can be asked for: a film or a show, as Reely's catalogue has it. */
+/** Something that can be asked for: a movie or a show, as Reely's catalogue has it. */
 data class RequestTitle(
     val kind: String,
     val tmdbId: Int,
@@ -32,7 +32,7 @@ data class RequestTitle(
     val key: String get() = "$kind:${if (tmdbId > 0) "t$tmdbId" else "v$tvdbId"}"
 }
 
-/** One row of Reely's discovery: Trending films, Popular shows, what's on a service. */
+/** One row of Reely's discovery: Trending Movies, Popular Shows, what's on a service. */
 data class RequestRow(val id: String, val title: String, val titles: List<RequestTitle>)
 
 data class RequestSeason(val number: Int, val name: String, val episodes: Int)
@@ -58,6 +58,36 @@ data class RequestRecord(
     /** Null for the whole show, and always for a film. */
     val seasons: List<Int>?,
 )
+
+/**
+ * What Reely knows about titles it has been asked for or holds, to mark a poster the way
+ * Reely's own Explore page does: Downloading, In library, Partial, or Requested.
+ */
+data class TitleMarks(
+    val movies: Map<Int, String> = emptyMap(),
+    val showsByTmdb: Map<Int, String> = emptyMap(),
+    val showsByTvdb: Map<Int, String> = emptyMap(),
+    /** Open requests from anybody who shares a library with this account, by title. */
+    val requested: Set<String> = emptySet(),
+) {
+    /** The mark for [title], or null when Reely has nothing to say about it. */
+    fun badge(title: RequestTitle): String? {
+        val held = if (title.isShow) {
+            (if (title.tvdbId > 0) showsByTvdb[title.tvdbId] else null) ?: showsByTmdb[title.tmdbId]
+        } else {
+            movies[title.tmdbId]
+        }
+        return held ?: "Requested".takeIf { requestedKeys(title).any { it in requested } }
+    }
+
+    companion object {
+        /** Reely's own rule: a show asked for by TheTVDB is still the same show by TMDB. */
+        internal fun requestedKeys(title: RequestTitle): List<String> = listOfNotNull(
+            if (title.isShow && title.tvdbId > 0) "show-tvdb-${title.tvdbId}" else null,
+            if (title.tmdbId > 0) "${title.kind}-${title.tmdbId}" else null,
+        )
+    }
+}
 
 /** The answer to asking. */
 sealed interface RequestOutcome {
@@ -131,8 +161,8 @@ class ReelyRequests(
                 val row = providers.optJSONObject(i) ?: continue
                 val titles = titlesOf(row.optJSONArray("results"), image)
                 if (titles.isEmpty()) continue
-                val kind = if (row.optString("kind") == "show") "shows" else "films"
-                add(RequestRow("provider:${row.optString("key")}:${row.optString("kind")}", "${kind.replaceFirstChar { it.uppercase() }} on ${row.optString("name")}", titles))
+                val kind = if (row.optString("kind") == "show") "Shows" else "Movies"
+                add(RequestRow("provider:${row.optString("key")}:${row.optString("kind")}", "$kind on ${row.optString("name")}", titles))
             }
         }
     }
@@ -165,6 +195,48 @@ class ReelyRequests(
                 // Specials are season nought; asked for with the rest, not on their own.
                 .filter { it.number > 0 },
             inLibrary = (root.optJSONArray("inLibraries")?.length() ?: 0) > 0,
+        )
+    }
+
+    /**
+     * How Reely's library and open requests mark titles, read from the same lists its
+     * own Explore page reads. Best effort: without them a poster simply goes unmarked.
+     */
+    suspend fun marks(): TitleMarks = withContext(Dispatchers.IO) {
+        val movies = JSONObject(get("/api/v1/movies")).optJSONArray("movies") ?: JSONArray()
+        val shows = JSONObject(get("/api/v1/shows")).optJSONArray("shows") ?: JSONArray()
+        val open = JSONObject(get("/api/v1/requests")).optJSONArray("requests") ?: JSONArray()
+        val movieMarks = (0 until movies.length()).mapNotNull { movies.optJSONObject(it) }
+            .filter { it.optInt("tmdbId") > 0 }
+            .associate { m ->
+                m.optInt("tmdbId") to when {
+                    m.optBoolean("downloading") -> "Downloading"
+                    m.optString("filePath").isNotBlank() -> "In library"
+                    else -> "Requested"
+                }
+            }
+        val showRows = (0 until shows.length()).mapNotNull { shows.optJSONObject(it) }
+        fun showMark(s: JSONObject) = when {
+            s.optBoolean("downloading") -> "Downloading"
+            s.optInt("onDisk") == 0 -> "Requested"
+            s.optInt("aired") > 0 && s.optInt("wanted") == 0 -> "In library"
+            else -> "Partial"
+        }
+        val requested = buildSet {
+            for (i in 0 until open.length()) {
+                val r = open.optJSONObject(i) ?: continue
+                val kind = r.optString("kind")
+                val tvdb = r.optInt("tvdbId")
+                val tmdb = r.optInt("tmdbId")
+                if (kind == "show" && tvdb > 0) add("show-tvdb-$tvdb")
+                if (tmdb > 0) add("$kind-$tmdb")
+            }
+        }
+        TitleMarks(
+            movies = movieMarks,
+            showsByTmdb = showRows.filter { it.optInt("tmdbId") > 0 }.associate { it.optInt("tmdbId") to showMark(it) },
+            showsByTvdb = showRows.filter { it.optInt("tvdbId") > 0 }.associate { it.optInt("tvdbId") to showMark(it) },
+            requested = requested,
         )
     }
 
@@ -230,12 +302,12 @@ class ReelyRequests(
 
         /** Reely's explore rows, in the order they're shown, and what they're called here. */
         private val ROWS = listOf(
-            "movies" to "Trending films",
-            "shows" to "Trending shows",
-            "popularMovies" to "Popular films",
-            "popularShows" to "Popular shows",
-            "topMovies" to "Top rated films",
-            "topShows" to "Top rated shows",
+            "movies" to "Trending Movies",
+            "shows" to "Trending Shows",
+            "popularMovies" to "Popular Movies",
+            "popularShows" to "Popular Shows",
+            "topMovies" to "Top Rated Movies",
+            "topShows" to "Top Rated Shows",
         )
 
         /** Accepts "reely.example.com", "192.168.1.5:8788", "http://…/", and so on. */

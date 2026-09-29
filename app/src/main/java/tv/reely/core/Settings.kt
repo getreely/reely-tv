@@ -72,6 +72,11 @@ class Settings(context: Context) {
      * ordinary amount starts things quickest, and only a slow or uneven connection to the
      * server needs more in hand.
      */
+    /** Home's rows switched off, by the row's id; see HomeRow. */
+    var hiddenHomeRows: Set<String>
+        get() = prefs.getStringSet(HIDDEN_HOME_ROWS, emptySet()) ?: emptySet()
+        set(value) = prefs.edit().putStringSet(HIDDEN_HOME_ROWS, value).apply()
+
     var largerBuffer: Boolean
         get() = prefs.getBoolean(LARGER_BUFFER, false)
         set(value) = prefs.edit().putBoolean(LARGER_BUFFER, value).apply()
@@ -129,6 +134,7 @@ class Settings(context: Context) {
         private const val PLAYBACK_MODE = "playback.mode"
         private const val MATCH_FRAME_RATE = "playback.matchFrameRate"
         private const val LARGER_BUFFER = "playback.largerBuffer"
+        private const val HIDDEN_HOME_ROWS = "home.hiddenRows"
         private const val MAX_BITRATE = "playback.maxBitrate"
         private const val UPDATE_URL = "update.url"
         private const val FAVOURITE_SECTIONS = "library.favourites"

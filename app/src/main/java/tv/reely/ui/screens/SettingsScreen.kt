@@ -88,6 +88,7 @@ import kotlin.math.roundToInt
 
 private enum class Section(val title: String) {
     PLAYBACK("Playback"),
+    HOME("Home"),
     LIVE_TV("Live TV"),
     REQUESTS("Requests"),
     PLEX("Plex"),
@@ -133,6 +134,7 @@ fun SettingsScreen(
     onSwitchProfile: () -> Unit = {},
     requests: tv.reely.ui.RequestsState = tv.reely.ui.RequestsState(),
     onDisconnectReely: () -> Unit = {},
+    onToggleHomeRow: (tv.reely.ui.HomeRow) -> Unit = {},
 ) {
     var section by remember { mutableStateOf(Section.PLAYBACK) }
     val sectionFocus = remember { Section.entries.associateWith { FocusRequester() } }
@@ -231,6 +233,8 @@ fun SettingsScreen(
                     onToggleGuidePreview = onToggleGuidePreview,
                     onSignOutXtream = onSignOutXtream,
                 )
+
+                Section.HOME -> HomeSection(prefs, reelyConnected = requests.server != null, onToggleHomeRow)
 
                 Section.REQUESTS -> RequestsSection(requests, onDisconnectReely)
 
@@ -488,6 +492,35 @@ private fun LiveSection(
             description = "Each channel on screen uses one, including the guide preview.",
         )
         SettingRow(title = "Sign out of live TV", onClick = onSignOutXtream)
+    }
+}
+
+/** Which rows Home shows. */
+@Composable
+private fun HomeSection(prefs: PlayerPrefs, reelyConnected: Boolean, onToggle: (tv.reely.ui.HomeRow) -> Unit) {
+    val (yours, reely) = tv.reely.ui.HomeRow.entries.partition { !it.fromReely }
+    SettingGroup("Rows on Home") {
+        yours.forEachIndexed { index, row ->
+            SettingRow(
+                title = row.title,
+                switch = row.id !in prefs.hiddenHomeRows,
+                first = index == 0,
+                onClick = { onToggle(row) },
+            )
+        }
+    }
+    SettingGroup(
+        "From Reely",
+        note = if (reelyConnected) "What's trending and popular that you can ask for." else
+            "Connect to Reely from the Request tab to show these.",
+    ) {
+        reely.forEach { row ->
+            SettingRow(
+                title = row.title,
+                switch = row.id !in prefs.hiddenHomeRows,
+                onClick = { onToggle(row) },
+            )
+        }
     }
 }
 

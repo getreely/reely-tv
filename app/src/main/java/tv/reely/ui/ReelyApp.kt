@@ -424,6 +424,13 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onStartLink = viewModel::startPlexLink,
                 onCancelLink = viewModel::cancelPlexLink,
                 onDismissPlexError = viewModel::dismissPlexError,
+                hidden = state.prefs.hiddenHomeRows,
+                requestRows = state.requests.rows,
+                requestBadge = state.requests::badgeFor,
+                onOpenRequest = { title ->
+                    openedFromPage = true
+                    viewModel.navigate(Route.RequestTitle(title))
+                },
             )
 
             is Route.Library -> LibraryScreen(
@@ -584,6 +591,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onSwitchProfile = { pickingProfile = true },
                 requests = state.requests,
                 onDisconnectReely = viewModel::disconnectReely,
+                onToggleHomeRow = viewModel::toggleHomeRow,
                 onToggleFavourite = viewModel::toggleFavouriteLibrary,
                 onToggleFormat = viewModel::toggleFormat,
                 onNudgeSubtitleScale = viewModel::nudgeSubtitleScale,

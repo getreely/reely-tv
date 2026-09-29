@@ -34,6 +34,7 @@ import tv.reely.plex.PlexItem
 import tv.reely.plex.formatDuration
 import tv.reely.ui.EpisodeGroup
 import tv.reely.ui.HomeState
+import tv.reely.ui.HomeRow
 import tv.reely.ui.PlexState
 import tv.reely.ui.components.HeroBackdrop
 import tv.reely.ui.components.EmptyNote
@@ -88,6 +89,12 @@ fun HomeScreen(
     onDismissPlexError: () -> Unit,
     modifier: Modifier = Modifier,
     onRemoveFromContinueWatching: (PlexItem) -> Unit = {},
+    /** Rows switched off in Settings; see HomeRow. */
+    hidden: Set<String> = emptySet(),
+    /** Reely's discovery rows, for Home's Trending and Popular. */
+    requestRows: List<tv.reely.requests.RequestRow> = emptyList(),
+    requestBadge: (tv.reely.requests.RequestTitle) -> String? = { null },
+    onOpenRequest: (tv.reely.requests.RequestTitle) -> Unit = {},
 ) {
     if (!plex.isConnected) {
         PlexSignInPanel(
@@ -180,7 +187,7 @@ fun HomeScreen(
                             item { ErrorNote(home.error, modifier = Modifier.padding(horizontal = 40.dp)) }
                         }
 
-                        if (home.continueWatching.isNotEmpty()) {
+                        if (home.continueWatching.isNotEmpty() && HomeRow.CONTINUE.id !in hidden) {
                             item {
                                 PosterRow(title = "Continue Watching", rowFocus = resumeFocus, sideways = sideways) {
                                     items(home.continueWatching, key = { it.listKey }) { item ->
@@ -203,7 +210,7 @@ fun HomeScreen(
                             }
                         }
 
-                        if (home.recentEpisodes.isNotEmpty()) {
+                        if (home.recentEpisodes.isNotEmpty() && HomeRow.EPISODES.id !in hidden) {
                             item {
                                 PosterRow(title = "Recently Added Episodes", rowFocus = episodeFocus, sideways = sideways) {
                                     items(home.recentEpisodes, key = { it.listKey }) { group ->
@@ -213,7 +220,7 @@ fun HomeScreen(
                             }
                         }
 
-                        if (home.recentMovies.isNotEmpty()) {
+                        if (home.recentMovies.isNotEmpty() && HomeRow.MOVIES.id !in hidden) {
                             item {
                                 PosterRow(title = "Recently Added Movies", rowFocus = movieFocus, sideways = sideways) {
                                     items(home.recentMovies, key = { it.listKey }) { movie ->
@@ -237,7 +244,7 @@ fun HomeScreen(
                         }
 
                         // The account's Watchlist, as far as the servers here have it.
-                        if (home.watchlist.isNotEmpty()) {
+                        if (home.watchlist.isNotEmpty() && HomeRow.WATCHLIST.id !in hidden) {
                             item {
                                 PosterRow(title = "Watchlist", rowFocus = watchlistFocus, sideways = sideways) {
                                     items(home.watchlist, key = { it.listKey }) { item ->
@@ -259,7 +266,7 @@ fun HomeScreen(
                             }
                         }
 
-                        if (home.playlists.isNotEmpty()) {
+                        if (home.playlists.isNotEmpty() && HomeRow.PLAYLISTS.id !in hidden) {
                             item {
                                 PosterRow(title = "Playlists", rowFocus = playlistFocus, sideways = sideways) {
                                     items(home.playlists, key = { it.listKey }) { playlist ->
@@ -274,6 +281,32 @@ fun HomeScreen(
                                             onClick = { onOpenItem(playlist) },
                                             modifier = rowItem(playlistFocus, playlist.listKey),
                                         )
+                                    }
+                                }
+                            }
+                        }
+
+                        // From Reely: what's trending and popular, films and shows together,
+                        // each opening its page in Requests.
+                        listOf(
+                            HomeRow.TRENDING to listOf("movies", "shows"),
+                            HomeRow.POPULAR to listOf("popularMovies", "popularShows"),
+                        ).forEach { (row, ids) ->
+                            val titles = interleave(ids.map { id -> requestRows.firstOrNull { it.id == id }?.titles.orEmpty() })
+                            if (titles.isNotEmpty() && row.id !in hidden) {
+                                item(key = row.id) {
+                                    val rowFocus = rememberRowFocus()
+                                    PosterRow(title = row.title, rowFocus = rowFocus, sideways = sideways) {
+                                        items(titles, key = { it.key }) { title ->
+                                            PosterCard(
+                                                title = title.title,
+                                                subtitle = requestBadge(title) ?: title.year?.toString(),
+                                                imageUrl = title.poster,
+                                                onFocus = { rowFocus.onFocused(title.key) },
+                                                onClick = { onOpenRequest(title) },
+                                                modifier = rowItem(rowFocus, title.key),
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -408,4 +441,10 @@ internal fun PosterRow(
             }
         }
     }
+}
+
+/** Films and shows taken in turn, so neither crowds the other out of the row. */
+internal fun <T> interleave(lists: List<List<T>>): List<T> {
+    val longest = lists.maxOfOrNull { it.size } ?: 0
+    return (0 until longest).flatMap { i -> lists.mapNotNull { it.getOrNull(i) } }
 }

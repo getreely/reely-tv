@@ -85,8 +85,16 @@ class ReelyRequestsTest {
                     {"imageBase":"https://image.tmdb.org/t/p","inLibraries":[3],
                      "preview":{"tmdbId":603,"kind":"movie","title":"The Matrix","year":1999,"runtime":136,"genres":[]}}
                 """.trimIndent())
+                path == "/api/v1/movies" -> ex.reply(200, """{"movies":[
+                    {"tmdbId":603,"filePath":"/films/matrix.mkv"},
+                    {"tmdbId":27205,"filePath":"","downloading":true},
+                    {"tmdbId":11,"filePath":""}]}""")
+                path == "/api/v1/shows" -> ex.reply(200, """{"shows":[
+                    {"tmdbId":1399,"onDisk":10,"aired":73,"wanted":63},
+                    {"tmdbId":0,"tvdbId":81189,"onDisk":62,"aired":62,"wanted":0}]}""")
+                path == "/api/v1/requests" && ex.requestMethod == "GET" && !query.contains("mine=1") ->
+                    ex.reply(200, """{"requests":[{"id":2,"kind":"movie","tmdbId":550,"title":"Fight Club","status":"pending"}]}""")
                 path == "/api/v1/requests" && ex.requestMethod == "GET" -> {
-                    assertTrue("only my own", query.contains("mine=1"))
                     ex.reply(200, """{"requests":[
                         {"id":4,"kind":"movie","tmdbId":603,"title":"The Matrix","year":1999,"poster":"/matrix.jpg","status":"approved"},
                         {"id":9,"kind":"show","tmdbId":1399,"title":"Game of Thrones","poster":"/got.jpg","seasons":[1],"status":"pending"}]}""")
@@ -132,7 +140,7 @@ class ReelyRequestsTest {
 
     @Test fun `explore rows, with posters from either TMDB or TheTVDB`() = runBlocking {
         val rows = reely().explore()
-        assertEquals(listOf("Trending films", "Trending shows", "Shows on Netflix"), rows.map { it.title })
+        assertEquals(listOf("Trending Movies", "Trending Shows", "Shows on Netflix"), rows.map { it.title })
         assertEquals("https://image.tmdb.org/t/p/w342/matrix.jpg", rows[0].titles[0].poster)
         assertEquals("https://artworks.thetvdb.com/bb.jpg", rows[2].titles[0].poster)
         assertEquals(81189, rows[2].titles[0].tvdbId)
@@ -193,5 +201,28 @@ class ReelyRequestsTest {
         assertEquals("https://r.example.com:8789", ReelyRequests.normalize("https://r.example.com:8789"))
         assertTrue(ReelyRequests.isValid("192.168.1.20:8788"))
         assertTrue(!ReelyRequests.isValid(""))
+    }
+
+    @Test fun `titles are marked the way Reely's own Explore marks them`() = runBlocking {
+        val marks = reely().marks()
+        fun film(id: Int) = tv.reely.requests.RequestTitle("movie", id, 0, "x", null, null, null, null)
+        fun show(tmdb: Int, tvdb: Int = 0) = tv.reely.requests.RequestTitle("show", tmdb, tvdb, "x", null, null, null, null)
+        assertEquals("In library", marks.badge(film(603)))
+        assertEquals("Downloading", marks.badge(film(27205)))
+        assertEquals("Requested", marks.badge(film(11)))      // held, file not here yet
+        assertEquals("Requested", marks.badge(film(550)))     // somebody's open request
+        assertNull(marks.badge(film(99)))
+        assertEquals("Partial", marks.badge(show(1399)))
+        assertEquals("In library", marks.badge(show(0, 81189)))
+    }
+
+    @Test fun `what's held comes first, then my own request, then anybody's`() {
+        val title = tv.reely.requests.RequestTitle("movie", 550, 0, "Fight Club", null, null, null, null)
+        val mine = listOf(tv.reely.requests.RequestRecord(1, title, "approved", null))
+        val asked = tv.reely.requests.TitleMarks(requested = setOf("movie-550"))
+        assertEquals("Approved", tv.reely.ui.RequestsState(mine = mine, marks = asked).badgeFor(title))
+        assertEquals("Requested", tv.reely.ui.RequestsState(marks = asked).badgeFor(title))
+        val held = tv.reely.requests.TitleMarks(movies = mapOf(550 to "In library"))
+        assertEquals("In library", tv.reely.ui.RequestsState(mine = mine, marks = held).badgeFor(title))
     }
 }
