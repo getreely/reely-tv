@@ -95,6 +95,7 @@ fun HomeScreen(
     onDismissPlexError: () -> Unit,
     modifier: Modifier = Modifier,
     onRemoveFromContinueWatching: (PlexItem) -> Unit = {},
+    onPlayNextEpisode: (PlexItem) -> Unit = {},
     /** Rows switched off in Settings; see HomeRow. */
     hidden: Set<String> = emptySet(),
     /** Reely's discovery rows, for Home's Trending and Popular. */
@@ -396,6 +397,7 @@ fun HomeScreen(
                         onPlay = { resume -> menuFor = null; onPlayItem(item, resume) },
                         onToggleWatched = { menuFor = null; onToggleWatched(item) },
                         onDetails = { menuFor = null; onOpenItem(item) },
+                        onPlayNext = { menuFor = null; onPlayNextEpisode(item) },
                         onRemoveFromContinueWatching = if (home.continueWatching.any { it.listKey == item.listKey }) {
                             { menuFor = null; onRemoveFromContinueWatching(item) }
                         } else {

@@ -48,7 +48,8 @@ internal fun menuMeta(item: PlexItem): String? {
             else -> formatDuration(item.durationMs).takeIf { it.isNotBlank() && left == null }
         },
         when {
-            left != null -> "$left min left"
+            // Kept on one line: "31" at the end of one and "min left" on the next read badly.
+            left != null -> "$left\u00A0min\u00A0left"
             item.isWatched -> "Watched"
             else -> null
         },
@@ -66,8 +67,23 @@ internal fun itemMenuActions(
     onToggleWatched: () -> Unit,
     onDetails: () -> Unit,
     onRemoveFromContinueWatching: (() -> Unit)? = null,
+    /** For a show or season: its next episode; see PlexApi.nextEpisode. */
+    onPlayNext: (() -> Unit)? = null,
 ): List<CardAction> = buildList {
     val resumable = (item.resumeFraction ?: 0f) > 0f
+    if (onPlayNext != null && (item.type == "show" || item.type == "season") && item.leafCount > 0) {
+        add(
+            CardAction(
+                label = when {
+                    item.viewedLeafCount == 0 -> "Play first episode"
+                    item.isWatched -> "Play from the start"
+                    else -> "Play next episode"
+                },
+                emphasised = true,
+                icon = { PlayGlyph(it, size = 20.dp) },
+            ) { onPlayNext() }
+        )
+    }
     if (item.isPlayable) {
         add(
             CardAction(
@@ -118,7 +134,9 @@ fun ItemMenu(
             focusRequester = focusRequester,
             onCancel = onCancel,
             imageUrl = backdropUrl(item.serverBase, picture),
-            logoUrl = if (item.type == "episode") null else logoUrl(item.serverBase, item.logo),
+            // The name in the app's own lettering, as on the page behind: a logo beside a
+            // small picture of the same title looked like two headings.
+            logoUrl = null,
             progress = item.resumeFraction,
             modifier = Modifier.align(Alignment.CenterEnd),
         )

@@ -184,7 +184,7 @@ class ReelyRequests(
                     404 -> "That server doesn't sign in from the TV yet. Update Reely."
                     412 -> "Signing in with Plex isn't set up on this Reely server yet."
                     429 -> "Too many tries. Wait a minute and try again."
-                    else -> errorOf(response.body?.string()) ?: "Reely said no (${response.code})."
+                    else -> errorOf(response.body?.string()) ?: "Reely couldn't do that. Try again."
                 }
             }
         }.getOrElse { "Couldn't reach Reely at ${hostOf(base)}." }
@@ -338,7 +338,7 @@ class ReelyRequests(
             when (code) {
                 in 200..299 -> RequestOutcome.Sent(JSONObject(text).optString("status") == "approved")
                 409 -> RequestOutcome.AlreadyRequested
-                else -> RequestOutcome.Refused(errorOf(text) ?: "Reely couldn't take that request ($code).")
+                else -> RequestOutcome.Refused(errorOf(text) ?: "Reely couldn't take that request. Try again.")
             }
         }
     }
@@ -346,7 +346,7 @@ class ReelyRequests(
     // ------------------------------------------------------------------ plumbing
 
     private fun get(path: String): String = call(Request.Builder().url(base + path).get().build()) { code, text ->
-        require(code in 200..299) { errorOf(text) ?: "Reely returned an error ($code)." }
+        require(code in 200..299) { errorOf(text) ?: "Reely couldn't do that. Try again." }
         text
     }
 
@@ -429,3 +429,15 @@ class ReelyRequests(
             text?.let { runCatching { JSONObject(it).optString("error").takeIf(String::isNotBlank) }.getOrNull() }
     }
 }
+
+/**
+ * Whether a Plex library here has [title], by the outside ids its items carry (see
+ * PlexApi.libraryGuids): films by TMDB, shows by TVDB or TMDB. Kept apart because the
+ * same TMDB number means a different title for a film and for a show.
+ */
+fun plexHas(title: RequestTitle, movies: Set<String>, shows: Set<String>): Boolean =
+    if (title.isShow) {
+        (title.tvdbId > 0 && "tvdb://${title.tvdbId}" in shows) || (title.tmdbId > 0 && "tmdb://${title.tmdbId}" in shows)
+    } else {
+        title.tmdbId > 0 && "tmdb://${title.tmdbId}" in movies
+    }

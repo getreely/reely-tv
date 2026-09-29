@@ -94,7 +94,6 @@ import tv.reely.core.GuideRequest
 import tv.reely.core.SkipPrompt
 import tv.reely.core.skipPromptAt
 import tv.reely.core.LivePlayer
-import tv.reely.core.DeviceAudio
 import tv.reely.core.Settings
 import tv.reely.core.SilentAudio
 import tv.reely.core.silentAudio
@@ -1474,19 +1473,6 @@ fun PlayerScreen(
             StatsPanel(
                 playback = playback,
                 player = exoPlayer,
-                audioDecoder = audioDecoder,
-                previews = when {
-                    previews != null -> "Available"
-                    framesOnly -> "Available, a picture at a time"
-                    playback.previewUrl != null && !noPreviews -> "Looking…"
-                    previewProblem != null -> "None: $previewProblem"
-                    else -> "None on the server"
-                } + (
-                    // Standing in for them on the bar, where the server made chapter pictures.
-                    if (previews == null && noPreviews && playback.chapters.any { it.thumbUrl != null }) {
-                        ". Chapter pictures instead"
-                    } else ""
-                ),
                 focusRequester = panelFocus,
                 onClose = { panel = Panel.NONE },
                 modifier = Modifier.align(Alignment.CenterEnd),
@@ -2065,9 +2051,6 @@ private val SCRUB_THUMB = 14.dp
 internal fun StatsPanel(
     playback: Playback,
     player: ExoPlayer,
-    audioDecoder: String? = null,
-    /** Whether the server's scrubbing pictures were found, as the line reads. */
-    previews: String? = null,
     focusRequester: FocusRequester,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
@@ -2084,8 +2067,6 @@ internal fun StatsPanel(
 
     val video = remember(tick) { player.videoFormat }
     val audio = remember(tick) { player.audioFormat }
-    val context = LocalContext.current
-    val deviceSound = remember { DeviceAudio(context).summary() }
     // The file's own sound, which is what to describe when none could be selected —
     // otherwise the panel shows a dash exactly when the audio is the question.
     val fileAudio = remember(tick) {
@@ -2093,91 +2074,34 @@ internal fun StatsPanel(
     }
     val unplayable = audio == null && fileAudio != null &&
         !player.currentTracks.isTypeSelected(C.TRACK_TYPE_AUDIO)
-    val dropped = remember(tick) { player.videoDecoderCounters?.droppedBufferCount ?: 0 }
 
-    MenuPanel(modifier = modifier.focusGroup().focusRequester(focusRequester)) {
-        // Close sits beside the heading: at the foot of the panel it fell below the
-        // bottom of the screen once every line here was filled in.
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(text = "Playback info", color = Chalk, style = ReelyType.Headline, modifier = Modifier.weight(1f))
-            TvActionButton(label = "Close", onClick = onClose)
-        }
-
+    // Nothing in here to press: the panel holds the cursor itself, and Back closes it.
+    MenuPanel(modifier = modifier.focusRequester(focusRequester).focusable()) {
+        MenuHeading(title = "Playback info")
         /*
-         * What somebody watching wants to know: whether it's the original or converted,
-         * what the picture and sound are, and how much is coming down the wire. The rest,
-         * down to decoder names and dropped frames, is for when something won't play, and
-         * waits behind More details. The server's address was here too, and has gone:
-         * it's no use to anyone watching and nothing to put on a screen.
+         * What somebody watching might want to know, said the way a streaming app says
+         * it: the quality, the picture, the sound and the rate. Decoder names, dropped
+         * frames and what the server has or hasn't made used to be here behind More
+         * details; that's a workbench, not a player.
          */
-        StatLine(
-            "Playing",
-            when {
-                playback.isLive -> "Live  ·  ${playback.format.label}"
-                playback.audioConverted -> "Original picture, sound converted by your server"
-                playback.transcoding -> "Converted by your server"
-                else -> "Original quality"
-            },
-        )
-        StatLine("Picture", video?.let(::pictureSummary) ?: "—")
-        StatLine(
-            "Sound",
-            when {
-                unplayable -> "Not supported on this device"
-                else -> (audio ?: fileAudio)?.let(::soundSummary) ?: "—"
-            },
-        )
-        StatLine("Bitrate", bitrate(video?.bitrate?.takeIf { it > 0 }?.plus(audio?.bitrate?.coerceAtLeast(0) ?: 0) ?: -1))
-
-        var details by remember { mutableStateOf(false) }
-        TvActionButton(
-            label = if (details) "Fewer details" else "More details",
-            onClick = { details = !details },
-            modifier = Modifier.padding(top = 6.dp),
-        )
-        if (details) {
-            if (!playback.isLive) {
-                // Whether the server sent intro and credits markers at all, which is the
-                // only way to tell one that hasn't detected them from a button that failed.
-                StatLine("Intro & credits", describeMarkers(playback.markers))
-                // The pictures above the bar while scrubbing are the server's to make, and
-                // only when the library is set to.
-                StatLine(
-                    "Scrubbing previews",
-                    previews ?: if (playback.previewUrl != null) "Available" else "None on the server",
-                )
-            }
-            SectionLabel("VIDEO")
-            StatLine("Codec", video?.sampleMimeType?.let(::codecName) ?: "—")
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.padding(start = 4.dp)) {
             StatLine(
-                "Size",
-                video?.takeIf { it.width > 0 }?.let { format ->
-                    val fps = format.frameRate.takeIf { it > 0f }?.let { "  ·  %.3g fps".format(it) }.orEmpty()
-                    "${format.width} × ${format.height}$fps"
-                } ?: "—",
-            )
-            StatLine("Bitrate", bitrate(video?.bitrate ?: -1))
-            StatLine("Dropped frames", dropped.toString())
-
-            SectionLabel("AUDIO")
-            StatLine("Codec", (audio ?: fileAudio)?.sampleMimeType?.let(::codecName) ?: "—")
-            StatLine(
-                "Decoder",
+                "Quality",
                 when {
-                    audioDecoder?.startsWith("ffmpeg") == true -> "In app (FFmpeg)"
-                    audioDecoder != null -> "Device"
-                    audio != null -> "Passed through"
-                    else -> "—"
+                    playback.isLive -> "Live"
+                    playback.transcoding || playback.audioConverted -> "Adjusted for this TV"
+                    else -> "Original"
                 },
             )
-            StatLine("Rate", audio?.sampleRate?.takeIf { it > 0 }?.let { "$it Hz" } ?: "—")
-            StatLine("Bitrate", bitrate(audio?.bitrate ?: -1))
-            // What this device said it plays, by decoder or passed over HDMI, which is
-            // what decided whether the sound above was converted.
-            StatLine("Supported audio", deviceSound.ifEmpty { "—" })
+            StatLine("Picture", video?.let(::pictureSummary) ?: "—")
+            StatLine(
+                "Sound",
+                when {
+                    unplayable -> "Not supported on this TV"
+                    else -> (audio ?: fileAudio)?.let(::soundSummary) ?: "—"
+                },
+            )
+            StatLine("Bitrate", bitrate(video?.bitrate?.takeIf { it > 0 }?.plus(audio?.bitrate?.coerceAtLeast(0) ?: 0) ?: -1))
         }
     }
 }
@@ -2188,11 +2112,11 @@ private fun StatLine(label: String, value: String) {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(text = label, color = Muted, style = ReelyType.Label)
+        Text(text = label, color = Muted, style = ReelyType.Meta)
         Text(
             text = value,
             color = Chalk,
-            style = ReelyType.Label,
+            style = ReelyType.Meta,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(start = 16.dp),
@@ -2201,17 +2125,6 @@ private fun StatLine(label: String, value: String) {
 }
 
 /** The small capitals over a group of lines in a panel. */
-@Composable
-private fun SectionLabel(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text = text.uppercase(),
-        color = Faint,
-        style = ReelyType.Label,
-        letterSpacing = 1.4.sp,
-        modifier = modifier.padding(top = 6.dp),
-    )
-}
-
 /** The part of a mime type anybody says out loud. */
 private fun codecName(mime: String): String = when (mime.substringAfter('/')) {
     "avc", "avc1", "h264" -> "H.264"
@@ -2716,32 +2629,18 @@ private fun channelLayout(count: Int): String? = when (count) {
     else -> if (count > 0) "$count-channel" else null
 }
 
-/** The server's intro and credits markers, or a plain statement that it sent none. */
-private fun describeMarkers(markers: List<tv.reely.plex.PlexMarker>): String {
-    if (markers.isEmpty()) return "Not detected"
-    return markers.joinToString("  ·  ") { marker ->
-        val kind = when {
-            marker.isIntro -> "Intro"
-            marker.isCredits -> "Credits"
-            else -> marker.type.replaceFirstChar { it.uppercase() }
-        }
-        "$kind ${clock(marker.startMs)}–${clock(marker.endMs)}"
-    }
-}
-
 private fun describe(error: PlaybackException): String = when (val cause = error.cause) {
     is HttpDataSource.InvalidResponseCodeException -> when (cause.responseCode) {
         401, 403 -> "This couldn't be opened. If it's a live channel, your subscription may " +
-            "already be using all its connections — close another stream and try again."
+            "already be using all its connections. Close another stream and try again."
 
         404 -> "This isn't available right now."
-        else -> "This couldn't be played (error ${cause.responseCode})."
+        else -> "This couldn't be played. Try again."
     }
 
-    is HttpDataSource.HttpDataSourceException -> "Couldn't connect. Check your network and try again."
+    is HttpDataSource.HttpDataSourceException -> tv.reely.core.Friendly.OFFLINE
 
-    // Anything else is the player's own; its code is kept for anybody reporting it.
-    else -> "This couldn't be played (${error.errorCodeName})."
+    else -> "This couldn't be played. Try again."
 }
 
 /**

@@ -286,7 +286,7 @@ object XtreamApi {
 
         Http.client.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
-            require(response.isSuccessful) { "Your provider returned an error (${response.code})." }
+            require(response.isSuccessful) { "Your provider couldn't do that. Try again." }
             require(body.isNotBlank()) { "Your provider didn't respond. Try again." }
             return body
         }

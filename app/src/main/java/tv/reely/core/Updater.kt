@@ -47,7 +47,7 @@ object Updater {
         // No manifest: ask the server what it is holding without fetching it.
         val request = Request.Builder().url(apkUrl).head().build()
         Http.client.newCall(request).execute().use { response ->
-            require(response.isSuccessful) { "Couldn't check for updates (error ${response.code}). Try again later." }
+            require(response.isSuccessful) { "Couldn't check for updates. Try again later." }
             UpdateInfo(
                 url = apkUrl,
                 versionCode = null,
@@ -89,7 +89,7 @@ object Updater {
 
         val request = Request.Builder().url(url).get().build()
         Http.client.newCall(request).execute().use { response ->
-            require(response.isSuccessful) { "Couldn't check for updates (error ${response.code}). Try again later." }
+            require(response.isSuccessful) { "Couldn't check for updates. Try again later." }
             val body = response.body ?: error("Couldn't check for updates. Try again later.")
             val total = body.contentLength()
             body.byteStream().use { input ->

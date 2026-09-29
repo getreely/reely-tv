@@ -42,7 +42,7 @@ data class M3uPlaylist(
                 error("Couldn't reach the playlist. Check the address.")
             }
             call.use { response ->
-                require(response.isSuccessful) { "Couldn't download the playlist (error ${response.code})." }
+                require(response.isSuccessful) { "Couldn't download the playlist." }
                 val body = response.body ?: error("The playlist was empty.")
                 val stream = body.byteStream().buffered(64 * 1024).let { raw ->
                     raw.mark(2)

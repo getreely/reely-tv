@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -126,6 +127,9 @@ data class RequestsState(
     val marks: tv.reely.requests.TitleMarks = tv.reely.requests.TitleMarks(),
     /** This account's requests that have arrived since they were last looked at. */
     val ready: List<tv.reely.requests.RequestTitle> = emptyList(),
+    /** The outside ids of the films and shows in the Plex libraries here; see plexHas. */
+    val plexMovies: Set<String> = emptySet(),
+    val plexShows: Set<String> = emptySet(),
 ) {
     /** The state of this account's request for [title], if it made one. */
     fun statusOf(title: tv.reely.requests.RequestTitle): String? =
@@ -138,6 +142,12 @@ data class RequestsState(
      */
     fun badgeFor(title: tv.reely.requests.RequestTitle): String? {
         val mark = marks.badge(title)
+        // In Plex already, whether or not Reely keeps track of it: Reely only knows what
+        // it added, and a library that was there first is most of what anybody has.
+        // Reely's own word wins when it has more to say, like Downloading or Partial.
+        if ((mark == null || mark == "Requested") && tv.reely.requests.plexHas(title, plexMovies, plexShows)) {
+            return "In library"
+        }
         if (mark != null && mark != "Requested") return mark
         return when (statusOf(title)) {
             "approved" -> "Approved"
@@ -856,9 +866,36 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
     fun dismissRequestsError() = _state.update { it.copy(requests = it.requests.copy(error = null)) }
 
+    /** When the Plex libraries' ids were last read, for marking what's already in them. */
+    private var plexHoldingsAt = 0L
+
+    /**
+     * What the Plex libraries here hold, by outside id, to mark a Reely title In library
+     * when it's there. Read at most every ten minutes: it's every title at once.
+     */
+    private fun refreshPlexHoldings() {
+        val now = System.currentTimeMillis()
+        if (now - plexHoldingsAt < PLEX_HOLDINGS_MS) return
+        val choices = _state.value.plex.libraryChoices
+        if (choices.isEmpty()) return
+        plexHoldingsAt = now
+        viewModelScope.launch {
+            suspend fun idsOf(kind: String, type: Int) = choices.filter { it.section.type == kind }.map { choice ->
+                async {
+                    runCatching { PlexApi.libraryGuids(choice.baseUrl, choice.token, choice.section.key, type) }
+                        .getOrDefault(emptySet())
+                }
+            }.awaitAll().flatten().toSet()
+            val movies = idsOf("movie", 1)
+            val shows = idsOf("show", 2)
+            _state.update { it.copy(requests = it.requests.copy(plexMovies = movies, plexShows = shows)) }
+        }
+    }
+
     /** Reely's discovery rows and this account's requests. */
     fun loadRequests() {
         val client = reely ?: return
+        refreshPlexHoldings()
         _state.update { it.copy(requests = it.requests.copy(loading = it.requests.rows.isEmpty(), error = null)) }
         viewModelScope.launch {
             val rows = async { runCatching { client.explore() } }
@@ -887,6 +924,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun checkReadyRequests() {
         val client = reely ?: return
+        refreshPlexHoldings()
         viewModelScope.launch {
             val mine = runCatching { client.myRequests() }.getOrNull() ?: return@launch
             val seen = settings.readyRequestsSeen
@@ -1139,6 +1177,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 serverName = store.get(SecureStore.PLEX_SERVER_NAME),
             )
         }
+        showKeptHomeRows()
         if (base != null && serverToken != null) loadSections() else connectServer(token)
         // Only the chosen server was ever stored, so the rest have to be asked for again
         // before anything can offer to switch to them.
@@ -1424,6 +1463,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             SecureStore.PLEX_SERVER_NAME,
         )
         _state.update { it.copy(plex = PlexState(), home = HomeState(), detail = null) }
+        // Nobody's rows to show the next person to sign in.
+        tv.reely.core.HomeCache.clear(getApplication<Application>().filesDir)
     }
 
     /**
@@ -1530,6 +1571,57 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 )
             }
+            keepHomeRows()
+        }
+    }
+
+    /** Whose Home rows these are: the account (or profile) on the server it's using. */
+    private fun homeOwner(): String? {
+        val plex = _state.value.plex
+        val token = plex.token ?: return null
+        return token + "|" + plex.baseUrl.orEmpty()
+    }
+
+    /** Home as it is now, kept for the next start; see [tv.reely.core.HomeCache]. */
+    private fun keepHomeRows() {
+        val owner = homeOwner() ?: return
+        val home = _state.value.home
+        if (home.isEmpty) return
+        val rows = tv.reely.core.HomeCache.Rows(
+            continueWatching = home.continueWatching,
+            recentMovies = home.recentMovies,
+            recentEpisodes = home.recentEpisodes.map { it.newest to it.count },
+        )
+        viewModelScope.launch(Dispatchers.IO) { tv.reely.core.HomeCache.save(getApplication<Application>().filesDir, owner, rows) }
+    }
+
+    /**
+     * Home from last time, shown the moment the app starts while fresh rows are fetched,
+     * as long as it's the same account on the same server.
+     */
+    private suspend fun showKeptHomeRows() {
+        val owner = homeOwner() ?: return
+        val kept = withContext(Dispatchers.IO) { tv.reely.core.HomeCache.load(getApplication<Application>().filesDir, owner) } ?: return
+        _state.update { current ->
+            if (!current.home.isEmpty) current
+            else current.copy(
+                home = current.home.copy(
+                    continueWatching = kept.continueWatching,
+                    recentMovies = kept.recentMovies,
+                    recentEpisodes = kept.recentEpisodes.map { (episode, count) ->
+                        EpisodeGroup(
+                            showTitle = episode.grandparentTitle ?: episode.title,
+                            showRatingKey = episode.grandparentRatingKey ?: episode.ratingKey,
+                            thumb = episode.grandparentThumb ?: episode.thumb,
+                            newest = episode,
+                            count = count,
+                            addedAt = episode.addedAt,
+                            librarySectionId = episode.librarySectionId,
+                            serverBase = episode.serverBase,
+                        )
+                    },
+                ),
+            )
         }
     }
 
@@ -1982,6 +2074,25 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
      * through, or the first one; for a film it means the film. With [resume] off it is the
      * same choice of thing to watch, started again from zero.
      */
+    /** A show's or season's next episode, from its menu: see [PlexApi.nextEpisode]. */
+    fun playNextEpisode(item: PlexItem) {
+        val plex = _state.value.plex
+        val base = item.serverBase ?: plex.baseUrl ?: return
+        val token = plex.tokenFor(item.serverBase) ?: return
+        viewModelScope.launch {
+            val episodes = runCatching { PlexApi.episodesOf(base, token, item.ratingKey) }
+                .getOrElse { failure ->
+                    reportPlaybackProblem(failure.readable())
+                    return@launch
+                }
+            val next = PlexApi.nextEpisode(episodes) ?: run {
+                reportPlaybackProblem("There are no episodes to play.")
+                return@launch
+            }
+            play(next, queue = episodes)
+        }
+    }
+
     fun playFromDetail(resume: Boolean = true) {
         val detailState = _state.value.detail ?: return
         val detail = detailState.detail ?: return
@@ -2405,7 +2516,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                     subtitleSearch = search.copy(
                         busy = false,
                         results = found.getOrElse { emptyList() },
-                        error = found.exceptionOrNull()?.let { "Plex couldn't look for subtitles. ${it.readable()}" },
+                        error = found.exceptionOrNull()?.let { "Couldn't look for subtitles. Try again." },
                     ),
                 )
             }
@@ -3835,6 +3946,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
         /** Three beside the one playing, which fills a 2x2 grid. */
         const val MAX_EXTRA_TILES = 3
+        const val PLEX_HOLDINGS_MS = 10 * 60_000L
     }
 }
 
@@ -3863,8 +3975,8 @@ private fun PlexDetail.asItem(): PlexItem = PlexItem(
     librarySectionId = null,
 )
 
-private fun Throwable.readable(): String =
-    message?.takeIf { it.isNotBlank() } ?: (this::class.java.simpleName + " while talking to the server")
+/** What to say about a failure on screen; see [tv.reely.core.Friendly]. */
+private fun Throwable.readable(): String = tv.reely.core.Friendly.error(this)
 
 /**
  * The Xtream Codes login inside a panel's playlist address

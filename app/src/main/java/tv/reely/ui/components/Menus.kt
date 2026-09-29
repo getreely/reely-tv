@@ -206,13 +206,13 @@ fun MenuArtHeader(
                 Text(
                     text = title,
                     color = Chalk,
-                    style = ReelyType.RowTitle,
+                    style = ReelyType.Headline,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
             if (!meta.isNullOrBlank()) {
-                Text(text = meta, color = Muted, style = ReelyType.Label, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(text = meta, color = Muted, style = ReelyType.Meta, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
     }

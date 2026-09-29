@@ -89,8 +89,8 @@ internal val TOUR = listOf(
     ),
     TourStep(
         "Hold OK for more",
-        "On Home, hold OK on a poster for more: play it from the beginning, mark it watched, " +
-            "or take it off Continue Watching.",
+        "Hold OK on any poster for more: carry on or start again, mark it watched, or go " +
+            "to its page. On a show, it plays the next episode.",
         RemoteKey.SELECT,
         hold = true,
     ),

@@ -443,9 +443,11 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
      * focus, it goes back where the person was: the tab they were on, or the page.
      */
     var appHasFocus by remember { mutableStateOf(true) }
-    // A reminder up has the cursor, outside all this; once it's gone the net catches it.
-    LaunchedEffect(appHasFocus, state.dueReminder) {
-        if (appHasFocus || state.dueReminder != null) return@LaunchedEffect
+    // A reminder or a title's menu up has the cursor, outside all this; once it's gone
+    // the net catches it. Without the menu here, the net took the cursor straight back
+    // off the menu it had just opened, leaving nothing in the menu to press.
+    LaunchedEffect(appHasFocus, state.dueReminder, itemMenu) {
+        if (appHasFocus || state.dueReminder != null || itemMenu != null) return@LaunchedEffect
         // Give anything that is moving the cursor on purpose a moment to do it first.
         delay(FOCUS_RESCUE_DELAY_MS)
         if (tabRowHasFocus) currentTabFocus.requestWhenReady() else contentFocus.requestWhenReady()
@@ -548,6 +550,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onPlayItem = { item, resume -> viewModel.play(item, resume = resume) },
                 onToggleWatched = viewModel::toggleWatched,
                 onRemoveFromContinueWatching = viewModel::removeFromContinueWatching,
+                onPlayNextEpisode = viewModel::playNextEpisode,
                 onStartLink = viewModel::startPlexLink,
                 onCancelLink = viewModel::cancelPlexLink,
                 onDismissPlexError = viewModel::dismissPlexError,
@@ -873,6 +876,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onPlay = { resume -> closeItemMenu(); viewModel.play(item, resume = resume) },
                 onToggleWatched = { closeItemMenu(); viewModel.toggleWatched(item) },
                 onDetails = { itemMenu = null; open(item) },
+                onPlayNext = { closeItemMenu(); viewModel.playNextEpisode(item) },
             ),
             onCancel = ::closeItemMenu,
         )

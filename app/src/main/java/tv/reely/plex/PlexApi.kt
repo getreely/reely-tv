@@ -378,7 +378,7 @@ object PlexApi {
             .build()
         Http.client.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
-            require(response.isSuccessful) { "Couldn't get a sign-in code from Plex (error ${response.code}). Try again." }
+            require(response.isSuccessful) { "Couldn't get a sign-in code from Plex. Try again." }
             val json = JSONObject(body)
             PlexPin(json.getLong("id"), json.getString("code"))
         }
@@ -465,7 +465,7 @@ object PlexApi {
                 require(response.code != 401 && response.code != 403) {
                     if (pin != null) "That PIN isn't right. Try again." else "Plex didn't allow switching to this profile."
                 }
-                require(response.isSuccessful) { "Couldn't switch profiles (error ${response.code}). Try again." }
+                require(response.isSuccessful) { "Couldn't switch profiles. Try again." }
                 JSONObject(body).optString("authToken").takeIf { it.isNotBlank() && it != "null" }
                     ?: error("Couldn't switch profiles. Try again.")
             }
@@ -496,7 +496,7 @@ object PlexApi {
             .build()
         Http.client.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
-            require(response.isSuccessful) { "Couldn't load your Plex servers (error ${response.code}). Try again." }
+            require(response.isSuccessful) { "Couldn't load your Plex servers. Try again." }
             val resources = JSONArray(body)
             buildList {
                 for (index in 0 until resources.length()) {
@@ -715,6 +715,51 @@ object PlexApi {
 
     suspend fun children(base: String, token: String, ratingKey: String): List<PlexItem> =
         items(base, token, "/library/metadata/$ratingKey/children", limit = 400)
+
+    /**
+     * The outside ids of everything in one library, as Plex gives them: "tmdb://603",
+     * "tvdb://81189", "imdb://tt0133093". Asked for all at once, ids only, so even a
+     * big library is one quick answer.
+     */
+    suspend fun libraryGuids(base: String, token: String, sectionKey: String, type: Int): Set<String> =
+        withContext(Dispatchers.IO) {
+            val json = container(
+                "$base/library/sections/$sectionKey/all?type=$type&includeGuids=1" +
+                    "&X-Plex-Container-Start=0&X-Plex-Container-Size=100000",
+                token,
+            )
+            guidsIn(json.optJSONArray("Metadata"))
+        }
+
+    internal fun guidsIn(metadata: JSONArray?): Set<String> = buildSet {
+        if (metadata == null) return@buildSet
+        for (i in 0 until metadata.length()) {
+            val guids = metadata.optJSONObject(i)?.optJSONArray("Guid") ?: continue
+            for (g in 0 until guids.length()) {
+                guids.optJSONObject(g)?.optString("id")?.takeIf { it.isNotBlank() }?.let(::add)
+            }
+        }
+    }
+
+    /** Every episode of a show, or of a season, in order. */
+    suspend fun episodesOf(base: String, token: String, ratingKey: String): List<PlexItem> =
+        items(base, token, "/library/metadata/$ratingKey/allLeaves", limit = 2000)
+            .filter { it.type == "episode" }
+            .map { it.copy(serverBase = base) }
+
+    /**
+     * Which of [episodes] (in order) to play next: the one part watched, else the first
+     * not yet watched after the last one that was, else the first not watched at all,
+     * else the first. What Plex's own apps mean by a show's next episode.
+     */
+    fun nextEpisode(episodes: List<PlexItem>): PlexItem? {
+        episodes.firstOrNull { it.resumeFraction != null && !it.isWatched }?.let { return it }
+        val lastWatched = episodes.indexOfLast { it.isWatched }
+        if (lastWatched >= 0) {
+            episodes.drop(lastWatched + 1).firstOrNull { !it.isWatched }?.let { return it }
+        }
+        return episodes.firstOrNull { !it.isWatched } ?: episodes.firstOrNull()
+    }
 
     /**
      * The video playlists on a server, the account's own and smart ones. A playlist's
@@ -1204,7 +1249,7 @@ object PlexApi {
             .put(FormBody.Builder().build())
             .build()
         Http.client.newCall(request).execute().use { response ->
-            require(response.isSuccessful) { "Couldn't change your Watchlist (error ${response.code})." }
+            require(response.isSuccessful) { "Couldn't change your Watchlist." }
         }
         Unit
     }
@@ -1218,7 +1263,7 @@ object PlexApi {
                 .build()
             Http.client.newCall(request).execute().use { response ->
                 require(response.isSuccessful) {
-                    "Couldn't remove that from Continue Watching (error ${response.code})."
+                    "Couldn't remove that from Continue Watching."
                 }
             }
             Unit
@@ -1239,7 +1284,7 @@ object PlexApi {
             "&identifier=com.plexapp.plugins.library&X-Plex-Token=$token"
         val request = Request.Builder().url(url).header("accept", "application/json").get().build()
         Http.client.newCall(request).execute().use { response ->
-            require(response.isSuccessful) { "Plex couldn't update the watched status (error ${response.code})." }
+            require(response.isSuccessful) { "Plex couldn't update the watched status." }
         }
         Unit
     }
@@ -1511,7 +1556,7 @@ object PlexApi {
             .build()
         Http.client.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
-            require(response.isSuccessful) { "Your Plex server returned an error (${response.code})." }
+            require(response.isSuccessful) { "Your Plex server couldn't do that. Try again." }
             return JSONObject(body).optJSONObject("MediaContainer") ?: JSONObject()
         }
     }
