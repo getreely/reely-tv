@@ -54,6 +54,8 @@ fun UpdatePrompt(
     status: UpdateStatus,
     onUpdate: () -> Unit,
     onLater: () -> Unit,
+    /** The installer again, on the update already downloaded. */
+    onInstall: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     BackHandler(onBack = onLater)
@@ -109,7 +111,7 @@ fun UpdatePrompt(
             Text(
                 text = when (status) {
                     is UpdateStatus.Downloading -> "It installs as soon as it's here."
-                    is UpdateStatus.Handed -> "Confirm on the screen that appears."
+                    is UpdateStatus.Handed -> status.note ?: "Confirm on the screen that appears."
                     is UpdateStatus.Failed -> status.message
                     else -> buildString {
                         append("Version ${info?.versionName ?: "?"} is ready")
@@ -152,11 +154,20 @@ fun UpdatePrompt(
                     modifier = startButton,
                 )
             } else if (status is UpdateStatus.Handed) {
-                TvActionButton(
-                    label = "Close",
-                    onClick = onLater,
-                    modifier = startButton,
-                )
+                // Install opens the installer again, should it have been closed or not
+                // come up, without downloading the update a second time.
+                Row(
+                    modifier = Modifier.padding(top = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    TvActionButton(
+                        label = "Install",
+                        onClick = onInstall,
+                        emphasised = true,
+                        modifier = startButton,
+                    )
+                    TvActionButton(label = "Close", onClick = onLater)
+                }
             } else {
                 Row(
                     modifier = Modifier.padding(top = 10.dp),

@@ -1,7 +1,11 @@
 package tv.reely.core
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -106,16 +110,33 @@ object Updater {
     }
 
     /**
-     * Hands the file to the system installer. Android will not take a file:// path from
-     * another app's storage, so it goes through this app's provider, and Fire OS will ask
-     * once for permission to install from here before it will go any further.
+     * The system installer, pointed at the file. Android will not take a file:// path
+     * from another app's storage, so it goes through this app's provider.
+     *
+     * Started from the screen that is showing, in its task. Started from the application
+     * with a task of its own, the installer often didn't come up on the first try: it
+     * could not tell which app was asking, and a new task on Fire TV can open behind
+     * the one in front.
      */
-    fun install(context: Context, apk: File) {
+    fun installIntent(context: Context, apk: File): Intent {
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.updates", apk)
-        val intent = Intent(Intent.ACTION_VIEW).apply {
+        return Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/vnd.android.package-archive")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            if (context !is Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        context.startActivity(intent)
     }
+
+    /**
+     * Whether this app may install at all. Until it's allowed in the system settings, the
+     * installer only shows its refusal, so the settings screen is opened first instead.
+     */
+    fun mayInstall(context: Context): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.O || context.packageManager.canRequestPackageInstalls()
+
+    /** The system's switch for letting this app install updates. */
+    fun permissionIntent(context: Context): Intent =
+        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")).apply {
+            if (context !is Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
 }

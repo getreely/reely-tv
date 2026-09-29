@@ -117,6 +117,14 @@ private val settingsDestination = Destination("Settings", Route.Settings, icon =
 fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
 
+    // Before anything that returns early, so it stays put whatever screen is up.
+    tv.reely.ui.screens.InstallerLauncher(
+        status = state.update,
+        onHandled = viewModel::installerRequestHandled,
+        onRetry = viewModel::openInstaller,
+        onDidNotOpen = viewModel::installerDidNotOpen,
+    )
+
     /*
      * "Who's watching?", over everything else while it is up. Closed by Back, by picking
      * the profile already in use, or by a switch going through.
@@ -615,6 +623,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 updateUrl = viewModel.updateUrl,
                 onCheckForUpdate = viewModel::checkForUpdate,
                 onInstallUpdate = viewModel::installUpdate,
+                onOpenInstaller = viewModel::openInstaller,
             )
         }
 
@@ -640,6 +649,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 tv.reely.ui.screens.UpdatePrompt(
                     status = state.update,
                     onUpdate = viewModel::installUpdate,
+                    onInstall = viewModel::openInstaller,
                     onLater = viewModel::dismissUpdatePrompt,
                 )
             }

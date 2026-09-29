@@ -130,6 +130,7 @@ fun SettingsScreen(
     updateUrl: String,
     onCheckForUpdate: () -> Unit,
     onInstallUpdate: () -> Unit,
+    onOpenInstaller: () -> Unit = {},
     modifier: Modifier = Modifier,
     /** Opens "Who's watching?" to switch Plex Home profiles. */
     onSwitchProfile: () -> Unit = {},
@@ -252,6 +253,7 @@ fun SettingsScreen(
                     update = update,
                     onCheck = onCheckForUpdate,
                     onInstall = onInstallUpdate,
+                    onOpenInstaller = onOpenInstaller,
                 )
 
                 Section.ABOUT -> AboutSection()
@@ -652,6 +654,7 @@ private fun UpdatesSection(
     update: UpdateStatus,
     onCheck: () -> Unit,
     onInstall: () -> Unit,
+    onOpenInstaller: () -> Unit,
 ) {
     SettingGroup("Reely") {
         SettingRow(title = "Version", value = BuildConfig.VERSION_NAME)
@@ -682,9 +685,9 @@ private fun UpdatesSection(
                 Triple("Downloading", "${update.read * 100 / total}%", null)
             }
             is UpdateStatus.Handed -> Triple(
-                "Ready to install",
-                null,
-                "Confirm on the screen that appears. The first time, Fire TV asks you to allow installs from Reely.",
+                "Install",
+                "Downloaded",
+                update.note ?: "Confirm on the screen that appears. The first time, allow installs from Reely when asked.",
             )
         }
         SettingRow(
@@ -695,6 +698,7 @@ private fun UpdatesSection(
             onClick = when (update) {
                 is UpdateStatus.Available, is UpdateStatus.Unlabelled -> onInstall
                 is UpdateStatus.Idle, is UpdateStatus.UpToDate, is UpdateStatus.Failed -> onCheck
+                is UpdateStatus.Handed -> onOpenInstaller
                 else -> ({})
             },
         )

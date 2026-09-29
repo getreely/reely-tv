@@ -523,7 +523,17 @@ sealed interface UpdateStatus {
     data class Unlabelled(val info: UpdateInfo) : UpdateStatus
     data object UpToDate : UpdateStatus
     data class Downloading(val read: Long, val total: Long) : UpdateStatus
-    data object Handed : UpdateStatus
+    /**
+     * Downloaded, and for the screen to open the installer on. [request] goes up each time
+     * that's asked for; [note] says why the last one didn't get as far as the installer.
+     */
+    data class Handed(
+        val file: java.io.File,
+        val request: Int = 1,
+        /** The last request the screen has acted on, so none is acted on twice. */
+        val handled: Int = 0,
+        val note: String? = null,
+    ) : UpdateStatus
     data class Failed(val message: String) : UpdateStatus
 }
 
@@ -3167,11 +3177,31 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 _state.update { it.copy(update = UpdateStatus.Failed(failure.readable())) }
                 return@launch
             }
-            runCatching { Updater.install(getApplication(), file) }.onFailure { failure ->
-                _state.update { it.copy(update = UpdateStatus.Failed(failure.readable())) }
-                return@launch
-            }
-            _state.update { it.copy(update = UpdateStatus.Handed) }
+            _state.update { it.copy(update = UpdateStatus.Handed(file)) }
+        }
+    }
+
+    /** The installer again, for the file already downloaded. */
+    fun openInstaller() {
+        _state.update { current ->
+            val handed = current.update as? UpdateStatus.Handed ?: return@update current
+            current.copy(update = handed.copy(request = handed.request + 1, note = null))
+        }
+    }
+
+    /** The screen has taken this request for the installer in hand. */
+    fun installerRequestHandled(request: Int) {
+        _state.update { current ->
+            val handed = current.update as? UpdateStatus.Handed ?: return@update current
+            current.copy(update = handed.copy(handled = maxOf(handed.handled, request)))
+        }
+    }
+
+    /** The installer was asked for and didn't come up, or couldn't be asked for. */
+    fun installerDidNotOpen(note: String) {
+        _state.update { current ->
+            val handed = current.update as? UpdateStatus.Handed ?: return@update current
+            current.copy(update = handed.copy(note = note))
         }
     }
 
