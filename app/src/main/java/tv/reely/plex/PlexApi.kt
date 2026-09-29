@@ -105,6 +105,9 @@ data class PlexPlayback(
     val chapters: List<PlexChapter> = emptyList(),
 )
 
+/** An actor who turned up in a search. */
+data class PlexPerson(val id: String, val name: String, val thumb: String?, val serverBase: String?)
+
 /** One of a title's files, when it has more than one: a 4K copy and a 1080p one, say. */
 data class PlexVersion(val label: String, val detail: String?)
 
@@ -974,23 +977,47 @@ object PlexApi {
 
     /** Searches the whole library at once — films, shows and episodes together. */
     suspend fun search(base: String, token: String, query: String): List<PlexItem> =
+        searchAll(base, token, query).first
+
+    /**
+     * Titles and people for a search. Plex answers with a hub per kind; actors come in
+     * their own hub, as tags with the id a library is filtered by (see [withActor]).
+     */
+    suspend fun searchAll(base: String, token: String, query: String): Pair<List<PlexItem>, List<PlexPerson>> =
         withContext(Dispatchers.IO) {
-            if (query.isBlank()) return@withContext emptyList()
+            if (query.isBlank()) return@withContext emptyList<PlexItem>() to emptyList()
             val encoded = URLEncoder.encode(query.trim(), "UTF-8")
             val hubs = container("$base/hubs/search?query=$encoded&limit=30", token)
                 .optJSONArray("Hub") ?: JSONArray()
-
-            val wanted = setOf("movie", "show", "episode")
-            buildList {
-                for (index in 0 until hubs.length()) {
-                    val metadata = hubs.getJSONObject(index).optJSONArray("Metadata") ?: continue
-                    for (entry in 0 until metadata.length()) {
-                        val item = parseItem(metadata.getJSONObject(entry)).copy(serverBase = base)
-                        if (item.type in wanted && item.ratingKey.isNotEmpty()) add(item)
-                    }
-                }
-            }.distinctBy { it.ratingKey }
+            itemsFromHubs(hubs, base) to peopleFromHubs(hubs, base)
         }
+
+    internal fun peopleFromHubs(hubs: JSONArray, base: String): List<PlexPerson> = buildList {
+        for (index in 0 until hubs.length()) {
+            val hub = hubs.optJSONObject(index) ?: continue
+            if (hub.optString("type") != "actor") continue
+            val entries = hub.optJSONArray("Directory") ?: hub.optJSONArray("Metadata") ?: continue
+            for (entry in 0 until entries.length()) {
+                val person = entries.optJSONObject(entry) ?: continue
+                val id = person.optString("id").takeIf(String::isNotBlank) ?: continue
+                val name = person.optString("tag").ifBlank { person.optString("title") }.takeIf(String::isNotBlank) ?: continue
+                add(PlexPerson(id, name, person.optString("thumb").takeIf(String::isNotBlank), base))
+            }
+        }
+    }.distinctBy { it.id }
+
+    private fun itemsFromHubs(hubs: JSONArray, base: String): List<PlexItem> {
+        val wanted = setOf("movie", "show", "episode")
+        return buildList {
+            for (index in 0 until hubs.length()) {
+                val metadata = hubs.getJSONObject(index).optJSONArray("Metadata") ?: continue
+                for (entry in 0 until metadata.length()) {
+                    val item = parseItem(metadata.getJSONObject(entry)).copy(serverBase = base)
+                    if (item.type in wanted && item.ratingKey.isNotEmpty()) add(item)
+                }
+            }
+        }.distinctBy { it.ratingKey }
+    }
 
     /**
      * Trailers and other extras. Locally stored ones are always here; Plex's own online

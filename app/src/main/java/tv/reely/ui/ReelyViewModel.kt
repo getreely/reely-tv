@@ -337,6 +337,8 @@ data class SearchState(
     val results: List<PlexItem> = emptyList(),
     /** Live channels whose name matches. Empty when no provider is configured. */
     val channels: List<XtreamChannel> = emptyList(),
+    /** Actors whose name matches, whose page shows what else they're in. */
+    val people: List<tv.reely.plex.PlexPerson> = emptyList(),
     val busy: Boolean = false,
 )
 
@@ -2116,9 +2118,11 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             delay(400)
             // Every pinned server, merged. Searching one of two libraries and calling it
             // "your library" is the thing this whole change is about.
-            val results = servers.flatMap { (base, token) ->
-                runCatching { PlexApi.search(base, token, query) }.getOrElse { emptyList() }
+            val found = servers.map { (base, token) ->
+                runCatching { PlexApi.searchAll(base, token, query) }.getOrElse { emptyList<PlexItem>() to emptyList() }
             }
+            val results = tv.reely.core.SearchMatch.relevant(query, found.flatMap { it.first })
+            val people = found.flatMap { it.second }.distinctBy { it.name.lowercase() }.take(PEOPLE_RESULTS)
             // Channels are matched here rather than asked of the panel: the panel has no
             // search, and the whole list is already in hand.
             val channels = allChannels.orEmpty()
@@ -2127,7 +2131,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { current ->
                 if (current.search.query != query) current
                 else current.copy(
-                    search = current.search.copy(results = results, channels = channels, busy = false)
+                    search = current.search.copy(results = results, channels = channels, people = people, busy = false)
                 )
             }
         }
@@ -2916,6 +2920,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     private companion object {
         /** How much of the guide is held in memory at once. */
         const val WINDOW_SECONDS = 24L * 3_600
+
+        /** How many people a search offers. */
+        const val PEOPLE_RESULTS = 12
 
         /** How much of the Watchlist Home looks for on the servers. */
         const val WATCHLIST_ROW = 40

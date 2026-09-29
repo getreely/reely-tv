@@ -454,6 +454,10 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onFocusItem = viewModel::focusItem,
                 onOpenItem = ::open,
                 onPlayChannel = viewModel::playSearchChannel,
+                onOpenPerson = { person ->
+                    openedFromPage = true
+                    viewModel.navigate(Route.Person(person.id, person.name, person.thumb, person.serverBase))
+                },
             )
 
             is Route.Detail -> {

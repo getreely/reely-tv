@@ -47,8 +47,10 @@ fun SearchScreen(
     onOpenItem: (PlexItem) -> Unit,
     onPlayChannel: (XtreamChannel) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenPerson: (tv.reely.plex.PlexPerson) -> Unit = {},
 ) {
     val channelFocus = rememberRowFocus()
+    val peopleFocus = rememberRowFocus()
     val resultFocus = rememberRowFocus()
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -73,22 +75,24 @@ fun SearchScreen(
                         value = search.query,
                         onValueChange = onQueryChange,
                         label = "Search",
-                        placeholder = "Movies, shows, episodes and channels",
+                        placeholder = "Movies, shows, people and channels",
                         imeAction = ImeAction.Search,
                         modifier = Modifier.widthIn(max = 620.dp),
                     )
                     when {
                         search.busy -> EmptyNote("Searching…")
                         search.query.isBlank() ->
-                            EmptyNote("Search movies, shows and live channels.")
+                            EmptyNote("Search movies, shows, people and live channels.")
 
-                        search.results.isEmpty() && search.channels.isEmpty() ->
+                        search.results.isEmpty() && search.channels.isEmpty() && search.people.isEmpty() ->
                             EmptyNote("Nothing matched \"${search.query}\".")
 
                         else -> EmptyNote(
                             listOfNotNull(
                                 "${search.results.size} in your library".takeIf { search.results.isNotEmpty() },
                                 "${search.channels.size} live channels".takeIf { search.channels.isNotEmpty() },
+                                (if (search.people.size == 1) "1 person" else "${search.people.size} people")
+                                    .takeIf { search.people.isNotEmpty() },
                             ).joinToString("  ·  ")
                         )
                     }
@@ -119,6 +123,32 @@ fun SearchScreen(
                                     logoUrl = channel.icon,
                                     onClick = { onPlayChannel(channel) },
                                     modifier = rowItem(channelFocus, channel.streamId.toString()),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // People after channels: a name typed is a person often enough to be worth a row.
+            if (search.people.isNotEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Column(
+                        modifier = Modifier.padding(bottom = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(text = "People", color = Chalk, style = ReelyType.RowTitle)
+                        LazyRow(
+                            modifier = Modifier.restoreFocusTo(peopleFocus).focusGroup(),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            items(search.people, key = { it.id }) { person ->
+                                tv.reely.ui.components.CastCircle(
+                                    name = person.name,
+                                    role = null,
+                                    imageUrl = imageUrl(person.serverBase, person.thumb, 160, 160),
+                                    onClick = { onOpenPerson(person) },
+                                    modifier = rowItem(peopleFocus, person.id),
                                 )
                             }
                         }
