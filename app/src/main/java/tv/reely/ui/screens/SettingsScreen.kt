@@ -151,7 +151,7 @@ fun SettingsScreen(
     val firstOption = remember { FocusRequester() }
 
     // Back from the options goes back to the section they belong to. Back from the
-    // sections leaves Settings, as it always has.
+    // sections goes up to the gear, as from any tab's page.
     BackHandler(enabled = inOptions) { sectionFocus.getValue(section).requestFocus() }
 
     /*

@@ -39,6 +39,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
+import tv.reely.ui.components.FocusReturn
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -71,6 +77,11 @@ fun LiveCategoriesScreen(
     onSelectCategory: (XtreamCategory) -> Unit,
     onDismissError: () -> Unit,
     modifier: Modifier = Modifier,
+    // The category the guide was opened from, on the way back out of it: the cursor goes
+    // back onto that tile. Left to itself it had nowhere to be once the guide went, and
+    // fell to the first thing in the window, the search tab.
+    returnTo: String? = null,
+    onReturned: () -> Unit = {},
 ) {
     if (!live.isConnected) {
         XtreamSignInPanel(
@@ -83,10 +94,26 @@ fun LiveCategoriesScreen(
         return
     }
 
+    val tiles = remember { CategoryTiles() }
+    val grid = rememberLazyGridState()
+    LaunchedEffect(returnTo, live.shownCategories.isEmpty()) {
+        if (returnTo == null || live.shownCategories.isEmpty()) return@LaunchedEffect
+        val index = live.shownCategories.indexOfFirst { it.id == returnTo }
+        if (index >= 0) {
+            // A frame to lay the grid out, then the tile brought on screen if it's not.
+            withFrameNanos { }
+            val item = index + 1 // after the heading
+            if (grid.layoutInfo.visibleItemsInfo.none { it.index == item }) grid.scrollToItem(item)
+            FocusReturn.to(tiles.of(returnTo))
+        }
+        onReturned()
+    }
+
     // The tiles step back while one of them has focus, as a row of posters does.
     FocusRow { gridFocused ->
         LazyVerticalGrid(
             columns = GridCells.Adaptive(minSize = 240.dp),
+            state = grid,
             modifier = modifier.fillMaxSize().then(gridFocused),
             // Inside the safe area, with room at the edges and between tiles for a focused
             // one's lift and glow.
@@ -125,7 +152,11 @@ fun LiveCategoriesScreen(
             }
 
             items(live.shownCategories, key = { it.id }) { category ->
-                CategoryCard(category = category, onClick = { onSelectCategory(category) })
+                CategoryCard(
+                    category = category,
+                    onClick = { onSelectCategory(category) },
+                    modifier = Modifier.focusRequester(tiles.of(category.id)),
+                )
             }
         }
     }
@@ -133,17 +164,23 @@ fun LiveCategoriesScreen(
 
 private val TILE_HEIGHT = 92.dp
 
+/** A requester per category tile, for putting the cursor back on one. */
+private class CategoryTiles {
+    private val requesters = mutableMapOf<String, FocusRequester>()
+    fun of(id: String): FocusRequester = requesters.getOrPut(id) { FocusRequester() }
+}
+
 /**
  * A category, in its own colour. Focus is the same as a poster's: a white ring, a lift,
  * and a glow — here in the tile's colour rather than the artwork's, since it has none.
  */
 @Composable
-private fun CategoryCard(category: XtreamCategory, onClick: () -> Unit) {
+private fun CategoryCard(category: XtreamCategory, onClick: () -> Unit, modifier: Modifier = Modifier) {
     var focused by remember { mutableStateOf(false) }
     val tint = channelTint(category.id)
     CompositionLocalProvider(LocalTint provides tint) {
         Box(
-            modifier = Modifier
+            modifier = modifier
                 .fillMaxWidth()
                 .height(TILE_HEIGHT)
                 .cardLift(focused)

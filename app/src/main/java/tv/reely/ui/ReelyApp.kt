@@ -275,33 +275,11 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     var constraintsWidth by remember { mutableIntStateOf(0) }
     val menuWidthPx = with(LocalDensity.current) { TAB_MENU_WIDTH.roundToPx() }
 
-    // Back walks the stack: out of a season, off a detail page, and only then out of the app.
-    // A library grid is reached from that library's home, so back belongs there and not
-    // out of the application. Top-level routes replace the stack, so there is nothing in
-    // it to walk back through.
+    // A library grid is reached from that library's home, so back belongs there. See
+    // backStep for the rest.
     val gridRoute = state.route as? Route.Library
     var confirmExit by remember { mutableStateOf(false) }
     val activity = LocalActivity.current
-
-    /*
-     * One handler, in order, rather than several fighting over which is enabled. The last
-     * step asks instead of leaving: closing the whole application on a single press of
-     * back, from a screen somebody only wandered into, is not something to do quietly.
-     */
-    BackHandler {
-        when {
-            confirmExit -> confirmExit = false
-            menuFor != null -> menuFor = null
-            state.stack.size > 1 -> {
-                wentBack = true
-                viewModel.goBack()
-            }
-            gridRoute != null && gridRoute.view != LibraryView.HOME ->
-                viewModel.navigate(Route.Library(gridRoute.kind, LibraryView.HOME))
-
-            else -> confirmExit = true
-        }
-    }
 
     // An audio player that outlives the screen is the bug this app has already shipped
     // once. Backgrounding kills the theme outright.
@@ -354,6 +332,8 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     // The page on screen was reached by the cursor moving along the tabs, and the cursor
     // is still up there. A page must not pull it down into itself: see GuideScreen.
     var cameByTabs by remember { mutableStateOf(false) }
+    // The category the guide was left from by Back, for the cursor to go back onto.
+    var returnToCategory by remember { mutableStateOf<String?>(null) }
 
 
 
@@ -365,6 +345,36 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     val currentTabFocus = tabFocus.getOrNull(selectedIndex) ?: settingsFocus
 
     LaunchedEffect(Unit) { tabFocus[1].requestWhenReady() }
+
+    // Staying puts the cursor back on the tab Back was pressed from. The question sits in
+    // the page's area, so without this the net below put it down in the page instead.
+    var exitClosed by remember { mutableIntStateOf(0) }
+    LaunchedEffect(exitClosed) {
+        if (exitClosed > 0) tv.reely.ui.components.FocusReturn.to(currentTabFocus)
+    }
+    fun stay() {
+        confirmExit = false
+        exitClosed++
+    }
+
+    /*
+     * One handler, in order, rather than several fighting over which is enabled. The last
+     * step asks instead of leaving: closing the whole application on a single press of
+     * back, from a screen somebody only wandered into, is not something to do quietly.
+     */
+    BackHandler {
+        when (backStep(confirmExit, menuFor != null, tabRowHasFocus, state.stack.size, state.route)) {
+            BackStep.CLOSE_EXIT -> stay()
+            BackStep.CLOSE_MENU -> menuFor = null
+            BackStep.WALK_BACK -> {
+                wentBack = true
+                viewModel.goBack()
+            }
+            BackStep.LIBRARY_HOME -> gridRoute?.let { viewModel.navigate(Route.Library(it.kind, LibraryView.HOME)) }
+            BackStep.UP_TO_TAB -> currentTabFocus.requestFocus()
+            BackStep.ASK_EXIT -> confirmExit = true
+        }
+    }
 
     // Closing a tab's menu gives the cursor back to the tab that opened it. Guarded on
     // having actually opened one, so this does not fight the effect above at startup.
@@ -702,6 +712,8 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                     onSignInPlaylist = viewModel::signInPlaylist,
                     onSelectCategory = viewModel::openCategory,
                     onDismissError = viewModel::dismissLiveError,
+                    returnTo = returnToCategory,
+                    onReturned = { returnToCategory = null },
                 )
             } else {
                 GuideScreen(
@@ -714,7 +726,12 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                     onJumpToNow = viewModel::guideJumpToNow,
                     onRefresh = { viewModel.refreshGuide(force = true) },
                     onPlaySelected = viewModel::guidePlaySelected,
-                    onBackToCategories = viewModel::clearCategory,
+                    onBackToCategories = {
+                        // Only from the guide itself: Back with the cursor up on the tabs
+                        // shows the categories without pulling the cursor down into them.
+                        if (!tabRowHasFocus) returnToCategory = state.live.selectedCategory?.id
+                        viewModel.clearCategory()
+                    },
                     livePlayer = viewModel.livePlayer,
                     reminders = state.reminders,
                     onToggleReminder = viewModel::toggleReminder,
@@ -798,7 +815,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             if (confirmExit) {
                 ConfirmExit(
                     onLeave = { activity?.finish() },
-                    onStay = { confirmExit = false },
+                    onStay = ::stay,
                     modifier = Modifier.align(Alignment.Center),
                 )
             }
@@ -1213,6 +1230,31 @@ private fun ConfirmExit(
             TvActionButton(label = "Close", onClick = onLeave)
         }
     }
+}
+
+/** What Back does, from where the cursor is. */
+internal enum class BackStep { CLOSE_EXIT, CLOSE_MENU, WALK_BACK, LIBRARY_HOME, UP_TO_TAB, ASK_EXIT }
+
+/**
+ * Back, in order: close whatever is open; off a page opened from somewhere, back to it;
+ * from a tab's own page, up to its tab, as every television app does; and from the tabs
+ * themselves, the question of leaving. Settings is a tab here, though it sits on top of
+ * wherever it was opened from. A library's grid goes to that library's home first.
+ */
+internal fun backStep(
+    confirmingExit: Boolean,
+    menuOpen: Boolean,
+    onTabs: Boolean,
+    stackSize: Int,
+    route: Route,
+): BackStep = when {
+    confirmingExit -> BackStep.CLOSE_EXIT
+    menuOpen -> BackStep.CLOSE_MENU
+    route is Route.Settings -> if (onTabs) BackStep.ASK_EXIT else BackStep.UP_TO_TAB
+    stackSize > 1 -> BackStep.WALK_BACK
+    onTabs -> BackStep.ASK_EXIT
+    route is Route.Library && route.view != LibraryView.HOME -> BackStep.LIBRARY_HOME
+    else -> BackStep.UP_TO_TAB
 }
 
 /**
