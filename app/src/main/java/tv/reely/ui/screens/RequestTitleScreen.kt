@@ -45,6 +45,8 @@ fun RequestTitleScreen(
     onToggleAll: () -> Unit,
     onRequest: () -> Unit,
     onChooseLibrary: (Long) -> Unit = {},
+    /** Already on the server: its page there, to watch it. */
+    onWatch: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val detail = page.detail
@@ -114,6 +116,16 @@ fun RequestTitleScreen(
                 }
             }
 
+            // Already here: something to press, and the thing most wanted. A page with no
+            // button at all left the cursor with nowhere to be but the tabs.
+            if (detail != null && (detail.inLibrary || held > 0) && !page.canAsk) {
+                TvActionButton(
+                    label = "Watch",
+                    onClick = onWatch,
+                    emphasised = true,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
             if (detail != null && page.canAsk) {
                 val verb = if (page.places?.adds == true) "Add" else "Request"
                 Row(

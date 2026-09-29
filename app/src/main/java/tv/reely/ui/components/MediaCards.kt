@@ -159,6 +159,14 @@ fun WideCard(
     }
 }
 
+/** A poster's tag in the colour of what it says: here is green, on its way warm, asked quiet. */
+internal fun tagColors(tag: String): Pair<Color, Color> = when (tag) {
+    "In library" -> tv.reely.ui.theme.Good to Ink
+    "Downloading", "Partial" -> Accent to Ink
+    "Declined" -> Ink.copy(alpha = 0.85f) to Faint
+    else -> Ink.copy(alpha = 0.85f) to Chalk
+}
+
 /**
  * A poster. The badge carries the "six new episodes" count, so a show that dropped a
  * whole season reads as one arrival rather than filling the row.
@@ -176,6 +184,11 @@ fun PosterCard(
     watched: Boolean = false,
     onFocus: () -> Unit = {},
     width: androidx.compose.ui.unit.Dp = 132.dp,
+    /**
+     * A word on the poster itself: where a title stands with Reely, In library,
+     * Requested and the like, so a row says it at a glance.
+     */
+    tag: String? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
 
@@ -228,6 +241,25 @@ fun PosterCard(
                 ) {
                     CheckGlyph(color = Ink, size = 15.dp)
                 }
+            }
+
+            if (tag != null) {
+                val (fill, ink) = tagColors(tag)
+                Text(
+                    text = tag,
+                    color = ink,
+                    fontSize = 12.sp,
+                    lineHeight = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    // Top left, clear of the title most posters carry along the bottom.
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(6.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(fill)
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                )
             }
 
             if (badge != null && badge > 1) {

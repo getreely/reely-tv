@@ -260,9 +260,13 @@ class ReelyRequests(
      * own Explore page reads. Best effort: without them a poster simply goes unmarked.
      */
     suspend fun marks(): TitleMarks = withContext(Dispatchers.IO) {
-        val movies = JSONObject(get("/api/v1/movies")).optJSONArray("movies") ?: JSONArray()
-        val shows = JSONObject(get("/api/v1/shows")).optJSONArray("shows") ?: JSONArray()
-        val open = JSONObject(get("/api/v1/requests")).optJSONArray("requests") ?: JSONArray()
+        // Each list on its own: one that can't be had leaves the others' marks standing,
+        // rather than every poster unmarked.
+        fun list(path: String, field: String) =
+            runCatching { JSONObject(get(path)).optJSONArray(field) }.getOrNull() ?: JSONArray()
+        val movies = list("/api/v1/movies", "movies")
+        val shows = list("/api/v1/shows", "shows")
+        val open = list("/api/v1/requests", "requests")
         val movieMarks = (0 until movies.length()).mapNotNull { movies.optJSONObject(it) }
             .filter { it.optInt("tmdbId") > 0 }
             .associate { m ->

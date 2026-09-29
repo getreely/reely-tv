@@ -5,13 +5,9 @@ import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -36,6 +32,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.runtime.key
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.focusRequester
@@ -114,52 +114,80 @@ fun MultiViewGrid(
     modifier: Modifier = Modifier,
     tile: @Composable (index: Int) -> Unit,
 ) {
-    when (slots) {
-        2 -> Row(
-            modifier = modifier.fillMaxSize(),
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
-        ) {
-            Box(modifier = Modifier.weight(1f).fillMaxHeight()) { tile(0) }
-            Box(modifier = Modifier.weight(1f).fillMaxHeight()) { tile(1) }
-        }
-
-        3 -> Row(
-            modifier = modifier.fillMaxSize(),
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
-        ) {
-            Box(modifier = Modifier.weight(1f).fillMaxHeight()) { tile(0) }
-            Column(
-                modifier = Modifier.weight(1f).fillMaxHeight(),
-                verticalArrangement = Arrangement.spacedBy(3.dp),
-            ) {
-                Box(modifier = Modifier.weight(1f).fillMaxWidth()) { tile(1) }
-                Box(modifier = Modifier.weight(1f).fillMaxWidth()) { tile(2) }
-            }
-        }
-
-        4 -> Column(
-            modifier = modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(3.dp),
-        ) {
-            Row(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
-            ) {
-                Box(modifier = Modifier.weight(1f).fillMaxHeight()) { tile(0) }
-                Box(modifier = Modifier.weight(1f).fillMaxHeight()) { tile(1) }
-            }
-            Row(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
-            ) {
-                Box(modifier = Modifier.weight(1f).fillMaxHeight()) { tile(2) }
-                Box(modifier = Modifier.weight(1f).fillMaxHeight()) { tile(3) }
-            }
-        }
-
-        else -> Box(modifier = modifier.fillMaxSize()) { tile(0) }
+    TileLayout(slots = slots, modifier = modifier, tile = tile) { width, height, gap ->
+        gridRects(slots, width, height, gap)
     }
 }
+
+/**
+ * Every tile's place in the even grid, in pixels. Two go side by side, three give the
+ * first the left half and stack the others, and four quarter the screen.
+ */
+fun gridRects(slots: Int, width: Int, height: Int, gap: Int): List<IntRect> {
+    val halfW = (width - gap) / 2
+    val halfH = (height - gap) / 2
+    val right = width - halfW
+    val lower = height - halfH
+    return when (slots) {
+        2 -> listOf(
+            IntRect(0, 0, halfW, height),
+            IntRect(right, 0, width, height),
+        )
+        3 -> listOf(
+            IntRect(0, 0, halfW, height),
+            IntRect(right, 0, width, halfH),
+            IntRect(right, lower, width, height),
+        )
+        4 -> listOf(
+            IntRect(0, 0, halfW, halfH),
+            IntRect(right, 0, width, halfH),
+            IntRect(0, lower, halfW, height),
+            IntRect(right, lower, width, height),
+        )
+        else -> listOf(IntRect(0, 0, width, height))
+    }.take(slots.coerceAtLeast(1))
+}
+
+/**
+ * Draws each tile once and only ever moves or resizes it.
+ *
+ * The layouts used to be rows and columns with each tile composed wherever it fell, so
+ * moving the cursor in the focus layout took a tile out of the side column and composed
+ * it afresh in the middle. That built its picture a new video surface every time, which
+ * showed green until the stream's next full frame arrived, and with four channels up it
+ * was four new surfaces a press. Here the tiles stay put in the composition, keyed by
+ * their place in the line, and only where they are drawn changes.
+ */
+@Composable
+private fun TileLayout(
+    slots: Int,
+    modifier: Modifier = Modifier,
+    tile: @Composable (index: Int) -> Unit,
+    rects: (width: Int, height: Int, gap: Int) -> List<IntRect>,
+) {
+    Layout(
+        modifier = modifier.fillMaxSize(),
+        content = {
+            repeat(slots) { index ->
+                key(index) { Box { tile(index) } }
+            }
+        },
+    ) { measurables, constraints ->
+        val width = constraints.maxWidth
+        val height = constraints.maxHeight
+        val placed = rects(width, height, TILE_GAP.roundToPx())
+        val placeables = measurables.mapIndexed { index, measurable ->
+            val rect = placed.getOrNull(index) ?: IntRect.Zero
+            measurable.measure(Constraints.fixed(rect.width.coerceAtLeast(0), rect.height.coerceAtLeast(0))) to rect
+        }
+        layout(width, height) {
+            placeables.forEach { (placeable, rect) -> placeable.place(rect.left, rect.top) }
+        }
+    }
+}
+
+/** The line between tiles. */
+private val TILE_GAP = 3.dp
 
 /**
  * A player for one of the extra channels.
@@ -213,7 +241,9 @@ fun ExtraTile(
                     this.player = player
                 }
             },
-            update = { it.player = player },
+            update = { if (it.player !== player) it.player = player },
+            // Otherwise the player keeps a listener on a view nobody can see any more.
+            onRelease = { it.player = null },
             modifier = Modifier.fillMaxSize(),
         )
     }
@@ -417,38 +447,45 @@ fun FocusLayout(
     modifier: Modifier = Modifier,
     tile: @Composable (index: Int) -> Unit,
 ) {
-    val (before, after) = focusSides(slots, focused)
-    val side = if (before.isNotEmpty() && after.isNotEmpty()) SIDE_BOTH else SIDE_ONE
-    Row(
-        modifier = modifier.fillMaxSize(),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
-    ) {
-        if (before.isNotEmpty()) SideColumn(before, Modifier.weight(side), tile)
-        Box(modifier = Modifier.weight(1f - side * listOf(before, after).count { it.isNotEmpty() }).fillMaxHeight()) {
-            tile(focused)
-        }
-        if (after.isNotEmpty()) SideColumn(after, Modifier.weight(side), tile)
+    TileLayout(slots = slots, modifier = modifier, tile = tile) { width, height, gap ->
+        focusRects(slots, focused, width, height, gap)
     }
+}
+
+/**
+ * Every tile's place in the focus layout, in pixels: the large one full height in its own
+ * place in the line, the ones before and after it in picture-shaped boxes stacked down
+ * the middle of a column either side.
+ */
+fun focusRects(slots: Int, focused: Int, width: Int, height: Int, gap: Int): List<IntRect> {
+    if (slots <= 1) return listOf(IntRect(0, 0, width, height))
+    val (before, after) = focusSides(slots, focused)
+    val columns = listOf(before, after).count { it.isNotEmpty() }
+    val side = if (columns == 2) SIDE_BOTH else SIDE_ONE
+    val room = width - gap * columns
+    val sideW = (room * side).toInt()
+    val largeW = room - sideW * columns
+    val largeLeft = if (before.isNotEmpty()) sideW + gap else 0
+    val rects = arrayOfNulls<IntRect>(slots)
+    rects[focused.coerceIn(0, slots - 1)] = IntRect(largeLeft, 0, largeLeft + largeW, height)
+    fun column(indices: List<Int>, left: Int) {
+        val tileH = sideW * 9 / 16
+        val total = tileH * indices.size + gap * (indices.size - 1)
+        var top = (height - total) / 2
+        indices.forEach { index ->
+            rects[index] = IntRect(left, top, left + sideW, top + tileH)
+            top += tileH + gap
+        }
+    }
+    column(before, 0)
+    column(after, largeLeft + largeW + gap)
+    return rects.map { it ?: IntRect.Zero }
 }
 
 /** The tiles either side of the large one in the focus layout, in their own order. */
 fun focusSides(slots: Int, focused: Int): Pair<List<Int>, List<Int>> {
     val large = focused.coerceIn(0, (slots - 1).coerceAtLeast(0))
     return (0 until large).toList() to (large + 1 until slots).toList()
-}
-
-@Composable
-private fun SideColumn(indices: List<Int>, modifier: Modifier, tile: @Composable (index: Int) -> Unit) {
-    Column(
-        modifier = modifier.fillMaxHeight(),
-        verticalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterVertically),
-    ) {
-        // Each the shape of a picture, not stretched to the height of the screen: one
-        // small channel beside the large one used to be a tall strip mostly of black.
-        indices.forEach { index ->
-            Box(modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)) { tile(index) }
-        }
-    }
 }
 
 /** The share of the width a side column takes: less of it when there's one each side. */

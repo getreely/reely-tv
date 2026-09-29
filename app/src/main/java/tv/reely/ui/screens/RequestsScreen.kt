@@ -116,7 +116,8 @@ private fun TitleRow(
         items(titles, key = { it.key }) { title ->
             PosterCard(
                 title = title.title,
-                subtitle = requests.badgeFor(title) ?: title.year?.toString(),
+                subtitle = title.year?.toString(),
+                tag = requests.badgeFor(title),
                 imageUrl = title.poster,
                 onFocus = { focus.onFocused(title.key) },
                 onClick = { onOpen(title) },

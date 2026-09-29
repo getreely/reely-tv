@@ -342,7 +342,8 @@ fun HomeScreen(
                                         items(titles, key = { it.key }) { title ->
                                             PosterCard(
                                                 title = title.title,
-                                                subtitle = requestBadge(title) ?: title.year?.toString(),
+                                                subtitle = title.year?.toString(),
+                                                tag = requestBadge(title),
                                                 imageUrl = title.poster,
                                                 onFocus = { rowFocus.onFocused(title.key) },
                                                 onClick = { onOpenRequest(title) },

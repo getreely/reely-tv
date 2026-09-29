@@ -909,6 +909,11 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun openReady(title: tv.reely.requests.RequestTitle) {
         dismissReady(title)
+        openInPlex(title)
+    }
+
+    /** A title Reely knows of, on the server: its page, or Search with its name when not found. */
+    fun openInPlex(title: tv.reely.requests.RequestTitle) {
         val plex = _state.value.plex
         val servers = plex.homeSources().map { it.baseUrl to it.token }.distinct().ifEmpty {
             val base = plex.baseUrl

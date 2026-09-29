@@ -1099,6 +1099,9 @@ fun PlayerScreen(
                     if (playerView.player !== exoPlayer) playerView.player = exoPlayer
                     playerView.subtitleView?.applyStyle(prefs)
                 },
+                // A view that has gone lets go of the player, which would otherwise keep
+                // it and its surface alive for as long as the player lives.
+                onRelease = { it.player = null },
                 modifier = Modifier.fillMaxSize(),
             )
         }

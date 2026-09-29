@@ -129,6 +129,8 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
      */
     val screenState = rememberSaveableStateHolder()
     val screenFocus = remember { mutableMapOf<String, ScreenFocus>() }
+    // Set by Back, for the screen it returns to: the cursor goes back where it was there.
+    var wentBack by remember { mutableStateOf(false) }
 
     /*
      * The screensaver: up after the minutes set in Settings without a button, never while
@@ -283,7 +285,10 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
         when {
             confirmExit -> confirmExit = false
             menuFor != null -> menuFor = null
-            state.stack.size > 1 -> viewModel.goBack()
+            state.stack.size > 1 -> {
+                wentBack = true
+                viewModel.goBack()
+            }
             gridRoute != null && gridRoute.view != LibraryView.HOME ->
                 viewModel.navigate(Route.Library(gridRoute.kind, LibraryView.HOME))
 
@@ -393,7 +398,12 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     LaunchedEffect(routeKey(state.route), contentReady(state), menuFor, touring) {
         // Not while the tour is up: it has the cursor, and this would take it from under it.
         if (menuFor != null || touring || !contentReady(state)) return@LaunchedEffect
-        if (tabRowHasFocus && !openedFromPage) return@LaunchedEffect
+        // Back to a screen puts the cursor where it was, even if it had drifted up to the
+        // tabs meanwhile: a page with nothing to press leaves it there, and Back from it
+        // then found the tabs and stayed.
+        val cameBack = wentBack
+        wentBack = false
+        if (tabRowHasFocus && !openedFromPage && !cameBack) return@LaunchedEffect
         // A show's page with its episode in hand puts the cursor on that episode itself,
         // coming back from the player especially; going to the top here would undo it.
         val episodeHere = state.detail?.let { page ->
@@ -626,6 +636,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                         onToggleAll = viewModel::toggleAllRequestSeasons,
                         onRequest = viewModel::submitRequest,
                         onChooseLibrary = viewModel::chooseRequestLibrary,
+                        onWatch = { viewModel.openInPlex(page.title) },
                     )
                 }
             }
@@ -963,16 +974,6 @@ internal fun TopBar(
 
         Box(modifier = Modifier.weight(1f))
 
-        // The time, quietly: nobody should have to leave the app to find out how late it is.
-        val context = androidx.compose.ui.platform.LocalContext.current
-        Text(
-            text = tv.reely.ui.components.clockTime(context, tv.reely.ui.components.rememberNow()),
-            color = Faint,
-            fontSize = 16.sp,
-            lineHeight = 20.sp,
-            modifier = Modifier.padding(end = 18.dp),
-        )
-
         if (profile != null) {
             ProfileChip(
                 user = profile,
@@ -1000,6 +1001,17 @@ internal fun TopBar(
             onFocused = onTabFocused,
             canSelectOnFocus = canSelectOnFocus,
             modifier = Modifier.focusRequester(settingsFocus),
+        )
+
+        // The time at the far right, quietly: nobody should have to leave the app to find
+        // out how late it is.
+        val context = androidx.compose.ui.platform.LocalContext.current
+        Text(
+            text = tv.reely.ui.components.clockTime(context, tv.reely.ui.components.rememberNow()),
+            color = Faint,
+            fontSize = 16.sp,
+            lineHeight = 20.sp,
+            modifier = Modifier.padding(start = 18.dp),
         )
     }
 }
