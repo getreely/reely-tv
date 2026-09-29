@@ -124,6 +124,7 @@ fun SettingsScreen(
     onToggleLargerBuffer: () -> Unit,
     onToggleSkipIntros: () -> Unit,
     onToggleSkipCredits: () -> Unit = {},
+    onSetScreensaver: (Int) -> Unit = {},
     onNudgeThemeVolume: (Float) -> Unit,
     onRefreshChannels: () -> Unit,
     onRefreshGuide: () -> Unit,
@@ -240,7 +241,7 @@ fun SettingsScreen(
                     onSignOutXtream = onSignOutXtream,
                 )
 
-                Section.HOME -> HomeSection(prefs, reelyConnected = requests.server != null, onToggleHomeRow)
+                Section.HOME -> HomeSection(prefs, reelyConnected = requests.server != null, onToggleHomeRow, onSetScreensaver)
 
                 Section.REQUESTS -> RequestsSection(requests, onDisconnectReely)
 
@@ -518,7 +519,12 @@ private fun LiveSection(
 
 /** Which rows Home shows. */
 @Composable
-private fun HomeSection(prefs: PlayerPrefs, reelyConnected: Boolean, onToggle: (tv.reely.ui.HomeRow) -> Unit) {
+private fun HomeSection(
+    prefs: PlayerPrefs,
+    reelyConnected: Boolean,
+    onToggle: (tv.reely.ui.HomeRow) -> Unit,
+    onSetScreensaver: (Int) -> Unit,
+) {
     val (yours, reely) = tv.reely.ui.HomeRow.entries.partition { !it.fromReely }
     SettingGroup("Rows on Home") {
         yours.forEachIndexed { index, row ->
@@ -542,6 +548,20 @@ private fun HomeSection(prefs: PlayerPrefs, reelyConnected: Boolean, onToggle: (
                 onClick = { onToggle(row) },
             )
         }
+    }
+    SettingGroup("Screensaver") {
+        ChoiceRow(
+            title = "Screensaver",
+            description = "Your library's artwork and the time, when the remote's been put down.",
+            options = listOf(
+                Option(0, "Off", "Fire TV's own screensaver comes on instead."),
+                Option(3, "After 3 minutes"),
+                Option(5, "After 5 minutes", "Only if Fire TV's own is set to longer."),
+                Option(10, "After 10 minutes", "Only if Fire TV's own is set to longer."),
+            ),
+            selected = prefs.screensaverMinutes,
+            onSelect = onSetScreensaver,
+        )
     }
 }
 

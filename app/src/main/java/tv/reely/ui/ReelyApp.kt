@@ -23,6 +23,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -128,6 +129,34 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
      */
     val screenState = rememberSaveableStateHolder()
     val screenFocus = remember { mutableMapOf<String, ScreenFocus>() }
+
+    /*
+     * The screensaver: up after the minutes set in Settings without a button, never while
+     * something plays. A press puts it away and does nothing else, down and up both, so
+     * waking the screen doesn't also open whatever the cursor was on.
+     */
+    var lastPress by remember { mutableLongStateOf(0L) }
+    var saverUp by remember { mutableStateOf(false) }
+    var swallowRelease by remember { mutableStateOf(false) }
+    val saverMinutes = state.prefs.screensaverMinutes
+    LaunchedEffect(lastPress, saverMinutes, state.playback == null) {
+        saverUp = false
+        if (saverMinutes <= 0 || state.playback != null) return@LaunchedEffect
+        delay(saverMinutes * 60_000L)
+        saverUp = true
+    }
+    // The screen held on while it's up, so Fire TV's own doesn't cover it; for half an hour,
+    // then Fire TV may put the television to sleep as it would have.
+    val rootView = androidx.compose.ui.platform.LocalView.current
+    LaunchedEffect(saverUp) {
+        if (!saverUp) return@LaunchedEffect
+        rootView.keepScreenOn = true
+        try {
+            delay(SCREENSAVER_HOLD_MS)
+        } finally {
+            rootView.keepScreenOn = false
+        }
+    }
 
     // Before anything that returns early, so it stays put whatever screen is up.
     tv.reely.ui.screens.InstallerLauncher(
@@ -383,7 +412,17 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             .background(Ink)
             .onFocusChanged { appHasFocus = it.hasFocus }
             .onPreviewKeyEvent { event ->
+                if (saverUp && event.type == KeyEventType.KeyDown) {
+                    swallowRelease = true
+                    lastPress++
+                    return@onPreviewKeyEvent true
+                }
+                if (swallowRelease && event.type == KeyEventType.KeyUp) {
+                    swallowRelease = false
+                    return@onPreviewKeyEvent true
+                }
                 if (event.type == KeyEventType.KeyDown) {
+                    lastPress++
                     arrivedByDirectionKey = event.key == Key.DirectionUp ||
                         event.key == Key.DirectionDown ||
                         event.key == Key.DirectionLeft ||
@@ -644,6 +683,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onToggleLargerBuffer = viewModel::toggleLargerBuffer,
                 onToggleSkipIntros = viewModel::toggleSkipIntros,
                 onToggleSkipCredits = viewModel::toggleSkipCredits,
+                onSetScreensaver = viewModel::setScreensaverMinutes,
                 onNudgeThemeVolume = viewModel::nudgeThemeVolume,
                 onSetPlaybackMode = viewModel::setPlaybackMode,
                 onSetMaxBitrate = viewModel::setMaxBitrate,
@@ -761,6 +801,12 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 )
             }
         }
+    }
+
+    // Over everything, the tab row included. The cursor stays where it was underneath.
+    if (saverUp) {
+        val slides = remember { viewModel.screensaverSlides() }
+        tv.reely.ui.screens.Screensaver(slides)
     }
 }
 
@@ -1094,3 +1140,6 @@ internal fun Modifier.pageArea(upTo: FocusRequester): Modifier = this
 
 /** How long nothing may have the cursor before it is put back. See the net in ReelyApp. */
 private const val FOCUS_RESCUE_DELAY_MS = 120L
+
+/** How long the screensaver keeps the screen on before letting Fire TV put it to sleep. */
+private const val SCREENSAVER_HOLD_MS = 30L * 60_000

@@ -85,6 +85,14 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(SKIP_INTROS, false)
         set(value) = prefs.edit().putBoolean(SKIP_INTROS, value).apply()
 
+    /**
+     * Minutes without a button pressed before the screensaver, or 0 for none. Three by
+     * default: Fire TV's own starts at five, and after that this would never be seen.
+     */
+    var screensaverMinutes: Int
+        get() = prefs.getInt(SCREENSAVER_MINUTES, DEFAULT_SCREENSAVER)
+        set(value) = prefs.edit().putInt(SCREENSAVER_MINUTES, value).apply()
+
     /** Straight on to the next episode when the credits start, rather than Up Next. */
     var skipCredits: Boolean
         get() = prefs.getBoolean(SKIP_CREDITS, false)
@@ -155,6 +163,8 @@ class Settings(context: Context) {
         private const val HIDDEN_HOME_ROWS = "home.hiddenRows"
         private const val SKIP_INTROS = "playback.skipIntros"
         private const val SKIP_CREDITS = "playback.skipCredits"
+        private const val SCREENSAVER_MINUTES = "screensaver.minutes"
+        const val DEFAULT_SCREENSAVER = 3
         private const val TOUR_SEEN = "tour.seen"
         private const val MAX_BITRATE = "playback.maxBitrate"
         private const val UPDATE_URL = "update.url"

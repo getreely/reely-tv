@@ -499,6 +499,8 @@ data class PlayerPrefs(
     val skipIntros: Boolean = false,
     /** Straight on to the next episode at the credits, where there is one. */
     val skipCredits: Boolean = false,
+    /** Minutes idle before the screensaver; 0 for none. */
+    val screensaverMinutes: Int = Settings.DEFAULT_SCREENSAVER,
     /** The tour of the remote has been taken or skipped; see Tour. */
     val tourSeen: Boolean = true,
     /** Home's rows switched off in Settings; see HomeRow. */
@@ -614,6 +616,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 largerBuffer = settings.largerBuffer,
                 skipIntros = settings.skipIntros,
                 skipCredits = settings.skipCredits,
+                screensaverMinutes = settings.screensaverMinutes,
                 tourSeen = settings.tourSeen,
                 hiddenHomeRows = settings.hiddenHomeRows,
             )
@@ -3279,6 +3282,33 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     /** The tour again, from Settings. */
     fun replayTour() {
         _state.update { it.copy(prefs = it.prefs.copy(tourSeen = false)) }
+    }
+
+    fun setScreensaverMinutes(minutes: Int) {
+        settings.screensaverMinutes = minutes
+        _state.update { it.copy(prefs = it.prefs.copy(screensaverMinutes = minutes)) }
+    }
+
+    /**
+     * The screensaver's pictures: the artwork of what's on Home, in no particular order,
+     * each once. Films and shows with wide artwork of their own; nothing without.
+     */
+    fun screensaverSlides(): List<tv.reely.ui.screens.SaverSlide> {
+        val home = _state.value.home
+        val items = home.continueWatching + home.recentMovies + home.recentEpisodes.map { it.newest } + home.watchlist
+        return items
+            .mapNotNull { item ->
+                val art = item.art ?: return@mapNotNull null
+                val url = plexImageUrl(item.serverBase, art, width = 1920, height = 1080) ?: return@mapNotNull null
+                val isEpisode = item.type == "episode" && item.grandparentTitle != null
+                tv.reely.ui.screens.SaverSlide(
+                    url = url,
+                    title = if (isEpisode) item.grandparentTitle!! else item.title,
+                    caption = if (isEpisode) item.caption else item.year?.toString(),
+                )
+            }
+            .distinctBy { it.url }
+            .shuffled()
     }
 
     fun toggleSkipCredits() {
