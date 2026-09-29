@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -24,6 +25,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,6 +74,8 @@ import tv.reely.ui.components.TAB_MENU_WIDTH
 import tv.reely.ui.components.TabMenuItem
 import tv.reely.ui.components.TvActionButton
 import tv.reely.ui.components.requestWhenReady
+import tv.reely.ui.components.LocalScreenFocus
+import tv.reely.ui.components.ScreenFocus
 import tv.reely.ui.screens.DetailScreen
 import tv.reely.ui.screens.PersonScreen
 import tv.reely.ui.screens.PlaylistScreen
@@ -116,6 +120,14 @@ private val settingsDestination = Destination("Settings", Route.Settings, icon =
 @Composable
 fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
+
+    /*
+     * Each screen's scroll, and where its cursor was, kept while it's not showing: a title
+     * opened, the player, another tab. Held up here, above everything that replaces the
+     * screens, so it outlives them. See ScreenFocus.
+     */
+    val screenState = rememberSaveableStateHolder()
+    val screenFocus = remember { mutableMapOf<String, ScreenFocus>() }
 
     // Before anything that returns early, so it stays put whatever screen is up.
     tv.reely.ui.screens.InstallerLauncher(
@@ -333,7 +345,9 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     LaunchedEffect(routeKey(state.route), contentReady(state), menuFor) {
         if (menuFor != null || !contentReady(state)) return@LaunchedEffect
         if (tabRowHasFocus && !openedFromPage) return@LaunchedEffect
-        contentFocus.requestWhenReady()
+        // Back to a screen: the card the cursor was on. Somewhere new: the top of it.
+        val back = !openedFromPage && screenFocus[routeKey(state.route)]?.restore() == true
+        if (!back) contentFocus.requestWhenReady()
         openedFromPage = false
     }
 
@@ -419,6 +433,9 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                     }
                 },
         ) {
+        val screenKey = routeKey(state.route)
+        screenState.SaveableStateProvider(screenKey) {
+        CompositionLocalProvider(LocalScreenFocus provides screenFocus.getOrPut(screenKey) { ScreenFocus() }) {
         when (val route = state.route) {
             is Route.Home -> HomeScreen(
                 plex = state.plex,
@@ -626,6 +643,8 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onInstallUpdate = viewModel::installUpdate,
                 onOpenInstaller = viewModel::openInstaller,
             )
+        }
+        }
         }
 
             // Once, after the app fell over last time: an apology, and where the details are.

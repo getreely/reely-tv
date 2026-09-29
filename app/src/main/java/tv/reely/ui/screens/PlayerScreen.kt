@@ -685,6 +685,7 @@ fun PlayerScreen(
     val scrubberFocus = remember { FocusRequester() }
     val rootFocus = remember { FocusRequester() }
     val panelFocus = remember { FocusRequester() }
+    val panelButtons = remember { Panel.entries.associateWith { FocusRequester() } }
     val tileMenuFocus = remember { FocusRequester() }
 
     /*
@@ -716,23 +717,49 @@ fun PlayerScreen(
         scrubFirst = false
     }
 
+    // The panel last open, so closing it puts the cursor back on the button that opened
+    // it. Going to Play instead meant finding Subtitles again to change your mind.
+    var closedPanel by remember { mutableStateOf<Panel?>(null) }
     LaunchedEffect(
-        controlsVisible, panel, guideOpen, tileMenu, skipLabel, playback.isLive, playback.url,
+        controlsVisible, panel, guideOpen, tileMenu, playback.isLive, playback.url,
         postPlay,
     ) {
         if (guideOpen) return@LaunchedEffect
+        val cameFrom = closedPanel
+        closedPanel = null
         when {
             postPlay -> upNextFocus.requestWhenReady()
             tileMenu != null -> tileMenuFocus.requestWhenReady()
-            panel != Panel.NONE -> panelFocus.requestWhenReady()
+            panel != Panel.NONE -> {
+                closedPanel = panel
+                panelFocus.requestWhenReady()
+            }
             // Above the transport: a prompt that is only up for a few seconds is no use
-            // if reaching it means hunting for it first. When it goes, focus has to land
-            // somewhere or the remote does nothing at all.
+            // if reaching it means hunting for it first.
             // The effect above is putting the cursor on the bar; don't take it to Play.
             scrubFirst && controlsVisible && !playback.isLive -> Unit
+            cameFrom != null && controlsVisible -> panelButtons.getValue(cameFrom).requestWhenReady()
             skipLabel != null -> skipFocus.requestWhenReady()
             controlsVisible -> playFocus.requestWhenReady()
             else -> rootFocus.requestWhenReady()
+        }
+    }
+
+    /*
+     * The skip prompt coming and going on its own, as the intro or the credits pass under
+     * the playhead. It takes the cursor when nothing is being done with the controls, so
+     * one press of OK skips. It doesn't while the bar has it: that is somebody scrubbing,
+     * and the prompt appearing sent the cursor off the bar mid-scrub. When the prompt goes
+     * with the cursor on it, the cursor goes to Play, or with the controls down, to the
+     * picture, so the remote still does something.
+     */
+    LaunchedEffect(skipLabel != null) {
+        if (guideOpen || postPlay || tileMenu != null || panel != Panel.NONE) return@LaunchedEffect
+        if (skipLabel != null) {
+            if (!(controlsVisible && atTopOfControls)) skipFocus.requestWhenReady()
+        } else if (skipFocused) {
+            skipFocused = false
+            if (controlsVisible) playFocus.requestWhenReady() else rootFocus.requestWhenReady()
         }
     }
 
@@ -1205,6 +1232,7 @@ fun PlayerScreen(
                 onOpenAudio = { panel = Panel.AUDIO },
                 onOpenStats = { panel = Panel.STATS },
                 onOpenChapters = if (playback.chapters.isNotEmpty()) ({ panel = Panel.CHAPTERS }) else null,
+                panelButtons = panelButtons,
                 onToggleFormat = onToggleFormat,
                 skipLabel = skipLabel,
                 skipFocus = skipFocus,
@@ -1366,6 +1394,8 @@ internal fun Controls(
     skipFocus: FocusRequester = remember { FocusRequester() },
     onSkipPrompt: () -> Unit = {},
     onSkipFocus: (Boolean) -> Unit = {},
+    /** The buttons that open each panel, for the cursor to go back to when it closes. */
+    panelButtons: Map<Panel, FocusRequester> = remember { Panel.entries.associateWith { FocusRequester() } },
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -1502,22 +1532,26 @@ internal fun Controls(
                         TransportButton(
                             onClick = onOpenChapters,
                             diameter = SMALL_BUTTON,
+                            modifier = Modifier.focusRequester(panelButtons.getValue(Panel.CHAPTERS)),
                             glyph = { ChaptersGlyph(it, 16.dp) },
                         )
                     }
                     TransportButton(
                         onClick = onOpenSubtitles,
                         diameter = SMALL_BUTTON,
+                        modifier = Modifier.focusRequester(panelButtons.getValue(Panel.SUBTITLES)),
                         glyph = { SubtitleGlyph(it, 16.dp) },
                     )
                     TransportButton(
                         onClick = onOpenAudio,
                         diameter = SMALL_BUTTON,
+                        modifier = Modifier.focusRequester(panelButtons.getValue(Panel.AUDIO)),
                         glyph = { SpeakerGlyph(it, 16.dp) },
                     )
                     TransportButton(
                         onClick = onOpenStats,
                         diameter = SMALL_BUTTON,
+                        modifier = Modifier.focusRequester(panelButtons.getValue(Panel.STATS)),
                         glyph = { InfoGlyph(it, 16.dp) },
                     )
                     if (playback.isLive) {

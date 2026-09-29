@@ -45,7 +45,7 @@ fun PlaylistScreen(
     onOpenItem: (PlexItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val gridFocus = rememberRowFocus()
+    val gridFocus = rememberRowFocus("grid")
     val gridScroll = rememberMarginScroll(above = 14.dp)
 
     CompositionLocalProvider(LocalBringIntoViewSpec provides gridScroll) {

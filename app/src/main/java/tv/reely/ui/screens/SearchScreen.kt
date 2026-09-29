@@ -49,9 +49,9 @@ fun SearchScreen(
     modifier: Modifier = Modifier,
     onOpenPerson: (tv.reely.plex.PlexPerson) -> Unit = {},
 ) {
-    val channelFocus = rememberRowFocus()
-    val peopleFocus = rememberRowFocus()
-    val resultFocus = rememberRowFocus()
+    val channelFocus = rememberRowFocus("channels")
+    val peopleFocus = rememberRowFocus("people")
+    val resultFocus = rememberRowFocus("results")
 
     Box(modifier = modifier.fillMaxSize()) {
         HeroBackdrop(

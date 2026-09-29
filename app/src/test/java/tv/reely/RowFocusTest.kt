@@ -61,9 +61,10 @@ class RowFocusTest {
         row.onGone("ep1")
         row.onPresent("ep1")
 
-        // The remembered key was cleared by the removal, so the row defers...
-        assertSame(FocusRequester.Default, row.entry())
-        // ...but the item keeps the same requester, because the modifier chain must not
+        // Still remembered, and offered again now it's back: coming back to the row,
+        // or to the screen, finds the cursor where it was...
+        assertSame(requester, row.entry())
+        // ...on the same requester, because the modifier chain must not
         // change shape when an item regains focus.
         assertSame(requester, row.requesterFor("ep1"))
     }

@@ -142,10 +142,10 @@ fun LibraryScreen(
     val recentEpisodes = home.recentEpisodes.filter { here(it.serverBase, it.librarySectionId) }
 
     // Held at screen level so a row scrolling out of view does not forget its place.
-    val resumeFocus = rememberRowFocus()
-    val recentFocus = rememberRowFocus()
-    val releasedFocus = rememberRowFocus()
-    val gridFocus = rememberRowFocus()
+    val resumeFocus = rememberRowFocus("continue")
+    val recentFocus = rememberRowFocus("recent")
+    val releasedFocus = rememberRowFocus("released")
+    val gridFocus = rememberRowFocus("grid")
 
     /*
      * Room around a focused card, so its lift and caption are never off the bottom of the

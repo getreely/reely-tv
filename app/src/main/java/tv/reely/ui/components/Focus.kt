@@ -2,12 +2,18 @@ package tv.reely.ui.components
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import kotlinx.coroutines.delay
 
 /**
@@ -46,7 +52,7 @@ suspend fun FocusRequester.requestWhenReady(
  * on every navigation, and it is easy to reintroduce by making this conditional.
  */
 @Stable
-class RowFocus {
+class RowFocus(private val screen: ScreenFocus? = null) {
     private val requesters = mutableMapOf<String, FocusRequester>()
 
     /**
@@ -59,19 +65,78 @@ class RowFocus {
     private val present = mutableSetOf<String>()
     private var remembered: String? = null
 
+    /** Which item is where, for the ones on screen, to find the one beside a card that went. */
+    private val keyAt = mutableMapOf<Int, String>()
+    private var focusedKey: String? = null
+
+    // A card taken away loses the cursor a moment before it's gone, so what lost it last,
+    // and when, is what says the card that went had it.
+    private var blurredKey: String? = null
+    private var blurredAt = 0L
+
+    /**
+     * Where a card was that went while it had the cursor: Remove from Continue Watching,
+     * say, or Mark watched on it. Read by the row, which puts the cursor on the card that
+     * took its place, or the one before it at the end. Without that, the cursor had
+     * nowhere to be and went back to the top of the page.
+     */
+    internal var lost by mutableIntStateOf(-1)
+        private set
+    internal var lostCount by mutableIntStateOf(0)
+        private set
+
     fun requesterFor(key: String): FocusRequester = requesters.getOrPut(key) { FocusRequester() }
 
     fun onFocused(key: String) {
         remembered = key
+        screen?.last = this
     }
 
-    fun onPresent(key: String) {
+    /** The card last on, whether or not it is on screen now. */
+    internal val rememberedKey: String? get() = remembered
+
+    fun onPresent(key: String, index: Int = -1) {
         present += key
+        if (index >= 0) keyAt[index] = key
     }
 
-    fun onGone(key: String) {
+    fun onGone(key: String, index: Int = -1) {
+        // The card is kept in mind even so: entry() only ever hands out one that's
+        // present, and a screen coming back puts the cursor on it once it's composed.
         present -= key
-        if (remembered == key) remembered = null
+        if (index >= 0 && keyAt[index] == key) keyAt.remove(index)
+        val justLost = blurredKey == key && System.nanoTime() - blurredAt < JUST_LOST_NS && focusedKey == null
+        if (focusedKey == key || justLost) {
+            focusedKey = null
+            blurredKey = null
+            if (index >= 0) {
+                lost = index
+                lostCount++
+            }
+        }
+    }
+
+    internal fun onFocusState(key: String, focused: Boolean) {
+        if (focused) {
+            focusedKey = key
+            // Every card in a row, whether or not it says so itself.
+            onFocused(key)
+        } else if (focusedKey == key) {
+            focusedKey = null
+            blurredKey = key
+            blurredAt = System.nanoTime()
+        }
+    }
+
+    /** The card at [index] now, or the nearest before it: what's beside one that went. */
+    internal fun nearest(index: Int): String? =
+        keyAt[index] ?: keyAt.keys.filter { it < index }.maxOrNull()?.let { keyAt[it] }
+
+    /** The cursor onto the card at [index], or the nearest before it, when there is one. */
+    suspend fun landAt(index: Int) {
+        // A frame for the row to lay the cards out again without the one that went.
+        withFrameNanos { }
+        nearest(index)?.let { land(it) }
     }
 
     /**
@@ -88,8 +153,48 @@ class RowFocus {
     }
 }
 
+/** How recently a card may have lost the cursor for its going to count as taking it. */
+private const val JUST_LOST_NS = 250_000_000L
+
 @Composable
 fun rememberRowFocus(): RowFocus = remember { RowFocus() }
+
+/**
+ * A row that outlives its screen: named, and kept by the screen's [ScreenFocus] rather
+ * than by the composition, so going to a title and coming back finds the cursor where it
+ * was. Outside a screen that keeps them, the same as [rememberRowFocus].
+ */
+@Composable
+fun rememberRowFocus(id: String): RowFocus {
+    val screen = LocalScreenFocus.current
+    return remember(screen, id) { screen?.row(id) ?: RowFocus() }
+}
+
+/**
+ * Where the cursor was on one screen: its rows, and which of them it was last in.
+ *
+ * Every screen was built again from nothing on the way back to it, so Back from a title
+ * opened from the third row of Home put the cursor on the first card of the first row,
+ * with the page scrolled to the top. The app keeps one of these per screen for as long
+ * as it runs, and on the way back puts the cursor on the card it was on.
+ */
+@Stable
+class ScreenFocus {
+    private val rows = mutableMapOf<String, RowFocus>()
+    internal var last: RowFocus? = null
+
+    fun row(id: String): RowFocus = rows.getOrPut(id) { RowFocus(this) }
+
+    /** The cursor back on the card last on; false when there's none to go back to. */
+    suspend fun restore(): Boolean {
+        val row = last ?: return false
+        val key = row.rememberedKey ?: return false
+        return row.requesterFor(key).requestWhenReady()
+    }
+}
+
+/** The screen showing's [ScreenFocus], provided by the app around each screen. */
+val LocalScreenFocus = androidx.compose.runtime.staticCompositionLocalOf<ScreenFocus?> { null }
 
 /**
  * What an item in a row wears: its own requester, and a note to the row that it exists
@@ -97,12 +202,26 @@ fun rememberRowFocus(): RowFocus = remember { RowFocus() }
  * something that has since been scrolled away or replaced.
  */
 @Composable
-fun rowItem(row: RowFocus, key: String): Modifier {
-    DisposableEffect(row, key) {
-        row.onPresent(key)
-        onDispose { row.onGone(key) }
+fun rowItem(row: RowFocus, key: String, index: Int = -1): Modifier {
+    DisposableEffect(row, key, index) {
+        row.onPresent(key, index)
+        onDispose { row.onGone(key, index) }
     }
-    return Modifier.focusRequester(row.requesterFor(key))
+    return Modifier
+        .focusRequester(row.requesterFor(key))
+        .onFocusChanged { row.onFocusState(key, it.isFocused) }
+}
+
+/**
+ * For a row whose cards can go while one has the cursor: puts it on the card beside the
+ * one that went. Needs the cards' positions, given to [rowItem].
+ */
+@Composable
+fun FollowRemovals(row: RowFocus) {
+    val count = row.lostCount
+    LaunchedEffect(row, count) {
+        if (count > 0) row.landAt(row.lost)
+    }
 }
 
 /**

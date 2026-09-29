@@ -111,7 +111,7 @@ private fun TitleRow(
     sideways: androidx.compose.foundation.gestures.BringIntoViewSpec,
     onOpen: (RequestTitle) -> Unit,
 ) {
-    val focus = rememberRowFocus()
+    val focus = rememberRowFocus(heading)
     PosterRow(title = heading, rowFocus = focus, sideways = sideways) {
         items(titles, key = { it.key }) { title ->
             PosterCard(

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import tv.reely.ui.theme.Accent
@@ -44,6 +45,7 @@ import tv.reely.ui.components.PosterCard
 import tv.reely.ui.components.rememberRowFocus
 import tv.reely.ui.components.rowItem
 import tv.reely.ui.components.restoreFocusTo
+import tv.reely.ui.components.FollowRemovals
 import tv.reely.ui.components.FocusRow
 import tv.reely.ui.theme.Chalk
 import tv.reely.ui.theme.ReelyType
@@ -109,11 +111,11 @@ fun HomeScreen(
 
     // One per row, held at screen level so scrolling a row out of view does not lose
     // where the cursor was in it.
-    val resumeFocus = rememberRowFocus()
-    val episodeFocus = rememberRowFocus()
-    val movieFocus = rememberRowFocus()
-    val watchlistFocus = rememberRowFocus()
-    val playlistFocus = rememberRowFocus()
+    val resumeFocus = rememberRowFocus("continue")
+    val episodeFocus = rememberRowFocus("episodes")
+    val movieFocus = rememberRowFocus("movies")
+    val watchlistFocus = rememberRowFocus("watchlist")
+    val playlistFocus = rememberRowFocus("playlists")
 
     // A row coming into focus snaps its heading to the top of the rows; see
     // rememberRowSnap. The rows keep the television's own rule for moving sideways.
@@ -122,7 +124,21 @@ fun HomeScreen(
 
     var menuFor by remember { mutableStateOf<PlexItem?>(null) }
     val menuFocus = remember { FocusRequester() }
-    LaunchedEffect(menuFor) { if (menuFor != null) menuFocus.requestWhenReady() }
+    // The card the menu was raised on, for the cursor to go back to when it closes. It went
+    // to the top of the page instead; if the card itself has gone, the one beside it.
+    var menuFrom by remember { mutableStateOf<Triple<tv.reely.ui.components.RowFocus, String, Int>?>(null) }
+    LaunchedEffect(menuFor) {
+        if (menuFor != null) {
+            menuFocus.requestWhenReady()
+            return@LaunchedEffect
+        }
+        val (row, key, index) = menuFrom ?: return@LaunchedEffect
+        menuFrom = null
+        if (row.nearest(index) == key) row.land(key) else row.landAt(index)
+    }
+    FollowRemovals(resumeFocus)
+    FollowRemovals(movieFocus)
+    FollowRemovals(watchlistFocus)
 
     // The screen takes its colour from the artwork of what has focus — the glow at the
     // bottom and behind a focused card. See HeroBackdrop and LocalTint.
@@ -190,7 +206,7 @@ fun HomeScreen(
                         if (home.continueWatching.isNotEmpty() && HomeRow.CONTINUE.id !in hidden) {
                             item {
                                 PosterRow(title = "Continue Watching", rowFocus = resumeFocus, sideways = sideways) {
-                                    items(home.continueWatching, key = { it.listKey }) { item ->
+                                    itemsIndexed(home.continueWatching, key = { _, it -> it.listKey }) { index, item ->
                                         PosterCard(
                                             title = item.rowTitle,
                                             subtitle = episodeLine(item),
@@ -202,8 +218,11 @@ fun HomeScreen(
                                                 onFocusItem(item)
                                             },
                                             onClick = { onOpenItem(item) },
-                                            onLongPress = { menuFor = item },
-                                            modifier = rowItem(resumeFocus, item.listKey),
+                                            onLongPress = {
+                                                menuFrom = Triple(resumeFocus, item.listKey, index)
+                                                menuFor = item
+                                            },
+                                            modifier = rowItem(resumeFocus, item.listKey, index),
                                         )
                                     }
                                 }
@@ -223,7 +242,7 @@ fun HomeScreen(
                         if (home.recentMovies.isNotEmpty() && HomeRow.MOVIES.id !in hidden) {
                             item {
                                 PosterRow(title = "Recently Added Movies", rowFocus = movieFocus, sideways = sideways) {
-                                    items(home.recentMovies, key = { it.listKey }) { movie ->
+                                    itemsIndexed(home.recentMovies, key = { _, it -> it.listKey }) { index, movie ->
                                         PosterCard(
                                             title = movie.title,
                                             subtitle = movie.caption,
@@ -235,8 +254,11 @@ fun HomeScreen(
                                                 onFocusItem(movie)
                                             },
                                             onClick = { onOpenItem(movie) },
-                                            onLongPress = { menuFor = movie },
-                                            modifier = rowItem(movieFocus, movie.listKey),
+                                            onLongPress = {
+                                                menuFrom = Triple(movieFocus, movie.listKey, index)
+                                                menuFor = movie
+                                            },
+                                            modifier = rowItem(movieFocus, movie.listKey, index),
                                         )
                                     }
                                 }
@@ -247,7 +269,7 @@ fun HomeScreen(
                         if (home.watchlist.isNotEmpty() && HomeRow.WATCHLIST.id !in hidden) {
                             item {
                                 PosterRow(title = "Watchlist", rowFocus = watchlistFocus, sideways = sideways) {
-                                    items(home.watchlist, key = { it.listKey }) { item ->
+                                    itemsIndexed(home.watchlist, key = { _, it -> it.listKey }) { index, item ->
                                         PosterCard(
                                             title = item.title,
                                             subtitle = item.caption,
@@ -259,7 +281,7 @@ fun HomeScreen(
                                                 onFocusItem(item)
                                             },
                                             onClick = { onOpenItem(item) },
-                                            modifier = rowItem(watchlistFocus, item.listKey),
+                                            modifier = rowItem(watchlistFocus, item.listKey, index),
                                         )
                                     }
                                 }
@@ -295,7 +317,7 @@ fun HomeScreen(
                             val titles = interleave(ids.map { id -> requestRows.firstOrNull { it.id == id }?.titles.orEmpty() })
                             if (titles.isNotEmpty() && row.id !in hidden) {
                                 item(key = row.id) {
-                                    val rowFocus = rememberRowFocus()
+                                    val rowFocus = rememberRowFocus(row.id)
                                     PosterRow(title = row.title, rowFocus = rowFocus, sideways = sideways) {
                                         items(titles, key = { it.key }) { title ->
                                             PosterCard(

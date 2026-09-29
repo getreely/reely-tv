@@ -55,7 +55,7 @@ fun PersonScreen(
     modifier: Modifier = Modifier,
 ) {
     val person = state.route
-    val gridFocus = rememberRowFocus()
+    val gridFocus = rememberRowFocus("grid")
     val gridScroll = rememberMarginScroll(above = 14.dp)
 
     CompositionLocalProvider(LocalBringIntoViewSpec provides gridScroll) {

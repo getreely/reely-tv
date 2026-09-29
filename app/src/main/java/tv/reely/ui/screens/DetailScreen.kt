@@ -157,8 +157,8 @@ fun DetailScreen(
         }
     }
     val railFocus = rememberRowFocus()
-    val relatedFocus = rememberRowFocus()
-    val membersFocus = rememberRowFocus()
+    val relatedFocus = rememberRowFocus("related")
+    val membersFocus = rememberRowFocus("members")
     val isCollection = detail.type == "collection"
     var railBroughtTo by remember(state.ratingKey) { mutableStateOf<String?>(null) }
     val page = rememberLazyListState()
