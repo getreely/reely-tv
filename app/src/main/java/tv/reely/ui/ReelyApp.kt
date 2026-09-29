@@ -74,6 +74,7 @@ import tv.reely.ui.components.TvActionButton
 import tv.reely.ui.components.requestWhenReady
 import tv.reely.ui.screens.DetailScreen
 import tv.reely.ui.screens.PersonScreen
+import tv.reely.ui.screens.PlaylistScreen
 import tv.reely.ui.screens.GuideScreen
 import tv.reely.ui.screens.HomeScreen
 import tv.reely.ui.screens.LiveCategoriesScreen
@@ -303,7 +304,10 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     var openedFromPage by remember { mutableStateOf(false) }
     fun open(item: PlexItem) {
         openedFromPage = true
-        viewModel.navigate(detailRouteFor(item))
+        viewModel.navigate(
+            if (item.type == "playlist") Route.Playlist(item.ratingKey, item.title, item.serverBase)
+            else detailRouteFor(item)
+        )
     }
     // The content of a screen is composed in the same pass that asks for its focus, so a
     // single request throws and is lost — and focus then falls back to the first thing in
@@ -481,6 +485,18 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                             openedFromPage = true
                             viewModel.navigate(Route.Person(id, role.name, role.thumb, detail.serverBase))
                         },
+                    )
+                }
+            }
+
+            is Route.Playlist -> {
+                val playlist = state.playlist
+                if (playlist != null && playlist.route == route) {
+                    PlaylistScreen(
+                        state = playlist,
+                        imageUrl = viewModel::plexImageUrl,
+                        onPlay = viewModel::playPlaylist,
+                        onOpenItem = ::open,
                     )
                 }
             }
@@ -687,6 +703,7 @@ private fun routeKey(route: Route): String = when (route) {
     is Route.Library -> "library:${route.kind}:${route.view}"
     is Route.Detail -> "detail:${route.serverBase}:${route.ratingKey}:${route.episodeKey}"
     is Route.Person -> "person:${route.serverBase}:${route.id}"
+    is Route.Playlist -> "playlist:${route.serverBase}:${route.ratingKey}"
     is Route.Live -> "live"
     is Route.Search -> "search"
     is Route.Settings -> "settings"
@@ -702,6 +719,7 @@ private fun contentReady(state: ReelyState): Boolean = when (val route = state.r
     is Route.Detail -> state.detail?.detail != null
     // Something to put the cursor on: a title, or nothing at all once it's known there are none.
     is Route.Person -> state.person?.let { !it.busy } == true
+    is Route.Playlist -> state.playlist?.let { !it.busy } == true
     is Route.Live -> true
     is Route.Search -> true
     is Route.Settings -> true

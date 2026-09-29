@@ -29,11 +29,20 @@ device.
 - **Sign in with a QR code** or the four-character code at plex.tv/link.
 - **Home** has Continue Watching and the newest movies and episodes, across every server
   your account can reach.
-- **Movies** and **TV Shows** each have their own home, the full library (sort, genres,
-  unwatched), and **collections**.
+- **Movies** and **TV Shows** each have their own home, the full library, and
+  **collections**. The library sorts by title, date added, release date, rating or recently
+  watched, filters by genre, decade or unwatched, and in A–Z order has a letter rail for
+  jumping straight to a letter.
 - **Title pages**: the title's logo and artwork, ratings, the cast and crew, a description
   you can open in full, "More like this", trailers, seasons and episodes, and air dates.
+  Choose someone in the cast to see what else they're in.
+- **Quality**: when a film is on the server in more than one version, such as 4K and
+  1080p, choose which one plays.
+- **Watchlist**: add to and remove from your Plex Watchlist, with a Watchlist row on Home.
+- **Playlists**: your Plex video playlists, to play in order or shuffled.
 - **Plex Home profiles**: "Who's watching?", with PIN-protected profiles.
+- **Chapters**, and **preview pictures** while you skip forward or back (when the server
+  makes them).
 - **Skip Intro**, and the **Up Next** screen with a countdown to the next episode. The next
   episode can be in the next season.
 - **Plays the file as it is** whenever the television can. Dolby Digital, Dolby Digital Plus,

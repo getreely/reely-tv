@@ -106,6 +106,7 @@ fun HomeScreen(
     val episodeFocus = rememberRowFocus()
     val movieFocus = rememberRowFocus()
     val watchlistFocus = rememberRowFocus()
+    val playlistFocus = rememberRowFocus()
 
     // A row coming into focus snaps its heading to the top of the rows; see
     // rememberRowSnap. The rows keep the television's own rule for moving sideways.
@@ -252,6 +253,26 @@ fun HomeScreen(
                                             },
                                             onClick = { onOpenItem(item) },
                                             modifier = rowItem(watchlistFocus, item.listKey),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (home.playlists.isNotEmpty()) {
+                            item {
+                                PosterRow(title = "Playlists", rowFocus = playlistFocus, sideways = sideways) {
+                                    items(home.playlists, key = { it.listKey }) { playlist ->
+                                        PosterCard(
+                                            title = playlist.title,
+                                            subtitle = playlist.leafCount.let { if (it == 1) "1 item" else "$it items" },
+                                            imageUrl = imageUrl(playlist.serverBase, playlist.thumb, 300, 450),
+                                            onFocus = {
+                                                playlistFocus.onFocused(playlist.listKey)
+                                                onFocusItem(playlist)
+                                            },
+                                            onClick = { onOpenItem(playlist) },
+                                            modifier = rowItem(playlistFocus, playlist.listKey),
                                         )
                                     }
                                 }

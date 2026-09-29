@@ -86,6 +86,13 @@ sealed interface Route {
         val serverBase: String? = null,
     ) : Route
 
+    /** A playlist: what is in it, to play from the top or shuffled. */
+    data class Playlist(
+        val ratingKey: String,
+        val title: String,
+        val serverBase: String? = null,
+    ) : Route
+
     /** Someone from a cast: what else they are in, across the server's libraries. */
     data class Person(
         val id: String,
@@ -94,6 +101,14 @@ sealed interface Route {
         val serverBase: String? = null,
     ) : Route
 }
+
+/** A playlist's page. */
+data class PlaylistState(
+    val route: Route.Playlist,
+    val items: List<PlexItem> = emptyList(),
+    val busy: Boolean = true,
+    val error: String? = null,
+)
 
 /** A person's page: who they are and what they appear in. */
 data class PersonState(
@@ -124,12 +139,14 @@ data class HomeState(
     val recentMovies: List<PlexItem> = emptyList(),
     /** What's on the account's Watchlist that a server here actually has. */
     val watchlist: List<PlexItem> = emptyList(),
+    /** The servers' video playlists. */
+    val playlists: List<PlexItem> = emptyList(),
     val busy: Boolean = false,
     val error: String? = null,
 ) {
     val isEmpty: Boolean
         get() = continueWatching.isEmpty() && recentEpisodes.isEmpty() && recentMovies.isEmpty() &&
-            watchlist.isEmpty()
+            watchlist.isEmpty() && playlists.isEmpty()
 }
 
 /**
@@ -423,6 +440,7 @@ data class ReelyState(
     val home: HomeState = HomeState(),
     val detail: DetailState? = null,
     val person: PersonState? = null,
+    val playlist: PlaylistState? = null,
     val live: LiveState = LiveState(),
     val guide: GuideState = GuideState(),
     val search: SearchState = SearchState(),
@@ -551,7 +569,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             // Settings is not one of those: it is somewhere you step into from wherever
             // you were and expect to come back from, so it grows the stack like a page.
             val stack = when {
-                route is Route.Detail || route is Route.Person -> current.stack + route
+                route is Route.Detail || route is Route.Person || route is Route.Playlist -> current.stack + route
                 route !is Route.Settings -> listOf(route)
                 current.route is Route.Settings -> current.stack
                 else -> current.stack + route
@@ -564,6 +582,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         if (route !is Route.Detail) stopTheme()
         if (route is Route.Detail) loadDetail(route)
         if (route is Route.Person) loadPerson(route)
+        if (route is Route.Playlist) loadPlaylist(route)
         if (route is Route.Home) refreshHome()
         if (route is Route.Library) refreshLibrary(route.kind, force = false)
         if (route is Route.Library && route.view == LibraryView.COLLECTIONS) loadCollections(route.kind)
@@ -615,6 +634,35 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val route = _state.value.route
         if (route is Route.Detail) loadDetail(route) else stopTheme()
         if (route is Route.Person && _state.value.person?.route != route) loadPerson(route)
+        if (route is Route.Playlist && _state.value.playlist?.route != route) loadPlaylist(route)
+    }
+
+    private fun loadPlaylist(route: Route.Playlist) {
+        val plex = _state.value.plex
+        val base = route.serverBase ?: plex.baseUrl ?: return
+        val token = plex.tokenFor(route.serverBase) ?: return
+        _state.update { it.copy(playlist = PlaylistState(route)) }
+        viewModelScope.launch {
+            val result = runCatching { PlexApi.playlistItems(base, token, route.ratingKey) }
+            _state.update { current ->
+                if (current.playlist?.route != route) current
+                else current.copy(
+                    playlist = current.playlist.copy(
+                        items = result.getOrElse { emptyList() },
+                        busy = false,
+                        error = result.exceptionOrNull()?.readable(),
+                    ),
+                )
+            }
+        }
+    }
+
+    /** The playlist from the top, or in a shuffled order, each going on to the next. */
+    fun playPlaylist(shuffle: Boolean) {
+        val items = _state.value.playlist?.items?.filter { it.isPlayable }.orEmpty()
+        if (items.isEmpty()) return
+        val order = if (shuffle) items.shuffled() else items
+        play(order.first(), queue = order, resume = !shuffle)
     }
 
     /**
@@ -1002,6 +1050,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
             val servers = sources.map { it.baseUrl to it.token }.distinct()
             refreshWatchlist(servers)
+            val playlists = servers.flatMap { (base, token) ->
+                runCatching { PlexApi.playlists(base, token) }.getOrElse { emptyList() }
+            }
 
             // The row Plex's own home screen shows, from every server, in order of when
             // each thing was last watched. It used to be ordered by when things were
@@ -1044,6 +1095,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                         recentMovies = recentMovies,
                         // Filled in on its own, and not to be lost when the rest comes in.
                         watchlist = it.home.watchlist,
+                        playlists = playlists,
                         busy = false,
                     )
                 )

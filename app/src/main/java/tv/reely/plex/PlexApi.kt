@@ -690,6 +690,27 @@ object PlexApi {
     suspend fun children(base: String, token: String, ratingKey: String): List<PlexItem> =
         items(base, token, "/library/metadata/$ratingKey/children", limit = 400)
 
+    /**
+     * The video playlists on a server, the account's own and smart ones. A playlist's
+     * picture is a composite of what is in it, which Plex keeps apart from a thumb.
+     */
+    suspend fun playlists(base: String, token: String): List<PlexItem> = withContext(Dispatchers.IO) {
+        val metadata = container("$base/playlists?playlistType=video", token).optJSONArray("Metadata") ?: JSONArray()
+        (0 until metadata.length()).mapNotNull { metadata.optJSONObject(it) }
+            .filter { it.optInt("leafCount") > 0 }
+            .map { entry ->
+                parseItem(entry).copy(
+                    serverBase = base,
+                    thumb = entry.optString("composite").takeIf(String::isNotEmpty)
+                        ?: entry.optString("thumb").takeIf(String::isNotEmpty),
+                )
+            }
+    }
+
+    /** What is in a playlist, in its own order. */
+    suspend fun playlistItems(base: String, token: String, ratingKey: String): List<PlexItem> =
+        items(base, token, "/playlists/$ratingKey/items", limit = 500)
+
     /** A library's collections, as Plex lists them: its own, and smart ones. */
     suspend fun collections(base: String, token: String, sectionKey: String): List<PlexItem> =
         items(base, token, "/library/sections/$sectionKey/collections", limit = 500)
