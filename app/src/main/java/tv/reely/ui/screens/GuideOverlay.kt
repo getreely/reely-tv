@@ -102,6 +102,8 @@ fun GuideOverlay(
     /** Channels marked as favorites, by stream id. */
     favorites: Set<Int> = emptySet(),
     onToggleFavorite: (XtreamChannel) -> Unit = {},
+    /** A programme that has been on, from a channel that keeps them: watch it from the start. */
+    onCatchUp: (XtreamChannel, EpgProgramme) -> Unit = { _, _ -> },
 ) {
     // Categories are drawn even with nothing under them: switching to one that is still
     // loading used to take the whole guide off the screen, with no way back to the list.
@@ -215,8 +217,19 @@ fun GuideOverlay(
                         event,
                         onPress = {
                             val channel = channels.getOrNull(cursor)
-                            if (addMode && channel != null) onAddToMultiview(channel)
-                            else onSelect(cursor)
+                            val past = channel?.takeIf { !addMode }?.let {
+                                tv.reely.xtream.catchUpProgramme(
+                                    it,
+                                    it.epgChannelId?.let { id -> programmes[id] }.orEmpty(),
+                                    focusTime,
+                                    System.currentTimeMillis() / 1000,
+                                )
+                            }
+                            when {
+                                addMode && channel != null -> onAddToMultiview(channel)
+                                channel != null && past != null -> onCatchUp(channel, past)
+                                else -> onSelect(cursor)
+                            }
                         },
                         onHold = { menuFor = channels.getOrNull(cursor) },
                     )
@@ -342,6 +355,7 @@ fun GuideOverlay(
                                 isCurrent = index == cursor,
                                 scroll = scroll,
                                 translucent = true,
+                                catchUpFrom = entry.catchUpFrom(now),
                             )
                         }
                     }

@@ -22,8 +22,11 @@ import kotlin.coroutines.coroutineContext
  */
 object XmltvImporter {
 
-    /** Programmes outside this window are parsed and discarded rather than stored. */
-    const val PAST_WINDOW_SECONDS = 6L * 3600
+    /**
+     * Programmes outside this window are parsed and discarded rather than stored. Two days
+     * back, for channels whose archive can play what has already been on.
+     */
+    const val PAST_WINDOW_SECONDS = 2L * 24 * 3600
     const val FUTURE_WINDOW_SECONDS = 7L * 24 * 3600
 
     suspend fun import(

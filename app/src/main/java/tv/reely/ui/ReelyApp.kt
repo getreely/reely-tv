@@ -234,6 +234,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             onToggleSubtitleBackground = viewModel::toggleSubtitleBackground,
             onSaveStreamChoice = { audio, subtitle -> viewModel.saveStreamChoice(audio, subtitle) },
             findChannel = viewModel::channelNumbered,
+            onCatchUp = viewModel::playCatchUp,
             onTuneChannel = viewModel::tuneChannel,
             imageUrl = viewModel::plexImageUrl,
             logoUrl = viewModel::plexLogoUrl,

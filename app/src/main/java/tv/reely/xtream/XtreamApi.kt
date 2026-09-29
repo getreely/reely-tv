@@ -33,6 +33,8 @@ data class XtreamAccount(
     val maxConnections: String,
     val activeConnections: String,
     val expiresAt: String?,
+    /** The panel's own time zone, which its catch-up addresses are written in. */
+    val timezone: String? = null,
 )
 
 data class XtreamCategory(val id: String, val name: String)
@@ -48,7 +50,13 @@ data class XtreamChannel(
     val url: String? = null,
     /** A playlist channel's group, which stands in for a panel's category. */
     val group: String? = null,
-)
+    /** How many days back the provider keeps this channel to watch again; 0 for none. */
+    val archiveDays: Int = 0,
+) {
+    /** The earliest moment that can be watched again, in epoch seconds; null for none. */
+    fun catchUpFrom(nowEpochSeconds: Long): Long? =
+        if (archiveDays > 0) nowEpochSeconds - archiveDays * 86_400L else null
+}
 
 enum class StreamFormat(val extension: String, val label: String) {
     TS("ts", "MPEG-TS"),
@@ -74,6 +82,16 @@ data class XtreamProgramme(
         if (span <= 0f) return null
         return ((nowEpochSeconds - startEpochSeconds) / span).coerceIn(0f, 1f)
     }
+}
+
+/**
+ * The programme at [at] on [channel], when it's one that can be watched again: over by
+ * [now], and not so long ago that the channel's archive has let it go. Null for anything
+ * else, which plays the channel live.
+ */
+fun catchUpProgramme(channel: XtreamChannel, listing: List<EpgProgramme>, at: Long, now: Long): EpgProgramme? {
+    val from = channel.catchUpFrom(now) ?: return null
+    return listing.firstOrNull { it.isOnAt(at) }?.takeIf { it.stop <= now && it.start >= from }
 }
 
 /**
@@ -137,6 +155,7 @@ object XtreamApi {
             maxConnections = user.optString("max_connections").ifEmpty { "?" },
             activeConnections = user.optString("active_cons").ifEmpty { "0" },
             expiresAt = user.optString("exp_date").takeIf { it.isNotEmpty() && it != "null" },
+            timezone = root.optJSONObject("server_info")?.optString("timezone")?.takeIf(String::isNotBlank),
         )
     }
 
@@ -183,6 +202,10 @@ object XtreamApi {
                 icon = it.optString("stream_icon").takeIf { icon -> icon.startsWith("http") },
                 epgChannelId = it.optString("epg_channel_id")
                     .takeIf(String::isNotBlank)?.lowercase(),
+                // Sent as a number or a string, depending on the panel.
+                archiveDays = if (it.optString("tv_archive") == "1") {
+                    it.optString("tv_archive_duration").toIntOrNull() ?: 0
+                } else 0,
             )
         }
             /*
@@ -216,6 +239,28 @@ object XtreamApi {
         format: StreamFormat,
     ): String = channel.url ?: with(credentials) {
         "$base/live/${Uri.encode(username)}/${Uri.encode(password)}/${channel.streamId}.${format.extension}"
+    }
+
+    /**
+     * A programme that has been on, from the channel's archive: the panel's timeshift
+     * address, which takes the start as a local time in the panel's own zone and the
+     * length in minutes. Null for a playlist, which has no panel to ask.
+     */
+    fun catchUpUrl(
+        credentials: XtreamCredentials,
+        channel: XtreamChannel,
+        startEpochSeconds: Long,
+        stopEpochSeconds: Long,
+        timezone: String?,
+    ): String? {
+        if (credentials.isPlaylist || channel.archiveDays <= 0) return null
+        val minutes = ((stopEpochSeconds - startEpochSeconds + 59) / 60).coerceAtLeast(1)
+        val start = SimpleDateFormat("yyyy-MM-dd:HH-mm", Locale.US).apply {
+            timeZone = timezone?.let(java.util.TimeZone::getTimeZone) ?: java.util.TimeZone.getDefault()
+        }.format(java.util.Date(startEpochSeconds * 1000))
+        return with(credentials) {
+            "$base/timeshift/${Uri.encode(username)}/${Uri.encode(password)}/$minutes/$start/${channel.streamId}.ts"
+        }
     }
 
     private fun get(

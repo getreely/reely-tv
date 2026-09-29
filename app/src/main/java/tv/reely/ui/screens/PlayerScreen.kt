@@ -192,6 +192,8 @@ fun PlayerScreen(
     onToggleSubtitleBackground: () -> Unit,
     /** A sound or subtitle choice to keep with Plex: stream ids, "0" for subtitles off. */
     onSaveStreamChoice: (audio: String?, subtitle: String?) -> Unit = { _, _ -> },
+    /** A programme from a channel's archive, chosen in the guide over the picture. */
+    onCatchUp: (XtreamChannel, tv.reely.xtream.EpgProgramme) -> Unit = { _, _ -> },
     /** The channel with a number typed on the remote, if there is one. */
     findChannel: (Int) -> XtreamChannel? = { null },
     onTuneChannel: (XtreamChannel) -> Unit = {},
@@ -1155,6 +1157,10 @@ fun PlayerScreen(
                 selectedCategory = live.selectedCategory,
                 favorites = live.favorites,
                 onToggleFavorite = onToggleFavoriteChannel,
+                onCatchUp = { channel, programme ->
+                    guideRequest = GuideRequest.Closed
+                    onCatchUp(channel, programme)
+                },
                 onSelectCategory = onOpenCategory,
                 addMode = guideRequest.adds,
                 pickVerb = guideRequest.verb,

@@ -114,6 +114,8 @@ fun GuideRow(
     modifier: Modifier = Modifier,
     /** Over a playing channel the tiles are lightened so the picture reads through. */
     translucent: Boolean = false,
+    /** From when this channel's programmes can be watched again, or null when they can't. */
+    catchUpFrom: Long? = null,
 ) {
     Row(modifier = modifier.fillMaxWidth().height(GUIDE_ROW_HEIGHT)) {
         Box(
@@ -209,6 +211,7 @@ fun GuideRow(
                     scroll = scroll,
                     selected = isCurrent && programme.isOnAt(focusTime),
                     past = programme.stop <= now,
+                    replay = catchUpFrom != null && programme.stop <= now && programme.start >= catchUpFrom,
                 )
                 cursor = stop
             }
@@ -236,7 +239,10 @@ private fun ProgrammeCard(
     scroll: ScrollState,
     selected: Boolean,
     past: Boolean,
+    /** Over, but it can still be watched: said, and not dimmed like the rest of the past. */
+    replay: Boolean = false,
 ) {
+    val faded = past && !selected && !replay
     Box(
         modifier = Modifier
             .width(width)
@@ -269,16 +275,16 @@ private fun ProgrammeCard(
         ) {
             Text(
                 text = title,
-                color = if (past && !selected) Chalk.copy(alpha = 0.55f) else Chalk,
+                color = if (faded) Chalk.copy(alpha = 0.55f) else Chalk,
                 fontSize = 15.sp,
                 lineHeight = 19.sp,
-                fontWeight = if (past && !selected) FontWeight.Normal else FontWeight.Medium,
+                fontWeight = if (faded) FontWeight.Normal else FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             if (slot != null) {
                 Text(
-                    text = slot,
+                    text = if (replay) "Watch again  ·  $slot" else slot,
                     color = Chalk.copy(alpha = 0.45f),
                     fontSize = 14.sp,
                     lineHeight = 18.sp,

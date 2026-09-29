@@ -3156,8 +3156,48 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         loadGuideWindow()
     }
 
+    /**
+     * OK in the guide: a programme that has been on, on a channel that keeps them, plays
+     * from its start; anything else plays the channel live.
+     */
     fun guidePlaySelected() {
-        playChannel(_state.value.guide.channelIndex)
+        val guide = _state.value.guide
+        val channel = _state.value.live.channels.getOrNull(guide.channelIndex)
+        val listing = channel?.epgChannelId?.let { guide.programmes[it] }.orEmpty()
+        val past = channel?.let {
+            tv.reely.xtream.catchUpProgramme(it, listing, guide.focusTime, System.currentTimeMillis() / 1000)
+        }
+        if (channel != null && past != null) playCatchUp(channel, past) else playChannel(guide.channelIndex)
+    }
+
+    /**
+     * A programme from a channel's archive. It plays like a film rather than a channel:
+     * from its start, with the bar to move through it, and Back returns to the guide.
+     */
+    fun playCatchUp(channel: XtreamChannel, programme: tv.reely.xtream.EpgProgramme) {
+        val live = _state.value.live
+        val credentials = live.credentials ?: return
+        val url = XtreamApi.catchUpUrl(credentials, channel, programme.start, programme.stop, live.account?.timezone)
+            ?: return
+        silenceTheme()
+        livePlayer.stop()
+        val format = java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT)
+        val day = java.text.SimpleDateFormat("EEE", java.util.Locale.getDefault())
+        val at = java.util.Date(programme.start * 1000)
+        _state.update {
+            it.copy(
+                upNext = null,
+                multiview = emptyList(),
+                playback = Playback(
+                    title = programme.title,
+                    subtitle = "${channel.name}  ·  ${day.format(at)} ${format.format(at)}",
+                    url = url,
+                    isLive = false,
+                    durationMs = programme.durationSeconds * 1000,
+                    format = StreamFormat.TS,
+                ),
+            )
+        }
     }
 
     fun signOutXtream() {

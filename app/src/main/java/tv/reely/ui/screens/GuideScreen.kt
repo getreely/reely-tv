@@ -329,6 +329,7 @@ fun GuideScreen(
                             focusTime = guide.focusTime,
                             isCurrent = index == guide.channelIndex,
                             scroll = scroll,
+                            catchUpFrom = entry.catchUpFrom(now),
                         )
                     }
                 }
