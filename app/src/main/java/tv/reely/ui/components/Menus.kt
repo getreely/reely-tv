@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -143,8 +144,12 @@ fun MenuHeading(title: String, subtitle: String? = null, modifier: Modifier = Mo
 }
 
 /**
- * A title's own picture at the top of its menu, with its logo (or its name) over the
- * bottom of it and, when it's part watched, how far along.
+ * A title at the top of its menu: a small picture of it on the left, with how far along
+ * it is under the picture, and beside it its logo (or its name) and what it is.
+ *
+ * The picture used to run the width of the panel. On a television that took a third of
+ * the panel's height and pushed the last options off the bottom, where they couldn't be
+ * seen; the options are what the menu is for.
  */
 @Composable
 fun MenuArtHeader(
@@ -155,14 +160,16 @@ fun MenuArtHeader(
     progress: Float? = null,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier.padding(bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        // Wider than a screen's shape, cropped: at 16:9 the picture took half the panel's
-        // height and pushed the last rows off the bottom.
+    Row(
+        modifier = modifier.fillMaxWidth().padding(start = 4.dp, bottom = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(ART_HEIGHT)
-                .clip(RoundedCornerShape(14.dp))
+                .width(ART_WIDTH)
+                .aspectRatio(16f / 9f)
+                .clip(RoundedCornerShape(10.dp))
                 .background(Chalk.copy(alpha = 0.06f)),
         ) {
             if (imageUrl != null) {
@@ -173,57 +180,46 @@ fun MenuArtHeader(
                     modifier = Modifier.fillMaxSize(),
                 )
             }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Brush.verticalGradient(0.35f to Color.Transparent, 1f to Ink.copy(alpha = 0.9f))),
-            )
-            if (logoUrl != null) {
-                AsyncImage(
-                    model = logoUrl,
-                    contentDescription = title,
-                    contentScale = ContentScale.Fit,
-                    alignment = Alignment.BottomStart,
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(14.dp)
-                        .height(44.dp)
-                        .widthIn(max = 260.dp),
-                )
-            } else {
-                Text(
-                    text = title,
-                    color = Chalk,
-                    style = ReelyType.Headline,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
-                )
-            }
             if (progress != null && progress > 0f) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                         .height(4.dp)
-                        .background(Chalk.copy(alpha = 0.25f)),
+                        .background(Ink.copy(alpha = 0.6f)),
                 ) {
                     Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(progress).background(Accent))
                 }
             }
         }
-        if (logoUrl != null) {
-            // The logo is the title in its own lettering; the name is still said, smaller.
-            Text(text = title, color = Chalk, style = ReelyType.RowTitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        if (!meta.isNullOrBlank()) {
-            Text(text = meta, color = Muted, style = ReelyType.Meta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (logoUrl != null) {
+                // The title in its own lettering.
+                AsyncImage(
+                    model = logoUrl,
+                    contentDescription = title,
+                    contentScale = ContentScale.Fit,
+                    alignment = Alignment.CenterStart,
+                    modifier = Modifier.height(36.dp).fillMaxWidth(),
+                )
+            } else {
+                Text(
+                    text = title,
+                    color = Chalk,
+                    style = ReelyType.RowTitle,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (!meta.isNullOrBlank()) {
+                Text(text = meta, color = Muted, style = ReelyType.Label, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
         }
     }
 }
 
-/** The height of the picture at the top of a title's menu. */
-private val ART_HEIGHT = 150.dp
+/** How wide the picture at the top of a title's menu is. */
+private val ART_WIDTH = 150.dp
 
 /** A small heading inside a menu, over the rows that belong to it. */
 @Composable

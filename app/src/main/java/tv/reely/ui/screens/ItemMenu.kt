@@ -44,7 +44,8 @@ internal fun menuMeta(item: PlexItem): String? {
         when (item.type) {
             "show" -> item.leafCount.takeIf { it > 0 }?.let { if (it == 1) "1 episode" else "$it episodes" }
             "season" -> item.caption
-            else -> formatDuration(item.durationMs).takeIf { it.isNotBlank() }
+            // Part watched, what's left says more than how long it is.
+            else -> formatDuration(item.durationMs).takeIf { it.isNotBlank() && left == null }
         },
         when {
             left != null -> "$left min left"
