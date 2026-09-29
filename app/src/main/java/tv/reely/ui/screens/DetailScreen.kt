@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import tv.reely.plex.PlexItem
+import tv.reely.plex.PlexRole
 import tv.reely.plex.formatAirDate
 import tv.reely.plex.formatDuration
 import tv.reely.ui.DetailState
@@ -101,6 +102,8 @@ fun DetailScreen(
     onOpenRelated: (PlexItem) -> Unit = {},
     /** Which of a title's files Play uses, when there are several. */
     onSelectVersion: (Int) -> Unit = {},
+    /** Someone in the cast: their page. */
+    onOpenPerson: (PlexRole) -> Unit = {},
 ) {
     val detail = state.detail
     if (detail == null) {
@@ -491,6 +494,7 @@ fun DetailScreen(
                                         name = role.name,
                                         role = role.role,
                                         imageUrl = imageUrl(state.serverBase, role.thumb, 160, 160),
+                                        onClick = role.id?.let { { onOpenPerson(role) } },
                                     )
                                 }
                             }

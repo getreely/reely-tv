@@ -85,7 +85,23 @@ sealed interface Route {
         /** Which server holds it. Null means the one connected. */
         val serverBase: String? = null,
     ) : Route
+
+    /** Someone from a cast: what else they are in, across the server's libraries. */
+    data class Person(
+        val id: String,
+        val name: String,
+        val thumb: String? = null,
+        val serverBase: String? = null,
+    ) : Route
 }
+
+/** A person's page: who they are and what they appear in. */
+data class PersonState(
+    val route: Route.Person,
+    val items: List<PlexItem> = emptyList(),
+    val busy: Boolean = true,
+    val error: String? = null,
+)
 
 /** Episodes added for the same show collapse into one tile carrying a count. */
 data class EpisodeGroup(
@@ -400,6 +416,7 @@ data class ReelyState(
     val plex: PlexState = PlexState(),
     val home: HomeState = HomeState(),
     val detail: DetailState? = null,
+    val person: PersonState? = null,
     val live: LiveState = LiveState(),
     val guide: GuideState = GuideState(),
     val search: SearchState = SearchState(),
@@ -528,7 +545,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             // Settings is not one of those: it is somewhere you step into from wherever
             // you were and expect to come back from, so it grows the stack like a page.
             val stack = when {
-                route is Route.Detail -> current.stack + route
+                route is Route.Detail || route is Route.Person -> current.stack + route
                 route !is Route.Settings -> listOf(route)
                 current.route is Route.Settings -> current.stack
                 else -> current.stack + route
@@ -540,6 +557,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         if (route !is Route.Live && _state.value.playback == null) livePlayer.stop()
         if (route !is Route.Detail) stopTheme()
         if (route is Route.Detail) loadDetail(route)
+        if (route is Route.Person) loadPerson(route)
         if (route is Route.Home) refreshHome()
         if (route is Route.Library) refreshLibrary(route.kind, force = false)
         if (route is Route.Library && route.view == LibraryView.COLLECTIONS) loadCollections(route.kind)
@@ -590,6 +608,42 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         }
         val route = _state.value.route
         if (route is Route.Detail) loadDetail(route) else stopTheme()
+        if (route is Route.Person && _state.value.person?.route != route) loadPerson(route)
+    }
+
+    /**
+     * What a person is in: every film and show library on the server that holds the title
+     * they were found in, asked at once, films and shows together, newest first.
+     */
+    private fun loadPerson(route: Route.Person) {
+        val plex = _state.value.plex
+        val base = route.serverBase ?: plex.baseUrl ?: return
+        val token = plex.tokenFor(route.serverBase) ?: return
+        _state.update { it.copy(person = PersonState(route)) }
+        viewModelScope.launch {
+            val sections = if (base == plex.baseUrl && plex.sections.isNotEmpty()) plex.sections
+            else runCatching { PlexApi.sections(base, token) }.getOrElse { emptyList() }
+            val libraries = sections.mapNotNull { section ->
+                LibraryKind.entries.firstOrNull { it.plexType == section.type }?.let { section to it }
+            }
+            val found = libraries.map { (section, kind) ->
+                async { runCatching { PlexApi.withActor(base, token, section, kind.filter, route.id) } }
+            }.map { it.await() }
+            val items = found.flatMap { it.getOrElse { emptyList() } }
+                .distinctBy { it.listKey }
+                .sortedByDescending { it.airDate ?: it.year?.toString() ?: "" }
+            val failed = found.isNotEmpty() && found.all { it.isFailure }
+            _state.update { current ->
+                if (current.person?.route != route) current
+                else current.copy(
+                    person = current.person.copy(
+                        items = items,
+                        busy = false,
+                        error = if (failed) found.first().exceptionOrNull()?.readable() else null,
+                    ),
+                )
+            }
+        }
     }
 
     // ---------------------------------------------------------------- Plex connection

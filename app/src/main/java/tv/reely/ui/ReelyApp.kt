@@ -73,6 +73,7 @@ import tv.reely.ui.components.TabMenuItem
 import tv.reely.ui.components.TvActionButton
 import tv.reely.ui.components.requestWhenReady
 import tv.reely.ui.screens.DetailScreen
+import tv.reely.ui.screens.PersonScreen
 import tv.reely.ui.screens.GuideScreen
 import tv.reely.ui.screens.HomeScreen
 import tv.reely.ui.screens.LiveCategoriesScreen
@@ -471,6 +472,22 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                         onSelectSeason = viewModel::selectSeason,
                         onOpenRelated = ::open,
                         onSelectVersion = viewModel::selectVersion,
+                        onOpenPerson = { role ->
+                            val id = role.id ?: return@DetailScreen
+                            openedFromPage = true
+                            viewModel.navigate(Route.Person(id, role.name, role.thumb, detail.serverBase))
+                        },
+                    )
+                }
+            }
+
+            is Route.Person -> {
+                val person = state.person
+                if (person != null && person.route == route) {
+                    PersonScreen(
+                        state = person,
+                        imageUrl = viewModel::plexImageUrl,
+                        onOpenItem = ::open,
                     )
                 }
             }
@@ -665,6 +682,7 @@ private fun routeKey(route: Route): String = when (route) {
     is Route.Home -> "home"
     is Route.Library -> "library:${route.kind}:${route.view}"
     is Route.Detail -> "detail:${route.serverBase}:${route.ratingKey}:${route.episodeKey}"
+    is Route.Person -> "person:${route.serverBase}:${route.id}"
     is Route.Live -> "live"
     is Route.Search -> "search"
     is Route.Settings -> "settings"
@@ -678,6 +696,8 @@ private fun contentReady(state: ReelyState): Boolean = when (val route = state.r
         else -> state.plex.browseFor(route.kind).items.isNotEmpty()
     }
     is Route.Detail -> state.detail?.detail != null
+    // Something to put the cursor on: a title, or nothing at all once it's known there are none.
+    is Route.Person -> state.person?.let { !it.busy } == true
     is Route.Live -> true
     is Route.Search -> true
     is Route.Settings -> true

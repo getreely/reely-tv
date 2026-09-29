@@ -293,9 +293,11 @@ fun CastCircle(
     role: String?,
     imageUrl: String?,
     modifier: Modifier = Modifier,
+    /** Their page: what else of theirs is on the server. Null when there's no telling. */
+    onClick: (() -> Unit)? = null,
 ) {
     /*
-     * Focusable, though there is nowhere to go from here.
+     * Focusable, even when there is nowhere to go from here.
      *
      * A television page scrolls by moving focus, so a row with nothing focusable in it is
      * a row the remote cannot reach: the cast sat below the fold and down did nothing,
@@ -306,7 +308,7 @@ fun CastCircle(
         modifier = modifier
             .width(108.dp)
             .onFocusChanged { focused = it.isFocused }
-            .focusable(),
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier.focusable()),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(

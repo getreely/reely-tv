@@ -103,6 +103,8 @@ data class PlexRole(
     val name: String,
     val role: String?,
     val thumb: String?,
+    /** The server's id for the person, which its libraries can be filtered by. */
+    val id: String? = null,
 )
 
 data class PlexItem(
@@ -1167,9 +1169,17 @@ object PlexApi {
                     name = name,
                     role = role.optString("role").takeIf(String::isNotBlank),
                     thumb = role.optString("thumb").takeIf(String::isNotEmpty),
+                    id = role.optString("id").takeIf(String::isNotBlank),
                 )
             }
     }
+
+    /**
+     * Everything in one library a person appears in, newest first. Plex filters a library
+     * by the id it gives each person, which is the id in a title's cast list.
+     */
+    suspend fun withActor(base: String, token: String, section: PlexSection, type: Int, personId: String): List<PlexItem> =
+        items(base, token, "/library/sections/${section.key}/all?type=$type&actor=$personId&sort=originallyAvailableAt:desc", limit = 300)
 
     /** Plex has been known to collapse a one-element collection to a bare object. */
     private fun markerArray(metadata: JSONObject): JSONArray? =
