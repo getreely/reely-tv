@@ -72,8 +72,8 @@ fun RequestsScreen(
                 TvTextField(
                     value = requests.query,
                     onValueChange = onQueryChange,
-                    label = "Request",
-                    placeholder = "Find a movie or show to ask for",
+                    label = "Search",
+                    placeholder = "Movies and shows to request",
                     imeAction = ImeAction.Search,
                     modifier = Modifier.widthIn(max = 620.dp),
                 )
