@@ -40,4 +40,12 @@ class SearchMatchTest {
     @Test fun `words typed together can start at any word`() {
         assertEquals(listOf("Man of Steel"), titles("ofsteel", film("Man of Steel")))
     }
+
+    @Test fun `the rest follow, not thrown away`() {
+        val (matches, others) = SearchMatch.split(
+            "nfl", listOf(film("Friday Night Lights"), film("NFL Films Presents"), film("Inflation")),
+        )
+        assertEquals(listOf("NFL Films Presents"), matches.map { it.title })
+        assertEquals(listOf("Friday Night Lights", "Inflation"), others.map { it.title })
+    }
 }

@@ -337,6 +337,8 @@ data class SearchState(
     val results: List<PlexItem> = emptyList(),
     /** Live channels whose name matches. Empty when no provider is configured. */
     val channels: List<XtreamChannel> = emptyList(),
+    /** What else the server offered that doesn't have the words in its name. */
+    val more: List<PlexItem> = emptyList(),
     /** Actors whose name matches, whose page shows what else they're in. */
     val people: List<tv.reely.plex.PlexPerson> = emptyList(),
     val busy: Boolean = false,
@@ -2121,7 +2123,10 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             val found = servers.map { (base, token) ->
                 runCatching { PlexApi.searchAll(base, token, query) }.getOrElse { emptyList<PlexItem>() to emptyList() }
             }
-            val results = tv.reely.core.SearchMatch.relevant(query, found.flatMap { it.first })
+            val (matches, others) = tv.reely.core.SearchMatch.split(query, found.flatMap { it.first })
+            // Nothing by name, a misspelling most likely: then Plex's own guesses are the results.
+            val results = matches.ifEmpty { others }
+            val more = if (matches.isEmpty()) emptyList() else others
             val people = found.flatMap { it.second }.distinctBy { it.name.lowercase() }.take(PEOPLE_RESULTS)
             // Channels are matched here rather than asked of the panel: the panel has no
             // search, and the whole list is already in hand.
@@ -2131,7 +2136,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { current ->
                 if (current.search.query != query) current
                 else current.copy(
-                    search = current.search.copy(results = results, channels = channels, people = people, busy = false)
+                    search = current.search.copy(
+                        results = results, more = more, channels = channels, people = people, busy = false,
+                    )
                 )
             }
         }

@@ -7,13 +7,24 @@ import java.text.Normalizer
  * Which of a server's search results are really about what was typed, best first.
  *
  * Plex's search is loose on purpose: it matches words in descriptions, near spellings,
- * genres and titles related to the ones that match. Typing "nfl" brought back films and
- * episodes with nothing to do with football, because something in them came close enough.
- * Here a result has to have what was typed in its name: the film's title, the show's name
- * or the episode's own. Case, accents and punctuation don't count, so "spiderman" finds
+ * genres and titles related to the ones that match. Typing "nfl" put films and episodes
+ * with nothing to do with football alongside the ones that were. Here a result is a match
+ * when it has what was typed in its name: the film's title, the show's name or the
+ * episode's own. Case, accents and punctuation don't count, so "spiderman" finds
  * "Spider-Man" and "amelie" finds "Amélie".
+ *
+ * The rest aren't thrown away. Plex's looseness is also what finds "interstelar" when it
+ * was spelled wrong, so they follow the matches as other results, and when nothing matches
+ * by name they are the results.
  */
 object SearchMatch {
+
+    /** The matches by name, best first, and everything else the server offered, in its order. */
+    fun split(query: String, items: List<PlexItem>): Pair<List<PlexItem>, List<PlexItem>> {
+        val matches = relevant(query, items)
+        val keys = matches.map { it.listKey }.toSet()
+        return matches to items.filter { it.listKey !in keys }
+    }
 
     fun relevant(query: String, items: List<PlexItem>): List<PlexItem> {
         val wanted = words(query)

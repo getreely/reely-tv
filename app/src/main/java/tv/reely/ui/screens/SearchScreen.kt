@@ -89,7 +89,7 @@ fun SearchScreen(
 
                         else -> EmptyNote(
                             listOfNotNull(
-                                "${search.results.size} in your library".takeIf { search.results.isNotEmpty() },
+                                "${search.results.size + search.more.size} in your library".takeIf { search.results.isNotEmpty() },
                                 "${search.channels.size} live channels".takeIf { search.channels.isNotEmpty() },
                                 (if (search.people.size == 1) "1 person" else "${search.people.size} people")
                                     .takeIf { search.people.isNotEmpty() },
@@ -168,6 +168,33 @@ fun SearchScreen(
             }
 
             items(search.results, key = { it.listKey }) { item ->
+                PosterCard(
+                    title = item.rowTitle,
+                    subtitle = episodeLine(item),
+                    imageUrl = imageUrl(item.serverBase, posterArt(item), 300, 450),
+                    progress = item.resumeFraction,
+                    watched = item.isWatched,
+                    onFocus = {
+                        resultFocus.onFocused(item.listKey)
+                        onFocusItem(item)
+                    },
+                    onClick = { onOpenItem(item) },
+                    modifier = rowItem(resultFocus, item.listKey),
+                )
+            }
+
+            if (search.more.isNotEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Text(
+                        text = "Other results",
+                        color = Chalk,
+                        style = ReelyType.RowTitle,
+                        modifier = Modifier.padding(top = 14.dp, bottom = 2.dp),
+                    )
+                }
+            }
+
+            items(search.more, key = { "more:" + it.listKey }) { item ->
                 PosterCard(
                     title = item.rowTitle,
                     subtitle = episodeLine(item),
