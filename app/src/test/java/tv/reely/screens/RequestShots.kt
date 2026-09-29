@@ -103,6 +103,20 @@ class RequestShots {
                         seasons = (1..4).map { RequestSeason(it, "Season $it", 8) }, inLibrary = false,
                     ),
                     chosen = setOf(1, 3),
+                    places = tv.reely.requests.RequestPlaces(
+                        libraries = listOf(
+                            tv.reely.requests.RequestLibrary(1, "TV Shows", "shows"),
+                            tv.reely.requests.RequestLibrary(2, "Kids TV", "shows"),
+                        ),
+                        groups = listOf(
+                            tv.reely.requests.RequestGroup(11, "Barretts", houseWide = false, mine = true),
+                            tv.reely.requests.RequestGroup(12, "Grandma", houseWide = false, mine = false),
+                        ),
+                        defaultLibraryId = 1,
+                        adds = false,
+                    ),
+                    libraryId = 1,
+                    audience = setOf(11),
                 ),
                 status = null, onToggleSeason = {}, onToggleAll = {}, onRequest = {},
             )

@@ -30,9 +30,11 @@ import tv.reely.ui.theme.Muted
 import tv.reely.ui.theme.ReelyType
 
 /**
- * One title in Requests: what it is, and asking for it. A show asks which seasons —
- * any number of them, or all — with every season picked to begin with, since that is
- * what asking for a show usually means.
+ * One title in Requests: what it is, and asking for it, with the choices Reely's own
+ * request button offers. Which library it goes to, when there's more than one it could
+ * (this account's default to begin with). Who it's for once it's in, when there are
+ * groups to share it with. And for a show, which seasons: any number, or all, with every
+ * season picked to begin with, since that is what asking for a show usually means.
  */
 @Composable
 fun RequestTitleScreen(
@@ -42,6 +44,9 @@ fun RequestTitleScreen(
     onToggleSeason: (Int) -> Unit,
     onToggleAll: () -> Unit,
     onRequest: () -> Unit,
+    onChooseLibrary: (Long) -> Unit = {},
+    onToggleGroup: (Long) -> Unit = {},
+    onToggleJustMe: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val detail = page.detail
@@ -65,25 +70,59 @@ fun RequestTitleScreen(
             Text(text = facts.joinToString("  ·  "), color = Muted, style = ReelyType.Body)
             (detail?.title?.overview ?: page.title.overview)?.let { ExpandableSummary(text = it, maxWidth = 700.dp) }
 
+            val held = detail?.inLibraries?.size ?: 0
             when {
                 page.busy -> EmptyNote("Loading…")
                 page.error != null -> ErrorNote(page.error)
                 detail == null -> Unit
-                detail.inLibrary -> EmptyNote(
-                    if (page.title.isShow) "This show is already in your library. Ask again for seasons it doesn't have."
-                    else "This is already in your library."
+                !page.canAsk -> EmptyNote(
+                    if (held > 1) "Already in $held libraries: there's nowhere left for it to go."
+                    else "Already in your library."
                 )
+                held == 1 -> EmptyNote("Already in a library. It can go in another as well.")
+                held > 1 -> EmptyNote("Already in $held libraries. It can go in another as well.")
+                detail.inLibrary -> EmptyNote("Already in your library.")
             }
             requestLabel(status)?.let { EmptyNote("You asked for this. ${requestWord(status)}") }
 
-            if (detail != null && page.title.isShow && detail.seasons.isNotEmpty()) {
+            val addable = page.addable.orEmpty()
+            if (detail != null && page.canAsk && addable.size > 1) {
+                SectionHeading("Library", modifier = Modifier.padding(top = 6.dp))
+                ChipRow {
+                    items(addable, key = { it.id }) { library ->
+                        TvChip(
+                            label = library.name,
+                            selected = library.id == page.libraryId,
+                            onClick = { onChooseLibrary(library.id) },
+                        )
+                    }
+                }
+            }
+
+            val groups = page.places?.groups.orEmpty()
+            if (detail != null && page.canAsk && groups.isNotEmpty()) {
+                SectionHeading(
+                    if (page.places?.adds == true) "Who it's for" else "Share it with",
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+                ChipRow {
+                    item(key = "me") {
+                        TvChip(label = "Just for me", selected = page.justMe, onClick = onToggleJustMe)
+                    }
+                    items(groups, key = { it.id }) { group ->
+                        TvChip(
+                            label = group.name,
+                            selected = !page.justMe && group.id in page.audience,
+                            onClick = { onToggleGroup(group.id) },
+                        )
+                    }
+                }
+            }
+
+            if (detail != null && page.canAsk && page.title.isShow && detail.seasons.isNotEmpty()) {
                 SectionHeading("Seasons", modifier = Modifier.padding(top = 6.dp))
                 val all = detail.seasons.map { it.number }.toSet()
-                LazyRow(
-                    modifier = Modifier.focusGroup(),
-                    contentPadding = PaddingValues(end = 40.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
+                ChipRow {
                     item(key = "all") {
                         TvChip(label = "All seasons", selected = page.chosen == all, onClick = onToggleAll)
                     }
@@ -97,18 +136,19 @@ fun RequestTitleScreen(
                 }
             }
 
-            if (detail != null && !(detail.inLibrary && !page.title.isShow)) {
+            if (detail != null && page.canAsk) {
+                val verb = if (page.places?.adds == true) "Add" else "Request"
                 Row(
                     modifier = Modifier.padding(top = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     TvActionButton(
                         label = when {
-                            page.sending -> "Requesting…"
-                            !page.title.isShow -> "Request"
-                            page.chosen.size == detail.seasons.size -> "Request all seasons"
-                            page.chosen.size == 1 -> "Request 1 season"
-                            else -> "Request ${page.chosen.size} seasons"
+                            page.sending -> if (verb == "Add") "Adding…" else "Requesting…"
+                            !page.title.isShow || detail.seasons.isEmpty() -> verb
+                            page.chosen.size == detail.seasons.size -> "$verb all seasons"
+                            page.chosen.size == 1 -> "$verb 1 season"
+                            else -> "$verb ${page.chosen.size} seasons"
                         },
                         onClick = onRequest,
                         emphasised = true,
@@ -120,6 +160,17 @@ fun RequestTitleScreen(
             }
         }
     }
+}
+
+/** A row of choices, walked left and right. */
+@Composable
+private fun ChipRow(content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit) {
+    LazyRow(
+        modifier = Modifier.focusGroup(),
+        contentPadding = PaddingValues(end = 40.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        content = content,
+    )
 }
 
 private fun requestWord(status: String?) = when (status) {

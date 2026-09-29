@@ -341,10 +341,14 @@ fun PlayerScreen(
     var scrubRequests by remember { mutableIntStateOf(0) }
     // The server's scrubbing pictures for this file, fetched once as it starts.
     var previews by remember(playback.previewUrl) { mutableStateOf<tv.reely.core.PreviewIndex?>(null) }
+    // Whether asking found none, which is when the bar shows the time alone.
+    var noPreviews by remember(playback.previewUrl) { mutableStateOf(false) }
     LaunchedEffect(playback.previewUrl) {
         val url = playback.previewUrl ?: return@LaunchedEffect
         previews = tv.reely.core.PreviewIndex.load(url.replace("/{ms}", ""), context.cacheDir)
+        noPreviews = previews == null
     }
+    val previewUrl = playback.previewUrl.takeIf { !noPreviews }
     var panel by remember { mutableStateOf(Panel.NONE) }
 
     // Plex's own intro and credits detection, when the server has it.
@@ -1162,7 +1166,8 @@ fun PlayerScreen(
                 modifier = Modifier.align(Alignment.TopEnd),
             )
             Controls(
-                playback = playback,
+                // Without the server's pictures, the bar shows the time alone.
+                playback = playback.copy(previewUrl = previewUrl),
                 playing = playing,
                 positionMs = positionMs,
                 durationMs = durationMs,
@@ -1279,6 +1284,11 @@ fun PlayerScreen(
                 playback = playback,
                 player = exoPlayer,
                 audioDecoder = audioDecoder,
+                previews = when {
+                    previews != null -> "Available"
+                    playback.previewUrl != null && !noPreviews -> "Looking…"
+                    else -> "None on the server"
+                },
                 focusRequester = panelFocus,
                 onClose = { panel = Panel.NONE },
                 modifier = Modifier.align(Alignment.CenterEnd),
@@ -1793,6 +1803,8 @@ internal fun StatsPanel(
     playback: Playback,
     player: ExoPlayer,
     audioDecoder: String? = null,
+    /** Whether the server's scrubbing pictures were found, as the line reads. */
+    previews: String? = null,
     focusRequester: FocusRequester,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1879,7 +1891,10 @@ internal fun StatsPanel(
                 StatLine("Intro & credits", describeMarkers(playback.markers))
                 // The pictures above the bar while scrubbing are the server's to make, and
                 // only when the library is set to.
-                StatLine("Scrubbing previews", if (playback.previewUrl != null) "Available" else "Not made by the server")
+                StatLine(
+                    "Scrubbing previews",
+                    previews ?: if (playback.previewUrl != null) "Available" else "None on the server",
+                )
             }
             SectionLabel("VIDEO")
             StatLine("Codec", video?.sampleMimeType?.let(::codecName) ?: "—")

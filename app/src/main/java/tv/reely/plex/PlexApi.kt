@@ -816,9 +816,11 @@ object PlexApi {
 
             val sound = audioOf(media, part)
             // Plex makes preview pictures only when the library is set to; "sd" is their
-            // name for the set, and a part without it has none to give.
+            // name for the set. Asked for whether or not the part says it has them: the
+            // attribute is missing from some servers' answers when the pictures are there,
+            // and the player says there are none once asking finds none.
             val partId = part.optLong("id").takeIf { it > 0 }
-            val previews = partId != null && part.optString("indexes").split(',').contains("sd")
+            val previews = partId != null
             PlexPlayback(
                 url = "$base$key?X-Plex-Token=$token",
                 subtitles = subtitlesOf(part, base, token),
