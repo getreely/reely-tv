@@ -676,7 +676,9 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                     onBackToCategories = viewModel::clearCategory,
                     livePlayer = viewModel.livePlayer,
                     reminders = state.reminders,
-                    onToggleReminder = viewModel::guideToggleReminder,
+                    onToggleReminder = viewModel::toggleReminder,
+                    favorites = state.live.favorites,
+                    onToggleFavorite = viewModel::toggleFavoriteChannel,
                 )
             }
 

@@ -104,8 +104,8 @@ internal val TOUR = listOf(
     TourStep(
         "Live TV",
         "Left and Right change channel, and Down opens the guide. Hold OK to put another " +
-            "channel beside the first, up to four. In the guide, hold OK on something still " +
-            "to come to be reminded when it starts.",
+            "channel beside the first, up to four. In the guide, hold OK on a channel to add " +
+            "it to Favorites, or to be reminded when something starts.",
         RemoteKey.DOWN,
     ),
     TourStep(

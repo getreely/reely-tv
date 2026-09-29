@@ -89,6 +89,10 @@ import tv.reely.ui.theme.Ink
 import tv.reely.ui.theme.Muted
 import tv.reely.ui.theme.Chalk
 import tv.reely.xtream.EpgProgramme
+import tv.reely.xtream.XtreamChannel
+import tv.reely.ui.theme.ReelyType
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.layout.widthIn
 import tv.reely.xtream.XtreamApi
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -118,10 +122,17 @@ fun GuideScreen(
     takeFocus: Boolean = true,
     /** Programmes with a reminder, marked in the grid. */
     reminders: List<tv.reely.core.Reminder> = emptyList(),
-    /** Hold OK: a reminder for the programme under the cursor, if it's still to come. */
-    onToggleReminder: () -> Unit = {},
+    /** A reminder for a programme still to come, set or cleared from a channel's menu. */
+    onToggleReminder: (XtreamChannel, EpgProgramme) -> Unit = { _, _ -> },
+    /** Channels marked as favorites, by stream id, and marking one. */
+    favorites: Set<Int> = emptySet(),
+    onToggleFavorite: (XtreamChannel) -> Unit = {},
 ) {
     val press = tv.reely.ui.components.rememberSelectPress()
+    // Hold OK: the channel's menu. Watch, a favorite or not, and a reminder for what's to come.
+    var menuOpen by remember { mutableStateOf(false) }
+    var menuWasOpen by remember { mutableStateOf(false) }
+    val menuFocus = remember { FocusRequester() }
     var now by remember { mutableLongStateOf(System.currentTimeMillis() / 1000) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -170,6 +181,17 @@ fun GuideScreen(
         // Long enough that walking past channels does not open a connection for each.
         delay(PREVIEW_DELAY_MS)
         livePlayer.play(previewUrl)
+    }
+
+    LaunchedEffect(menuOpen) {
+        if (menuOpen) {
+            menuWasOpen = true
+            menuFocus.requestWhenReady()
+        } else if (menuWasOpen) {
+            // Back to the grid where it was, rather than wherever the net would put it.
+            menuWasOpen = false
+            gridFocus.requestWhenReady()
+        }
     }
 
     LaunchedEffect(guide.focusTime, guide.windowStart) {
@@ -286,9 +308,26 @@ fun GuideScreen(
                 .focusRequester(gridFocus)
                 .focusable()
                 .onPreviewKeyEvent { event ->
-                    // OK plays the channel, or the programme again; held, it sets a reminder.
+                    // The menu's own keys are the menu's. The release of the hold that opened
+                    // it is swallowed, so it doesn't press the first button as well.
+                    if (menuOpen) {
+                        if (event.isSelect() && press.awaitingRelease) {
+                            press.handle(event, onPress = {}, onHold = {})
+                            return@onPreviewKeyEvent true
+                        }
+                        if (event.key == Key.Back && event.type == KeyEventType.KeyDown) {
+                            menuOpen = false
+                            return@onPreviewKeyEvent true
+                        }
+                        return@onPreviewKeyEvent false
+                    }
+                    // OK plays the channel, or the programme again; held, the channel's menu.
                     if (event.isSelect()) {
-                        return@onPreviewKeyEvent press.handle(event, onPress = onPlaySelected, onHold = onToggleReminder)
+                        return@onPreviewKeyEvent press.handle(
+                            event,
+                            onPress = onPlaySelected,
+                            onHold = { if (channel != null) menuOpen = true },
+                        )
                     }
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when (event.key) {
@@ -341,6 +380,49 @@ fun GuideScreen(
             }
 
             GuideNowLine(windowStart = guide.windowStart, now = now, scroll = scroll)
+
+            if (menuOpen && channel != null) {
+                val upcoming = selected?.takeIf { it.start > now }
+                val reminded = upcoming != null &&
+                    reminders.any { it.streamId == channel.streamId && it.start == upcoming.start }
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .widthIn(max = 460.dp)
+                        .glass()
+                        .padding(20.dp)
+                        .focusGroup()
+                        .focusRequester(menuFocus),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(text = channel.name, color = Chalk, style = ReelyType.Body, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    TvActionButton(
+                        label = "Watch",
+                        emphasised = true,
+                        onClick = {
+                            menuOpen = false
+                            onPlaySelected()
+                        },
+                    )
+                    TvActionButton(
+                        label = if (channel.streamId in favorites) "Remove from Favorites" else "Add to Favorites",
+                        onClick = {
+                            menuOpen = false
+                            onToggleFavorite(channel)
+                        },
+                    )
+                    if (upcoming != null) {
+                        TvActionButton(
+                            label = if (reminded) "Cancel the reminder" else "Remind me: ${upcoming.title}",
+                            onClick = {
+                                menuOpen = false
+                                onToggleReminder(channel, upcoming)
+                            },
+                        )
+                    }
+                    TvActionButton(label = "Cancel", onClick = { menuOpen = false })
+                }
+            }
         }
     }
 }

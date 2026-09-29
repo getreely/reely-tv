@@ -2351,15 +2351,6 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         setReminders(if (list.any { it.key == reminder.key }) list.filterNot { it.key == reminder.key } else list + reminder)
     }
 
-    /** Hold OK in the Live TV guide: the programme under the cursor, if it's still to come. */
-    fun guideToggleReminder() {
-        val guide = _state.value.guide
-        val channel = _state.value.live.channels.getOrNull(guide.channelIndex) ?: return
-        val programme = channel.epgChannelId?.let { guide.programmes[it] }.orEmpty()
-            .firstOrNull { it.isOnAt(guide.focusTime) } ?: return
-        toggleReminder(channel, programme)
-    }
-
     fun dismissReminder() = _state.update { it.copy(dueReminder = null) }
 
     /** The channel of the programme starting, from wherever the reminder was said. */
