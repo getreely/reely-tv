@@ -30,8 +30,13 @@
         android:name="android.hardware.wifi"
         android:required="false" />
 
+    <!--
+        largeHeap: a video buffer lives in the app's own memory, and the ordinary allowance
+        on a television is too small to hold much of a 4K file. See playbackBufferBytes.
+    -->
     <application
         android:allowBackup="false"
+        android:largeHeap="true"
         android:banner="@drawable/ic_banner"
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"

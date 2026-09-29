@@ -2073,22 +2073,38 @@ private fun describe(error: PlaybackException): String = when (val cause = error
 }
 
 /**
- * How much of a film or episode to keep loaded ahead.
+ * How much of a film or episode to keep loaded ahead. Live television has its own, much
+ * smaller, buffer: channel-change speed is what matters there.
  *
- * Normal: a second to start, a ceiling of thirty seconds — channel-switch speed, which is
- * what separates good from bad on live television, and fine on a good home network.
+ * Normal: a second to start, then fifty seconds kept ahead, the player's own standard. It
+ * used to be thirty, live television's ceiling, which left a film less in hand than the
+ * player it is built on would keep by default.
  * Larger: the same start, then it keeps loading to a minute before easing off, holds up
  * to two, and after a stall waits for five seconds in hand rather than two, so an uneven
- * connection does not stutter through a string of short stops. Both are also bounded by
- * the player's memory budget, which a very high bitrate file reaches first.
+ * connection does not stutter through a string of short stops.
+ *
+ * Both are bounded by memory as well as time: see [playbackBufferBytes].
  */
 private fun bufferFor(larger: Boolean): DefaultLoadControl =
-    if (larger) {
-        DefaultLoadControl.Builder()
-            .setBufferDurationsMs(60_000, 120_000, 1_500, 5_000)
-            .build()
-    } else {
-        DefaultLoadControl.Builder()
-            .setBufferDurationsMs(2_000, 30_000, 1_000, 2_000)
-            .build()
-    }
+    DefaultLoadControl.Builder()
+        .apply {
+            if (larger) setBufferDurationsMs(60_000, 120_000, 1_500, 5_000)
+            else setBufferDurationsMs(50_000, 50_000, 1_000, 2_000)
+        }
+        .setTargetBufferBytes(playbackBufferBytes(Runtime.getRuntime().maxMemory()))
+        .build()
+
+/**
+ * How many bytes of video the player may hold, from how much memory the app has.
+ *
+ * The player's own figure is about 130 MB whatever the device, which is a minute of an
+ * ordinary 1080p file and only a quarter of one of a 4K remux at 70 Mbps, so on a 4K
+ * file the time above was never reached. Where the device gives the app room (a Shield,
+ * a Fire TV Cube), up to four tenths of it goes to the buffer. Where it doesn't, the
+ * player's own figure stands: a buffer that runs a stick out of memory stops everything.
+ */
+internal fun playbackBufferBytes(maxHeapBytes: Long): Int {
+    val mb = 1024L * 1024
+    if (maxHeapBytes < 320 * mb) return C.LENGTH_UNSET
+    return (maxHeapBytes * 4 / 10).coerceIn(128 * mb, 384 * mb).toInt()
+}

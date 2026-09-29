@@ -318,8 +318,8 @@ private fun PlaybackSection(
             title = "Buffer",
             description = "Larger helps on a slow or unsteady connection.",
             options = listOf(
-                Option(false, "Normal", "Starts quickly."),
-                Option(true, "Larger", "Holds up to two minutes ahead. Takes a moment longer to start."),
+                Option(false, "Normal", "Keeps about 50 seconds ahead. Starts quickly."),
+                Option(true, "Larger", "Keeps up to two minutes ahead. Takes a moment longer to start."),
             ),
             selected = prefs.largerBuffer,
             onSelect = { onToggleLargerBuffer() },
