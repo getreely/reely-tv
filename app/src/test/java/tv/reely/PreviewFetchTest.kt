@@ -53,7 +53,7 @@ class PreviewFetchTest {
     @Test fun `no file says what the server said`() = runBlocking {
         val fetched = PreviewIndex.fetch("$base/library/parts/5/indexes/sd?X-Plex-Token=t", File(cache, "a"))
         assertNull(fetched.index)
-        assertEquals("the server said 404", fetched.problem)
+        assertEquals(tv.reely.core.PreviewIndex.NOT_MADE, fetched.problem)
     }
 
     @Test fun `single pictures are found when the file isn't there`() = runBlocking {

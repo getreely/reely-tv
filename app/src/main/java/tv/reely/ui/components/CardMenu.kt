@@ -10,9 +10,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
@@ -60,21 +57,19 @@ fun CardMenu(
      * A hold opens this menu while the finger is still down, and by the time the key
      * comes up this has taken focus — so the release lands on a button here. The card
      * that opened it cannot swallow it, because it is no longer the thing receiving keys.
-     * So a release with no press of its own behind it is thrown away.
+     * So the rest of that hold is thrown away: its release, and the repeats that keep
+     * coming while the finger stays down. Counting a repeat as a press of its own was
+     * what let go of the key onto the first button.
      */
-    var sawOwnPress by remember { mutableStateOf(false) }
+    val stray = remember { StraySelect() }
 
     Column(
         modifier = modifier
             .onPreviewKeyEvent { event ->
                 if (!event.isSelect()) return@onPreviewKeyEvent false
                 when (event.type) {
-                    KeyEventType.KeyDown -> {
-                        sawOwnPress = true
-                        false
-                    }
-
-                    KeyEventType.KeyUp -> !sawOwnPress
+                    KeyEventType.KeyDown -> stray.down(event.nativeKeyEvent.repeatCount)
+                    KeyEventType.KeyUp -> stray.up()
                     else -> false
                 }
             }
@@ -117,4 +112,20 @@ fun CardMenu(
         }
         TvActionButton(label = "Cancel", onClick = onCancel)
     }
+}
+
+/**
+ * Tells a menu's own presses of OK from the tail of the hold that opened it. Each call
+ * says whether to throw the event away.
+ */
+internal class StraySelect {
+    private var sawOwnPress = false
+
+    /** A key going down; only a fresh one, not a repeat, is a press of this menu's own. */
+    fun down(repeatCount: Int): Boolean {
+        if (repeatCount == 0) sawOwnPress = true
+        return !sawOwnPress
+    }
+
+    fun up(): Boolean = !sawOwnPress
 }

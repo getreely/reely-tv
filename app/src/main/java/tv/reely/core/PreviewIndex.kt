@@ -64,6 +64,13 @@ class PreviewIndex internal constructor(
          */
         suspend fun load(url: String, cacheDir: File): PreviewIndex? = fetch(url, cacheDir).index
 
+        /**
+         * What a 404 means here: the file hasn't had its pictures made. Plex makes them
+         * only for libraries with video preview thumbnails turned on, and only once its
+         * scheduled task has got to the file, so a new episode often has none yet.
+         */
+        const val NOT_MADE = "Plex hasn't made them for this file yet"
+
         /** What asking for the pictures came to: them, or why not, said plainly. */
         data class Fetched(val index: PreviewIndex?, val problem: String?)
 
@@ -97,7 +104,7 @@ class PreviewIndex internal constructor(
                     val request = Request.Builder().url(url).get().build()
                     Http.bulk.newCall(request).execute().use { response ->
                         if (!response.isSuccessful) {
-                            why("the server said ${response.code}")
+                            why(if (response.code == 404) NOT_MADE else "the server said ${response.code}")
                             return@use false
                         }
                         val body = response.body ?: return@use false

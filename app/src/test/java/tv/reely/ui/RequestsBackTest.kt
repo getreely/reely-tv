@@ -74,17 +74,12 @@ class RequestsBackTest {
         // Into the second row, three along, and open it.
         compose.onNode(hasText("Popular 3", substring = true) and androidx.compose.ui.test.hasClickAction()).requestFocus()
         compose.waitForIdle()
-        val opened = compose.onNode(isFocused()).fetchSemanticsNode().config.toString()
-        println("OPENED: " + opened.take(300))
         press(Key.DirectionCenter)
         compose.waitForIdle()
         route = "requests"
         compose.waitForIdle()
         val restored = compose.runOnIdle { runBlocking { screens.getValue("requests").restore() } }
         compose.waitForIdle()
-        println("RESTORED: $restored")
-        val now = runCatching { compose.onNode(isFocused()).fetchSemanticsNode().config.toString() }.getOrDefault("nothing")
-        println("FOCUSED: " + now.take(300))
         assertTrue(restored)
         compose.onNode(isFocused() and hasText("Popular 3", substring = true)).assertExists()
     }
