@@ -497,6 +497,8 @@ data class PlayerPrefs(
     val largerBuffer: Boolean = false,
     /** Straight past an episode's intro, where the server has marked one. */
     val skipIntros: Boolean = false,
+    /** Straight on to the next episode at the credits, where there is one. */
+    val skipCredits: Boolean = false,
     /** The tour of the remote has been taken or skipped; see Tour. */
     val tourSeen: Boolean = true,
     /** Home's rows switched off in Settings; see HomeRow. */
@@ -611,6 +613,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 matchFrameRate = settings.matchFrameRate,
                 largerBuffer = settings.largerBuffer,
                 skipIntros = settings.skipIntros,
+                skipCredits = settings.skipCredits,
                 tourSeen = settings.tourSeen,
                 hiddenHomeRows = settings.hiddenHomeRows,
             )
@@ -2122,15 +2125,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             ?: detail?.episodes?.firstOrNull { it.ratingKey == playback.ratingKey }
         val show = finished?.grandparentRatingKey?.takeIf { finished.type == "episode" }
         if (finished != null && show != null) {
-            val route = _state.value.route
-            if (route is Route.Detail && route.ratingKey == show && detail != null) {
-                val inRail = detail.episodes.firstOrNull { it.ratingKey == finished.ratingKey }
-                val season = detail.seasons.firstOrNull { it.ratingKey == finished.parentRatingKey }
-                when {
-                    inRail != null -> _state.update { it.copy(detail = it.detail?.copy(focusedEpisode = inRail)) }
-                    season != null -> selectSeason(season, focusEpisodeKey = finished.ratingKey)
-                }
-            } else {
+            if (!landOnEpisode(finished)) {
                 navigate(
                     Route.Detail(
                         ratingKey = show,
@@ -2369,7 +2364,30 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(prefs = it.prefs.copy(maxBitrateKbps = kbps)) }
     }
 
+    /**
+     * The show's page underneath, pointed at [episode]: the one just watched, which Up
+     * Next may have moved on from the one the page was opened at. False when the page
+     * underneath isn't that show's.
+     */
+    private fun landOnEpisode(episode: PlexItem): Boolean {
+        val show = episode.grandparentRatingKey?.takeIf { episode.type == "episode" } ?: return false
+        val route = _state.value.route
+        val detail = _state.value.detail
+        if (route !is Route.Detail || route.ratingKey != show || detail == null) return false
+        val inRail = detail.episodes.firstOrNull { it.ratingKey == episode.ratingKey }
+        val season = detail.seasons.firstOrNull { it.ratingKey == episode.parentRatingKey }
+        when {
+            inRail != null -> _state.update { it.copy(detail = it.detail?.copy(focusedEpisode = inRail)) }
+            season != null -> selectSeason(season, focusEpisodeKey = episode.ratingKey)
+        }
+        return true
+    }
+
     fun stopPlayback(positionMs: Long = 0) {
+        // Back to the show's page on the episode that was playing, not the one it opened at.
+        _state.value.playback?.takeIf { !it.isLive }?.let { playing ->
+            playing.queue.firstOrNull { it.ratingKey == playing.ratingKey }?.let(::landOnEpisode)
+        }
         releaseTranscode()
         if (_state.value.playback?.isLive == true) livePlayer.stop()
         _state.update { it.copy(multiview = emptyList()) }
@@ -3261,6 +3279,12 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     /** The tour again, from Settings. */
     fun replayTour() {
         _state.update { it.copy(prefs = it.prefs.copy(tourSeen = false)) }
+    }
+
+    fun toggleSkipCredits() {
+        val next = !settings.skipCredits
+        settings.skipCredits = next
+        _state.update { it.copy(prefs = it.prefs.copy(skipCredits = next)) }
     }
 
     fun toggleSkipIntros() {

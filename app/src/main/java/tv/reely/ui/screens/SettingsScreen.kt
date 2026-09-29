@@ -123,6 +123,7 @@ fun SettingsScreen(
     onToggleMatchFrameRate: () -> Unit,
     onToggleLargerBuffer: () -> Unit,
     onToggleSkipIntros: () -> Unit,
+    onToggleSkipCredits: () -> Unit = {},
     onNudgeThemeVolume: (Float) -> Unit,
     onRefreshChannels: () -> Unit,
     onRefreshGuide: () -> Unit,
@@ -223,6 +224,7 @@ fun SettingsScreen(
                     onToggleMatchFrameRate = onToggleMatchFrameRate,
                     onToggleLargerBuffer = onToggleLargerBuffer,
                     onToggleSkipIntros = onToggleSkipIntros,
+                    onToggleSkipCredits = onToggleSkipCredits,
                     onNudgeThemeVolume = onNudgeThemeVolume,
                 )
 
@@ -287,6 +289,7 @@ private fun PlaybackSection(
     onToggleMatchFrameRate: () -> Unit,
     onToggleLargerBuffer: () -> Unit,
     onToggleSkipIntros: () -> Unit,
+    onToggleSkipCredits: () -> Unit,
     onNudgeThemeVolume: (Float) -> Unit,
 ) {
     SettingGroup("Video") {
@@ -365,6 +368,12 @@ private fun PlaybackSection(
             switch = prefs.skipIntros,
             description = "Goes straight past an episode's intro when Plex has found it.",
             onClick = onToggleSkipIntros,
+        )
+        SettingRow(
+            title = "Skip credits",
+            switch = prefs.skipCredits,
+            description = "Goes straight to the next episode when Plex finds the credits.",
+            onClick = onToggleSkipCredits,
         )
         ChoiceRow(
             title = "Up Next",

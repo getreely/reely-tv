@@ -350,6 +350,12 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
         // Not while the tour is up: it has the cursor, and this would take it from under it.
         if (menuFor != null || touring || !contentReady(state)) return@LaunchedEffect
         if (tabRowHasFocus && !openedFromPage) return@LaunchedEffect
+        // A show's page with its episode in hand puts the cursor on that episode itself,
+        // coming back from the player especially; going to the top here would undo it.
+        val episodeHere = state.detail?.let { page ->
+            page.focusedEpisode?.let { e -> page.episodes.any { it.ratingKey == e.ratingKey } }
+        } == true
+        if (state.route is Route.Detail && episodeHere && !openedFromPage) return@LaunchedEffect
         // Back to a screen: the card the cursor was on. Somewhere new: the top of it.
         val back = !openedFromPage && screenFocus[routeKey(state.route)]?.restore() == true
         if (!back) contentFocus.requestWhenReady()
@@ -637,6 +643,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onToggleMatchFrameRate = viewModel::toggleMatchFrameRate,
                 onToggleLargerBuffer = viewModel::toggleLargerBuffer,
                 onToggleSkipIntros = viewModel::toggleSkipIntros,
+                onToggleSkipCredits = viewModel::toggleSkipCredits,
                 onNudgeThemeVolume = viewModel::nudgeThemeVolume,
                 onSetPlaybackMode = viewModel::setPlaybackMode,
                 onSetMaxBitrate = viewModel::setMaxBitrate,

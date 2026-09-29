@@ -434,7 +434,9 @@ fun PlayerScreen(
     LaunchedEffect(inCredits, playback.url) {
         if (inCredits && !creditsOffered) {
             creditsOffered = true
-            onCredits()
+            // Skip credits, in Settings: straight on to the next episode, where there is one.
+            // The last episode, and films, still end with Up Next as before.
+            if (prefs.skipCredits && canSkipForward) onStepEpisode(1) else onCredits()
         }
     }
     // The Up Next screen: the picture shrunk into a corner and the next episode offered

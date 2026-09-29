@@ -85,6 +85,11 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(SKIP_INTROS, false)
         set(value) = prefs.edit().putBoolean(SKIP_INTROS, value).apply()
 
+    /** Straight on to the next episode when the credits start, rather than Up Next. */
+    var skipCredits: Boolean
+        get() = prefs.getBoolean(SKIP_CREDITS, false)
+        set(value) = prefs.edit().putBoolean(SKIP_CREDITS, value).apply()
+
     /**
      * Keep more of a film or episode loaded ahead of what is playing. Off by default: the
      * ordinary amount starts things quickest, and only a slow or uneven connection to the
@@ -149,6 +154,7 @@ class Settings(context: Context) {
         private const val LARGER_BUFFER = "playback.largerBuffer"
         private const val HIDDEN_HOME_ROWS = "home.hiddenRows"
         private const val SKIP_INTROS = "playback.skipIntros"
+        private const val SKIP_CREDITS = "playback.skipCredits"
         private const val TOUR_SEEN = "tour.seen"
         private const val MAX_BITRATE = "playback.maxBitrate"
         private const val UPDATE_URL = "update.url"
