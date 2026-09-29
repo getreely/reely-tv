@@ -29,6 +29,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -39,6 +40,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
 import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
 import tv.reely.ui.theme.SurfaceRaised
@@ -49,6 +51,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.layout.layout
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
@@ -318,6 +321,13 @@ fun PlayerScreen(
      */
     var nudge by remember { mutableStateOf<ScrubNudge?>(null) }
     var scrubFirst by remember { mutableStateOf(false) }
+    var scrubRequests by remember { mutableIntStateOf(0) }
+    // The server's scrubbing pictures for this file, fetched once as it starts.
+    var previews by remember(playback.previewUrl) { mutableStateOf<tv.reely.core.PreviewIndex?>(null) }
+    LaunchedEffect(playback.previewUrl) {
+        val url = playback.previewUrl ?: return@LaunchedEffect
+        previews = tv.reely.core.PreviewIndex.load(url.replace("/{ms}", ""), context.cacheDir)
+    }
     var panel by remember { mutableStateOf(Panel.NONE) }
 
     // Plex's own intro and credits detection, when the server has it.
@@ -621,11 +631,27 @@ fun PlayerScreen(
         scrubFirst = true
         controlsVisible = true
         nudge = ScrubNudge(direction, stepMs, (nudge?.serial ?: 0) + 1)
+        scrubRequests++
+    }
+
+    /*
+     * The cursor onto the bar for a scrub started from outside it. An effect of its own,
+     * keyed on nothing the bar changes: this used to ride on the one below, keyed on the
+     * press itself, and the bar spending the press cancelled the move half-way, so the
+     * cursor landed on Play and the preview, which shows only on the bar, never came up.
+     */
+    LaunchedEffect(scrubRequests) {
+        if (scrubRequests == 0 || playback.isLive) return@LaunchedEffect
+        scrubberFocus.requestWhenReady()
+        // Held for a frame: the effect below starts in the same frame as this one, and
+        // seeing the flag already down it put the cursor straight back on Play.
+        withFrameNanos { }
+        scrubFirst = false
     }
 
     LaunchedEffect(
         controlsVisible, panel, guideOpen, tileMenu, skipLabel, playback.isLive, playback.url,
-        postPlay, nudge?.serial,
+        postPlay,
     ) {
         if (guideOpen) return@LaunchedEffect
         when {
@@ -635,10 +661,8 @@ fun PlayerScreen(
             // Above the transport: a prompt that is only up for a few seconds is no use
             // if reaching it means hunting for it first. When it goes, focus has to land
             // somewhere or the remote does nothing at all.
-            scrubFirst && controlsVisible && !playback.isLive -> {
-                scrubFirst = false
-                scrubberFocus.requestWhenReady()
-            }
+            // The effect above is putting the cursor on the bar; don't take it to Play.
+            scrubFirst && controlsVisible && !playback.isLive -> Unit
             skipLabel != null -> skipFocus.requestWhenReady()
             controlsVisible -> playFocus.requestWhenReady()
             else -> rootFocus.requestWhenReady()
@@ -1061,6 +1085,7 @@ fun PlayerScreen(
                 onScrub = { interaction++ },
                 nudge = nudge,
                 onNudgeUsed = { nudge = null },
+                previews = previews,
                 onTogglePlay = {
                     interaction++
                     // Coming back from a pause on live television means coming back to
@@ -1200,6 +1225,7 @@ internal fun Controls(
     /** A scrub started from outside the bar; see ScrubNudge. */
     nudge: ScrubNudge? = null,
     onNudgeUsed: () -> Unit = {},
+    previews: tv.reely.core.PreviewIndex? = null,
     onSkip: (Int) -> Unit,
     onTogglePlay: () -> Unit,
     onAddChannel: () -> Unit,
@@ -1264,6 +1290,7 @@ internal fun Controls(
                 previewUrl = playback.previewUrl,
                 nudge = nudge,
                 onNudgeUsed = onNudgeUsed,
+                previews = previews,
             )
         }
 
@@ -1400,6 +1427,7 @@ private fun Scrubber(
     previewUrl: String? = null,
     nudge: ScrubNudge? = null,
     onNudgeUsed: () -> Unit = {},
+    previews: tv.reely.core.PreviewIndex? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
     val total = durationMs.coerceAtLeast(1)
@@ -1532,6 +1560,7 @@ private fun Scrubber(
                 ScrubPreview(
                     atMs = scrubbing,
                     previewUrl = previewUrl,
+                    previews = previews,
                     centreX = maxWidth * played,
                     barWidth = maxWidth,
                 )
@@ -1551,7 +1580,13 @@ private fun Scrubber(
  * the server has made no previews. Takes no room of its own; it is drawn over the picture.
  */
 @Composable
-private fun ScrubPreview(atMs: Long, previewUrl: String?, centreX: Dp, barWidth: Dp) {
+private fun ScrubPreview(
+    atMs: Long,
+    previewUrl: String?,
+    centreX: Dp,
+    barWidth: Dp,
+    previews: tv.reely.core.PreviewIndex? = null,
+) {
     val width = if (previewUrl != null) PREVIEW_WIDTH else 84.dp
     val height = if (previewUrl != null) PREVIEW_WIDTH * 9 / 16 + 30.dp else 30.dp
     val left = (centreX - width / 2).coerceIn(0.dp, (barWidth - width).coerceAtLeast(0.dp))
@@ -1567,7 +1602,28 @@ private fun ScrubPreview(atMs: Long, previewUrl: String?, centreX: Dp, barWidth:
             .border(1.dp, Chalk.copy(alpha = 0.18f), RoundedCornerShape(10.dp)),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if (previewUrl != null) {
+        if (previews != null) {
+            // Read from the file already in hand. The last picture stays up while the
+            // next is read, so holding the button is a moving picture, not a flicker.
+            val index = previews.indexAt(atMs)
+            var picture by remember(previews) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+            LaunchedEffect(previews, index) {
+                val bytes = withContext(kotlinx.coroutines.Dispatchers.IO) { previews.jpeg(index) } ?: return@LaunchedEffect
+                picture = withContext(kotlinx.coroutines.Dispatchers.Default) {
+                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                } ?: picture
+            }
+            Box(modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Ink)) {
+                picture?.let {
+                    androidx.compose.foundation.Image(
+                        bitmap = it,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
+        } else if (previewUrl != null) {
             // To the nearest two seconds, the spacing Plex makes them at, so a scrub that
             // comes back past the same moment finds the picture already loaded.
             val moment = (atMs / 2_000) * 2_000
