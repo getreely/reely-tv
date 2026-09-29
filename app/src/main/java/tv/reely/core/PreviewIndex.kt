@@ -62,7 +62,31 @@ class PreviewIndex internal constructor(
          * The pictures for [url] (the BIF itself), from the cache when it has them. Null
          * when the server has none to give, or what it gave wasn't a BIF.
          */
-        suspend fun load(url: String, cacheDir: File): PreviewIndex? = withContext(Dispatchers.IO) {
+        suspend fun load(url: String, cacheDir: File): PreviewIndex? = fetch(url, cacheDir).index
+
+        /** What asking for the pictures came to: them, or why not, said plainly. */
+        data class Fetched(val index: PreviewIndex?, val problem: String?)
+
+        /** As [load], saying why when there are none. */
+        suspend fun fetch(url: String, cacheDir: File): Fetched = withContext(Dispatchers.IO) {
+            var problem: String? = null
+            val index = loadNow(url, cacheDir) { problem = it }
+            Fetched(index, if (index == null) problem ?: "the server's file couldn't be read" else null)
+        }
+
+        /**
+         * Whether the server hands out single pictures at [frameUrl], one moment's: some
+         * don't give the whole file but do give these, which the bar can show one by one.
+         */
+        suspend fun hasFrames(frameUrl: String): Boolean = withContext(Dispatchers.IO) {
+            runCatching {
+                Http.client.newCall(Request.Builder().url(frameUrl).get().build()).execute().use { response ->
+                    response.isSuccessful && response.body?.contentType()?.type == "image"
+                }
+            }.getOrDefault(false)
+        }
+
+        private fun loadNow(url: String, cacheDir: File, why: (String) -> Unit): PreviewIndex? {
             val dir = File(cacheDir, "previews").apply { mkdirs() }
             // Named for the file's address less the token, so it survives signing in again.
             val name = url.substringBefore('?').hashCode().toUInt().toString(16) + ".bif"
@@ -72,19 +96,29 @@ class PreviewIndex internal constructor(
                 val ok = runCatching {
                     val request = Request.Builder().url(url).get().build()
                     Http.bulk.newCall(request).execute().use { response ->
-                        if (!response.isSuccessful) return@use false
+                        if (!response.isSuccessful) {
+                            why("the server said ${response.code}")
+                            return@use false
+                        }
                         val body = response.body ?: return@use false
                         partial.outputStream().use { out -> body.byteStream().copyTo(out) }
                         true
                     }
-                }.getOrDefault(false)
+                }.getOrElse {
+                    why("couldn't reach the server for them")
+                    false
+                }
                 if (!ok || !partial.renameTo(file)) {
                     partial.delete()
-                    return@withContext null
+                    return null
                 }
                 trim(dir, keep = file)
             }
-            runCatching { read(file) }.getOrNull() ?: run { file.delete(); null }
+            return runCatching { read(file) }.getOrNull() ?: run {
+                why("the server's file wasn't one of preview pictures")
+                file.delete()
+                null
+            }
         }
 
         /** Reads the table; the pictures stay in the file until asked for. */

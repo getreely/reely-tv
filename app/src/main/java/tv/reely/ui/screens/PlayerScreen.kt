@@ -144,6 +144,8 @@ private const val CONTROLS_TIMEOUT_MS = 6_000L
 /** Long enough to read twice from across a room, short enough not to sit on the picture. */
 private const val AUDIO_NOTICE_MS = 9_000L
 private const val NOTICE_MS = 2_500L
+/** A moment to ask the server for a single preview picture of, to see if it gives them. */
+private const val PROBE_FRAME_MS = 60_000L
 private const val CHANNEL_ENTRY_MS = 2_000L
 private const val CHANNEL_DIGITS = 5
 
@@ -360,12 +362,20 @@ fun PlayerScreen(
     var scrubRequests by remember { mutableIntStateOf(0) }
     // The server's scrubbing pictures for this file, fetched once as it starts.
     var previews by remember(playback.previewUrl) { mutableStateOf<tv.reely.core.PreviewIndex?>(null) }
-    // Whether asking found none, which is when the bar shows the time alone.
+    // Whether asking found none, which is when the bar shows the time alone, and why.
     var noPreviews by remember(playback.previewUrl) { mutableStateOf(false) }
+    var previewProblem by remember(playback.previewUrl) { mutableStateOf<String?>(null) }
+    // The whole file wouldn't come, but single pictures do: the bar shows those one by one.
+    var framesOnly by remember(playback.previewUrl) { mutableStateOf(false) }
     LaunchedEffect(playback.previewUrl) {
         val url = playback.previewUrl ?: return@LaunchedEffect
-        previews = tv.reely.core.PreviewIndex.load(url.replace("/{ms}", ""), context.cacheDir)
-        noPreviews = previews == null
+        val fetched = tv.reely.core.PreviewIndex.fetch(url.replace("/{ms}", ""), context.cacheDir)
+        previews = fetched.index
+        if (fetched.index == null) {
+            framesOnly = tv.reely.core.PreviewIndex.hasFrames(url.replace("{ms}", PROBE_FRAME_MS.toString()))
+            noPreviews = !framesOnly
+            previewProblem = fetched.problem
+        }
     }
     val previewUrl = playback.previewUrl.takeIf { !noPreviews }
     var panel by remember { mutableStateOf(Panel.NONE) }
@@ -1439,9 +1449,16 @@ fun PlayerScreen(
                 audioDecoder = audioDecoder,
                 previews = when {
                     previews != null -> "Available"
+                    framesOnly -> "Available, a picture at a time"
                     playback.previewUrl != null && !noPreviews -> "Looking…"
+                    previewProblem != null -> "None: $previewProblem"
                     else -> "None on the server"
-                },
+                } + (
+                    // Standing in for them on the bar, where the server made chapter pictures.
+                    if (previews == null && noPreviews && playback.chapters.any { it.thumbUrl != null }) {
+                        ". Chapter pictures instead"
+                    } else ""
+                ),
                 focusRequester = panelFocus,
                 onClose = { panel = Panel.NONE },
                 modifier = Modifier.align(Alignment.CenterEnd),
@@ -1577,6 +1594,7 @@ internal fun Controls(
                 nudge = nudge,
                 onNudgeUsed = onNudgeUsed,
                 previews = previews,
+                chapters = playback.chapters.filter { it.thumbUrl != null },
             )
         }
 
@@ -1728,6 +1746,8 @@ private fun Scrubber(
     nudge: ScrubNudge? = null,
     onNudgeUsed: () -> Unit = {},
     previews: tv.reely.core.PreviewIndex? = null,
+    /** The file's chapters with pictures, for a server that made those and not previews. */
+    chapters: List<tv.reely.plex.PlexChapter> = emptyList(),
 ) {
     var focused by remember { mutableStateOf(false) }
     val total = durationMs.coerceAtLeast(1)
@@ -1861,6 +1881,7 @@ private fun Scrubber(
                     atMs = scrubbing,
                     previewUrl = previewUrl,
                     previews = previews,
+                    chapters = chapters,
                     centreX = maxWidth * played,
                     barWidth = maxWidth,
                 )
@@ -1886,9 +1907,15 @@ private fun ScrubPreview(
     centreX: Dp,
     barWidth: Dp,
     previews: tv.reely.core.PreviewIndex? = null,
+    chapters: List<tv.reely.plex.PlexChapter> = emptyList(),
 ) {
-    val width = if (previewUrl != null) PREVIEW_WIDTH else 84.dp
-    val height = if (previewUrl != null) PREVIEW_WIDTH * 9 / 16 + 30.dp else 30.dp
+    // The last resort for a picture: the chapter's, where the server has none of its own.
+    val chapterPicture = if (previewUrl == null && previews == null && chapters.isNotEmpty()) {
+        chapters.getOrNull(currentChapter(chapters, atMs).coerceAtLeast(0))?.thumbUrl
+    } else null
+    val pictured = previewUrl != null || chapterPicture != null
+    val width = if (pictured) PREVIEW_WIDTH else 84.dp
+    val height = if (pictured) PREVIEW_WIDTH * 9 / 16 + 30.dp else 30.dp
     val left = (centreX - width / 2).coerceIn(0.dp, (barWidth - width).coerceAtLeast(0.dp))
     Column(
         modifier = Modifier
@@ -1923,6 +1950,16 @@ private fun ScrubPreview(
                     )
                 }
             }
+        } else if (chapterPicture != null) {
+            AsyncImage(
+                model = chapterPicture,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .background(Ink),
+            )
         } else if (previewUrl != null) {
             // To the nearest two seconds, the spacing Plex makes them at, so a scrub that
             // comes back past the same moment finds the picture already loaded.
