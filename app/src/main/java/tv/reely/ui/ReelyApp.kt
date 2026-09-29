@@ -758,13 +758,11 @@ internal fun TopBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(
-            text = "reely",
-            color = Accent,
-            fontSize = 22.sp,
-            lineHeight = 25.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(end = 18.dp),
+        // The mark, as on the launcher: the app says its name once, on the home screen.
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(tv.reely.R.drawable.ic_mark),
+            contentDescription = "Reely",
+            modifier = Modifier.padding(end = 22.dp).height(30.dp),
         )
 
         destinations.forEachIndexed { index, destination ->
