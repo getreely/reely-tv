@@ -118,6 +118,8 @@ fun GuideRow(
     catchUpFrom: Long? = null,
     /** The starts of this channel's programmes that have a reminder. */
     reminded: Set<Long> = emptySet(),
+    /** Marked with a heart in the corner of its tile. */
+    favorite: Boolean = false,
 ) {
     Row(modifier = modifier.fillMaxWidth().height(GUIDE_ROW_HEIGHT)) {
         Box(
@@ -160,6 +162,13 @@ fun GuideRow(
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(horizontal = 8.dp),
+                )
+            }
+            if (favorite) {
+                HeartGlyph(
+                    color = Accent,
+                    size = 14.dp,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 7.dp),
                 )
             }
         }

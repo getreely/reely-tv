@@ -360,6 +360,7 @@ fun GuideOverlay(
                                 translucent = true,
                                 catchUpFrom = entry.catchUpFrom(now),
                                 reminded = reminders.filter { it.streamId == entry.streamId }.map { it.start }.toSet(),
+                                favorite = entry.streamId in favorites,
                             )
                         }
                     }

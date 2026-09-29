@@ -75,6 +75,23 @@ fun BookmarkGlyph(color: Color, filled: Boolean, size: Dp = 18.dp, modifier: Mod
     }
 }
 
+/** A heart: a favourite channel. */
+@Composable
+fun HeartGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(size)) {
+        val s = size.toPx()
+        val path = androidx.compose.ui.graphics.Path().apply {
+            moveTo(s * 0.5f, s * 0.88f)
+            cubicTo(s * 0.12f, s * 0.62f, s * 0.02f, s * 0.42f, s * 0.1f, s * 0.26f)
+            cubicTo(s * 0.2f, s * 0.08f, s * 0.42f, s * 0.08f, s * 0.5f, s * 0.26f)
+            cubicTo(s * 0.58f, s * 0.08f, s * 0.8f, s * 0.08f, s * 0.9f, s * 0.26f)
+            cubicTo(s * 0.98f, s * 0.42f, s * 0.88f, s * 0.62f, s * 0.5f, s * 0.88f)
+            close()
+        }
+        drawPath(path, color)
+    }
+}
+
 /** A crescent moon: the sleep timer. */
 @Composable
 fun MoonGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) {

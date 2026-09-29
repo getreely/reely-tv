@@ -105,6 +105,8 @@ class LiveShot {
                         live = live, guide = guide, previewEnabled = false,
                         onMoveChannel = {}, onMoveTime = {}, onJumpToNow = {}, onRefresh = {},
                         onPlaySelected = {}, onBackToCategories = {}, livePlayer = livePlayer,
+                        // Two marked, to show the heart on their tiles.
+                        favorites = live.channels.take(3).drop(1).map { it.streamId }.toSet(),
                     )
                 }
             }
