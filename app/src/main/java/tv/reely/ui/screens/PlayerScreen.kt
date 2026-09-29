@@ -103,6 +103,7 @@ import tv.reely.core.PlexStream
 import tv.reely.core.playerTrackFor
 import tv.reely.core.plexStreamFor
 import tv.reely.core.sidecarId
+import tv.reely.ui.components.digitOf
 import tv.reely.plex.PlexItem
 import tv.reely.ui.GuideState
 import tv.reely.ui.LiveState
@@ -142,7 +143,9 @@ private const val CONTROLS_TIMEOUT_MS = 6_000L
 
 /** Long enough to read twice from across a room, short enough not to sit on the picture. */
 private const val AUDIO_NOTICE_MS = 9_000L
-private const val SKIP_NOTICE_MS = 2_500L
+private const val NOTICE_MS = 2_500L
+private const val CHANNEL_ENTRY_MS = 2_000L
+private const val CHANNEL_DIGITS = 5
 
 internal enum class Panel { NONE, SUBTITLES, AUDIO, STATS, CHAPTERS }
 
@@ -189,6 +192,9 @@ fun PlayerScreen(
     onToggleSubtitleBackground: () -> Unit,
     /** A sound or subtitle choice to keep with Plex: stream ids, "0" for subtitles off. */
     onSaveStreamChoice: (audio: String?, subtitle: String?) -> Unit = { _, _ -> },
+    /** The channel with a number typed on the remote, if there is one. */
+    findChannel: (Int) -> XtreamChannel? = { null },
+    onTuneChannel: (XtreamChannel) -> Unit = {},
     imageUrl: (String?, String?, Int, Int) -> String?,
     logoUrl: (String?, String?) -> String?,
     modifier: Modifier = Modifier,
@@ -375,19 +381,37 @@ fun PlayerScreen(
      * episode: going back into the intro afterwards is somebody wanting to hear it.
      */
     var introSkipped by remember(playback.url) { mutableStateOf(false) }
-    var skipNotice by remember { mutableStateOf<String?>(null) }
+    var notice by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(prompt == SkipPrompt.INTRO, prefs.skipIntros) {
         if (prompt == SkipPrompt.INTRO && prefs.skipIntros && !introSkipped && intro != null) {
             introSkipped = true
             exoPlayer.seekTo(intro.endMs)
-            skipNotice = "Intro skipped"
+            notice = "Intro skipped"
+        }
+    }
+    /*
+     * A channel number typed on the remote. It tunes a moment after the last digit, or
+     * straight away on OK, as a cable box does.
+     */
+    var typedChannel by remember { mutableStateOf("") }
+    val typedMatch = typedChannel.toIntOrNull()?.let(findChannel)
+    fun tuneTyped() {
+        val number = typedChannel.toIntOrNull()
+        typedChannel = ""
+        val channel = number?.let(findChannel)
+        if (channel != null) onTuneChannel(channel) else if (number != null) notice = "There's no channel $number."
+    }
+    LaunchedEffect(typedChannel) {
+        if (typedChannel.isNotEmpty()) {
+            delay(CHANNEL_ENTRY_MS)
+            tuneTyped()
         }
     }
     // Its own effect: the one above is cancelled by the seek it makes.
-    LaunchedEffect(skipNotice) {
-        if (skipNotice != null) {
-            delay(SKIP_NOTICE_MS)
-            skipNotice = null
+    LaunchedEffect(notice) {
+        if (notice != null) {
+            delay(NOTICE_MS)
+            notice = null
         }
     }
     val skipLabel = when (prompt) {
@@ -724,6 +748,28 @@ fun PlayerScreen(
             .focusRequester(rootFocus)
             .focusable()
             .onPreviewKeyEvent { event ->
+                // Number keys type a channel, one picture on screen and nothing open over it.
+                if (playback.isLive && slotCount == 1 && !guideOpen && panel == Panel.NONE && tileMenu == null) {
+                    val digit = digitOf(event.key)
+                    if (digit != null) {
+                        if (event.type == KeyEventType.KeyDown) {
+                            typedChannel = (typedChannel + digit).take(CHANNEL_DIGITS)
+                        }
+                        return@onPreviewKeyEvent true
+                    }
+                    if (typedChannel.isNotEmpty()) {
+                        when (event.key) {
+                            Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
+                                if (event.type == KeyEventType.KeyDown) tuneTyped()
+                                return@onPreviewKeyEvent true
+                            }
+                            Key.Back -> {
+                                if (event.type == KeyEventType.KeyDown) typedChannel = ""
+                                return@onPreviewKeyEvent true
+                            }
+                        }
+                    }
+                }
                 /*
                  * A press of OK on a tile, and a hold of it, both halves. This has to run
                  * before the key-up bail below, because a press is not a press until the
@@ -1044,7 +1090,15 @@ fun PlayerScreen(
 
         // At the top, away from the transport and the skip prompt, and gone on its own:
         // the picture is still playing and this is only saying why it is quiet.
-        (audioNotice ?: skipNotice)?.let { message ->
+        if (typedChannel.isNotEmpty()) {
+            ChannelEntry(
+                typed = typedChannel,
+                match = typedMatch,
+                modifier = Modifier.align(Alignment.TopStart).padding(start = 48.dp, top = 27.dp),
+            )
+        }
+
+        (audioNotice ?: notice)?.let { message ->
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -2139,6 +2193,27 @@ private fun buildMediaItem(playback: Playback): MediaItem =
             }
         )
         .build()
+
+/** The number being typed, and the channel it will tune to, or that there isn't one. */
+@Composable
+internal fun ChannelEntry(typed: String, match: XtreamChannel?, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .widthIn(min = 200.dp, max = 460.dp)
+            .sheet(radius = 16)
+            .padding(horizontal = 22.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(text = typed, color = Chalk, style = ReelyType.Display)
+        Text(
+            text = match?.name ?: "No channel with this number",
+            color = if (match != null) Chalk else Muted,
+            style = ReelyType.Body,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
 
 /**
  * The film's chapters, each with the server's picture of it and where it starts. Opens on

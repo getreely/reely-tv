@@ -2457,6 +2457,23 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * The channel with this number, if there is one: from the category open first, then
+     * from the provider's whole list once it's in hand.
+     */
+    fun channelNumbered(number: Int): XtreamChannel? =
+        _state.value.live.channels.firstOrNull { it.number == number }
+            ?: allChannels?.firstOrNull { it.number == number }
+
+    /**
+     * Tunes to a channel typed by number. Within the open category it plays as if chosen
+     * there, so channel up and down carry on from it.
+     */
+    fun tuneChannel(channel: XtreamChannel) {
+        val index = _state.value.live.channels.indexOfFirst { it.streamId == channel.streamId }
+        if (index >= 0) playChannel(index) else playSearchChannel(channel)
+    }
+
+    /**
      * Plays a channel found by search. It may not be in the category currently open, in
      * which case there is nothing to surf through and the skip buttons stay quiet.
      */
@@ -2814,6 +2831,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val credentials = live.credentials ?: return
         val channel = live.channels.getOrNull(index) ?: return
         rememberChannel(channel)
+        // For typing a channel number, which can be any channel, not only this category's.
+        primeChannelIndex()
         val now = System.currentTimeMillis() / 1000
         val programme = live.nowNext(channel.streamId).firstOrNull { it.progressAt(now) != null }
         _state.update {
