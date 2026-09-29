@@ -15,6 +15,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.draw.clip
+import tv.reely.ui.components.glass
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -97,6 +101,10 @@ fun HomeScreen(
     requestRows: List<tv.reely.requests.RequestRow> = emptyList(),
     requestBadge: (tv.reely.requests.RequestTitle) -> String? = { null },
     onOpenRequest: (tv.reely.requests.RequestTitle) -> Unit = {},
+    /** What this account asked for that has arrived. */
+    ready: List<tv.reely.requests.RequestTitle> = emptyList(),
+    onWatchReady: (tv.reely.requests.RequestTitle) -> Unit = {},
+    onDismissReady: (tv.reely.requests.RequestTitle) -> Unit = {},
 ) {
     if (!plex.isConnected) {
         PlexSignInPanel(
@@ -201,6 +209,18 @@ fun HomeScreen(
                     ) {
                         if (home.error != null) {
                             item { ErrorNote(home.error, modifier = Modifier.padding(horizontal = 40.dp)) }
+                        }
+
+                        // Something asked for has arrived: said first, one at a time.
+                        ready.firstOrNull()?.let { arrived ->
+                            item(key = "ready:${arrived.key}") {
+                                ReadyCard(
+                                    title = arrived,
+                                    more = ready.size - 1,
+                                    onWatch = { onWatchReady(arrived) },
+                                    onDismiss = { onDismissReady(arrived) },
+                                )
+                            }
                         }
 
                         if (home.continueWatching.isNotEmpty() && HomeRow.CONTINUE.id !in hidden) {
@@ -397,6 +417,46 @@ fun HomeScreen(
             }
 
         }
+    }
+}
+
+/** "Dune is ready to watch": something asked for through Requests, now on the server. */
+@Composable
+private fun ReadyCard(
+    title: tv.reely.requests.RequestTitle,
+    more: Int,
+    onWatch: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .padding(horizontal = 40.dp)
+            .glass()
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .focusGroup(),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        coil.compose.AsyncImage(
+            model = title.poster,
+            contentDescription = null,
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            modifier = Modifier
+                .height(72.dp)
+                .width(48.dp)
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(6.dp)),
+        )
+        Column(modifier = Modifier.widthIn(max = 520.dp)) {
+            Text(text = "${title.title} is ready to watch", color = Chalk, style = ReelyType.Body, fontWeight = FontWeight.SemiBold)
+            Text(
+                text = if (more > 0) "You asked for it. And ${if (more == 1) "1 more" else "$more more"} after this."
+                else "You asked for it, and it's here.",
+                color = tv.reely.ui.theme.Muted,
+                style = ReelyType.Label,
+            )
+        }
+        tv.reely.ui.components.TvActionButton(label = "Watch", onClick = onWatch, emphasised = true)
+        tv.reely.ui.components.TvActionButton(label = "Dismiss", onClick = onDismiss)
     }
 }
 

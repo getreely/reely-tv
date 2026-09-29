@@ -59,6 +59,17 @@ data class PlexSubtitle(
     val language: String?,
 )
 
+/** Subtitles found online for a title, which the server can fetch and add to it. */
+data class PlexOnlineSubtitle(
+    val key: String,
+    val title: String,
+    val provider: String?,
+    val language: String?,
+    val codec: String?,
+    val hearingImpaired: Boolean,
+    val forced: Boolean,
+)
+
 /** A trailer or other extra attached to a library item. */
 data class PlexExtra(
     val ratingKey: String,
@@ -833,6 +844,52 @@ object PlexApi {
                 audioStreams = streamsOf(part, AUDIO_STREAM),
                 subtitleStreams = streamsOf(part, SUBTITLE_STREAM),
             )
+        }
+
+    /**
+     * Subtitles for [ratingKey] that the server can find online, in [language] (a two
+     * letter code), from whichever providers it has turned on. The same search Plex's own
+     * apps offer when a file has none.
+     */
+    suspend fun searchSubtitles(base: String, token: String, ratingKey: String, language: String): List<PlexOnlineSubtitle> =
+        withContext(Dispatchers.IO) {
+            val found = container(
+                "$base/library/metadata/$ratingKey/subtitles?language=$language&hearingImpaired=0&forced=0",
+                token,
+            ).optJSONArray("Stream") ?: return@withContext emptyList()
+            (0 until found.length()).mapNotNull { found.optJSONObject(it) }.mapNotNull { stream ->
+                val key = stream.optString("key").takeIf(String::isNotBlank) ?: return@mapNotNull null
+                PlexOnlineSubtitle(
+                    key = key,
+                    title = stream.optString("title").ifBlank { stream.optString("displayTitle") }
+                        .ifBlank { stream.optString("languageTag").ifBlank { "Subtitles" } },
+                    provider = stream.optString("providerTitle").takeIf(String::isNotBlank),
+                    language = stream.optString("languageCode").takeIf(String::isNotBlank)
+                        ?: stream.optString("languageTag").takeIf(String::isNotBlank),
+                    codec = stream.optString("codec").takeIf(String::isNotBlank),
+                    hearingImpaired = stream.optBoolean("hearingImpaired"),
+                    forced = stream.optBoolean("forced"),
+                )
+            }
+        }
+
+    /** Has the server fetch [subtitle] and add it to the title, as a subtitle file of its own. */
+    suspend fun addSubtitle(base: String, token: String, ratingKey: String, subtitle: PlexOnlineSubtitle, language: String) =
+        withContext(Dispatchers.IO) {
+            val query = buildString {
+                append("key=").append(URLEncoder.encode(subtitle.key, "UTF-8"))
+                subtitle.codec?.let { append("&codec=").append(URLEncoder.encode(it, "UTF-8")) }
+                append("&language=").append(URLEncoder.encode(subtitle.language ?: language, "UTF-8"))
+                append("&hearingImpaired=").append(if (subtitle.hearingImpaired) 1 else 0)
+                append("&forced=").append(if (subtitle.forced) 1 else 0)
+                subtitle.provider?.let { append("&providerTitle=").append(URLEncoder.encode(it, "UTF-8")) }
+            }
+            val request = Request.Builder()
+                .url("$base/library/metadata/$ratingKey/subtitles?$query")
+                .plexHeaders(clientId, token)
+                .put(FormBody.Builder().build())
+                .build()
+            runCatching { Http.client.newCall(request).execute().use { it.isSuccessful } }.getOrDefault(false)
         }
 
     /**

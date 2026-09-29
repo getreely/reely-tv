@@ -80,6 +80,7 @@ import tv.reely.ui.components.TvActionButton
 import tv.reely.ui.components.glass
 import tv.reely.ui.components.guideTimeRange
 import tv.reely.ui.components.guideWidthFor
+import tv.reely.ui.components.isSelect
 import tv.reely.ui.components.requestWhenReady
 import tv.reely.ui.theme.Accent
 import tv.reely.ui.theme.Faint
@@ -115,7 +116,12 @@ fun GuideScreen(
      * else, to Settings say, and pulling it down into the guide stopped it there.
      */
     takeFocus: Boolean = true,
+    /** Programmes with a reminder, marked in the grid. */
+    reminders: List<tv.reely.core.Reminder> = emptyList(),
+    /** Hold OK: a reminder for the programme under the cursor, if it's still to come. */
+    onToggleReminder: () -> Unit = {},
 ) {
+    val press = tv.reely.ui.components.rememberSelectPress()
     var now by remember { mutableLongStateOf(System.currentTimeMillis() / 1000) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -280,6 +286,10 @@ fun GuideScreen(
                 .focusRequester(gridFocus)
                 .focusable()
                 .onPreviewKeyEvent { event ->
+                    // OK plays the channel, or the programme again; held, it sets a reminder.
+                    if (event.isSelect()) {
+                        return@onPreviewKeyEvent press.handle(event, onPress = onPlaySelected, onHold = onToggleReminder)
+                    }
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when (event.key) {
                         Key.DirectionUp -> if (guide.channelIndex == 0) false
@@ -292,12 +302,6 @@ fun GuideScreen(
 
                         Key.DirectionLeft -> { onMoveTime(-1); true }
                         Key.DirectionRight -> { onMoveTime(1); true }
-                        Key.DirectionCenter, Key.Enter -> {
-                            // The stream stays exactly as it is; only the view changes.
-                            onPlaySelected()
-                            true
-                        }
-
                         else -> false
                     }
                 },
@@ -330,6 +334,7 @@ fun GuideScreen(
                             isCurrent = index == guide.channelIndex,
                             scroll = scroll,
                             catchUpFrom = entry.catchUpFrom(now),
+                            reminded = reminders.filter { it.streamId == entry.streamId }.map { it.start }.toSet(),
                         )
                     }
                 }

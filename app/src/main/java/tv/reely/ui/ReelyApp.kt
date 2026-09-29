@@ -139,6 +139,8 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     var saverUp by remember { mutableStateOf(false) }
     var swallowRelease by remember { mutableStateOf(false) }
     val saverMinutes = state.prefs.screensaverMinutes
+    // A reminder coming up counts as somebody being there: the screensaver makes way.
+    LaunchedEffect(state.dueReminder) { if (state.dueReminder != null) lastPress++ }
     LaunchedEffect(lastPress, saverMinutes, state.playback == null) {
         saverUp = false
         if (saverMinutes <= 0 || state.playback != null) return@LaunchedEffect
@@ -235,6 +237,18 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             onSaveStreamChoice = { audio, subtitle -> viewModel.saveStreamChoice(audio, subtitle) },
             findChannel = viewModel::channelNumbered,
             onCatchUp = viewModel::playCatchUp,
+            sleep = state.sleep,
+            onSetSleep = viewModel::setSleepTimer,
+            reminders = state.reminders,
+            onToggleReminder = viewModel::toggleReminder,
+            subtitleSearch = state.subtitleSearch,
+            onFindSubtitles = viewModel::searchSubtitles,
+            onAddSubtitle = viewModel::addSubtitle,
+            onCloseSubtitleSearch = viewModel::closeSubtitleSearch,
+            reminder = state.dueReminder,
+            onWatchReminder = viewModel::watchReminder,
+            onDismissReminder = viewModel::dismissReminder,
+            onStartOver = viewModel.startOverProgramme()?.let { { viewModel.startOver() } },
             onTuneChannel = viewModel::tuneChannel,
             imageUrl = viewModel::plexImageUrl,
             logoUrl = viewModel::plexLogoUrl,
@@ -400,8 +414,9 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
      * focus, it goes back where the person was: the tab they were on, or the page.
      */
     var appHasFocus by remember { mutableStateOf(true) }
-    LaunchedEffect(appHasFocus) {
-        if (appHasFocus) return@LaunchedEffect
+    // A reminder up has the cursor, outside all this; once it's gone the net catches it.
+    LaunchedEffect(appHasFocus, state.dueReminder) {
+        if (appHasFocus || state.dueReminder != null) return@LaunchedEffect
         // Give anything that is moving the cursor on purpose a moment to do it first.
         delay(FOCUS_RESCUE_DELAY_MS)
         if (tabRowHasFocus) currentTabFocus.requestWhenReady() else contentFocus.requestWhenReady()
@@ -506,6 +521,9 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 hidden = state.prefs.hiddenHomeRows,
                 requestRows = state.requests.rows,
                 requestBadge = state.requests::badgeFor,
+                ready = state.requests.ready,
+                onWatchReady = viewModel::openReady,
+                onDismissReady = viewModel::dismissReady,
                 onOpenRequest = { title ->
                     openedFromPage = true
                     viewModel.navigate(Route.RequestTitle(title))
@@ -657,6 +675,8 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                     onPlaySelected = viewModel::guidePlaySelected,
                     onBackToCategories = viewModel::clearCategory,
                     livePlayer = viewModel.livePlayer,
+                    reminders = state.reminders,
+                    onToggleReminder = viewModel::guideToggleReminder,
                 )
             }
 
@@ -801,6 +821,23 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                         .padding(top = 4.dp),
                 )
             }
+        }
+    }
+
+    // A reminder, low on the right over whatever screen is up, with the cursor on Watch.
+    state.dueReminder?.let { due ->
+        val reminderFocus = remember { FocusRequester() }
+        LaunchedEffect(due) { reminderFocus.requestWhenReady() }
+        Box(
+            modifier = Modifier.fillMaxSize().padding(end = 40.dp, bottom = 32.dp),
+            contentAlignment = Alignment.BottomEnd,
+        ) {
+            tv.reely.ui.screens.ReminderCard(
+                reminder = due,
+                focusRequester = reminderFocus,
+                onWatch = viewModel::watchReminder,
+                onDismiss = viewModel::dismissReminder,
+            )
         }
     }
 

@@ -116,6 +116,8 @@ fun GuideRow(
     translucent: Boolean = false,
     /** From when this channel's programmes can be watched again, or null when they can't. */
     catchUpFrom: Long? = null,
+    /** The starts of this channel's programmes that have a reminder. */
+    reminded: Set<Long> = emptySet(),
 ) {
     Row(modifier = modifier.fillMaxWidth().height(GUIDE_ROW_HEIGHT)) {
         Box(
@@ -212,6 +214,7 @@ fun GuideRow(
                     selected = isCurrent && programme.isOnAt(focusTime),
                     past = programme.stop <= now,
                     replay = catchUpFrom != null && programme.stop <= now && programme.start >= catchUpFrom,
+                    reminder = programme.start in reminded,
                 )
                 cursor = stop
             }
@@ -241,6 +244,8 @@ private fun ProgrammeCard(
     past: Boolean,
     /** Over, but it can still be watched: said, and not dimmed like the rest of the past. */
     replay: Boolean = false,
+    /** Still to come, with a reminder set for when it starts. */
+    reminder: Boolean = false,
 ) {
     val faded = past && !selected && !replay
     Box(
@@ -284,7 +289,11 @@ private fun ProgrammeCard(
             )
             if (slot != null) {
                 Text(
-                    text = if (replay) "Watch again  ·  $slot" else slot,
+                    text = when {
+                        replay -> "Watch again  ·  $slot"
+                        reminder -> "Reminder set  ·  $slot"
+                        else -> slot
+                    },
                     color = Chalk.copy(alpha = 0.45f),
                     fontSize = 14.sp,
                     lineHeight = 18.sp,

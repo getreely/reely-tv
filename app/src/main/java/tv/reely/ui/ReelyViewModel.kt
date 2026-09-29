@@ -124,6 +124,8 @@ data class RequestsState(
     val mine: List<tv.reely.requests.RequestRecord> = emptyList(),
     /** What Reely holds and what's been asked for, to mark posters with. */
     val marks: tv.reely.requests.TitleMarks = tv.reely.requests.TitleMarks(),
+    /** This account's requests that have arrived since they were last looked at. */
+    val ready: List<tv.reely.requests.RequestTitle> = emptyList(),
 ) {
     /** The state of this account's request for [title], if it made one. */
     fun statusOf(title: tv.reely.requests.RequestTitle): String? =
@@ -556,7 +558,30 @@ sealed interface UpdateStatus {
     data class Failed(val message: String) : UpdateStatus
 }
 
+/**
+ * When playback should stop by itself: at a time on the clock, or at the end of what's
+ * playing. It carries on from one episode to the next, and goes when the player is left.
+ */
+data class SleepTimer(val atMs: Long? = null, val endOfEpisode: Boolean = false)
+
+/** Looking for subtitles online for what's playing, through the server. */
+data class SubtitleSearch(
+    val language: String,
+    val busy: Boolean = true,
+    val results: List<tv.reely.plex.PlexOnlineSubtitle> = emptyList(),
+    val error: String? = null,
+    /** The one being fetched and added, by key. */
+    val adding: String? = null,
+)
+
 data class ReelyState(
+    /** Subtitles being looked for online, for what's playing. */
+    val subtitleSearch: SubtitleSearch? = null,
+    /** Programmes to be told about when they start, soonest first. */
+    val reminders: List<tv.reely.core.Reminder> = emptyList(),
+    /** The one starting now, while it's being said. */
+    val dueReminder: tv.reely.core.Reminder? = null,
+    val sleep: SleepTimer? = null,
     val restoring: Boolean = true,
     val stack: List<Route> = listOf(Route.Home),
     val plex: PlexState = PlexState(),
@@ -639,6 +664,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     private var timelineSessionFor: String? = null
     private var importJob: Job? = null
     private var searchJob: Job? = null
+    private var reminderJob: Job? = null
     private var channelsJob: Job? = null
     private val browseJobs = mutableMapOf<LibraryKind, Job>()
     private var updateJob: Job? = null
@@ -649,6 +675,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     private var allChannels: List<XtreamChannel>? = null
 
     init {
+        setReminders(tv.reely.core.Reminders.decode(settings.reminders))
+
         PlexApi.clientId = clientId
         // The name the television was given in its own settings, as Plex's apps use; the
         // model when there is none, which is still more use than the app's name.
@@ -839,6 +867,68 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                         error = found.exceptionOrNull()?.readable(),
                     ),
                 )
+            }
+        }
+    }
+
+    /**
+     * Whether anything asked for has arrived. The library lists are only fetched while
+     * something approved is still waiting, since they're the large ones. The first look
+     * takes in what was ready already without saying so: that isn't news.
+     */
+    private fun checkReadyRequests() {
+        val client = reely ?: return
+        viewModelScope.launch {
+            val mine = runCatching { client.myRequests() }.getOrNull() ?: return@launch
+            val seen = settings.readyRequestsSeen
+            if (mine.none { it.status == "approved" && it.title.key !in seen.orEmpty() }) {
+                if (seen == null) settings.readyRequestsSeen = emptySet()
+                _state.update { it.copy(requests = it.requests.copy(mine = mine)) }
+                return@launch
+            }
+            val marks = runCatching { client.marks() }.getOrNull() ?: return@launch
+            val arrived = tv.reely.requests.readyRequests(mine, marks, seen.orEmpty())
+            if (seen == null) {
+                settings.readyRequestsSeen = arrived.map { it.key }.toSet()
+                _state.update { it.copy(requests = it.requests.copy(mine = mine, marks = marks)) }
+                return@launch
+            }
+            _state.update { it.copy(requests = it.requests.copy(mine = mine, marks = marks, ready = arrived)) }
+        }
+    }
+
+    /** Put away without watching: not said again. */
+    fun dismissReady(title: tv.reely.requests.RequestTitle) {
+        settings.readyRequestsSeen = settings.readyRequestsSeen.orEmpty() + title.key
+        _state.update { it.copy(requests = it.requests.copy(ready = it.requests.ready.filterNot { r -> r.key == title.key })) }
+    }
+
+    /**
+     * Opens what arrived: its page on the server, found by name, kind and year; or, if the
+     * server hasn't picked it up yet under that name, Search with the name typed in.
+     */
+    fun openReady(title: tv.reely.requests.RequestTitle) {
+        dismissReady(title)
+        val plex = _state.value.plex
+        val servers = plex.homeSources().map { it.baseUrl to it.token }.distinct().ifEmpty {
+            val base = plex.baseUrl
+            val token = plex.serverToken
+            if (base != null && token != null) listOf(base to token) else emptyList()
+        }
+        viewModelScope.launch {
+            val kind = if (title.isShow) "show" else "movie"
+            val found = servers.firstNotNullOfOrNull { (base, token) ->
+                runCatching { PlexApi.searchAll(base, token, title.title).first }.getOrNull()
+                    ?.firstOrNull { item ->
+                        item.type == kind && item.title.equals(title.title, ignoreCase = true) &&
+                            (title.year == null || item.year == null || item.year == title.year)
+                    }
+            }
+            if (found != null) {
+                navigate(Route.Detail(found.ratingKey, serverBase = found.serverBase))
+            } else {
+                navigate(Route.Search)
+                setQuery(title.title)
             }
         }
     }
@@ -1358,6 +1448,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
      * that span them.
      */
     fun refreshHome() {
+        // Anything asked for that has arrived, said on Home as it refreshes.
+        checkReadyRequests()
         val plex = _state.value.plex
         val sources = plex.homeSources().ifEmpty {
             val base = plex.baseUrl ?: return
@@ -2102,6 +2194,11 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         if (startingNext) return
         val playback = _state.value.playback ?: return
         if (playback.isLive) return
+        // The sleep timer said this episode was the last: out, with no Up Next.
+        if (_state.value.sleep?.endOfEpisode == true) {
+            finishAtEnd(playback)
+            return
+        }
         val next = playback.queue.getOrNull(playback.queueIndex + 1)
         if (next != null) {
             _state.update { it.copy(upNext = next) }
@@ -2151,6 +2248,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun onCreditsReached() {
         if (_state.value.upNext != null) return
+        // Asleep at the end of this one: the credits run, and nothing's offered after.
+        if (_state.value.sleep?.endOfEpisode == true) return
         offerUpNext()
     }
 
@@ -2220,6 +2319,149 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun dismissUpNext() = _state.update { it.copy(upNext = null) }
+
+    // ---------------------------------------------------------------- Reminders
+
+    /**
+     * Keeps the list, and waits for the first of them. When it starts it's said, on
+     * whatever screen is up; then the wait moves on to the next.
+     */
+    private fun setReminders(list: List<tv.reely.core.Reminder>) {
+        val upcoming = tv.reely.core.Reminders.upcoming(list, System.currentTimeMillis() / 1000)
+        settings.reminders = tv.reely.core.Reminders.encode(upcoming)
+        _state.update { it.copy(reminders = upcoming) }
+        reminderJob?.cancel()
+        val next = upcoming.firstOrNull() ?: return
+        reminderJob = viewModelScope.launch {
+            delay((next.start * 1000 - System.currentTimeMillis()).coerceAtLeast(0))
+            _state.update { it.copy(dueReminder = next) }
+            setReminders(_state.value.reminders.filterNot { it.key == next.key })
+        }
+    }
+
+    /** Whether there's a reminder for [programme] on [channel]. */
+    fun hasReminder(channel: XtreamChannel, start: Long): Boolean =
+        _state.value.reminders.any { it.streamId == channel.streamId && it.start == start }
+
+    /** A reminder for a programme still to come, or none if there was one. */
+    fun toggleReminder(channel: XtreamChannel, programme: tv.reely.xtream.EpgProgramme) {
+        if (programme.start <= System.currentTimeMillis() / 1000) return
+        val reminder = tv.reely.core.Reminder(channel.streamId, channel.name, programme.title, programme.start)
+        val list = _state.value.reminders
+        setReminders(if (list.any { it.key == reminder.key }) list.filterNot { it.key == reminder.key } else list + reminder)
+    }
+
+    /** Hold OK in the Live TV guide: the programme under the cursor, if it's still to come. */
+    fun guideToggleReminder() {
+        val guide = _state.value.guide
+        val channel = _state.value.live.channels.getOrNull(guide.channelIndex) ?: return
+        val programme = channel.epgChannelId?.let { guide.programmes[it] }.orEmpty()
+            .firstOrNull { it.isOnAt(guide.focusTime) } ?: return
+        toggleReminder(channel, programme)
+    }
+
+    fun dismissReminder() = _state.update { it.copy(dueReminder = null) }
+
+    /** The channel of the programme starting, from wherever the reminder was said. */
+    fun watchReminder() {
+        val due = _state.value.dueReminder ?: return
+        _state.update { it.copy(dueReminder = null) }
+        val channel = _state.value.live.channels.firstOrNull { it.streamId == due.streamId }
+            ?: allChannels?.firstOrNull { it.streamId == due.streamId }
+        if (channel != null) {
+            tuneChannel(channel)
+            return
+        }
+        // Not in hand yet: the whole list, then the channel.
+        val credentials = _state.value.live.credentials ?: return
+        viewModelScope.launch {
+            val all = allChannels ?: runCatching { XtreamApi.liveChannels(credentials) }.getOrNull()
+                ?.also { allChannels = it } ?: return@launch
+            all.firstOrNull { it.streamId == due.streamId }?.let(::tuneChannel)
+        }
+    }
+
+    // ---------------------------------------------------------------- Finding subtitles
+
+    /** Subtitles online for what's playing, in the television's language. */
+    fun searchSubtitles() {
+        val playback = _state.value.playback ?: return
+        val ratingKey = playback.ratingKey ?: return
+        val plex = _state.value.plex
+        val base = playback.serverBase ?: plex.baseUrl ?: return
+        val token = plex.tokenFor(playback.serverBase) ?: return
+        val language = java.util.Locale.getDefault().language.ifBlank { "en" }
+        _state.update { it.copy(subtitleSearch = SubtitleSearch(language)) }
+        viewModelScope.launch {
+            val found = runCatching { PlexApi.searchSubtitles(base, token, ratingKey, language) }
+            _state.update { current ->
+                val search = current.subtitleSearch ?: return@update current
+                current.copy(
+                    subtitleSearch = search.copy(
+                        busy = false,
+                        results = found.getOrElse { emptyList() },
+                        error = found.exceptionOrNull()?.let { "Plex couldn't look for subtitles. ${it.readable()}" },
+                    ),
+                )
+            }
+        }
+    }
+
+    fun closeSubtitleSearch() = _state.update { it.copy(subtitleSearch = null) }
+
+    /**
+     * Has the server fetch [subtitle] and add it to the file, then plays with it on: the
+     * file's subtitles are read again, and the new one is picked and remembered.
+     */
+    fun addSubtitle(subtitle: tv.reely.plex.PlexOnlineSubtitle) {
+        val playback = _state.value.playback ?: return
+        val ratingKey = playback.ratingKey ?: return
+        val search = _state.value.subtitleSearch ?: return
+        val plex = _state.value.plex
+        val base = playback.serverBase ?: plex.baseUrl ?: return
+        val token = plex.tokenFor(playback.serverBase) ?: return
+        _state.update { it.copy(subtitleSearch = search.copy(adding = subtitle.key, error = null)) }
+        viewModelScope.launch {
+            val added = PlexApi.addSubtitle(base, token, ratingKey, subtitle, search.language)
+            val fresh = if (added) {
+                runCatching { PlexApi.playback(base, token, ratingKey, playback.mediaIndex) }.getOrNull()
+            } else null
+            val before = playback.subtitles.map { it.id }.toSet()
+            val newOne = fresh?.subtitles?.firstOrNull { it.id !in before }
+            if (fresh == null || newOne == null) {
+                _state.update { current ->
+                    current.copy(
+                        subtitleSearch = current.subtitleSearch?.copy(
+                            adding = null,
+                            error = "Plex couldn't add those subtitles. Try another.",
+                        ),
+                    )
+                }
+                return@launch
+            }
+            _state.update { current ->
+                val now = current.playback?.takeIf { it.url == playback.url } ?: return@update current
+                current.copy(
+                    subtitleSearch = null,
+                    playback = now.copy(
+                        subtitles = fresh.subtitles,
+                        subtitleStreams = fresh.subtitleStreams.map { it.copy(selected = it.id == newOne.id) },
+                    ),
+                )
+            }
+            saveStreamChoice(subtitleStreamId = newOne.id)
+        }
+    }
+
+    /** The sleep timer: [minutes] from now, the end of this episode (0), or off (null). */
+    fun setSleepTimer(minutes: Int?) {
+        val timer = when {
+            minutes == null -> null
+            minutes == 0 -> SleepTimer(endOfEpisode = true)
+            else -> SleepTimer(atMs = System.currentTimeMillis() + minutes * 60_000L)
+        }
+        _state.update { it.copy(sleep = timer) }
+    }
 
     /**
      * Tell Plex where we are. Without this the server never learns anything was watched,
@@ -2417,7 +2659,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         }
         // A later play of the same thing is a new sitting, so it gets a new identifier.
         timelineSessionFor = null
-        _state.update { it.copy(playback = null, upNext = null) }
+        _state.update { it.copy(playback = null, upNext = null, sleep = null) }
     }
 
     // ---------------------------------------------------------------- Subtitle preferences
@@ -3168,6 +3410,35 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             tv.reely.xtream.catchUpProgramme(it, listing, guide.focusTime, System.currentTimeMillis() / 1000)
         }
         if (channel != null && past != null) playCatchUp(channel, past) else playChannel(guide.channelIndex)
+    }
+
+    /**
+     * What's on the channel playing, when it can be started again from the beginning: a
+     * channel with an archive, and a programme it still holds. Read from the guide, or
+     * the panel's own now-and-next where the guide hasn't got it.
+     */
+    fun startOverProgramme(): Pair<XtreamChannel, tv.reely.xtream.EpgProgramme>? {
+        val state = _state.value
+        val playback = state.playback?.takeIf { it.isLive } ?: return null
+        val channel = state.live.channels.getOrNull(playback.channelIndex) ?: return null
+        val now = System.currentTimeMillis() / 1000
+        val from = channel.catchUpFrom(now) ?: return null
+        val listed = channel.epgChannelId?.let { state.guide.programmes[it] }.orEmpty()
+            .firstOrNull { it.isOnAt(now) }
+        val programme = listed ?: state.live.nowNext(channel.streamId)
+            .firstOrNull { it.progressAt(now) != null }
+            ?.let {
+                tv.reely.xtream.EpgProgramme(
+                    channel.epgChannelId.orEmpty(), it.startEpochSeconds, it.endEpochSeconds, it.title, it.description,
+                )
+            }
+        return programme?.takeIf { it.start >= from }?.let { channel to it }
+    }
+
+    /** The programme on now, from its beginning, out of the channel's archive. */
+    fun startOver() {
+        val (channel, programme) = startOverProgramme() ?: return
+        playCatchUp(channel, programme)
     }
 
     /**

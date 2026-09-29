@@ -104,6 +104,9 @@ fun GuideOverlay(
     onToggleFavorite: (XtreamChannel) -> Unit = {},
     /** A programme that has been on, from a channel that keeps them: watch it from the start. */
     onCatchUp: (XtreamChannel, EpgProgramme) -> Unit = { _, _ -> },
+    /** Programmes with a reminder, marked; and setting or clearing one from a channel's menu. */
+    reminders: List<tv.reely.core.Reminder> = emptyList(),
+    onToggleReminder: (XtreamChannel, EpgProgramme) -> Unit = { _, _ -> },
 ) {
     // Categories are drawn even with nothing under them: switching to one that is still
     // loading used to take the whole guide off the screen, with no way back to the list.
@@ -356,6 +359,7 @@ fun GuideOverlay(
                                 scroll = scroll,
                                 translucent = true,
                                 catchUpFrom = entry.catchUpFrom(now),
+                                reminded = reminders.filter { it.streamId == entry.streamId }.map { it.start }.toSet(),
                             )
                         }
                     }
@@ -365,8 +369,17 @@ fun GuideOverlay(
         }
 
         menuFor?.let { target ->
+            // The programme under the cursor on that channel, if it's still to come.
+            val upcoming = target.epgChannelId?.let { programmes[it] }.orEmpty()
+                .firstOrNull { it.isOnAt(focusTime) }?.takeIf { it.start > now }
             ChannelMenu(
                 channel = target,
+                upcoming = upcoming,
+                reminded = upcoming != null && reminders.any { it.streamId == target.streamId && it.start == upcoming.start },
+                onToggleReminder = {
+                    menuFor = null
+                    if (upcoming != null) onToggleReminder(target, upcoming)
+                },
                 canAddTile = canAddTile,
                 pickVerb = pickVerb,
                 focusRequester = menuFocus,
@@ -393,6 +406,10 @@ fun GuideOverlay(
 @Composable
 private fun ChannelMenu(
     channel: XtreamChannel,
+    /** The programme under the cursor, when it's still to come: one to be reminded of. */
+    upcoming: EpgProgramme?,
+    reminded: Boolean,
+    onToggleReminder: () -> Unit,
     canAddTile: Boolean,
     pickVerb: String,
     focusRequester: FocusRequester,
@@ -437,6 +454,12 @@ private fun ChannelMenu(
                 color = Faint,
                 fontSize = 14.sp,
                 lineHeight = 19.sp,
+            )
+        }
+        if (upcoming != null) {
+            TvActionButton(
+                label = if (reminded) "Cancel the reminder" else "Remind me: ${upcoming.title}",
+                onClick = onToggleReminder,
             )
         }
         TvActionButton(

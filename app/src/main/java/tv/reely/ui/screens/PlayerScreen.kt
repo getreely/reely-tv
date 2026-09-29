@@ -147,7 +147,7 @@ private const val NOTICE_MS = 2_500L
 private const val CHANNEL_ENTRY_MS = 2_000L
 private const val CHANNEL_DIGITS = 5
 
-internal enum class Panel { NONE, SUBTITLES, AUDIO, STATS, CHAPTERS }
+internal enum class Panel { NONE, SUBTITLES, AUDIO, STATS, CHAPTERS, SLEEP, FIND_SUBTITLES }
 
 private data class TrackChoice(
     val label: String,
@@ -192,6 +192,23 @@ fun PlayerScreen(
     onToggleSubtitleBackground: () -> Unit,
     /** A sound or subtitle choice to keep with Plex: stream ids, "0" for subtitles off. */
     onSaveStreamChoice: (audio: String?, subtitle: String?) -> Unit = { _, _ -> },
+    /** Subtitles being looked for online, and looking, choosing and giving up. */
+    subtitleSearch: tv.reely.ui.SubtitleSearch? = null,
+    onFindSubtitles: () -> Unit = {},
+    onAddSubtitle: (tv.reely.plex.PlexOnlineSubtitle) -> Unit = {},
+    onCloseSubtitleSearch: () -> Unit = {},
+    /** Programmes with a reminder, for the guide over the picture, and setting one there. */
+    reminders: List<tv.reely.core.Reminder> = emptyList(),
+    onToggleReminder: (XtreamChannel, tv.reely.xtream.EpgProgramme) -> Unit = { _, _ -> },
+    /** A programme starting that somebody asked to be reminded of, and the answers to it. */
+    reminder: tv.reely.core.Reminder? = null,
+    onWatchReminder: () -> Unit = {},
+    onDismissReminder: () -> Unit = {},
+    /** The sleep timer, if one is set, and setting it: minutes, 0 for the episode's end, null off. */
+    sleep: tv.reely.ui.SleepTimer? = null,
+    onSetSleep: (Int?) -> Unit = {},
+    /** The programme on now, from its beginning, when the channel keeps an archive; else null. */
+    onStartOver: (() -> Unit)? = null,
     /** A programme from a channel's archive, chosen in the guide over the picture. */
     onCatchUp: (XtreamChannel, tv.reely.xtream.EpgProgramme) -> Unit = { _, _ -> },
     /** The channel with a number typed on the remote, if there is one. */
@@ -413,6 +430,12 @@ fun PlayerScreen(
             tuneTyped()
         }
     }
+    // The sleep timer running out: out of the player, where it was saved, as Back does.
+    LaunchedEffect(sleep?.atMs) {
+        val at = sleep?.atMs ?: return@LaunchedEffect
+        delay((at - System.currentTimeMillis()).coerceAtLeast(0))
+        onExit(exoPlayer.currentPosition.coerceAtLeast(0))
+    }
     // Its own effect: the one above is cancelled by the seek it makes.
     LaunchedEffect(notice) {
         if (notice != null) {
@@ -438,7 +461,9 @@ fun PlayerScreen(
             creditsOffered = true
             // Skip credits, in Settings: straight on to the next episode, where there is one.
             // The last episode, and films, still end with Up Next as before.
-            if (prefs.skipCredits && canSkipForward) onStepEpisode(1) else onCredits()
+            // Not with the sleep timer set for this episode's end: it runs out instead.
+            val lastOne = sleep?.endOfEpisode == true
+            if (prefs.skipCredits && canSkipForward && !lastOne) onStepEpisode(1) else onCredits()
         }
     }
     // The Up Next screen: the picture shrunk into a corner and the next episode offered
@@ -621,6 +646,22 @@ fun PlayerScreen(
         }
     }
 
+    /*
+     * New subtitles added to the file while it plays, found online: the file is loaded
+     * again where it was, with them beside it, and the server's choice — the new one —
+     * applied afresh.
+     */
+    var loadedSubtitles by remember(playback.url) { mutableStateOf(playback.subtitles) }
+    LaunchedEffect(playback.subtitles) {
+        if (playback.isLive || playback.subtitles == loadedSubtitles) return@LaunchedEffect
+        loadedSubtitles = playback.subtitles
+        val at = exoPlayer.currentPosition.coerceAtLeast(0)
+        serverChoiceFor = null
+        exoPlayer.setMediaItem(buildMediaItem(playback), at)
+        exoPlayer.prepare()
+        exoPlayer.playWhenReady = true
+    }
+
     LaunchedEffect(exoPlayer) {
         while (true) {
             val current = currentPlayback
@@ -783,6 +824,8 @@ fun PlayerScreen(
             .focusRequester(rootFocus)
             .focusable()
             .onPreviewKeyEvent { event ->
+                // A reminder up has the cursor on its buttons; the keys are its.
+                if (reminder != null) return@onPreviewKeyEvent false
                 // Number keys type a channel, one picture on screen and nothing open over it.
                 if (playback.isLive && slotCount == 1 && !guideOpen && panel == Panel.NONE && tileMenu == null) {
                     val digit = digitOf(event.key)
@@ -1157,6 +1200,8 @@ fun PlayerScreen(
                 selectedCategory = live.selectedCategory,
                 favorites = live.favorites,
                 onToggleFavorite = onToggleFavoriteChannel,
+                reminders = reminders,
+                onToggleReminder = onToggleReminder,
                 onCatchUp = { channel, programme ->
                     guideRequest = GuideRequest.Closed
                     onCatchUp(channel, programme)
@@ -1240,8 +1285,11 @@ fun PlayerScreen(
                 onOpenAudio = { panel = Panel.AUDIO },
                 onOpenStats = { panel = Panel.STATS },
                 onOpenChapters = if (playback.chapters.isNotEmpty()) ({ panel = Panel.CHAPTERS }) else null,
+                onOpenSleep = { panel = Panel.SLEEP },
+                sleeping = sleep != null,
                 panelButtons = panelButtons,
                 onToggleFormat = onToggleFormat,
+                onStartOver = onStartOver,
                 skipLabel = skipLabel,
                 skipFocus = skipFocus,
                 onSkipPrompt = skip,
@@ -1278,6 +1326,14 @@ fun PlayerScreen(
                 prefs = prefs,
                 tracksVersion = tracksVersion,
                 focusRequester = panelFocus,
+                // Found online by the server, for a file it plays as it is; a conversion
+                // burns subtitles in, and a channel has none to find.
+                onFindSubtitles = if (!playback.isLive && !playback.transcoding && playback.ratingKey != null) {
+                    {
+                        onFindSubtitles()
+                        panel = Panel.FIND_SUBTITLES
+                    }
+                } else null,
                 onPicked = { trackType, trackIndex ->
                     if (!playback.transcoding) {
                         val tracks = playerTracks(exoPlayer, trackType).map { it.second }
@@ -1296,6 +1352,62 @@ fun PlayerScreen(
                 onClose = { panel = Panel.NONE },
                 onNudgeScale = onNudgeSubtitleScale,
                 onToggleBackground = onToggleSubtitleBackground,
+                modifier = Modifier.align(Alignment.CenterEnd),
+            )
+        }
+
+        // A reminder, top right, over whatever is playing: the cursor goes to Watch, and
+        // comes back where it belongs once it's answered or has gone.
+        val reminderFocus = remember { FocusRequester() }
+        var hadReminder by remember { mutableStateOf(false) }
+        LaunchedEffect(reminder) {
+            if (reminder != null) {
+                hadReminder = true
+                reminderFocus.requestWhenReady()
+            } else if (hadReminder) {
+                hadReminder = false
+                if (controlsVisible && !playback.isLive) playFocus.requestWhenReady() else rootFocus.requestWhenReady()
+            }
+        }
+        reminder?.let { due ->
+            ReminderCard(
+                reminder = due,
+                focusRequester = reminderFocus,
+                onWatch = onWatchReminder,
+                onDismiss = onDismissReminder,
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 27.dp, end = 48.dp),
+            )
+        }
+
+        if (panel == Panel.FIND_SUBTITLES) {
+            subtitleSearch?.let { search ->
+                SubtitleSearchPanel(
+                    search = search,
+                    focusRequester = panelFocus,
+                    onPick = onAddSubtitle,
+                    onClose = {
+                        onCloseSubtitleSearch()
+                        panel = Panel.NONE
+                    },
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                )
+            }
+        }
+        // Found and added: the search goes, and so does its panel.
+        LaunchedEffect(subtitleSearch == null) {
+            if (subtitleSearch == null && panel == Panel.FIND_SUBTITLES) panel = Panel.NONE
+        }
+
+        if (panel == Panel.SLEEP) {
+            SleepPanel(
+                sleep = sleep,
+                isLive = playback.isLive,
+                focusRequester = panelFocus,
+                onPick = { minutes ->
+                    onSetSleep(minutes)
+                    panel = Panel.NONE
+                },
+                onClose = { panel = Panel.NONE },
                 modifier = Modifier.align(Alignment.CenterEnd),
             )
         }
@@ -1395,6 +1507,11 @@ internal fun Controls(
     onOpenAudio: () -> Unit,
     onOpenStats: () -> Unit,
     onToggleFormat: () -> Unit,
+    /** Live: the programme on now from its beginning, where the channel keeps an archive. */
+    onStartOver: (() -> Unit)? = null,
+    onOpenSleep: () -> Unit = {},
+    /** A sleep timer is set: its button is lit. */
+    sleeping: Boolean = false,
     /** The film's chapters, when it has some. */
     onOpenChapters: (() -> Unit)? = null,
     /** Skip Intro or Next Episode, when one is being offered; it sits in the title's row. */
@@ -1557,11 +1674,21 @@ internal fun Controls(
                         glyph = { SpeakerGlyph(it, 16.dp) },
                     )
                     TransportButton(
+                        onClick = onOpenSleep,
+                        diameter = SMALL_BUTTON,
+                        filled = sleeping,
+                        modifier = Modifier.focusRequester(panelButtons.getValue(Panel.SLEEP)),
+                        glyph = { tv.reely.ui.components.MoonGlyph(it, 16.dp) },
+                    )
+                    TransportButton(
                         onClick = onOpenStats,
                         diameter = SMALL_BUTTON,
                         modifier = Modifier.focusRequester(panelButtons.getValue(Panel.STATS)),
                         glyph = { InfoGlyph(it, 16.dp) },
                     )
+                    if (playback.isLive && onStartOver != null) {
+                        TvActionButton(label = "Start over", onClick = onStartOver)
+                    }
                     if (playback.isLive) {
                         TvActionButton(
                             label = if (playback.format.label == "MPEG-TS") "HLS" else "TS",
@@ -2065,6 +2192,8 @@ internal fun TrackPanel(
     focusRequester: FocusRequester,
     onClose: () -> Unit,
     onNudgeScale: (Float) -> Unit,
+    /** Subtitles online, when they can be looked for; null when they can't. */
+    onFindSubtitles: (() -> Unit)? = null,
     /** After a track is chosen: its type, and where it is among them (null for Off). */
     onPicked: (Int, Int?) -> Unit = { _, _ -> },
     onToggleBackground: () -> Unit,
@@ -2116,6 +2245,10 @@ internal fun TrackPanel(
                     },
                 )
             }
+        }
+
+        if (panel == Panel.SUBTITLES && onFindSubtitles != null) {
+            TvActionButton(label = "Find subtitles online", onClick = onFindSubtitles)
         }
 
         if (panel == Panel.SUBTITLES) {
@@ -2318,6 +2451,126 @@ internal fun ChapterPanel(
         TvActionButton(label = "Close", onClick = onClose)
     }
 }
+
+/**
+ * Subtitles the server found online, in the television's language, to choose from. The
+ * one chosen is fetched and added to the file, and plays straight away.
+ */
+@Composable
+internal fun SubtitleSearchPanel(
+    search: tv.reely.ui.SubtitleSearch,
+    focusRequester: FocusRequester,
+    onPick: (tv.reely.plex.PlexOnlineSubtitle) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val languageName = java.util.Locale(search.language).displayLanguage.ifBlank { search.language }
+    Column(
+        modifier = modifier
+            .padding(end = 48.dp, top = 27.dp, bottom = 27.dp)
+            .width(460.dp)
+            .sheet()
+            .padding(24.dp)
+            .focusGroup(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(text = "Find subtitles", color = Chalk, style = ReelyType.Headline)
+        Text(
+            text = when {
+                search.busy -> "Looking for $languageName subtitles…"
+                search.error != null -> search.error
+                search.results.isEmpty() -> "No $languageName subtitles were found for this."
+                search.adding != null -> "Adding them…"
+                else -> "$languageName, found by your Plex server."
+            },
+            color = Muted,
+            style = ReelyType.Meta,
+        )
+        LazyColumn(
+            modifier = Modifier.weight(1f, fill = false),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            itemsIndexed(search.results, key = { _, it -> it.key }) { index, result ->
+                TvListRow(
+                    title = result.title,
+                    subtitle = listOfNotNull(
+                        result.provider,
+                        "For the hard of hearing".takeIf { result.hearingImpaired },
+                        "Forced".takeIf { result.forced },
+                    ).joinToString("  ·  ").ifBlank { null },
+                    imageUrl = null,
+                    selected = result.key == search.adding,
+                    onClick = { if (search.adding == null) onPick(result) },
+                    modifier = if (index == 0) Modifier.focusRequester(focusRequester) else Modifier,
+                )
+            }
+        }
+        TvActionButton(
+            label = "Close",
+            onClick = onClose,
+            modifier = if (search.results.isEmpty()) Modifier.focusRequester(focusRequester) else Modifier,
+        )
+    }
+}
+
+/**
+ * The sleep timer: off, a time from now, or the end of what's playing. A channel has no
+ * end to stop at, so it isn't offered there. The choice already made is marked, with when
+ * it will stop.
+ */
+@Composable
+internal fun SleepPanel(
+    sleep: tv.reely.ui.SleepTimer?,
+    isLive: Boolean,
+    focusRequester: FocusRequester,
+    onPick: (Int?) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val options = buildList<Pair<Int?, String>> {
+        add(null to "Off")
+        SLEEP_MINUTES.forEach { add(it to "In $it minutes") }
+        if (!isLive) add(0 to "At the end of this episode")
+    }
+    val chosen: Int? = when {
+        sleep == null -> null
+        sleep.endOfEpisode -> 0
+        else -> -1
+    }
+    Column(
+        modifier = modifier
+            .padding(end = 48.dp, top = 27.dp, bottom = 27.dp)
+            .width(420.dp)
+            .sheet()
+            .padding(24.dp)
+            .focusGroup(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(text = "Sleep timer", color = Chalk, style = ReelyType.Headline)
+        sleep?.atMs?.let {
+            Text(
+                text = "Stops at ${tv.reely.ui.components.clockTime(context, it)}.",
+                color = Muted,
+                style = ReelyType.Meta,
+            )
+        }
+        options.forEachIndexed { index, (minutes, label) ->
+            val selected = minutes == chosen
+            TvListRow(
+                title = label,
+                subtitle = null,
+                imageUrl = null,
+                selected = selected,
+                onClick = { onPick(minutes) },
+                modifier = if (index == 0) Modifier.focusRequester(focusRequester) else Modifier,
+            )
+        }
+        TvActionButton(label = "Close", onClick = onClose)
+    }
+}
+
+private val SLEEP_MINUTES = listOf(30, 60, 90)
 
 /**
  * The time, top right while the controls are up, and for a film or an episode when it

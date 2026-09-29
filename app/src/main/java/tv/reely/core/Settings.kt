@@ -72,6 +72,19 @@ class Settings(context: Context) {
         get() = prefs.getStringSet(HIDDEN_HOME_ROWS, emptySet()) ?: emptySet()
         set(value) = prefs.edit().putStringSet(HIDDEN_HOME_ROWS, value).apply()
 
+    /**
+     * Requests already said to be ready, by title key, so each is said once. Null until
+     * the first look, which takes in whatever was ready already without saying so.
+     */
+    var readyRequestsSeen: Set<String>?
+        get() = prefs.getStringSet(READY_SEEN, null)
+        set(value) = prefs.edit().putStringSet(READY_SEEN, value).apply()
+
+    /** Programmes to be told about when they start; see Reminders. */
+    var reminders: String?
+        get() = prefs.getString(REMINDERS, null)
+        set(value) = prefs.edit().putString(REMINDERS, value).apply()
+
     /** Whether the tour of the remote has been taken, or skipped. Shown once until it has. */
     var tourSeen: Boolean
         get() = prefs.getBoolean(TOUR_SEEN, false)
@@ -166,6 +179,8 @@ class Settings(context: Context) {
         private const val SCREENSAVER_MINUTES = "screensaver.minutes"
         const val DEFAULT_SCREENSAVER = 3
         private const val TOUR_SEEN = "tour.seen"
+        private const val READY_SEEN = "requests.readySeen"
+        private const val REMINDERS = "live.reminders"
         private const val MAX_BITRATE = "playback.maxBitrate"
         private const val UPDATE_URL = "update.url"
         private const val FAVOURITE_SECTIONS = "library.favourites"

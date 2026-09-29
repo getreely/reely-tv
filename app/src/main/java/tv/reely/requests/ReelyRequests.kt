@@ -118,6 +118,19 @@ data class TitleMarks(
     }
 }
 
+/**
+ * Which of this account's approved requests have arrived: a film in the library, or a
+ * show with something of it there, as Reely's own marks say. Anything already in [seen]
+ * has been said.
+ */
+fun readyRequests(mine: List<RequestRecord>, marks: TitleMarks, seen: Set<String>): List<RequestTitle> =
+    mine.asSequence()
+        .filter { it.status == "approved" && it.title.key !in seen }
+        .map { it.title }
+        .filter { marks.badge(it) == "In library" || (it.isShow && marks.badge(it) == "Partial") }
+        .distinctBy { it.key }
+        .toList()
+
 /** The answer to asking. */
 sealed interface RequestOutcome {
     /** Recorded; approved straight away for a trusted account or a title already held. */

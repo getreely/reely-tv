@@ -228,6 +228,24 @@ class ReelyRequestsTest {
         assertTrue(!sent.has("audience"))
     }
 
+    @Test fun `what was asked for and has arrived is ready, once`() {
+        fun film(id: Int) = tv.reely.requests.RequestTitle("movie", id, 0, "Film $id", null, null, null, null)
+        fun show(id: Int) = tv.reely.requests.RequestTitle("show", id, 0, "Show $id", null, null, null, null)
+        val mine = listOf(
+            tv.reely.requests.RequestRecord(1, film(1), "approved", null),  // here
+            tv.reely.requests.RequestRecord(2, film(2), "approved", null),  // still downloading
+            tv.reely.requests.RequestRecord(3, film(3), "pending", null),   // not approved
+            tv.reely.requests.RequestRecord(4, show(4), "approved", null),  // some of it here
+            tv.reely.requests.RequestRecord(5, film(5), "approved", null),  // here, said before
+        )
+        val marks = tv.reely.requests.TitleMarks(
+            movies = mapOf(1 to "In library", 2 to "Downloading", 3 to "In library", 5 to "In library"),
+            showsByTmdb = mapOf(4 to "Partial"),
+        )
+        val ready = tv.reely.requests.readyRequests(mine, marks, seen = setOf(film(5).key))
+        assertEquals(listOf("Film 1", "Show 4"), ready.map { it.title })
+    }
+
     @Test fun `addresses are taken as people type them`() {
         assertEquals("http://reely.example.com", ReelyRequests.normalize(" reely.example.com/ "))
         assertEquals("https://r.example.com:8789", ReelyRequests.normalize("https://r.example.com:8789"))

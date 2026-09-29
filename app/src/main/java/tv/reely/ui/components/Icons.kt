@@ -75,6 +75,21 @@ fun BookmarkGlyph(color: Color, filled: Boolean, size: Dp = 18.dp, modifier: Mod
     }
 }
 
+/** A crescent moon: the sleep timer. */
+@Composable
+fun MoonGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(size)) {
+        val s = size.toPx()
+        val moon = Path().apply {
+            addOval(androidx.compose.ui.geometry.Rect(s * 0.14f, s * 0.14f, s * 0.86f, s * 0.86f))
+        }
+        val bite = Path().apply {
+            addOval(androidx.compose.ui.geometry.Rect(s * 0.36f, s * 0.02f, s * 1.04f, s * 0.7f))
+        }
+        drawPath(Path.combine(androidx.compose.ui.graphics.PathOperation.Difference, moon, bite), color)
+    }
+}
+
 /** Three lines with a mark at the start of each: a list of chapters. */
 @Composable
 fun ChaptersGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) {
