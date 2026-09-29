@@ -472,6 +472,10 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                         onSelectSeason = viewModel::selectSeason,
                         onOpenRelated = ::open,
                         onSelectVersion = viewModel::selectVersion,
+                        watchlisted = detail.detail?.guid?.let { guid ->
+                            state.plex.watchlist?.let { guid in it }
+                        }?.takeIf { detail.detail?.type == "movie" || detail.detail?.type == "show" },
+                        onToggleWatchlist = viewModel::toggleWatchlist,
                         onOpenPerson = { role ->
                             val id = role.id ?: return@DetailScreen
                             openedFromPage = true

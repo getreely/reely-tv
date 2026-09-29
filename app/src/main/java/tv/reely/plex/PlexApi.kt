@@ -245,6 +245,8 @@ data class PlexDetail(
     val qualities: List<String> = emptyList(),
     /** The files it comes in, in the server's order; empty when there is only the one. */
     val versions: List<PlexVersion> = emptyList(),
+    /** Plex's own id for the title, "plex://movie/…", shared by every server that has it. */
+    val guid: String? = null,
 ) {
     val isShow: Boolean get() = type == "show"
 
@@ -306,6 +308,9 @@ object PlexApi {
     var clientId: String = ""
 
     private const val PLEX_TV = "https://plex.tv"
+
+    /** Where the account's Watchlist lives: Plex's own catalogue, not any one server. */
+    private const val DISCOVER = "https://discover.provider.plex.tv"
     private const val PRODUCT = "Reely TV"
     // What Plex shows for this app in its dashboard and the account's list of devices.
     private val VERSION = tv.reely.BuildConfig.VERSION_NAME
@@ -730,6 +735,7 @@ object PlexApi {
                 logo = logoOf(entry),
                 qualities = qualitiesOf(entry),
                 versions = versionsOf(entry),
+                guid = entry.optString("guid").takeIf { it.startsWith("plex://") },
             )
         }
 
@@ -1020,6 +1026,41 @@ object PlexApi {
      * Takes something off Continue Watching without marking it watched, as Plex's own
      * apps offer. What was watched of it is kept.
      */
+    /**
+     * The account's Watchlist, newest first, as Plex's own ids ("plex://movie/…"). The
+     * Watchlist belongs to the account, not to a server: what's on it may be on none of
+     * them, so each id is matched to a server's copy with [byGuid].
+     */
+    suspend fun watchlist(token: String): List<String> = withContext(Dispatchers.IO) {
+        val metadata = container(
+            "$DISCOVER/library/sections/watchlist/all?includeFields=guid,type,title" +
+                "&X-Plex-Container-Start=0&X-Plex-Container-Size=100",
+            token,
+        ).optJSONArray("Metadata") ?: JSONArray()
+        (0 until metadata.length()).mapNotNull { index ->
+            metadata.optJSONObject(index)?.optString("guid")?.takeIf { it.startsWith("plex://") }
+        }
+    }
+
+    /** A server's copy of something, by Plex's own id for it, if the server has it. */
+    suspend fun byGuid(base: String, token: String, guid: String): PlexItem? =
+        items(base, token, "/library/all?guid=" + URLEncoder.encode(guid, "UTF-8"), limit = 1).firstOrNull()
+
+    /** Puts something on the account's Watchlist, or takes it off. */
+    suspend fun setWatchlisted(token: String, guid: String, on: Boolean) = withContext(Dispatchers.IO) {
+        val key = guid.substringAfterLast('/')
+        val action = if (on) "addToWatchlist" else "removeFromWatchlist"
+        val request = Request.Builder()
+            .url("$DISCOVER/actions/$action?ratingKey=$key")
+            .plexHeaders(clientId, token)
+            .put(FormBody.Builder().build())
+            .build()
+        Http.client.newCall(request).execute().use { response ->
+            require(response.isSuccessful) { "Couldn't change your Watchlist (error ${response.code})." }
+        }
+        Unit
+    }
+
     suspend fun removeFromContinueWatching(base: String, token: String, ratingKey: String) =
         withContext(Dispatchers.IO) {
             val request = Request.Builder()

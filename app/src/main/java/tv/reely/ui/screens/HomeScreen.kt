@@ -105,6 +105,7 @@ fun HomeScreen(
     val resumeFocus = rememberRowFocus()
     val episodeFocus = rememberRowFocus()
     val movieFocus = rememberRowFocus()
+    val watchlistFocus = rememberRowFocus()
 
     // A row coming into focus snaps its heading to the top of the rows; see
     // rememberRowSnap. The rows keep the television's own rule for moving sideways.
@@ -228,6 +229,29 @@ fun HomeScreen(
                                             onClick = { onOpenItem(movie) },
                                             onLongPress = { menuFor = movie },
                                             modifier = rowItem(movieFocus, movie.listKey),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // The account's Watchlist, as far as the servers here have it.
+                        if (home.watchlist.isNotEmpty()) {
+                            item {
+                                PosterRow(title = "Watchlist", rowFocus = watchlistFocus, sideways = sideways) {
+                                    items(home.watchlist, key = { it.listKey }) { item ->
+                                        PosterCard(
+                                            title = item.title,
+                                            subtitle = item.caption,
+                                            imageUrl = imageUrl(item.serverBase, item.thumb, 300, 450),
+                                            progress = item.resumeFraction,
+                                            watched = item.isWatched,
+                                            onFocus = {
+                                                watchlistFocus.onFocused(item.listKey)
+                                                onFocusItem(item)
+                                            },
+                                            onClick = { onOpenItem(item) },
+                                            modifier = rowItem(watchlistFocus, item.listKey),
                                         )
                                     }
                                 }

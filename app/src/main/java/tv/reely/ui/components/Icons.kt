@@ -57,6 +57,24 @@ fun InfoGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) {
     }
 }
 
+/** A bookmark: the Watchlist. Filled when the title is on it. */
+@Composable
+fun BookmarkGlyph(color: Color, filled: Boolean, size: Dp = 18.dp, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(size)) {
+        val s = size.toPx()
+        val path = androidx.compose.ui.graphics.Path().apply {
+            moveTo(s * 0.26f, s * 0.14f)
+            lineTo(s * 0.74f, s * 0.14f)
+            lineTo(s * 0.74f, s * 0.88f)
+            lineTo(s * 0.5f, s * 0.68f)
+            lineTo(s * 0.26f, s * 0.88f)
+            close()
+        }
+        if (filled) drawPath(path, color)
+        else drawPath(path, color, style = Stroke(width = s * 0.1f, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+    }
+}
+
 /** Three lines with a mark at the start of each: a list of chapters. */
 @Composable
 fun ChaptersGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) {

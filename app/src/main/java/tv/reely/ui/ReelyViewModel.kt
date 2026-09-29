@@ -122,11 +122,14 @@ data class HomeState(
     val continueWatching: List<PlexItem> = emptyList(),
     val recentEpisodes: List<EpisodeGroup> = emptyList(),
     val recentMovies: List<PlexItem> = emptyList(),
+    /** What's on the account's Watchlist that a server here actually has. */
+    val watchlist: List<PlexItem> = emptyList(),
     val busy: Boolean = false,
     val error: String? = null,
 ) {
     val isEmpty: Boolean
-        get() = continueWatching.isEmpty() && recentEpisodes.isEmpty() && recentMovies.isEmpty()
+        get() = continueWatching.isEmpty() && recentEpisodes.isEmpty() && recentMovies.isEmpty() &&
+            watchlist.isEmpty()
 }
 
 /**
@@ -223,6 +226,8 @@ data class PlexState(
     val baseUrl: String? = null,
     val serverToken: String? = null,
     val sections: List<PlexSection> = emptyList(),
+    /** The account's Watchlist, by Plex's own ids; null until it has been asked for. */
+    val watchlist: Set<String>? = null,
     /** Every server the account can see, so one of several can be chosen. */
     val servers: List<PlexServer> = emptyList(),
     /** Every library on every server the account can reach. */
@@ -996,6 +1001,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(home = it.home.copy(busy = true, error = null)) }
 
             val servers = sources.map { it.baseUrl to it.token }.distinct()
+            refreshWatchlist(servers)
 
             // The row Plex's own home screen shows, from every server, in order of when
             // each thing was last watched. It used to be ordered by when things were
@@ -1036,6 +1042,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                         continueWatching = onDeck.map { item -> item.withShowLogo() },
                         recentEpisodes = recentEpisodes.map { group -> group.copy(newest = group.newest.withShowLogo()) },
                         recentMovies = recentMovies,
+                        // Filled in on its own, and not to be lost when the rest comes in.
+                        watchlist = it.home.watchlist,
                         busy = false,
                     )
                 )
@@ -1502,6 +1510,52 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             play(episode, queue = detailState.episodes, resume = resume)
         } else {
             play(detail.asItem(), resume = resume, mediaIndex = detailState.versionIndex)
+        }
+    }
+
+    /**
+     * The account's Watchlist, and which of it the servers here have, in the Watchlist's
+     * own order. Something no server has can't be opened or played, so it isn't shown.
+     */
+    private fun refreshWatchlist(servers: List<Pair<String, String>>) {
+        val token = _state.value.plex.token ?: return
+        viewModelScope.launch {
+            val guids = runCatching { PlexApi.watchlist(token) }.getOrElse { return@launch }
+            _state.update { it.copy(plex = it.plex.copy(watchlist = guids.toSet())) }
+            val found = guids.take(WATCHLIST_ROW).chunked(8).flatMap { batch ->
+                batch.map { guid ->
+                    async {
+                        servers.firstNotNullOfOrNull { (base, serverToken) ->
+                            runCatching { PlexApi.byGuid(base, serverToken, guid) }.getOrNull()
+                        }
+                    }
+                }.map { it.await() }
+            }.filterNotNull()
+            _state.update { it.copy(home = it.home.copy(watchlist = found)) }
+        }
+    }
+
+    /** On the Watchlist, or off it, for the title whose page this is. */
+    fun toggleWatchlist() {
+        val detail = _state.value.detail?.detail ?: return
+        val guid = detail.guid ?: return
+        val token = _state.value.plex.token ?: return
+        val on = guid !in _state.value.plex.watchlist.orEmpty()
+        fun mark(listed: Boolean) = _state.update {
+            val now = it.plex.watchlist.orEmpty()
+            it.copy(plex = it.plex.copy(watchlist = if (listed) now + guid else now - guid))
+        }
+        // Straight away: waiting on Plex's answer made the button feel broken.
+        mark(on)
+        viewModelScope.launch {
+            runCatching { PlexApi.setWatchlisted(token, guid, on) }
+                .onSuccess { refreshHome() }
+                .onFailure { failure ->
+                    mark(!on)
+                    _state.update { current ->
+                        current.copy(detail = current.detail?.copy(error = failure.readable()))
+                    }
+                }
         }
     }
 
@@ -2810,6 +2864,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     private companion object {
         /** How much of the guide is held in memory at once. */
         const val WINDOW_SECONDS = 24L * 3_600
+
+        /** How much of the Watchlist Home looks for on the servers. */
+        const val WATCHLIST_ROW = 40
 
         /** Guide data older than this is worth fetching again. */
         const val REFRESH_AFTER_SECONDS = 6L * 3_600

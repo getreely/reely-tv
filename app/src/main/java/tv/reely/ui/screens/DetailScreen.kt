@@ -55,6 +55,7 @@ import tv.reely.ui.components.HeroBackdrop
 import tv.reely.ui.components.CastCircle
 import tv.reely.ui.components.FocusRow
 import tv.reely.ui.components.CheckGlyph
+import tv.reely.ui.components.BookmarkGlyph
 import tv.reely.ui.components.EmptyNote
 import tv.reely.ui.components.ErrorNote
 import tv.reely.ui.components.HeroText
@@ -104,6 +105,9 @@ fun DetailScreen(
     onSelectVersion: (Int) -> Unit = {},
     /** Someone in the cast: their page. */
     onOpenPerson: (PlexRole) -> Unit = {},
+    /** Whether the title is on the account's Watchlist; null when that can't be known or changed. */
+    watchlisted: Boolean? = null,
+    onToggleWatchlist: () -> Unit = {},
 ) {
     val detail = state.detail
     if (detail == null) {
@@ -390,6 +394,14 @@ fun DetailScreen(
                                             maxLines = 1,
                                         )
                                     },
+                                )
+                            }
+                            if (watchlisted != null && episode == null) {
+                                IconAction(
+                                    label = "Watchlist",
+                                    filled = false,
+                                    onClick = onToggleWatchlist,
+                                    glyph = { BookmarkGlyph(it, filled = watchlisted, size = 20.dp) },
                                 )
                             }
                             // Only appears when the server actually has a trailer to play.
