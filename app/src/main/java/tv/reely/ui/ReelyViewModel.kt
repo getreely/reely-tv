@@ -157,13 +157,10 @@ data class RequestDetailState(
     val sending: Boolean = false,
     /** What came of asking, to say on the page. */
     val outcome: String? = null,
-    /** Where asks can go and who for; null until known, or when Reely wouldn't say. */
+    /** Where asks can go; null until known, or when Reely wouldn't say. */
     val places: tv.reely.requests.RequestPlaces? = null,
     /** The library picked, from [addable]. */
     val libraryId: Long? = null,
-    /** The groups it should reach, and whether it's kept to the asker instead. */
-    val audience: Set<Long> = emptySet(),
-    val justMe: Boolean = false,
 ) {
     /** The libraries it could go to: the right kind, and not holding it already. */
     val addable: List<tv.reely.requests.RequestLibrary>?
@@ -889,7 +886,6 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                     // Every season to start with: asking for a show is usually asking for all of it.
                     chosen = detail?.seasons?.map { it.number }?.toSet().orEmpty(),
                     places = where,
-                    audience = where?.usualAudience.orEmpty(),
                 )
                 current.copy(
                     requestDetail = ready.copy(libraryId = ready.addable?.let { where?.preferred(it) }?.id),
@@ -918,20 +914,6 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         current.copy(requestDetail = page.copy(libraryId = id, outcome = null))
     }
 
-    /** One group in or out of who the title should reach. */
-    fun toggleRequestGroup(id: Long) = _state.update { current ->
-        val page = current.requestDetail ?: return@update current
-        if (page.justMe) return@update current
-        val audience = if (id in page.audience) page.audience - id else page.audience + id
-        current.copy(requestDetail = page.copy(audience = audience, outcome = null))
-    }
-
-    /** Kept to the asker, or back to the groups ticked. */
-    fun toggleRequestJustMe() = _state.update { current ->
-        val page = current.requestDetail ?: return@update current
-        current.copy(requestDetail = page.copy(justMe = !page.justMe, outcome = null))
-    }
-
     /** Asks Reely for the title on the page: a film, or the seasons picked of a show. */
     fun submitRequest() {
         val client = reely ?: return
@@ -947,14 +929,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         }
         _state.update { it.copy(requestDetail = page.copy(sending = true, outcome = null)) }
         viewModelScope.launch {
-            // The groups only when there are any to choose from, as Reely's own page sends it.
-            val audience = when {
-                page.places == null || page.places.groups.isEmpty() -> null
-                page.justMe -> emptyList()
-                else -> page.audience.toList()
-            }
             val library = page.library
-            val outcome = runCatching { client.request(title, seasons, library?.id, audience) }
+            // Who it's for is Reely's to decide: the asker and their groups.
+            val outcome = runCatching { client.request(title, seasons, library?.id) }
                 .getOrElse { tv.reely.requests.RequestOutcome.Refused(it.readable()) }
             val into = library?.let { " to ${it.name}" }.orEmpty()
             val message = when (outcome) {

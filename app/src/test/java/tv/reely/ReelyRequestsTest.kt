@@ -32,7 +32,6 @@ class ReelyRequestsTest {
     private val requested = mutableListOf<JSONObject>()
     private var alreadyRequested = false
     private var role = "user"
-    private var ownerGroupsServed = true
 
     private fun HttpExchange.reply(code: Int, body: String, cookie: String? = null) {
         cookie?.let { responseHeaders.add("Set-Cookie", it) }
@@ -77,15 +76,6 @@ class ReelyRequestsTest {
                     {"id":1,"name":"Movies","kind":"movies"},
                     {"id":2,"name":"Kids Movies","kind":"movies"},
                     {"id":3,"name":"TV","kind":"shows"}]}""")
-                path == "/api/v1/sharing/groups" && role == "admin" && ownerGroupsServed -> ex.reply(200, """[
-                    {"id":10,"name":"Me","personal":true,"backfill":false,"everyone":false,"mine":true},
-                    {"id":11,"name":"Barretts","personal":false,"backfill":false,"everyone":false,"mine":true},
-                    {"id":12,"name":"Grandma","personal":false,"backfill":false,"everyone":false,"mine":false},
-                    {"id":13,"name":"Everyone","personal":false,"backfill":false,"everyone":true,"mine":true}]""")
-                path == "/api/v1/sharing/me/groups" -> ex.reply(200, """[
-                    {"id":10,"name":"Me","personal":true,"backfill":false,"everyone":false},
-                    {"id":11,"name":"Barretts","personal":false,"backfill":false,"everyone":false},
-                    {"id":13,"name":"Everyone","personal":false,"backfill":false,"everyone":true}]""")
                 path == "/api/v1/search" && query.startsWith("q=") -> ex.reply(200, """
                     {"imageBase":"https://image.tmdb.org/t/p","results":[
                      {"tmdbId":27205,"kind":"movie","title":"Inception","year":2010,"poster":"/inc.jpg"}]}
@@ -222,32 +212,20 @@ class ReelyRequestsTest {
         val addable = places.librariesFor(matrix, detail.inLibraries)
         assertEquals(listOf("Movies", "Kids Movies"), addable.map { it.name })
         assertEquals("their default", "Kids Movies", places.preferred(addable)?.name)
-        // A requester is offered their own groups, never the whole household or their own.
-        assertEquals(listOf("Barretts"), places.groups.map { it.name })
-        assertEquals(setOf(11L), places.usualAudience)
         assertEquals(false, places.adds)
     }
 
-    @Test fun `the owner is offered every group, the household ones unticked`() = runBlocking {
+    @Test fun `the owner adds rather than asks`() = runBlocking {
         role = "admin"
-        val places = reely().places()
-        assertEquals(listOf("Barretts", "Grandma", "Everyone"), places.groups.map { it.name })
-        assertEquals(setOf(11L), places.usualAudience)
-        assertEquals(true, places.adds)
+        assertEquals(true, reely().places().adds)
     }
 
-    @Test fun `away from home the owner's own groups stand in`() = runBlocking {
-        role = "admin"
-        ownerGroupsServed = false
-        assertEquals(listOf("Barretts", "Everyone"), reely().places().groups.map { it.name })
-    }
-
-    @Test fun `the library and who it's for go with the request`() = runBlocking {
+    @Test fun `the library goes with the request, and who it's for is left to Reely`() = runBlocking {
         val reely = reely()
-        reely.request(reely.explore()[0].titles[0], null, libraryId = 1, audience = emptyList())
+        reely.request(reely.explore()[0].titles[0], null, libraryId = 1)
         val sent = requested.single()
         assertEquals(1L, sent.getLong("libraryId"))
-        assertEquals("[]", sent.getJSONArray("audience").toString())
+        assertTrue(!sent.has("audience"))
     }
 
     @Test fun `addresses are taken as people type them`() {

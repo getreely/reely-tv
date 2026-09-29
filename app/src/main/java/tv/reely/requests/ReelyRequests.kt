@@ -56,24 +56,16 @@ data class RequestLibrary(val id: Long, val name: String, val kind: String) {
     fun takes(title: RequestTitle) = kind == if (title.isShow) "shows" else "movies"
 }
 
-/** A group of people who see the same titles, that an ask can be shared with. */
-data class RequestGroup(
-    val id: Long,
-    val name: String,
-    /** The whole household, or what was in Plex before the split: never ticked by itself. */
-    val houseWide: Boolean,
-    /** One the asker is in, which is ticked to begin with. */
-    val mine: Boolean,
-)
-
 /**
- * Where this account's asks can go and who they can be for, as Reely's own request
- * button offers it: a library of the right kind (their default to begin with), and the
- * groups the title should reach once it's in.
+ * Where this account's asks can go, as Reely's own request button offers it: a library
+ * of the right kind, their default to begin with.
+ *
+ * Who it's for once it's in is left to Reely: the asker and the groups they're in, never
+ * the whole household. That is what Reely's page does unless told otherwise, and on a
+ * television nobody needs to tell it otherwise.
  */
 data class RequestPlaces(
     val libraries: List<RequestLibrary>,
-    val groups: List<RequestGroup>,
     val defaultLibraryId: Long,
     /** The owner, or an account that adds without asking: what they ask for is added. */
     val adds: Boolean,
@@ -84,9 +76,6 @@ data class RequestPlaces(
 
     /** Where it goes unless another is picked: the default, when it's one of them. */
     fun preferred(among: List<RequestLibrary>) = among.firstOrNull { it.id == defaultLibraryId } ?: among.firstOrNull()
-
-    /** The groups ticked to begin with: the asker's own, never a house-wide one. */
-    val usualAudience: Set<Long> get() = groups.filter { !it.houseWide && it.mine }.map { it.id }.toSet()
 }
 
 /** Something asked for, and where the asking has got to. */
@@ -240,35 +229,16 @@ class ReelyRequests(
         )
     }
 
-    /**
-     * The libraries and groups an ask can go to, and which library it goes to unless
-     * told otherwise. The owner is offered every group, as Reely's own page does;
-     * anybody else only their own, and never one that reaches the whole household.
-     */
+    /** The libraries an ask can go to, and which it goes to unless told otherwise. */
     suspend fun places(): RequestPlaces = withContext(Dispatchers.IO) {
         val user = JSONObject(get("/api/v1/auth/me")).optJSONObject("user") ?: JSONObject()
-        val owner = user.optString("role") == "admin"
         val libraries = JSONObject(get("/api/v1/libraries")).optJSONArray("libraries") ?: JSONArray()
-        // The owner's full list isn't served away from home; their own groups are.
-        val groups = (if (owner) runCatching { JSONArray(get("/api/v1/sharing/groups")) }.getOrNull() else null)
-            ?: runCatching { JSONArray(get("/api/v1/sharing/me/groups")) }.getOrDefault(JSONArray())
         RequestPlaces(
             libraries = (0 until libraries.length()).mapNotNull { libraries.optJSONObject(it) }.map {
                 RequestLibrary(it.optLong("id"), it.optString("name"), it.optString("kind"))
             },
-            groups = (0 until groups.length()).mapNotNull { groups.optJSONObject(it) }
-                .filter { !it.optBoolean("personal") }
-                .map { g ->
-                    RequestGroup(
-                        id = g.optLong("id"),
-                        name = g.optString("name"),
-                        houseWide = g.optBoolean("backfill") || g.optBoolean("everyone"),
-                        mine = !g.has("mine") || g.optBoolean("mine"),
-                    )
-                }
-                .filter { owner || !it.houseWide },
             defaultLibraryId = user.optLong("defaultLibraryId"),
-            adds = owner || user.optBoolean("mayAdd"),
+            adds = user.optString("role") == "admin" || user.optBoolean("mayAdd"),
         )
     }
 
@@ -330,14 +300,12 @@ class ReelyRequests(
 
     /**
      * Asks for [title]; for a show, [seasons] or, when null, the whole of it. It goes to
-     * [libraryId], or where this account's asks usually land when that's null, and once
-     * it's in reaches [audience]: the asker's groups when null, only them when empty.
+     * [libraryId], or where this account's asks usually land when that's null.
      */
     suspend fun request(
         title: RequestTitle,
         seasons: List<Int>?,
         libraryId: Long? = null,
-        audience: Collection<Long>? = null,
     ): RequestOutcome = withContext(Dispatchers.IO) {
         val body = JSONObject()
             .put("kind", title.kind)
@@ -348,7 +316,6 @@ class ReelyRequests(
             .put("poster", title.posterPath ?: "")
             .apply { if (seasons != null) put("seasons", JSONArray(seasons)) }
             .apply { if (libraryId != null) put("libraryId", libraryId) }
-            .apply { if (audience != null) put("audience", JSONArray(audience.toList())) }
             .toString()
         call(post("/api/v1/requests", body)) { code, text ->
             when (code) {

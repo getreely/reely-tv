@@ -540,8 +540,6 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                         onToggleAll = viewModel::toggleAllRequestSeasons,
                         onRequest = viewModel::submitRequest,
                         onChooseLibrary = viewModel::chooseRequestLibrary,
-                        onToggleGroup = viewModel::toggleRequestGroup,
-                        onToggleJustMe = viewModel::toggleRequestJustMe,
                     )
                 }
             }

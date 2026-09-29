@@ -30,11 +30,11 @@ import tv.reely.ui.theme.Muted
 import tv.reely.ui.theme.ReelyType
 
 /**
- * One title in Requests: what it is, and asking for it, with the choices Reely's own
- * request button offers. Which library it goes to, when there's more than one it could
- * (this account's default to begin with). Who it's for once it's in, when there are
- * groups to share it with. And for a show, which seasons: any number, or all, with every
- * season picked to begin with, since that is what asking for a show usually means.
+ * One title in Requests: what it is, and asking for it. Which library it goes to, when
+ * there's more than one it could (this account's default to begin with). And for a
+ * show, which seasons: any number, or all, with every season picked to begin with,
+ * since that is what asking for a show usually means. Who it's for once it's in is left
+ * to Reely: the asker and the groups they're in.
  */
 @Composable
 fun RequestTitleScreen(
@@ -45,8 +45,6 @@ fun RequestTitleScreen(
     onToggleAll: () -> Unit,
     onRequest: () -> Unit,
     onChooseLibrary: (Long) -> Unit = {},
-    onToggleGroup: (Long) -> Unit = {},
-    onToggleJustMe: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val detail = page.detail
@@ -94,26 +92,6 @@ fun RequestTitleScreen(
                             label = library.name,
                             selected = library.id == page.libraryId,
                             onClick = { onChooseLibrary(library.id) },
-                        )
-                    }
-                }
-            }
-
-            val groups = page.places?.groups.orEmpty()
-            if (detail != null && page.canAsk && groups.isNotEmpty()) {
-                SectionHeading(
-                    if (page.places?.adds == true) "Who it's for" else "Share it with",
-                    modifier = Modifier.padding(top = 6.dp),
-                )
-                ChipRow {
-                    item(key = "me") {
-                        TvChip(label = "Just for me", selected = page.justMe, onClick = onToggleJustMe)
-                    }
-                    items(groups, key = { it.id }) { group ->
-                        TvChip(
-                            label = group.name,
-                            selected = !page.justMe && group.id in page.audience,
-                            onClick = { onToggleGroup(group.id) },
                         )
                     }
                 }
