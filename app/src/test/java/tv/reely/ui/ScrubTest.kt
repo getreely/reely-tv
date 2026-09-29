@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
@@ -38,7 +39,9 @@ class ScrubTest {
     private var toggled = 0
     private val start = 24 * 60_000L
 
-    private fun open(previews: Boolean = false) {
+    private var nudgesUsed = 0
+
+    private fun open(previews: Boolean = false, nudge: tv.reely.ui.screens.ScrubNudge? = null) {
         val play = FocusRequester()
         val scrubber = FocusRequester()
         val skip = FocusRequester()
@@ -66,6 +69,8 @@ class ScrubTest {
                         onOpenSubtitles = {}, onOpenAudio = {}, onOpenStats = {}, onToggleFormat = {},
                         skipLabel = null,
                         skipFocus = skip,
+                        nudge = nudge,
+                        onNudgeUsed = { nudgesUsed++ },
                         modifier = Modifier.align(Alignment.BottomStart),
                     )
                 }
@@ -117,5 +122,18 @@ class ScrubTest {
         open(previews = true)
         repeat(4) { press(Key.DirectionRight) }
         Shots.saveIfAsked(compose, "player-scrub-preview", settleMs = 200)
+    }
+
+    @Test fun `fast-forward from outside the bar is the first step of a scrub`() {
+        open(nudge = tv.reely.ui.screens.ScrubNudge(direction = 1, stepMs = 30_000, serial = 1))
+        // Not gone there yet: the preview is up, at where it's going.
+        assertEquals(emptyList<Long>(), seeks)
+        // Beside the bar, and under the preview picture above it.
+        compose.onAllNodes(androidx.compose.ui.test.hasText("24:30")).assertCountEquals(2)
+        press(Key.DirectionRight)
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        assertEquals(listOf(start + 40_000), seeks)
+        assertEquals(1, nudgesUsed)
     }
 }

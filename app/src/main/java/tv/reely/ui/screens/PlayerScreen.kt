@@ -126,6 +126,9 @@ import tv.reely.ui.theme.Chalk
 import tv.reely.ui.theme.ReelyType
 
 private const val SEEK_STEP_MS = 10_000L
+
+/** A press that starts a scrub from outside the bar: which way, how far, and which press. */
+internal data class ScrubNudge(val direction: Int, val stepMs: Long, val serial: Int)
 private const val CONTROLS_TIMEOUT_MS = 6_000L
 
 /** Long enough to read twice from across a room, short enough not to sit on the picture. */
@@ -307,6 +310,14 @@ fun PlayerScreen(
         exoPlayer.volume = if (focusedTile == 0) 1f else 0f
     }
     var interaction by remember { mutableIntStateOf(0) }
+    /*
+     * Left or right with the controls down, or fast-forward and rewind, start a scrub on
+     * the bar, preview and all, as Plex's own player does. They used to raise the controls
+     * with the cursor on Play, or jump thirty seconds blind, and the preview was only ever
+     * seen by somebody who knew to go up to the bar first.
+     */
+    var nudge by remember { mutableStateOf<ScrubNudge?>(null) }
+    var scrubFirst by remember { mutableStateOf(false) }
     var panel by remember { mutableStateOf(Panel.NONE) }
 
     // Plex's own intro and credits detection, when the server has it.
@@ -606,9 +617,15 @@ fun PlayerScreen(
      * after they timed out and were summoned back, which re-ran this against nodes that
      * existed by then. So keep asking for a few frames instead of giving up on the first.
      */
+    fun startScrub(direction: Int, stepMs: Long) {
+        scrubFirst = true
+        controlsVisible = true
+        nudge = ScrubNudge(direction, stepMs, (nudge?.serial ?: 0) + 1)
+    }
+
     LaunchedEffect(
         controlsVisible, panel, guideOpen, tileMenu, skipLabel, playback.isLive, playback.url,
-        postPlay,
+        postPlay, nudge?.serial,
     ) {
         if (guideOpen) return@LaunchedEffect
         when {
@@ -618,6 +635,10 @@ fun PlayerScreen(
             // Above the transport: a prompt that is only up for a few seconds is no use
             // if reaching it means hunting for it first. When it goes, focus has to land
             // somewhere or the remote does nothing at all.
+            scrubFirst && controlsVisible && !playback.isLive -> {
+                scrubFirst = false
+                scrubberFocus.requestWhenReady()
+            }
             skipLabel != null -> skipFocus.requestWhenReady()
             controlsVisible -> playFocus.requestWhenReady()
             else -> rootFocus.requestWhenReady()
@@ -842,12 +863,22 @@ fun PlayerScreen(
                         true
                     }
 
-                    Key.MediaFastForward -> {
-                        exoPlayer.seekTo(exoPlayer.currentPosition + 30_000); true
+                    Key.MediaFastForward, Key.MediaRewind -> {
+                        val direction = if (event.key == Key.MediaFastForward) 1 else -1
+                        if (playback.isLive) {
+                            exoPlayer.seekTo((exoPlayer.currentPosition + direction * 30_000).coerceAtLeast(0))
+                        } else {
+                            startScrub(direction, 30_000)
+                        }
+                        true
                     }
 
-                    Key.MediaRewind -> {
-                        exoPlayer.seekTo((exoPlayer.currentPosition - 30_000).coerceAtLeast(0)); true
+                    Key.DirectionLeft, Key.DirectionRight -> {
+                        if (playback.isLive || controlsVisible) false
+                        else {
+                            startScrub(if (event.key == Key.DirectionRight) 1 else -1, SEEK_STEP_MS)
+                            true
+                        }
                     }
 
                     else -> false
@@ -1028,6 +1059,8 @@ fun PlayerScreen(
                     positionMs = target
                 },
                 onScrub = { interaction++ },
+                nudge = nudge,
+                onNudgeUsed = { nudge = null },
                 onTogglePlay = {
                     interaction++
                     // Coming back from a pause on live television means coming back to
@@ -1164,6 +1197,9 @@ internal fun Controls(
     onSeekTo: (Long) -> Unit,
     /** A press while scrubbing, which is using the controls. */
     onScrub: () -> Unit = {},
+    /** A scrub started from outside the bar; see ScrubNudge. */
+    nudge: ScrubNudge? = null,
+    onNudgeUsed: () -> Unit = {},
     onSkip: (Int) -> Unit,
     onTogglePlay: () -> Unit,
     onAddChannel: () -> Unit,
@@ -1226,6 +1262,8 @@ internal fun Controls(
                 onTogglePlay = onTogglePlay,
                 onScrub = onScrub,
                 previewUrl = playback.previewUrl,
+                nudge = nudge,
+                onNudgeUsed = onNudgeUsed,
             )
         }
 
@@ -1360,6 +1398,8 @@ private fun Scrubber(
     /** Each press, so the controls stay up while somebody is scrubbing. */
     onScrub: () -> Unit = {},
     previewUrl: String? = null,
+    nudge: ScrubNudge? = null,
+    onNudgeUsed: () -> Unit = {},
 ) {
     var focused by remember { mutableStateOf(false) }
     val total = durationMs.coerceAtLeast(1)
@@ -1381,6 +1421,18 @@ private fun Scrubber(
         }
     }
 
+    // The press that brought the controls up is the first step of the scrub. Used once:
+    // the controls coming back later must not take the same step again.
+    LaunchedEffect(nudge?.serial) {
+        val press = nudge ?: return@LaunchedEffect
+        onNudgeUsed()
+        onScrub()
+        val next = ((target ?: positionMs) + press.direction * press.stepMs)
+            .coerceIn(0, (durationMs - 1_000).coerceAtLeast(0))
+        target = next
+        settle(next)
+    }
+
     val shown = target ?: positionMs
     val played = (shown.toFloat() / total).coerceIn(0f, 1f)
     val buffered = (bufferedMs.toFloat() / total).coerceIn(0f, 1f)
@@ -1399,10 +1451,13 @@ private fun Scrubber(
                 .height(SCRUB_THUMB)
                 .focusRequester(focusRequester)
                 .onFocusChanged {
+                    // Leaving the bar mid-scrub still goes where it was taken. Only leaving:
+                    // the bar reports "not focused" when it first appears, which is before
+                    // the cursor reaches it on a scrub started from outside.
+                    val left = focused && !it.isFocused
                     focused = it.isFocused
                     onFocusState(it.isFocused)
-                    // Leaving the bar mid-scrub still goes where it was taken.
-                    if (!it.isFocused) target?.let { to -> commit?.cancel(); onSeekTo(to); target = null }
+                    if (left) target?.let { to -> commit?.cancel(); onSeekTo(to); target = null }
                 }
                 .focusable()
                 .onPreviewKeyEvent { event ->
@@ -1624,6 +1679,15 @@ internal fun StatsPanel(
         // Whether the server sent intro and credits markers at all, which is the only
         // way to tell a server that has not detected them from a button that failed.
         if (!playback.isLive) StatLine("Intro & credits", describeMarkers(playback.markers))
+        // The pictures above the bar while scrubbing are the server's to make, and only
+        // when the library is set to (Plex: the library's Advanced settings, "Generate
+        // video preview thumbnails"). Said here so their absence isn't a mystery.
+        if (!playback.isLive) {
+            StatLine(
+                "Scrubbing previews",
+                if (playback.previewUrl != null) "Available" else "None — turn them on in the library's settings in Plex",
+            )
+        }
         StatLine("Source", playback.serverBase?.removePrefix("http://")?.removePrefix("https://")
             ?: "—")
 
