@@ -43,6 +43,17 @@ data class PlexSection(
 )
 
 /** One genre a library can be narrowed to. The id is what the filter takes. */
+/** One title of a library, as far as matching it with a title elsewhere goes. */
+data class PlexIndexEntry(
+    val ratingKey: String,
+    val serverBase: String?,
+    val title: String,
+    val originalTitle: String?,
+    val year: Int?,
+    /** "tmdb://603", "imdb://tt0133093". */
+    val guids: Set<String>,
+)
+
 data class PlexGenre(val id: String, val title: String)
 
 /** One letter of a library in title order, and how many titles start with it. "#" is digits and the rest. */
@@ -753,6 +764,38 @@ object PlexApi {
             )
             guidsIn(json.optJSONArray("Metadata"))
         }
+
+    /**
+     * Everything in one library, by the little that tells one title from another: its
+     * name, year and outside ids. What IPTV's films and series are matched against, so a
+     * title in both shows once.
+     */
+    suspend fun libraryEntries(base: String, token: String, sectionKey: String, type: Int): List<PlexIndexEntry> =
+        withContext(Dispatchers.IO) {
+            val json = container(
+                "$base/library/sections/$sectionKey/all?type=$type&includeGuids=1" +
+                    "&X-Plex-Container-Start=0&X-Plex-Container-Size=100000",
+                token,
+            )
+            entriesIn(json.optJSONArray("Metadata"), base)
+        }
+
+    internal fun entriesIn(metadata: JSONArray?, base: String?): List<PlexIndexEntry> {
+        if (metadata == null) return emptyList()
+        return (0 until metadata.length()).mapNotNull { i ->
+            val entry = metadata.optJSONObject(i) ?: return@mapNotNull null
+            val guids = entry.optJSONArray("Guid")
+            PlexIndexEntry(
+                ratingKey = entry.optString("ratingKey"),
+                serverBase = base,
+                title = entry.optString("title"),
+                originalTitle = entry.optString("originalTitle").takeIf { it.isNotBlank() },
+                year = entry.optInt("year").takeIf { it > 0 },
+                guids = (0 until (guids?.length() ?: 0)).mapNotNull { guids?.optJSONObject(it)?.optString("id") }
+                    .filter { it.isNotBlank() }.toSet(),
+            )
+        }
+    }
 
     internal fun guidsIn(metadata: JSONArray?): Set<String> = buildSet {
         if (metadata == null) return@buildSet
