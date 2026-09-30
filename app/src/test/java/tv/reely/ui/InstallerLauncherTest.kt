@@ -69,7 +69,9 @@ class InstallerLauncherTest {
         val intent = nextStarted()!!
         assertEquals(Intent.ACTION_VIEW, intent.action)
         assertEquals("application/vnd.android.package-archive", intent.type)
-        assertEquals("in the app's own task", 0, intent.flags and Intent.FLAG_ACTIVITY_NEW_TASK)
+        // Its own task, so Android closing Reely to update it doesn't take the installer too.
+        assertEquals("in a task of its own", Intent.FLAG_ACTIVITY_NEW_TASK, intent.flags and Intent.FLAG_ACTIVITY_NEW_TASK)
+        assertEquals(Intent.FLAG_GRANT_READ_URI_PERMISSION, intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION)
         assertEquals(listOf(1), handled)
     }
 

@@ -113,17 +113,20 @@ object Updater {
      * The system installer, pointed at the file. Android will not take a file:// path
      * from another app's storage, so it goes through this app's provider.
      *
-     * Started from the screen that is showing, in its task. Started from the application
-     * with a task of its own, the installer often didn't come up on the first try: it
-     * could not tell which app was asking, and a new task on Fire TV can open behind
-     * the one in front.
+     * Started from the screen that is showing — started from the application, it often
+     * didn't come up on the first try — but in a task of its own. In Reely's task, it went
+     * when Android closed Reely to put the new version in: the installing screen vanished
+     * part way through, and opening Reely in the seconds the install still had left got
+     * it closed again, which looked like a crash. In its own task it stays up until it
+     * says the app is installed, with Open on it.
      */
     fun installIntent(context: Context, apk: File): Intent {
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.updates", apk)
         return Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/vnd.android.package-archive")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            if (context !is Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            @Suppress("DEPRECATION")
+            putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, context.packageName)
         }
     }
 
