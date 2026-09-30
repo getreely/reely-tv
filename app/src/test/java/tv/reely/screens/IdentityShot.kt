@@ -38,7 +38,7 @@ class IdentityShot {
                 horizontalArrangement = Arrangement.spacedBy(60.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Image(painterResource(R.drawable.reely_banner), null, Modifier.size(width = 480.dp, height = 270.dp))
+                Image(painterResource(R.drawable.reely_banner_wordmark), null, Modifier.size(width = 480.dp, height = 270.dp))
                 Image(painterResource(R.mipmap.reely_icon), null, Modifier.size(216.dp))
             }
         }
