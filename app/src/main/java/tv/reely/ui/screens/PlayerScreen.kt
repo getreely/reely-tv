@@ -2515,6 +2515,13 @@ internal fun SubtitleSearchPanel(
     modifier: Modifier = Modifier,
 ) {
     val languageName = java.util.Locale(search.language).displayLanguage.ifBlank { search.language }
+    // The cursor waits on Close while the server looks. When the results come, Close goes,
+    // and the cursor has to be put on the first of them: left alone it went with Close,
+    // and there was nothing in the list that could be chosen.
+    val found = search.results.isNotEmpty()
+    LaunchedEffect(found) {
+        if (found) focusRequester.requestWhenReady()
+    }
     MenuPanel(modifier = modifier.focusGroup(), width = 500.dp) {
         MenuHeading(title = "Find subtitles")
         Text(
