@@ -93,4 +93,18 @@ class ResumePointTest {
         // Everywhere else it stays, ticked.
         assertTrue(after.plex.browse.getValue(tv.reely.ui.LibraryKind.MOVIES).items.first().isWatched)
     }
+
+    /** Two servers number their titles independently: the same number is two titles. */
+    @Test fun `marking one server's title leaves the other server's same number alone`() {
+        val a = episode("7").copy(serverBase = "http://a:32400")
+        val b = episode("7").copy(serverBase = "http://b:32400")
+        val state = ReelyState(home = HomeState(continueWatching = listOf(a, b)))
+        val after = state.withWatched("7", watched = true, server = "http://b:32400")
+        assertFalse("server A's untouched", after.home.continueWatching[0].isWatched)
+        assertTrue("server B's marked", after.home.continueWatching[1].isWatched)
+
+        val moved = state.withProgress("7", 300_000, 1_000_000, server = "http://a:32400")
+        assertEquals(300_000L, moved.home.continueWatching[0].viewOffsetMs)
+        assertEquals(0L, moved.home.continueWatching[1].viewOffsetMs)
+    }
 }

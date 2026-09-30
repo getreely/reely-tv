@@ -580,12 +580,13 @@ private const val WATCHED_FRACTION = 0.9
  * where this one ended. Past the point Plex counts it as watched, it's watched and
  * starts from the top.
  */
-internal fun ReelyState.withProgress(ratingKey: String, positionMs: Long, durationMs: Long): ReelyState {
+internal fun ReelyState.withProgress(ratingKey: String, positionMs: Long, durationMs: Long, server: String? = null): ReelyState {
     val watched = durationMs > 0 && positionMs >= durationMs * WATCHED_FRACTION
     val offset = if (watched) 0L else positionMs
     fun seen(count: Int) = if (watched) maxOf(count, 1) else count
     return patchItem(
         ratingKey,
+        server,
         change = { it.copy(viewOffsetMs = offset, viewCount = seen(it.viewCount)) },
         changeDetail = { it.copy(viewOffsetMs = offset, viewCount = seen(it.viewCount)) },
     )
@@ -597,7 +598,7 @@ internal fun ReelyState.withProgress(ratingKey: String, positionMs: Long, durati
  * watched on its own page used to change everywhere but that page, whose button then
  * offered to mark it watched again.
  */
-internal fun ReelyState.withWatched(ratingKey: String, watched: Boolean): ReelyState {
+internal fun ReelyState.withWatched(ratingKey: String, watched: Boolean, server: String? = null): ReelyState {
     fun PlexItem.marked() = copy(
         viewCount = if (watched) maxOf(1, viewCount) else 0,
         viewOffsetMs = if (watched) 0 else viewOffsetMs,
@@ -605,6 +606,7 @@ internal fun ReelyState.withWatched(ratingKey: String, watched: Boolean): ReelyS
     )
     val marked = patchItem(
         ratingKey,
+        server,
         change = { it.marked() },
         changeDetail = {
             it.copy(
@@ -619,13 +621,14 @@ internal fun ReelyState.withWatched(ratingKey: String, watched: Boolean): ReelyS
         plex = marked.plex.copy(
             browse = marked.plex.browse.mapValues { (_, browse) ->
                 if (!browse.unwatchedOnly) browse
-                else browse.copy(items = browse.items.filterNot { it.ratingKey == ratingKey })
+                else browse.copy(items = browse.items.filterNot { it.ratingKey == ratingKey && sameServer(it.serverBase, server) })
             },
         ),
     )
     // A show or season marked as a whole marks the episodes on its page with it.
     val page = sifted.detail ?: return sifted
-    val whole = page.detail?.ratingKey == ratingKey || page.selectedSeason?.ratingKey == ratingKey
+    val whole = sameServer(page.serverBase, server) &&
+        (page.detail?.ratingKey == ratingKey || page.selectedSeason?.ratingKey == ratingKey)
     if (!whole) return sifted
     return sifted.copy(
         detail = page.copy(
@@ -662,13 +665,19 @@ internal fun ReelyState.forgetAccount(): ReelyState = copy(
     stack = if (route is Route.Settings) listOf(Route.Home, Route.Settings) else listOf(Route.Home),
 )
 
+/** Two ways of naming a server the same: no server given is the one connected. */
+internal fun ReelyState.sameServer(a: String?, b: String?): Boolean = (a ?: plex.baseUrl) == (b ?: plex.baseUrl)
+
 /** One title changed, on every screen and row holding a copy of it. */
 internal fun ReelyState.patchItem(
     ratingKey: String,
+    server: String?,
     change: (PlexItem) -> PlexItem,
     changeDetail: (tv.reely.plex.PlexDetail) -> tv.reely.plex.PlexDetail,
 ): ReelyState {
-    fun one(item: PlexItem) = if (item.ratingKey == ratingKey) change(item) else item
+    // By number and server: two servers number their titles independently, and the
+    // same number on each is two different titles side by side on Home.
+    fun one(item: PlexItem) = if (item.ratingKey == ratingKey && sameServer(item.serverBase, server)) change(item) else item
     fun all(items: List<PlexItem>) = items.map(::one)
     return copy(
         focused = focused?.let(::one),
@@ -686,7 +695,9 @@ internal fun ReelyState.patchItem(
         ),
         detail = detail?.let { page ->
             page.copy(
-                detail = page.detail?.let { if (it.ratingKey == ratingKey) changeDetail(it) else it },
+                detail = page.detail?.let {
+                    if (it.ratingKey == ratingKey && sameServer(page.serverBase, server)) changeDetail(it) else it
+                },
                 seasons = all(page.seasons),
                 selectedSeason = page.selectedSeason?.let(::one),
                 episodes = all(page.episodes),
@@ -1649,8 +1660,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         plexImageUrl(serverBase, path, width = 720, height = 405)
 
     fun toggleWatchedDetail() {
-        val detail = _state.value.detail?.detail ?: return
-        toggleWatched(detail.asItem())
+        val page = _state.value.detail ?: return
+        val detail = page.detail ?: return
+        toggleWatched(detail.asItem(page.serverBase))
     }
 
     /**
@@ -2359,7 +2371,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 ?: return
             play(episode, queue = detailState.episodes, resume = resume)
         } else {
-            play(detail.asItem(), resume = resume, mediaIndex = detailState.versionIndex)
+            play(detail.asItem(detailState.serverBase), resume = resume, mediaIndex = detailState.versionIndex)
         }
     }
 
@@ -2651,7 +2663,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         }
         // Reported as stopped at the very end, which is what marks it watched on the server.
         stopPlayback(playback.durationMs)
-        playback.ratingKey?.let { applyWatched(it, watched = true) }
+        playback.ratingKey?.let { applyWatched(it, watched = true, server = playback.serverBase) }
     }
 
     /**
@@ -3056,8 +3068,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
      * went back to where the last sitting had started rather than where this one ended.
      * Past the point Plex counts it as watched, it's watched and starts from the top.
      */
-    private fun keepProgress(ratingKey: String, positionMs: Long, durationMs: Long) =
-        _state.update { it.withProgress(ratingKey, positionMs, durationMs) }
+    private fun keepProgress(ratingKey: String, positionMs: Long, durationMs: Long, server: String?) =
+        _state.update { it.withProgress(ratingKey, positionMs, durationMs, server) }
 
     /** Where the player last said it was, for the thing it said it about. */
     private var lastPosition: Pair<String, Long>? = null
@@ -3073,7 +3085,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     private fun endSitting(playback: Playback, positionMs: Long) {
         val ratingKey = playback.ratingKey ?: return
         if (positionMs <= 0) return
-        keepProgress(ratingKey, positionMs, playback.durationMs)
+        keepProgress(ratingKey, positionMs, playback.durationMs, playback.serverBase)
         val plex = _state.value.plex
         val base = playback.serverBase ?: plex.baseUrl ?: return
         val token = plex.tokenFor(playback.serverBase) ?: return
@@ -3301,11 +3313,11 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val token = plex.tokenFor(item.serverBase) ?: return
         val watched = !item.isWatched
 
-        applyWatched(item.ratingKey, watched)
+        applyWatched(item.ratingKey, watched, item.serverBase)
         viewModelScope.launch {
             val ok = writes.withLock { runCatching { PlexApi.setWatched(base, token, item.ratingKey, watched) }.isSuccess }
             if (!ok) {
-                applyWatched(item.ratingKey, !watched)
+                applyWatched(item.ratingKey, !watched, item.serverBase)
                 reportPlaybackProblem("Couldn't mark that as ${if (watched) "watched" else "unwatched"}.")
             } else {
                 refreshHome()
@@ -3330,8 +3342,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Patches the tick everywhere the same item is on screen. */
-    private fun applyWatched(ratingKey: String, watched: Boolean) =
-        _state.update { it.withWatched(ratingKey, watched) }
+    private fun applyWatched(ratingKey: String, watched: Boolean, server: String?) =
+        _state.update { it.withWatched(ratingKey, watched, server) }
 
     /**
      * Plays the item's trailer, when the server has one to give.
@@ -4337,8 +4349,12 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     }
 }
 
-/** A detail page already holds everything the player needs from an item. */
-private fun PlexDetail.asItem(): PlexItem = PlexItem(
+/**
+ * A detail page already holds everything the player needs from an item — and which
+ * server it's on. Without that it was taken to be the one connected, so a film from a
+ * second server played whatever had its number on the first, and Watched marked that.
+ */
+private fun PlexDetail.asItem(serverBase: String?): PlexItem = PlexItem(
     ratingKey = ratingKey,
     title = title,
     type = type,
@@ -4360,6 +4376,7 @@ private fun PlexDetail.asItem(): PlexItem = PlexItem(
     viewCount = viewCount,
     addedAt = 0,
     librarySectionId = null,
+    serverBase = serverBase,
 )
 
 /** What to say about a failure on screen; see [tv.reely.core.Friendly]. */
