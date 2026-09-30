@@ -266,10 +266,23 @@ class IptvWatch(private val file: File, private val now: () -> Long = { System.c
         )
     }
 
-    /** How many episodes of a show or season have been watched. */
-    @Synchronized fun watchedUnder(key: String, season: Boolean): Int = marks.values.count {
-        it.watched && (if (season) it.item.parentRatingKey == key else it.item.grandparentRatingKey == key)
+    /**
+     * How many episodes of a show or season have been watched. Counted once and kept until
+     * something changes: a grid of thousands of series asks for every one of them.
+     */
+    @Synchronized fun watchedUnder(key: String, season: Boolean): Int {
+        val counts = watchedCounts ?: HashMap<String, Int>().also { counts ->
+            for (mark in marks.values) {
+                if (!mark.watched) continue
+                mark.item.grandparentRatingKey?.let { counts["show|$it"] = (counts["show|$it"] ?: 0) + 1 }
+                mark.item.parentRatingKey?.let { counts["season|$it"] = (counts["season|$it"] ?: 0) + 1 }
+            }
+            watchedCounts = counts
+        }
+        return counts[(if (season) "season|" else "show|") + key] ?: 0
     }
+
+    private var watchedCounts: HashMap<String, Int>? = null
 
     /** Part-way through, most recent first. */
     @Synchronized fun continueWatching(): List<PlexItem> = marks.values
@@ -278,6 +291,7 @@ class IptvWatch(private val file: File, private val now: () -> Long = { System.c
         .map { apply(it.item) }
 
     private fun put(item: PlexItem, mark: IptvMark, save: Boolean = true) {
+        watchedCounts = null
         marks.remove(item.ratingKey)
         // Kept without its progress: that's the mark's to say.
         marks[item.ratingKey] = mark.copy(item = item.copy(viewOffsetMs = 0, viewCount = 0, lastViewedAt = 0))

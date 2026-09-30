@@ -1818,6 +1818,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         plexHoldingsAt = 0L
         lastPosition = null
         _state.update { it.forgetAccount() }
+        // IPTV's rows aren't the Plex account's: they go back on Home straight away.
+        publishIptv()
     }
 
     /** Home asked for again shortly, while the server isn't answering. */
@@ -4283,6 +4285,12 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     /** How long the player last said the IPTV file playing runs, which its list rarely says. */
     private var iptvDurationMs = 0L
 
+    /** Whose catalogue and watch record are loaded: the login, hashed. */
+    private var iptvAccount: String? = null
+
+    /** The tabs whose IPTV grid is waiting to be worked out again; see [publishIptv]. */
+    private val iptvPublishKinds = mutableSetOf<LibraryKind>()
+
     /** The provider's films and series need an Xtream login; a playlist has none of them. */
     private fun iptvCredentials(): XtreamCredentials? =
         _state.value.live.credentials?.takeIf { !it.isPlaylist }
@@ -4319,6 +4327,11 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         iptvJob?.cancel()
         val dir = getApplication<Application>().filesDir
         val account = (credentials.base + "|" + credentials.username).hashCode().toUInt().toString(16)
+        // Another login is another provider's list and another record of what's been watched.
+        if (account != iptvAccount) {
+            iptv.clear()
+            iptvAccount = account
+        }
         if (iptv.watch == null) iptv.watch = IptvWatch(java.io.File(dir, "iptv-watch-$account.json"))
         _state.update { it.copy(iptv = it.iptv.copy(on = true, loading = true, error = null)) }
         iptvJob = viewModelScope.launch {
@@ -4347,9 +4360,12 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Switched off, or signed out of the provider: none of it anywhere. */
     private fun stopIptvLibrary() {
+        val wasOn = _state.value.iptv.on
         iptvJob?.cancel()
         iptvPublishJob?.cancel()
+        iptvPublishKinds.clear()
         iptv.clear()
+        iptvAccount = null
         _state.update { current ->
             current.copy(
                 iptv = IptvState(),
@@ -4364,7 +4380,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val route = _state.value.route
         if (route is Route.Library && route.view == LibraryView.IPTV) navigate(Route.Library(route.kind))
         // Plex's copies were left out of Home's rows while IPTV won; they come back.
-        if (_state.value.prefs.iptvWins) refreshHome()
+        if (wasOn && _state.value.prefs.iptvWins) refreshHome()
     }
 
     /** What's in Plex's libraries, to match IPTV's titles against. */
@@ -4390,12 +4406,18 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     /** The grids, Home's rows and Continue Watching, from the catalogue as it is now. */
     private fun publishIptv(kinds: Collection<LibraryKind> = LibraryKind.entries) {
         if (!_state.value.iptv.on) return
+        // One at a time, the latest wins; but a tab asked for by one that's overtaken is
+        // still owed its grid. Movies' sort changing mustn't lose the shows a moment before.
+        iptvPublishKinds += kinds
         iptvPublishJob?.cancel()
         iptvPublishJob = viewModelScope.launch {
+            val todo = iptvPublishKinds.toSet()
             val wins = _state.value.prefs.iptvWins
+            val options = todo.associateWith(::iptvOptionsFor)
             val built = withContext(Dispatchers.Default) {
-                kinds.associateWith { kind -> iptv.browse(kind, iptvOptionsFor(kind), wins) to iptv.newest(kind, wins) }
+                todo.associateWith { kind -> iptv.browse(kind, options.getValue(kind), wins) to iptv.newest(kind, wins) }
             }
+            iptvPublishKinds -= todo
             val catalog = iptv.catalog
             val progress = iptvContinue()
             _state.update { current ->
@@ -4590,7 +4612,10 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val page = _state.value.detail ?: return
         seasonJob?.cancel()
         seasonJob = viewModelScope.launch {
-            _state.update { it.copy(detail = it.detail?.copy(selectedSeason = season)) }
+            // As for Plex: the season chosen, and no other season's episodes under it meanwhile.
+            _state.update {
+                it.copy(detail = it.detail?.copy(selectedSeason = season, busy = true, episodes = emptyList(), focusedEpisode = null))
+            }
             val episodes = iptvEpisodes(key.showId).firstOrNull { (s, _) -> s.number == key.number }?.second.orEmpty()
             val now = _state.value.detail
             if (now?.selectedSeason?.ratingKey != season.ratingKey || now.ratingKey != page.ratingKey ||
@@ -4676,11 +4701,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
             watch.setWatched(episodes, watched)
-            _state.update { current ->
-                episodes.fold(current.withWatched(item.ratingKey, watched, IPTV_SOURCE)) { state, episode ->
-                    state.withWatched(episode.ratingKey, watched, IPTV_SOURCE)
-                }
-            }
+            // The show or season marked marks the episodes on its page with it; anywhere
+            // else an episode of it shows, Continue Watching, is worked out again below.
+            applyWatched(item.ratingKey, watched, IPTV_SOURCE)
             refreshIptvContinue()
         }
     }

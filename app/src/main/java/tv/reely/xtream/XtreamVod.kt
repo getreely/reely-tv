@@ -309,7 +309,8 @@ object XtreamVod {
         val named = (0 until listed.length()).mapNotNull { listed.optJSONObject(it) }.associateBy {
             it.optString("season_number").toIntOrNull()
         }
-        val seasons = episodes.groupBy { it.season }.toSortedMap().map { (number, list) ->
+        // An episode listed twice is one episode: its id is a list's key on screen.
+        val seasons = episodes.distinctBy { it.id }.groupBy { it.season }.toSortedMap().map { (number, list) ->
             val about = named[number]
             VodSeason(
                 number = number,

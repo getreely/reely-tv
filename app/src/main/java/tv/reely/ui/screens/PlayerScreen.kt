@@ -2877,6 +2877,9 @@ private fun explainSilence(tracks: Tracks, playback: Playback, prefs: PlayerPref
     return when {
         playback.isLive ->
             "No sound: this channel's audio ($sound) isn't supported on this device."
+        // Nothing converts an IPTV provider's file: it plays here as it is, or not at all.
+        playback.fromIptv ->
+            "No sound: this audio ($sound) isn't supported on this device."
         playback.transcoding ->
             "No sound: Plex couldn't convert this audio ($sound)."
         prefs.playbackMode == Settings.MODE_DIRECT ->
