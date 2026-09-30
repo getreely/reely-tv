@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.withContext
 import tv.reely.core.AudioPlan
 import tv.reely.core.DeviceAudio
@@ -542,6 +543,38 @@ enum class HomeRow(val id: String, val title: String, val fromReely: Boolean = f
 /** How often a browsing screen left up asks for what has changed. */
 /** How long after starting the app it looks for a newer version. */
 private const val UPDATE_CHECK_DELAY_MS = 4_000L
+
+/** How far in Plex counts something as watched, by its default setting. */
+private const val WATCHED_FRACTION = 0.9
+
+/**
+ * Where something was stopped, on the pages and rows already showing it: the show's page
+ * it goes back to, a film's own page, Continue Watching. They were loaded before it
+ * played, so Resume there went back to where the last sitting had started rather than
+ * where this one ended. Past the point Plex counts it as watched, it's watched and
+ * starts from the top.
+ */
+internal fun ReelyState.withProgress(ratingKey: String, positionMs: Long, durationMs: Long): ReelyState {
+    val watched = durationMs > 0 && positionMs >= durationMs * WATCHED_FRACTION
+    val offset = if (watched) 0L else positionMs
+    fun seen(count: Int) = if (watched) maxOf(count, 1) else count
+    fun PlexItem.moved() = if (this.ratingKey != ratingKey) this else copy(viewOffsetMs = offset, viewCount = seen(viewCount))
+    return copy(
+        detail = detail?.let { page ->
+            page.copy(
+                detail = page.detail?.let {
+                    if (it.ratingKey != ratingKey) it else it.copy(viewOffsetMs = offset, viewCount = seen(it.viewCount))
+                },
+                episodes = page.episodes.map { it.moved() },
+                focusedEpisode = page.focusedEpisode?.moved(),
+            )
+        },
+        home = home.copy(
+            continueWatching = home.continueWatching.map { it.moved() },
+            recentMovies = home.recentMovies.map { it.moved() },
+        ),
+    )
+}
 
 /** How many titles the library grid asks for at a time. */
 private const val GRID_PAGE = 300
@@ -2752,6 +2785,15 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         return true
     }
 
+    /**
+     * Where something was stopped, on the pages already showing it: the show's page it
+     * goes back to, a film's own page. They were loaded before it played, so Resume there
+     * went back to where the last sitting had started rather than where this one ended.
+     * Past the point Plex counts it as watched, it's watched and starts from the top.
+     */
+    private fun keepProgress(ratingKey: String, positionMs: Long, durationMs: Long) =
+        _state.update { it.withProgress(ratingKey, positionMs, durationMs) }
+
     fun stopPlayback(positionMs: Long = 0) {
         // Back to the show's page on the episode that was playing, not the one it opened at.
         _state.value.playback?.takeIf { !it.isLive }?.let { playing ->
@@ -2765,8 +2807,13 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val plex = _state.value.plex
         val base = playback?.serverBase ?: plex.baseUrl
         val token = plex.tokenFor(playback?.serverBase)
+        if (ratingKey != null && positionMs > 0) keepProgress(ratingKey, positionMs, playback.durationMs)
         if (ratingKey != null && base != null && token != null && positionMs > 0) {
-            viewModelScope.launch {
+            // After any report still on its way: one sent a moment earlier and arriving
+            // after this would put Plex back up to ten seconds behind where it stopped.
+            val earlier = timelineJob
+            timelineJob = viewModelScope.launch {
+                earlier?.cancelAndJoin()
                 runCatching {
                     PlexApi.reportTimeline(
                         base = base,
