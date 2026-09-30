@@ -2346,9 +2346,15 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun refreshWatchlist(servers: List<Pair<String, String>>) {
         val token = _state.value.plex.token ?: return
+        val edits = watchlistEdits
         viewModelScope.launch {
             val guids = runCatching { PlexApi.watchlist(token) }.getOrElse { return@launch }
-            _state.update { it.copy(plex = it.plex.copy(watchlist = guids.toSet())) }
+            // Not over a change made since it was asked, which it can't know about: the
+            // button flipped back. Nor for a profile that's no longer the one signed in.
+            if (_state.value.plex.token != token) return@launch
+            if (watchlistEdits == edits) {
+                _state.update { it.copy(plex = it.plex.copy(watchlist = guids.toSet())) }
+            }
             val found = guids.take(WATCHLIST_ROW).chunked(8).flatMap { batch ->
                 batch.map { guid ->
                     async {
@@ -2358,9 +2364,13 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }.map { it.await() }
             }.filterNotNull()
+            if (_state.value.plex.token != token) return@launch
             _state.update { it.copy(home = it.home.copy(watchlist = found)) }
         }
     }
+
+    /** Changes made to the Watchlist here, so a list read before one isn't put over it. */
+    private var watchlistEdits = 0
 
     /** On the Watchlist, or off it, for the title whose page this is. */
     fun toggleWatchlist() {
@@ -2373,6 +2383,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             it.copy(plex = it.plex.copy(watchlist = if (listed) now + guid else now - guid))
         }
         // Straight away: waiting on Plex's answer made the button feel broken.
+        watchlistEdits++
         mark(on)
         viewModelScope.launch {
             writes.withLock { runCatching { PlexApi.setWatchlisted(token, guid, on) } }
@@ -3452,7 +3463,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     fun clearCategory() {
         guideJob?.cancel()
         livePlayer.stop()
-        updateLive { it.copy(selectedCategory = null, channels = emptyList(), focusedChannel = null) }
+        updateLive { it.copy(selectedCategory = null, channels = emptyList(), focusedChannel = null, busy = false) }
     }
 
     fun openCategory(category: XtreamCategory) {
@@ -3472,9 +3483,13 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 else if (category.id == LiveState.RECENT.id) recentChannelList(credentials)
                 else XtreamApi.liveChannels(credentials, category.id)
             }.getOrElse { failure ->
-                updateLive { it.copy(busy = false, error = failure.readable()) }
+                updateLive { if (it.selectedCategory?.id == category.id) it.copy(busy = false, error = failure.readable()) else it }
                 return@launch
             }
+            // Only if it's still the category open. Picking another quickly, or going back
+            // to the categories, this one's channels arrived late and filled the other's
+            // guide with them.
+            if (_state.value.live.selectedCategory?.id != category.id) return@launch
             updateLive { it.copy(busy = false, channels = channels) }
             _state.update { it.copy(guide = it.guide.copy(channelIndex = 0)) }
             loadGuideWindow()
@@ -3798,13 +3813,22 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val guide = _state.value.guide
         val channelIds = _state.value.live.channels.mapNotNull { it.epgChannelId }
         if (channelIds.isEmpty() || guide.windowEnd <= guide.windowStart) return
-        viewModelScope.launch {
+        // The window asked for last is the one shown. Moving along the hours quickly, an
+        // earlier window's programmes could arrive after a later one's and fill the grid
+        // with hours it wasn't showing.
+        guideWindowJob?.cancel()
+        guideWindowJob = viewModelScope.launch {
             val programmes = withContext(Dispatchers.IO) {
                 epgStore.programmes(channelIds, guide.windowStart, guide.windowEnd)
             }
-            _state.update { it.copy(guide = it.guide.copy(programmes = programmes)) }
+            _state.update {
+                val same = it.guide.windowStart == guide.windowStart && it.guide.windowEnd == guide.windowEnd
+                if (same) it.copy(guide = it.guide.copy(programmes = programmes)) else it
+            }
         }
     }
+
+    private var guideWindowJob: Job? = null
 
     fun guideMoveChannel(delta: Int) {
         val channels = _state.value.live.channels
