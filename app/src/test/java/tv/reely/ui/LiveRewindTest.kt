@@ -98,6 +98,20 @@ class LiveRewindTest {
         assertEquals(1, wentLive)
     }
 
+    @Test fun `behind live, up from Play reaches Go live`() {
+        player(
+            Playback(
+                title = "News", subtitle = null, url = "", isLive = false,
+                durationMs = 60 * 60_000L, startPositionMs = 5 * 60_000L, timeshift = window,
+            )
+        )
+        // The controls come up on Play; up is the bar, and up again is Go live above it.
+        press(Key.DirectionUp)
+        press(Key.DirectionUp)
+        press(Key.DirectionCenter)
+        assertEquals("Go live pressed", 1, wentLive)
+    }
+
     @Test fun `play after a pause on live carries on from the pause, where the channel can`() {
         val now = System.currentTimeMillis()
         val paused = now - 5 * 60_000

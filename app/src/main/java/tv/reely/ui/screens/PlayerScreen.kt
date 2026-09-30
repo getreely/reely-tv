@@ -360,6 +360,9 @@ fun PlayerScreen(
     var atTopOfControls by remember { mutableStateOf(false) }
     // The skip prompt, when the controls are up, is the top of them instead.
     var skipFocused by remember { mutableStateOf(false) }
+    // Go live has the cursor: it sits above the bar, so up from the bar goes to it rather
+    // than putting the controls away, and up from it does that instead.
+    var goLiveFocused by remember { mutableStateOf(false) }
     // The guide, raised over a playing channel. Mutually exclusive with the controls.
     // One value rather than three flags, so opening it has to say what it is for and
     // closing it cannot half-forget — see GuideRequest.
@@ -1141,7 +1144,7 @@ fun PlayerScreen(
                     event.key == Key.DirectionUp &&
                     !playback.isLive &&
                     controlsVisible &&
-                    ((atTopOfControls && skipLabel == null) || skipFocused)
+                    ((atTopOfControls && skipLabel == null && !behindLive) || skipFocused || goLiveFocused)
                 ) {
                     controlsVisible = false
                     return@onPreviewKeyEvent true
@@ -1491,6 +1494,7 @@ fun PlayerScreen(
                 skipFocus = skipFocus,
                 onSkipPrompt = skip,
                 onSkipFocus = { skipFocused = it },
+                onGoLiveFocus = { goLiveFocused = it },
                 modifier = Modifier.align(Alignment.BottomStart),
             )
         }
@@ -1735,6 +1739,7 @@ internal fun Controls(
     scrubLimitMs: Long? = null,
     /** Behind live: back to the channel as it is now. */
     onGoLive: (() -> Unit)? = null,
+    onGoLiveFocus: (Boolean) -> Unit = {},
     onOpenSleep: () -> Unit = {},
     /** A sleep timer is set: its button is lit. */
     sleeping: Boolean = false,
@@ -1773,7 +1778,12 @@ internal fun Controls(
         // Behind live: the way back to now, where Skip Intro would sit above the bar.
         if (onGoLive != null && skipLabel == null) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TvActionButton(label = "Go live", onClick = onGoLive, emphasised = true)
+                TvActionButton(
+                    label = "Go live",
+                    onClick = onGoLive,
+                    emphasised = true,
+                    modifier = Modifier.onFocusChanged { onGoLiveFocus(it.isFocused) },
+                )
             }
         }
 
