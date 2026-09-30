@@ -7,9 +7,9 @@ import tv.reely.plex.PlexItem
 
 /** Which episode "Play next episode" on a show starts. */
 class NextEpisodeTest {
-    private fun ep(key: String, watched: Boolean = false, offset: Long = 0) = PlexItem(
+    private fun ep(key: String, watched: Boolean = false, offset: Long = 0, season: Int? = null) = PlexItem(
         ratingKey = key, title = key, type = "episode", thumb = null, art = null, summary = null,
-        year = null, index = null, parentIndex = null, parentRatingKey = null, parentTitle = null,
+        year = null, index = null, parentIndex = season, parentRatingKey = null, parentTitle = null,
         grandparentRatingKey = "show", grandparentTitle = "Show", grandparentThumb = null,
         durationMs = 1_000_000, viewOffsetMs = offset, leafCount = 0, viewedLeafCount = 0,
         viewCount = if (watched) 1 else 0, addedAt = 0, librarySectionId = null,
@@ -35,5 +35,21 @@ class NextEpisodeTest {
         // Every one watched: from the start.
         assertEquals("1", PlexApi.nextEpisode(listOf(ep("1", true), ep("2", true)))?.ratingKey)
         assertEquals(null, PlexApi.nextEpisode(emptyList()))
+    }
+
+    /** Specials are season 0, first in Plex's order, which reads as no season number. */
+    @Test fun `a show not started begins with its first episode, not a special`() {
+        val list = listOf(ep("special"), ep("s1e1", season = 1), ep("s1e2", season = 1))
+        assertEquals("s1e1", PlexApi.nextEpisode(list)?.ratingKey)
+    }
+
+    @Test fun `specials don't count towards where the show is up to`() {
+        val list = listOf(ep("special"), ep("s1e1", true, season = 1), ep("s1e2", season = 1))
+        assertEquals("s1e2", PlexApi.nextEpisode(list)?.ratingKey)
+    }
+
+    @Test fun `a special part watched is still carried on with`() {
+        val list = listOf(ep("special", offset = 300_000), ep("s1e1", true, season = 1), ep("s1e2", season = 1))
+        assertEquals("special", PlexApi.nextEpisode(list)?.ratingKey)
     }
 }

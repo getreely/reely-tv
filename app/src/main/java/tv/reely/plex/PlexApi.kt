@@ -758,14 +758,20 @@ object PlexApi {
      * Which of [episodes] (in order) to play next: the one part watched, else the first
      * not yet watched after the last one that was, else the first not watched at all,
      * else the first. What Plex's own apps mean by a show's next episode.
+     *
+     * Specials aside, unless they're all there is or one's part watched: they come first
+     * in Plex's order, as season 0, and a show not started began with its first special
+     * rather than its first episode.
      */
     fun nextEpisode(episodes: List<PlexItem>): PlexItem? {
         episodes.firstOrNull { it.resumeFraction != null && !it.isWatched }?.let { return it }
-        val lastWatched = episodes.indexOfLast { it.isWatched }
+        // A special's season is 0, which is read as no season number at all.
+        val main = episodes.filter { it.parentIndex != null }.ifEmpty { episodes }
+        val lastWatched = main.indexOfLast { it.isWatched }
         if (lastWatched >= 0) {
-            episodes.drop(lastWatched + 1).firstOrNull { !it.isWatched }?.let { return it }
+            main.drop(lastWatched + 1).firstOrNull { !it.isWatched }?.let { return it }
         }
-        return episodes.firstOrNull { !it.isWatched } ?: episodes.firstOrNull()
+        return main.firstOrNull { !it.isWatched } ?: main.firstOrNull()
     }
 
     /**

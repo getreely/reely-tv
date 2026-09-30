@@ -2249,12 +2249,22 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             onThisPage { it.copy(seasons = seasons, busy = seasons.isNotEmpty()) }
 
             // Arriving from a row means arriving at one episode, not at the top of the show.
+            // Arriving at the show itself means arriving where it's up to: the season and
+            // episode to watch next, as Plex's own apps open a show. It opened on the first
+            // season listed — Specials, as often as not — and Play started that.
+            val upTo = if (route.seasonKey == null) {
+                runCatching { PlexApi.episodesOf(base, token, ratingKey) }.getOrNull()
+                    ?.let(PlexApi::nextEpisode)
+            } else null
+            if (_state.value.detail?.ratingKey != ratingKey) return@launch
             val season = seasons.firstOrNull { it.ratingKey == route.seasonKey }
+                ?: upTo?.let { next -> seasons.firstOrNull { it.ratingKey == next.parentRatingKey } }
+                ?: seasons.firstOrNull { (it.index ?: 0) > 0 }
                 ?: seasons.firstOrNull()
             if (season == null) {
                 onThisPage { it.copy(busy = false) }
             } else {
-                selectSeason(season, focusEpisodeKey = route.episodeKey)
+                selectSeason(season, focusEpisodeKey = route.episodeKey ?: upTo?.ratingKey)
             }
         }
     }
