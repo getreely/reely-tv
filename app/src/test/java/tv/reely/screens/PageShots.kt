@@ -60,7 +60,8 @@ class PageShots {
             Box(Modifier.fillMaxSize().background(Ink)) {
                 SettingsScreen(
                     plex = PlexState(baseUrl = "http://server", serverToken = "t", token = "t", serverName = "Living Room"),
-                    live = connectedLive, guide = readyGuide, prefs = PlayerPrefs(themeMusic = true),
+                    live = connectedLive, guide = readyGuide, prefs = PlayerPrefs(themeMusic = true, iptvLibrary = true),
+                    iptv = tv.reely.ui.IptvState(on = true, movieCount = 18_412, showCount = 3_207, loadedAt = System.currentTimeMillis() - 3_600_000),
                     onSignOutPlex = {}, onSignOutXtream = {}, onSwitchServer = {}, onToggleFavourite = {},
                     onToggleFormat = {}, onNudgeSubtitleScale = {}, onToggleSubtitleBackground = {},
                     onNudgeUpNext = {}, onToggleGuidePreview = {}, onSetPlaybackMode = {},
