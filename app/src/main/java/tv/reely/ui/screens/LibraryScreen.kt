@@ -107,6 +107,9 @@ fun LibraryScreen(
     onSelectGenre: (String?) -> Unit,
     onDismissBrowseError: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Signed in with no server to show: look again, or sign in as somebody else. */
+    onRetryConnect: () -> Unit = {},
+    onSignOutPlex: () -> Unit = {},
     /** The cursor is near the end of the grid: time for the next page. */
     onLoadMore: () -> Unit = {},
     onSelectDecade: (String?) -> Unit = {},
@@ -119,6 +122,8 @@ fun LibraryScreen(
             onCancelLink = onCancelLink,
             onDismissError = onDismissPlexError,
             modifier = modifier.fillMaxSize(),
+            onRetryConnect = onRetryConnect,
+            onSignOut = onSignOutPlex,
         )
         return
     }

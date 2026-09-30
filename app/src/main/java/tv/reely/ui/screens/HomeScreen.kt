@@ -94,6 +94,9 @@ fun HomeScreen(
     onCancelLink: () -> Unit,
     onDismissPlexError: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Signed in with no server to show: look again, or sign in as somebody else. */
+    onRetryConnect: () -> Unit = {},
+    onSignOutPlex: () -> Unit = {},
     onRemoveFromContinueWatching: (PlexItem) -> Unit = {},
     onPlayNextEpisode: (PlexItem) -> Unit = {},
     /** Rows switched off in Settings; see HomeRow. */
@@ -114,6 +117,8 @@ fun HomeScreen(
             onCancelLink = onCancelLink,
             onDismissError = onDismissPlexError,
             modifier = modifier.fillMaxSize(),
+            onRetryConnect = onRetryConnect,
+            onSignOut = onSignOutPlex,
         )
         return
     }

@@ -790,7 +790,7 @@ fun PlayerScreen(
      * a pause or a resume is sent the moment it happens, because this restarts on
      * `playing`, rather than up to ten seconds later.
      */
-    LaunchedEffect(playback.ratingKey, playing) {
+    LaunchedEffect(playback.ratingKey, playback.serverBase, playing) {
         if (playback.isLive || playback.ratingKey == null) return@LaunchedEffect
         while (true) {
             onReportProgress(exoPlayer.currentPosition.coerceAtLeast(0), playing)

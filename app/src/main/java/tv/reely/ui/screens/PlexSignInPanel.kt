@@ -44,7 +44,15 @@ fun PlexSignInPanel(
     onCancelLink: () -> Unit,
     onDismissError: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Signed in, and no server answered: look again now. */
+    onRetryConnect: () -> Unit = {},
+    /** Signed in, and no server answered: start again as somebody else. */
+    onSignOut: () -> Unit = {},
 ) {
+    if (plex.token != null && plex.linkCode == null) {
+        SignedInNoServer(plex, onRetryConnect, onSignOut, onDismissError, modifier)
+        return
+    }
     /*
      * The same shape as the live TV sign-in: what this is on the left, the one thing to
      * do on the right. Stacked, an error message pushed the code off the bottom.
@@ -175,5 +183,77 @@ private fun Step(number: Int, content: @Composable () -> Unit) {
             Text(text = number.toString(), color = Ink, style = ReelyType.Label, fontWeight = FontWeight.Bold)
         }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { content() }
+    }
+}
+
+/**
+ * Signed in, and on the way to a server or unable to reach one. It showed the sign-in
+ * button again — "Getting a code…" while it looked, as though the code just typed hadn't
+ * taken — and pressing it was the only way to look again.
+ */
+@Composable
+private fun SignedInNoServer(
+    plex: PlexState,
+    onRetry: () -> Unit,
+    onSignOut: () -> Unit,
+    onDismissError: () -> Unit,
+    modifier: Modifier,
+) {
+    val looking = plex.busy
+    Row(
+        modifier = modifier.padding(horizontal = 48.dp, vertical = 27.dp),
+        horizontalArrangement = Arrangement.spacedBy(48.dp),
+    ) {
+        Column(
+            modifier = Modifier.weight(1f).padding(top = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            SectionHeading("Plex")
+            Text(
+                text = if (looking) "Finding your Plex server" else "Can't find your Plex server",
+                color = Chalk,
+                style = ReelyType.Display.copy(fontSize = 30.sp, lineHeight = 36.sp),
+            )
+            Text(
+                text = if (looking) {
+                    "You're signed in${plex.user?.title?.let { " as $it" }.orEmpty()}. " +
+                        "Looking for your server, at home first, then over the internet."
+                } else {
+                    "Make sure Plex Media Server is running and signed in to the same account. " +
+                        "Reely keeps looking, or try again now."
+                },
+                color = Muted,
+                style = ReelyType.Body,
+            )
+            if (plex.error != null && !looking) {
+                ErrorNote(message = plex.error, onDismiss = onDismissError)
+            }
+        }
+        Column(
+            modifier = Modifier.width(440.dp).glass().padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            if (looking) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    LoadingRing(diameter = 20.dp)
+                    Text(text = "Connecting…", color = Muted, style = ReelyType.Label)
+                }
+            } else {
+                TvActionButton(
+                    label = "Try again",
+                    onClick = onRetry,
+                    emphasised = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                TvActionButton(
+                    label = "Use a different Plex account",
+                    onClick = onSignOut,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
     }
 }

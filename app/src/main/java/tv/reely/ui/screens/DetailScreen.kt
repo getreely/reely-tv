@@ -179,7 +179,7 @@ fun DetailScreen(
     val relatedFocus = rememberRowFocus("related")
     val membersFocus = rememberRowFocus("members")
     val isCollection = detail.type == "collection"
-    var railBroughtTo by remember(state.ratingKey) { mutableStateOf<String?>(null) }
+    var railBroughtTo by remember(state.ratingKey, state.serverBase) { mutableStateOf<String?>(null) }
     val page = rememberLazyListState()
     val scope = rememberCoroutineScope()
     // Set while a landing is placing focus in the rail itself, which scrolls on its own.
@@ -203,7 +203,7 @@ fun DetailScreen(
         if (distance != 0) page.animateScrollBy(distance.toFloat())
     }
     // Set by choosing a season from its row, and spent once that season's episodes land.
-    var seasonChosen by remember(state.ratingKey) { mutableStateOf(false) }
+    var seasonChosen by remember(state.ratingKey, state.serverBase) { mutableStateOf(false) }
     LaunchedEffect(state.episodes) {
         val key = state.focusedEpisode?.ratingKey ?: return@LaunchedEffect
         if (railBroughtTo == key) return@LaunchedEffect

@@ -93,6 +93,16 @@ class SignInShots {
         "plex-sign-in-scan",
     )
 
+    @Test fun plexFindingServer() = plex(
+        tv.reely.ui.PlexState(token = "t", busy = true),
+        "plex-finding-server",
+    )
+
+    @Test fun plexNoServer() = plex(
+        tv.reely.ui.PlexState(token = "t", error = "Couldn't reach your Plex server. Make sure it's on and connected."),
+        "plex-no-server",
+    )
+
     @Test fun liveSignIn() = signIn(LiveState(), "live-sign-in")
 
     @Test fun liveSignInError() =

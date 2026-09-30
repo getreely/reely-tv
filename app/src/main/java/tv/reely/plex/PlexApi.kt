@@ -1,6 +1,8 @@
 package tv.reely.plex
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
 import okhttp3.Request
@@ -508,6 +510,7 @@ object PlexApi {
             val body = response.body?.string().orEmpty()
             require(response.isSuccessful) { "Couldn't load your Plex servers. Try again." }
             val resources = JSONArray(body)
+            val owned = mutableSetOf<String>()
             buildList {
                 for (index in 0 until resources.length()) {
                     val resource = resources.getJSONObject(index)
@@ -528,15 +531,17 @@ object PlexApi {
                     )
 
                     if (uris.isEmpty()) continue
-                    add(
-                        PlexServer(
-                            name = resource.optString("name").ifEmpty { "Plex Media Server" },
-                            accessToken = resource.optString("accessToken").ifEmpty { token },
-                            connections = uris,
-                        )
+                    val server = PlexServer(
+                        name = resource.optString("name").ifEmpty { "Plex Media Server" },
+                        accessToken = resource.optString("accessToken").ifEmpty { token },
+                        connections = uris,
                     )
+                    if (resource.optBoolean("owned")) owned += server.accessToken
+                    add(server)
                 }
-            }
+            // The account's own servers first: signing in connects to the first that
+            // answers, and plex.tv lists a friend's shared server as readily as your own.
+            }.sortedBy { it.accessToken !in owned }
         }
     }
 
@@ -576,9 +581,17 @@ object PlexApi {
         }.distinct()
     }
 
-    /** The first address that actually answers, which is not knowable from the list alone. */
-    suspend fun firstReachable(server: PlexServer): String? =
-        server.connections.firstOrNull { reachable(server, it) }
+    /**
+     * The best address that actually answers, which is not knowable from the list alone.
+     * All are asked at once: one by one, a server away from home kept somebody waiting
+     * on every home address timing out in turn before the internet one was even tried.
+     */
+    suspend fun firstReachable(server: PlexServer): String? = coroutineScope {
+        val probes = server.connections.map { uri -> async { reachable(server, uri) } }
+        val best = server.connections.indices.firstOrNull { probes[it].await() }
+        probes.forEach { it.cancel() }
+        best?.let { server.connections[it] }
+    }
 
     /** Whether the server answers at this address, within the probe's few seconds. */
     suspend fun reachable(server: PlexServer, uri: String): Boolean = withContext(Dispatchers.IO) {

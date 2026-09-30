@@ -6,6 +6,10 @@ import tv.reely.plex.PlexDetail
 import tv.reely.plex.PlexItem
 import tv.reely.ui.DetailState
 import tv.reely.ui.HomeState
+import tv.reely.ui.Playback
+import tv.reely.ui.PlexState
+import tv.reely.ui.isPlaying
+import tv.reely.ui.sameTitle
 import tv.reely.ui.ReelyState
 import tv.reely.ui.withProgress
 import tv.reely.ui.withWatched
@@ -106,5 +110,18 @@ class ResumePointTest {
         val moved = state.withProgress("7", 300_000, 1_000_000, server = "http://a:32400")
         assertEquals(300_000L, moved.home.continueWatching[0].viewOffsetMs)
         assertEquals(0L, moved.home.continueWatching[1].viewOffsetMs)
+    }
+
+    @Test fun `the same number on another server is another title, and not what's playing`() {
+        val state = ReelyState(plex = PlexState(baseUrl = "http://a:32400"))
+        val onA = episode("7").copy(serverBase = "http://a:32400")
+        val onB = episode("7").copy(serverBase = "http://b:32400")
+        val unnamed = episode("7")
+        assertFalse(state.sameTitle(onA, onB))
+        assertTrue("no server given is the one connected", state.sameTitle(onA, unnamed))
+
+        val playing = Playback(title = "7", subtitle = null, url = "u", isLive = false, ratingKey = "7", serverBase = "http://a:32400")
+        assertTrue(state.isPlaying(playing, onA))
+        assertFalse(state.isPlaying(playing, onB))
     }
 }

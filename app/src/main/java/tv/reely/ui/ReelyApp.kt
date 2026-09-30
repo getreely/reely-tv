@@ -197,6 +197,12 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             if (state.plex.switchError == null) pickingProfile = false
         }
     }
+    LaunchedEffect(state.plex.askWho) {
+        if (state.plex.askWho) {
+            pickingProfile = true
+            viewModel.askedWho()
+        }
+    }
     if (pickingProfile && state.playback == null) {
         tv.reely.ui.screens.ProfilePicker(
             users = state.plex.homeUsers,
@@ -597,6 +603,8 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onStartLink = viewModel::startPlexLink,
                 onCancelLink = viewModel::cancelPlexLink,
                 onDismissPlexError = viewModel::dismissPlexError,
+                onRetryConnect = viewModel::retryConnect,
+                onSignOutPlex = viewModel::signOutPlex,
                 hidden = state.prefs.hiddenHomeRows,
                 requestRows = state.requests.rows,
                 requestBadge = state.requests::badgeFor,
@@ -622,6 +630,8 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onStartLink = viewModel::startPlexLink,
                 onCancelLink = viewModel::cancelPlexLink,
                 onDismissPlexError = viewModel::dismissPlexError,
+                onRetryConnect = viewModel::retryConnect,
+                onSignOutPlex = viewModel::signOutPlex,
                 onSetSort = { viewModel.setSort(route.kind, it) },
                 onToggleUnwatched = { viewModel.toggleUnwatchedOnly(route.kind) },
                 onSelectGenre = { viewModel.selectGenre(route.kind, it) },
@@ -652,7 +662,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 val detail = state.detail
                 if (detail == null) {
                     DetailPlaceholder(modifier = Modifier.fillMaxSize())
-                } else key(detail.ratingKey) {
+                } else key(detail.ratingKey, detail.serverBase) {
                     // One title's page to another, from "More like this", starts at the top
                     // of the new one rather than wherever the last one was scrolled to.
                     DetailScreen(
