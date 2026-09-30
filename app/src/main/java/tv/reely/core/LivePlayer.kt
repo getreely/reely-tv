@@ -48,6 +48,13 @@ class LivePlayer(context: Context) {
     private var loaded: String? = null
     private var retries = 0
 
+    /**
+     * Whether a channel is playing, in the guide's preview as much as full screen. The
+     * screensaver reads it: it came up over the preview with the sound still going.
+     */
+    private val _playing = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val playing: kotlinx.coroutines.flow.StateFlow<Boolean> = _playing
+
     init {
         player.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
@@ -77,6 +84,10 @@ class LivePlayer(context: Context) {
 
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_READY) retries = 0
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                _playing.value = isPlaying
             }
         })
     }

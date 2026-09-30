@@ -136,7 +136,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
 
     /*
      * The screensaver: up after the minutes set in Settings without a button, never while
-     * something plays. A press puts it away and does nothing else, down and up both, so
+     * something plays, the guide's live preview included. A press puts it away and does nothing else, down and up both, so
      * waking the screen doesn't also open whatever the cursor was on.
      */
     var lastPress by remember { mutableLongStateOf(0L) }
@@ -145,9 +145,11 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     val saverMinutes = state.prefs.screensaverMinutes
     // A reminder coming up counts as somebody being there: the screensaver makes way.
     LaunchedEffect(state.dueReminder) { if (state.dueReminder != null) lastPress++ }
-    LaunchedEffect(lastPress, saverMinutes, state.playback == null) {
+    // Live TV playing counts as watching wherever it is: the guide's preview too.
+    val livePlaying by viewModel.livePlayer.playing.collectAsState()
+    LaunchedEffect(lastPress, saverMinutes, state.playback == null, livePlaying) {
         saverUp = false
-        if (saverMinutes <= 0 || state.playback != null) return@LaunchedEffect
+        if (!screensaverMayCome(saverMinutes, state.playback != null, livePlaying)) return@LaunchedEffect
         delay(saverMinutes * 60_000L)
         saverUp = true
     }
@@ -1231,6 +1233,10 @@ private fun ConfirmExit(
         }
     }
 }
+
+/** Whether the screensaver may come up at all: switched on, and nothing on screen playing. */
+internal fun screensaverMayCome(minutes: Int, playerOpen: Boolean, livePlaying: Boolean): Boolean =
+    minutes > 0 && !playerOpen && !livePlaying
 
 /** What Back does, from where the cursor is. */
 internal enum class BackStep { CLOSE_EXIT, CLOSE_MENU, WALK_BACK, LIBRARY_HOME, UP_TO_TAB, ASK_EXIT }
