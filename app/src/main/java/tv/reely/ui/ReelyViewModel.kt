@@ -500,6 +500,12 @@ data class Playback(
      * forward to now, or its end, goes back to the channel live.
      */
     val timeshift: Timeshift? = null,
+    /**
+     * The queue is a playlist: it ends where the playlist does. Otherwise the end of a
+     * season carries on into the next one, and a playlist whose last item was an episode
+     * offered the rest of that show.
+     */
+    val playlist: Boolean = false,
     val mediaIndex: Int = 0,
     val chapters: List<tv.reely.plex.PlexChapter> = emptyList(),
     /** The file's part, and its sound and subtitle streams with the server's choice marked. */
@@ -1280,7 +1286,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val items = _state.value.playlist?.items?.filter { it.isPlayable }.orEmpty()
         if (items.isEmpty()) return
         val order = if (shuffle) items.shuffled() else items
-        play(order.first(), queue = order, resume = !shuffle)
+        play(order.first(), queue = order, resume = !shuffle, playlist = true)
     }
 
     /**
@@ -2422,6 +2428,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         queue: List<PlexItem> = emptyList(),
         resume: Boolean = true,
         mediaIndex: Int = 0,
+        playlist: Boolean = false,
     ): Job? {
         val plex = _state.value.plex
         val on = item.serverBase
@@ -2519,6 +2526,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                         serverBase = on,
                         queue = effectiveQueue,
                         queueIndex = effectiveQueue.indexOfFirst { entry -> entry.ratingKey == item.ratingKey },
+                        playlist = playlist,
                         transcoding = serverWorks,
                         audioConverted = convert != null,
                         transcodeSession = if (serverWorks) session else null,
@@ -2669,6 +2677,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun firstOfNextSeason(): PlexItem? {
         val plex = _state.value.plex
         val playback = _state.value.playback ?: return null
+        // A playlist ends where it does.
+        if (playback.playlist) return null
         val base = playback.serverBase ?: plex.baseUrl ?: return null
         val token = plex.tokenFor(playback.serverBase) ?: return null
         val current = playback.queue.getOrNull(playback.queueIndex)
@@ -2703,7 +2713,12 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val next = _state.value.upNext ?: return
         val queue = _state.value.playback?.queue.orEmpty()
         startingNext = true
-        val job = play(next, queue = queue.takeIf { list -> list.any { it.ratingKey == next.ratingKey } } ?: emptyList())
+        val inQueue = queue.any { it.ratingKey == next.ratingKey }
+        val job = play(
+            next,
+            queue = if (inQueue) queue else emptyList(),
+            playlist = inQueue && _state.value.playback?.playlist == true,
+        )
         if (job == null) {
             startingNext = false
             return
@@ -3595,7 +3610,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
         val next = playback.queue.getOrNull(playback.queueIndex + delta)
         if (next != null) {
-            play(next, queue = playback.queue)
+            play(next, queue = playback.queue, playlist = playback.playlist)
             return
         }
         // Off the end of a season. Up Next already carries on into the next one, so the
