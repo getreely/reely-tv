@@ -79,4 +79,18 @@ class ResumePointTest {
         assertFalse(unwatched.detail!!.detail!!.isWatched)
         assertTrue(unwatched.detail!!.episodes.none { it.isWatched })
     }
+
+    @Test fun `marked watched, it leaves a library showing only what's unwatched`() {
+        val grid = tv.reely.ui.BrowseState(items = listOf(episode("e1"), episode("e2")), unwatchedOnly = true)
+        val all = tv.reely.ui.BrowseState(items = listOf(episode("e1"), episode("e2")))
+        val state = ReelyState(
+            plex = tv.reely.ui.PlexState(
+                browse = mapOf(tv.reely.ui.LibraryKind.SHOWS to grid, tv.reely.ui.LibraryKind.MOVIES to all),
+            ),
+        )
+        val after = state.withWatched("e1", watched = true)
+        assertEquals(listOf("e2"), after.plex.browse.getValue(tv.reely.ui.LibraryKind.SHOWS).items.map { it.ratingKey })
+        // Everywhere else it stays, ticked.
+        assertTrue(after.plex.browse.getValue(tv.reely.ui.LibraryKind.MOVIES).items.first().isWatched)
+    }
 }

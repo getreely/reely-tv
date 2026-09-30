@@ -614,11 +614,20 @@ internal fun ReelyState.withWatched(ratingKey: String, watched: Boolean): ReelyS
             )
         },
     )
+    // A library showing only what's unwatched no longer shows it, as it wouldn't read again.
+    val sifted = if (!watched) marked else marked.copy(
+        plex = marked.plex.copy(
+            browse = marked.plex.browse.mapValues { (_, browse) ->
+                if (!browse.unwatchedOnly) browse
+                else browse.copy(items = browse.items.filterNot { it.ratingKey == ratingKey })
+            },
+        ),
+    )
     // A show or season marked as a whole marks the episodes on its page with it.
-    val page = marked.detail ?: return marked
+    val page = sifted.detail ?: return sifted
     val whole = page.detail?.ratingKey == ratingKey || page.selectedSeason?.ratingKey == ratingKey
-    if (!whole) return marked
-    return marked.copy(
+    if (!whole) return sifted
+    return sifted.copy(
         detail = page.copy(
             episodes = page.episodes.map { it.marked() },
             focusedEpisode = page.focusedEpisode?.marked(),
