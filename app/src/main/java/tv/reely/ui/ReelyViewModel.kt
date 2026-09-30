@@ -2258,19 +2258,17 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             // Arriving at the show itself means arriving where it's up to: the season and
             // episode to watch next, as Plex's own apps open a show. It opened on the first
             // season listed — Specials, as often as not — and Play started that.
-            val upTo = if (route.seasonKey == null) {
-                runCatching { PlexApi.episodesOf(base, token, ratingKey) }.getOrNull()
-                    ?.let(PlexApi::nextEpisode)
-            } else null
-            if (_state.value.detail?.ratingKey != ratingKey) return@launch
+            // The server says which with the page itself; failing that, the first season
+            // that isn't Specials.
+            val upTo = detail.onDeckKey.takeIf { route.seasonKey == null }
             val season = seasons.firstOrNull { it.ratingKey == route.seasonKey }
-                ?: upTo?.let { next -> seasons.firstOrNull { it.ratingKey == next.parentRatingKey } }
+                ?: upTo?.let { seasons.firstOrNull { it.ratingKey == detail.onDeckSeasonKey } }
                 ?: seasons.firstOrNull { (it.index ?: 0) > 0 }
                 ?: seasons.firstOrNull()
             if (season == null) {
                 onThisPage { it.copy(busy = false) }
             } else {
-                selectSeason(season, focusEpisodeKey = route.episodeKey ?: upTo?.ratingKey)
+                selectSeason(season, focusEpisodeKey = route.episodeKey ?: upTo)
             }
         }
     }

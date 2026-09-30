@@ -275,6 +275,9 @@ data class PlexDetail(
     val guid: String? = null,
     /** For a show or season: how many of its episodes have been watched. */
     val viewedLeafCount: Int = 0,
+    /** For a show: the episode to watch next, and its season, as the server has it. */
+    val onDeckKey: String? = null,
+    val onDeckSeasonKey: String? = null,
 ) {
     val isShow: Boolean get() = type == "show"
 
@@ -805,9 +808,14 @@ object PlexApi {
 
     suspend fun detail(base: String, token: String, ratingKey: String): PlexDetail? =
         withContext(Dispatchers.IO) {
-            val entry = container("$base/library/metadata/$ratingKey", token)
+            // With a show's next episode, as Plex's own apps ask for it: where the show's
+            // page opens, without reading every episode it has to work it out.
+            val entry = container("$base/library/metadata/$ratingKey?includeOnDeck=1", token)
                 .optJSONArray("Metadata")?.optJSONObject(0) ?: return@withContext null
+            val onDeck = entry.optJSONObject("OnDeck")?.optJSONArray("Metadata")?.optJSONObject(0)
             PlexDetail(
+                onDeckKey = onDeck?.optString("ratingKey")?.takeIf(String::isNotEmpty),
+                onDeckSeasonKey = onDeck?.optString("parentRatingKey")?.takeIf(String::isNotEmpty),
                 ratingKey = entry.optString("ratingKey"),
                 type = entry.optString("type"),
                 title = entry.optString("title"),
