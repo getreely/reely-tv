@@ -159,6 +159,21 @@ private const val AUDIO_NOTICE_MS = 9_000L
 private const val RECONNECT_TRIES = 3
 private const val RECONNECT_WAIT_MS = 3_000L
 
+/** What Play does: see [livePlayAction]. */
+internal enum class LivePlay { TOGGLE, REJOIN, FROM_PAUSE }
+
+/**
+ * Play or pause. Coming back from a pause on live television is coming back to now —
+ * unless the channel keeps an archive and the pause was long enough ago to be behind
+ * now, when it carries on from the pause, out of the archive.
+ */
+internal fun livePlayAction(isLive: Boolean, isPlaying: Boolean, rewindable: Boolean, pausedAt: Long?, now: Long): LivePlay =
+    when {
+        !isLive || isPlaying -> LivePlay.TOGGLE
+        rewindable && pausedAt != null && pausedAt < now - LIVE_SLACK_MS -> LivePlay.FROM_PAUSE
+        else -> LivePlay.REJOIN
+    }
+
 /** How close to now counts as live: a scrub let go this near the live point stays live. */
 private const val LIVE_SLACK_MS = 20_000L
 
@@ -225,7 +240,7 @@ fun PlayerScreen(
      * null for a channel that can't be rewound. See ReelyViewModel.liveWindow.
      */
     liveWindow: tv.reely.ui.Timeshift? = null,
-    /** Back into the programme on now, this far from its start. */
+    /** Back to this moment, in epoch milliseconds, out of the channel's archive. */
     onTimeshift: (Long) -> Unit = {},
     /** From behind, back to the channel as it is now. */
     onGoLive: () -> Unit = {},
@@ -846,7 +861,7 @@ fun PlayerScreen(
     val liveSpanMs = liveWindow?.let { (it.stop - it.start) * 1000 } ?: 0L
     val liveEdgeMs = liveWindow?.let { (nowMs - it.start * 1000).coerceIn(0, liveSpanMs) } ?: 0L
 
-    /** Where in the programme live television was paused, to carry on from there. */
+    /** When live television was paused, by the clock, to carry on from there. */
     var livePausedAt by remember(playback.url) { mutableStateOf<Long?>(null) }
 
     /*
@@ -856,13 +871,12 @@ fun PlayerScreen(
      * an archive: then it carries on from the pause, out of that, as a recorder would.
      */
     fun playPause() {
-        val pausedAt = livePausedAt
-        when {
-            playback.isLive && !exoPlayer.isPlaying && liveRewind && pausedAt != null &&
-                pausedAt < liveEdgeMs - LIVE_SLACK_MS -> onTimeshift(pausedAt)
-            playback.isLive && !exoPlayer.isPlaying -> livePlayer.rejoin()
-            else -> {
-                if (playback.isLive && liveRewind) livePausedAt = liveEdgeMs
+        val now = System.currentTimeMillis()
+        when (livePlayAction(playback.isLive, exoPlayer.isPlaying, liveRewind, livePausedAt, now)) {
+            LivePlay.FROM_PAUSE -> livePausedAt?.let(onTimeshift)
+            LivePlay.REJOIN -> livePlayer.rejoin()
+            LivePlay.TOGGLE -> {
+                if (playback.isLive && liveRewind) livePausedAt = now
                 togglePlay(exoPlayer)
             }
         }
@@ -1443,7 +1457,9 @@ fun PlayerScreen(
                     interaction++
                     when {
                         // Let go behind now: out of the archive from there. At now: stays live.
-                        liveRewind -> if (to < liveEdgeMs - LIVE_SLACK_MS) onTimeshift(to)
+                        liveRewind -> if (to < liveEdgeMs - LIVE_SLACK_MS) {
+                            liveWindow?.let { window -> onTimeshift(window.start * 1000 + to) }
+                        }
                         // Caught up with now from behind: the channel live again.
                         behindLive && to >= liveEdgeMs - LIVE_SLACK_MS -> onGoLive()
                         else -> {

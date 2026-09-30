@@ -28,6 +28,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -213,12 +214,24 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     val livePlayers = remember { listOf(viewModel.livePlayer.player) }
     tv.reely.ui.components.FollowAudioOutput(livePlayers, state.prefs.audioOutput)
 
+    /*
+     * The programme the live bar spans, asked again every little while as well as when
+     * anything changes: programmes end with nothing else changing, and a bar left on the
+     * last one pointed a rewind at the wrong programme.
+     */
+    val liveWindow by produceState(viewModel.liveWindow(), state.playback, state.guide.programmes, state.live) {
+        while (true) {
+            value = viewModel.liveWindow()
+            delay(LIVE_WINDOW_REFRESH_MS)
+        }
+    }
+
     val playback = state.playback
     if (playback != null) {
         PlayerScreen(
             playback = playback,
             onSetAudioOutput = viewModel::setAudioOutput,
-            liveWindow = remember(state.playback, state.guide.programmes, state.live) { viewModel.liveWindow() },
+            liveWindow = liveWindow,
             onTimeshift = viewModel::timeshiftTo,
             onGoLive = viewModel::goLive,
             prefs = state.prefs,
@@ -1301,6 +1314,9 @@ internal fun Modifier.pageArea(upTo: FocusRequester): Modifier = this
         }
     }
     .focusGroup()
+
+/** How often the live bar's programme is looked at again. */
+private const val LIVE_WINDOW_REFRESH_MS = 15_000L
 
 /** How long nothing may have the cursor before it is put back. See the net in ReelyApp. */
 private const val FOCUS_RESCUE_DELAY_MS = 120L

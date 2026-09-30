@@ -17,7 +17,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import tv.reely.screens.Shots
+import tv.reely.ui.screens.LivePlay
 import tv.reely.ui.screens.PlayerScreen
+import tv.reely.ui.screens.livePlayAction
 import tv.reely.ui.theme.ReelyTheme
 
 /**
@@ -32,7 +34,7 @@ class LiveRewindTest {
 
     private val nowS = System.currentTimeMillis() / 1000
     // Twenty minutes into an hour-long programme.
-    private val window = Timeshift(channelIndex = 3, start = nowS - 20 * 60, stop = nowS + 40 * 60)
+    private val window = Timeshift(streamId = 3, start = nowS - 20 * 60, stop = nowS + 40 * 60)
     private val timeshifts = mutableListOf<Long>()
     private var wentLive = 0
 
@@ -72,8 +74,9 @@ class LiveRewindTest {
         player(Playback(title = "News", subtitle = null, url = "", isLive = true, channelIndex = 3))
         press(Key.MediaRewind)
         assertEquals("one step back, out of the archive", 1, timeshifts.size)
-        val edge = 20 * 60_000L
-        assertTrue("about 30 s behind now: ${timeshifts[0]}", timeshifts[0] in (edge - 40_000)..(edge - 20_000))
+        // By the clock: about 30 seconds before now.
+        val behind = System.currentTimeMillis() - timeshifts[0]
+        assertTrue("about 30 s behind now: $behind", behind in 20_000..45_000)
     }
 
     @Test fun `fast-forward on live stays live`() {
@@ -93,5 +96,17 @@ class LiveRewindTest {
         compose.onNodeWithText("Go live").performClick()
         compose.waitForIdle()
         assertEquals(1, wentLive)
+    }
+
+    @Test fun `play after a pause on live carries on from the pause, where the channel can`() {
+        val now = System.currentTimeMillis()
+        val paused = now - 5 * 60_000
+        assertEquals(LivePlay.FROM_PAUSE, livePlayAction(isLive = true, isPlaying = false, rewindable = true, pausedAt = paused, now = now))
+        // No archive: back to now, the only place there is.
+        assertEquals(LivePlay.REJOIN, livePlayAction(isLive = true, isPlaying = false, rewindable = false, pausedAt = paused, now = now))
+        // A moment's pause is still live.
+        assertEquals(LivePlay.REJOIN, livePlayAction(isLive = true, isPlaying = false, rewindable = true, pausedAt = now - 5_000, now = now))
+        assertEquals(LivePlay.TOGGLE, livePlayAction(isLive = true, isPlaying = true, rewindable = true, pausedAt = null, now = now))
+        assertEquals(LivePlay.TOGGLE, livePlayAction(isLive = false, isPlaying = false, rewindable = false, pausedAt = null, now = now))
     }
 }

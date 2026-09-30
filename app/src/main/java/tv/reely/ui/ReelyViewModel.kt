@@ -552,8 +552,14 @@ enum class HomeRow(val id: String, val title: String, val fromReely: Boolean = f
 /** How long after starting the app it looks for a newer version. */
 private const val UPDATE_CHECK_DELAY_MS = 4_000L
 
-/** A live channel rewound into its archive: which channel, and the programme's span in epoch seconds. */
-data class Timeshift(val channelIndex: Int, val start: Long, val stop: Long)
+/**
+ * A live channel rewound into its archive: which channel, by its id — its place in a list
+ * changes with the category open — and the programme's span in epoch seconds.
+ */
+data class Timeshift(val streamId: Int, val start: Long, val stop: Long)
+
+/** How near now counts as caught up with live, behind it in the archive. */
+private const val LIVE_CATCH_UP_MS = 20_000L
 
 /** How soon Home is asked for again while the server isn't answering. */
 private const val HOME_RETRY_MS = 30_000L
@@ -2555,9 +2561,14 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         if (startingNext) return
         val playback = _state.value.playback ?: return
         if (playback.isLive) return
-        // Caught up with the channel, or reached the end of the programme: live again.
-        if (playback.timeshift != null) {
-            goLive()
+        // The end of a programme watched behind live. Still behind — paused across the
+        // change of programme, say — the next one carries on from the archive; caught up
+        // with now, the channel live again. Going straight to live skipped whatever there
+        // was in between.
+        playback.timeshift?.let { timeshift ->
+            val next = timeshift.stop * 1000
+            val behind = next < System.currentTimeMillis() - LIVE_CATCH_UP_MS
+            if (!behind || !timeshiftTo(next)) goLive()
             return
         }
         // The sleep timer said this episode was the last: out, with no Up Next.
@@ -3868,16 +3879,30 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
      * channel with an archive, and a programme it still holds. Read from the guide, or
      * the panel's own now-and-next where the guide hasn't got it.
      */
-    fun startOverProgramme(): Pair<XtreamChannel, tv.reely.xtream.EpgProgramme>? {
+    fun startOverProgramme(): Pair<XtreamChannel, tv.reely.xtream.EpgProgramme>? =
+        if (_state.value.playback?.isLive == true) rewindableAt(System.currentTimeMillis() / 1000) else null
+
+    /**
+     * The live channel playing, and its programme at [at] (epoch seconds), when the
+     * channel's archive still holds that. Read from the guide, or the panel's own
+     * now-and-next where the guide hasn't got it.
+     */
+    private fun rewindableAt(at: Long): Pair<XtreamChannel, tv.reely.xtream.EpgProgramme>? {
         val state = _state.value
-        val playback = state.playback?.takeIf { it.isLive } ?: return null
-        val channel = state.live.channels.getOrNull(playback.channelIndex) ?: return null
+        val playback = state.playback ?: return null
+        // Live, the channel playing; behind live, the one it was rewound from.
+        val channel = if (playback.isLive) {
+            state.live.channels.getOrNull(playback.channelIndex)
+        } else {
+            val id = playback.timeshift?.streamId ?: return null
+            state.live.channels.firstOrNull { it.streamId == id } ?: allChannels?.firstOrNull { it.streamId == id }
+        } ?: return null
         val now = System.currentTimeMillis() / 1000
         val from = channel.catchUpFrom(now) ?: return null
         val listed = channel.epgChannelId?.let { state.guide.programmes[it] }.orEmpty()
-            .firstOrNull { it.isOnAt(now) }
+            .firstOrNull { it.isOnAt(at) }
         val programme = listed ?: state.live.nowNext(channel.streamId)
-            .firstOrNull { it.progressAt(now) != null }
+            .firstOrNull { at in it.startEpochSeconds until it.endEpochSeconds }
             ?.let {
                 tv.reely.xtream.EpgProgramme(
                     channel.epgChannelId.orEmpty(), it.startEpochSeconds, it.endEpochSeconds, it.title, it.description,
@@ -3889,7 +3914,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     /** The programme on now, from its beginning, out of the channel's archive. */
     fun startOver() {
         val (channel, programme) = startOverProgramme() ?: return
-        playCatchUp(channel, programme, timeshift = Timeshift(_state.value.playback!!.channelIndex, programme.start, programme.stop))
+        playCatchUp(channel, programme, timeshift = Timeshift(channel.streamId, programme.start, programme.stop))
     }
 
     /**
@@ -3901,25 +3926,32 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     fun liveWindow(): Timeshift? {
         val playback = _state.value.playback ?: return null
         playback.timeshift?.let { return it }
-        val (_, programme) = startOverProgramme() ?: return null
-        return Timeshift(playback.channelIndex, programme.start, programme.stop)
+        val (channel, programme) = startOverProgramme() ?: return null
+        return Timeshift(channel.streamId, programme.start, programme.stop)
     }
 
-    /** Back into the programme on now, [offsetMs] from its start, out of the archive. */
-    fun timeshiftTo(offsetMs: Long) {
-        val playback = _state.value.playback ?: return
-        val (channel, programme) = startOverProgramme() ?: return
+    /**
+     * Back to [atMs], a moment (epoch milliseconds) behind now, out of the archive: the
+     * programme on at that moment, from there. By the clock rather than by a place in a
+     * programme, so a bar or a pause from before the programme changed still goes where
+     * it meant.
+     */
+    fun timeshiftTo(atMs: Long): Boolean {
+        val (channel, programme) = rewindableAt(atMs / 1000) ?: return false
         playCatchUp(
             channel, programme,
-            startAtMs = offsetMs.coerceAtLeast(0),
-            timeshift = Timeshift(playback.channelIndex, programme.start, programme.stop),
+            startAtMs = (atMs - programme.start * 1000).coerceAtLeast(0),
+            timeshift = Timeshift(channel.streamId, programme.start, programme.stop),
         )
+        return true
     }
 
-    /** From behind, back to the channel as it is now. */
+    /** From behind, back to the channel as it is now: that channel, wherever it is in the lists. */
     fun goLive() {
         val timeshift = _state.value.playback?.timeshift ?: return
-        playChannel(timeshift.channelIndex)
+        val channel = _state.value.live.channels.firstOrNull { it.streamId == timeshift.streamId }
+            ?: allChannels?.firstOrNull { it.streamId == timeshift.streamId }
+        if (channel != null) tuneChannel(channel) else stopPlayback()
     }
 
     /**
