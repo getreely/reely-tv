@@ -273,13 +273,20 @@ data class PlexDetail(
     val versions: List<PlexVersion> = emptyList(),
     /** Plex's own id for the title, "plex://movie/…", shared by every server that has it. */
     val guid: String? = null,
+    /** For a show or season: how many of its episodes have been watched. */
+    val viewedLeafCount: Int = 0,
 ) {
     val isShow: Boolean get() = type == "show"
 
+    /**
+     * As for an item: a show or season is watched when every episode under it has been.
+     * Its view count is how many views there have been, so one episode watched made the
+     * whole show read as watched, and its page offered to unwatch it.
+     */
     val isWatched: Boolean
         get() = when (type) {
             "movie", "episode" -> viewCount > 0
-            "show", "season" -> leafCount > 0 && childCount >= 0 && viewCount > 0
+            "show", "season" -> leafCount > 0 && viewedLeafCount >= leafCount
             else -> false
         }
 
@@ -808,6 +815,7 @@ object PlexApi {
                 audienceRating = entry.optDouble("audienceRating").takeIf { !it.isNaN() && it > 0 },
                 airDate = entry.optString("originallyAvailableAt").takeIf(String::isNotBlank),
                 viewCount = entry.optInt("viewCount"),
+                viewedLeafCount = entry.optInt("viewedLeafCount"),
                 studio = entry.optString("studio").takeIf(String::isNotBlank),
                 thumb = entry.optString("thumb").takeIf(String::isNotEmpty),
                 art = entry.optString("art").takeIf(String::isNotEmpty),

@@ -154,6 +154,9 @@ private const val CONTROLS_TIMEOUT_MS = 6_000L
 
 /** Long enough to read twice from across a room, short enough not to sit on the picture. */
 private const val AUDIO_NOTICE_MS = 9_000L
+
+/** How long nothing in the player may have the cursor before it's put back. */
+private const val PLAYER_RESCUE_DELAY_MS = 150L
 private const val NOTICE_MS = 2_500L
 /** A moment to ask the server for a single preview picture of, to see if it gives them. */
 private const val PROBE_FRAME_MS = 60_000L
@@ -804,9 +807,33 @@ fun PlayerScreen(
     // The panel last open, so closing it puts the cursor back on the button that opened
     // it. Going to Play instead meant finding Subtitles again to change your mind.
     var closedPanel by remember { mutableStateOf<Panel?>(null) }
+
+    /*
+     * The net under the player, as the app has under its pages. When whatever has the
+     * cursor is taken away — a list's rows replaced by what it was loading, a device
+     * disconnected from the sound menu — it has nowhere to be, and the remote goes dead
+     * until Back. The player sits outside the app's own net, so it keeps one of its own:
+     * the cursor gone, or left on the bare picture behind a menu that's open, is put back
+     * where it belongs.
+     */
+    var hasFocus by remember { mutableStateOf(true) }
+    var bareFocus by remember { mutableStateOf(false) }
+    var refocus by remember { mutableIntStateOf(0) }
+    val lostCursor = !hasFocus || (bareFocus && (panel != Panel.NONE || tileMenu != null || postPlay))
+    LaunchedEffect(lostCursor) {
+        if (!lostCursor) return@LaunchedEffect
+        // Anything moving the cursor on purpose has a moment to do it first.
+        delay(PLAYER_RESCUE_DELAY_MS)
+        refocus++
+    }
+    val trackFocus = Modifier.onFocusChanged {
+        hasFocus = it.hasFocus
+        bareFocus = it.isFocused
+    }
+
     LaunchedEffect(
         controlsVisible, panel, guideOpen, tileMenu, playback.isLive, playback.url,
-        postPlay,
+        postPlay, refocus,
     ) {
         if (guideOpen) return@LaunchedEffect
         val cameFrom = closedPanel
@@ -860,6 +887,7 @@ fun PlayerScreen(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
+            .then(trackFocus)
             .focusRequester(rootFocus)
             .focusable()
             .onPreviewKeyEvent { event ->

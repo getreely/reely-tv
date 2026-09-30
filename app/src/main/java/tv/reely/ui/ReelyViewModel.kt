@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.withContext
 import tv.reely.core.AudioPlan
@@ -558,20 +559,88 @@ internal fun ReelyState.withProgress(ratingKey: String, positionMs: Long, durati
     val watched = durationMs > 0 && positionMs >= durationMs * WATCHED_FRACTION
     val offset = if (watched) 0L else positionMs
     fun seen(count: Int) = if (watched) maxOf(count, 1) else count
-    fun PlexItem.moved() = if (this.ratingKey != ratingKey) this else copy(viewOffsetMs = offset, viewCount = seen(viewCount))
-    return copy(
-        detail = detail?.let { page ->
-            page.copy(
-                detail = page.detail?.let {
-                    if (it.ratingKey != ratingKey) it else it.copy(viewOffsetMs = offset, viewCount = seen(it.viewCount))
-                },
-                episodes = page.episodes.map { it.moved() },
-                focusedEpisode = page.focusedEpisode?.moved(),
+    return patchItem(
+        ratingKey,
+        change = { it.copy(viewOffsetMs = offset, viewCount = seen(it.viewCount)) },
+        changeDetail = { it.copy(viewOffsetMs = offset, viewCount = seen(it.viewCount)) },
+    )
+}
+
+/**
+ * Watched or not, on every screen and row showing it: a film's own page, a show's and its
+ * episodes, the libraries, Home, search, a person's page, a playlist. Marking a film
+ * watched on its own page used to change everywhere but that page, whose button then
+ * offered to mark it watched again.
+ */
+internal fun ReelyState.withWatched(ratingKey: String, watched: Boolean): ReelyState {
+    fun PlexItem.marked() = copy(
+        viewCount = if (watched) maxOf(1, viewCount) else 0,
+        viewOffsetMs = if (watched) 0 else viewOffsetMs,
+        viewedLeafCount = if (type == "show" || type == "season") (if (watched) leafCount else 0) else viewedLeafCount,
+    )
+    val marked = patchItem(
+        ratingKey,
+        change = { it.marked() },
+        changeDetail = {
+            it.copy(
+                viewCount = if (watched) maxOf(1, it.viewCount) else 0,
+                viewOffsetMs = if (watched) 0 else it.viewOffsetMs,
+                viewedLeafCount = if (watched) it.leafCount else 0,
             )
         },
+    )
+    // A show or season marked as a whole marks the episodes on its page with it.
+    val page = marked.detail ?: return marked
+    val whole = page.detail?.ratingKey == ratingKey || page.selectedSeason?.ratingKey == ratingKey
+    if (!whole) return marked
+    return marked.copy(
+        detail = page.copy(
+            episodes = page.episodes.map { it.marked() },
+            focusedEpisode = page.focusedEpisode?.marked(),
+            seasons = if (page.detail?.ratingKey == ratingKey) page.seasons.map { it.marked() } else page.seasons,
+        ),
+    )
+}
+
+/** One title changed, on every screen and row holding a copy of it. */
+internal fun ReelyState.patchItem(
+    ratingKey: String,
+    change: (PlexItem) -> PlexItem,
+    changeDetail: (tv.reely.plex.PlexDetail) -> tv.reely.plex.PlexDetail,
+): ReelyState {
+    fun one(item: PlexItem) = if (item.ratingKey == ratingKey) change(item) else item
+    fun all(items: List<PlexItem>) = items.map(::one)
+    return copy(
+        focused = focused?.let(::one),
+        upNext = upNext?.let(::one),
         home = home.copy(
-            continueWatching = home.continueWatching.map { it.moved() },
-            recentMovies = home.recentMovies.map { it.moved() },
+            continueWatching = all(home.continueWatching),
+            recentEpisodes = home.recentEpisodes.map { it.copy(newest = one(it.newest)) },
+            recentMovies = all(home.recentMovies),
+            watchlist = all(home.watchlist),
+        ),
+        plex = plex.copy(
+            browse = plex.browse.mapValues { (_, browse) ->
+                browse.copy(items = all(browse.items), released = all(browse.released))
+            },
+        ),
+        detail = detail?.let { page ->
+            page.copy(
+                detail = page.detail?.let { if (it.ratingKey == ratingKey) changeDetail(it) else it },
+                seasons = all(page.seasons),
+                selectedSeason = page.selectedSeason?.let(::one),
+                episodes = all(page.episodes),
+                focusedEpisode = page.focusedEpisode?.let(::one),
+                related = all(page.related),
+                members = all(page.members),
+            )
+        },
+        person = person?.let { it.copy(items = all(it.items)) },
+        playlist = playlist?.let { it.copy(items = all(it.items)) },
+        search = search.copy(
+            results = all(search.results),
+            more = all(search.more),
+            collections = all(search.collections),
         ),
     )
 }
@@ -1540,6 +1609,15 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
      * Browsing a library is still that library's server's business. It is only the rows
      * that span them.
      */
+    private var homeGeneration = 0
+
+    /**
+     * Changes sent to Plex go one at a time, in the order they were made. Watched then
+     * Unwatch in quick succession could otherwise reach the server the other way round,
+     * leaving it the opposite of what the screen shows.
+     */
+    private val writes = kotlinx.coroutines.sync.Mutex()
+
     fun refreshHome() {
         // Anything asked for that has arrived, said on Home as it refreshes.
         checkReadyRequests()
@@ -1551,6 +1629,10 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         }
         if (sources.isEmpty()) return
 
+        // Several can be under way at once — one after stopping, another after marking
+        // something watched — and the one asked for last is the one that counts. An
+        // earlier one finishing later would put back rows from before the change.
+        val generation = ++homeGeneration
         viewModelScope.launch {
             _state.update { it.copy(home = it.home.copy(busy = true, error = null)) }
 
@@ -1596,6 +1678,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 if (logo != null || type != "episode") this
                 else copy(logo = showLogos[serverBase to grandparentRatingKey])
 
+            if (generation != homeGeneration) return@launch
             _state.update {
                 it.copy(
                     home = HomeState(
@@ -2013,21 +2096,24 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
 
+        // Only onto this title's page. Leaving it quickly for another, the answer for this
+        // one could arrive late and fill the other page with it.
+        fun onThisPage(change: (DetailState) -> DetailState) = _state.update { current ->
+            val page = current.detail
+            if (page == null || page.ratingKey != ratingKey) current else current.copy(detail = change(page))
+        }
         viewModelScope.launch {
             val detail = runCatching { PlexApi.detail(base, token, ratingKey) }.getOrElse { failure ->
-                _state.update {
-                    it.copy(detail = it.detail?.copy(busy = false, error = failure.readable()))
-                }
+                onThisPage { it.copy(busy = false, error = failure.readable()) }
                 return@launch
             }
             if (detail == null) {
-                _state.update {
-                    it.copy(detail = it.detail?.copy(busy = false, error = "This title isn't available."))
-                }
+                onThisPage { it.copy(busy = false, error = "This title isn't available.") }
                 return@launch
             }
+            if (_state.value.detail?.ratingKey != ratingKey) return@launch
 
-            _state.update { it.copy(detail = it.detail?.copy(detail = detail, busy = detail.isShow)) }
+            onThisPage { it.copy(detail = detail, busy = detail.isShow) }
             startTheme()
 
             launch {
@@ -2060,25 +2146,32 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             val seasons = runCatching { PlexApi.children(base, token, ratingKey) }
                 .getOrElse { emptyList() }
                 .filter { it.type == "season" }
-            _state.update { it.copy(detail = it.detail?.copy(seasons = seasons, busy = seasons.isNotEmpty())) }
+            if (_state.value.detail?.ratingKey != ratingKey) return@launch
+            onThisPage { it.copy(seasons = seasons, busy = seasons.isNotEmpty()) }
 
             // Arriving from a row means arriving at one episode, not at the top of the show.
             val season = seasons.firstOrNull { it.ratingKey == route.seasonKey }
                 ?: seasons.firstOrNull()
             if (season == null) {
-                _state.update { it.copy(detail = it.detail?.copy(busy = false)) }
+                onThisPage { it.copy(busy = false) }
             } else {
                 selectSeason(season, focusEpisodeKey = route.episodeKey)
             }
         }
     }
 
+    private var seasonJob: Job? = null
+
     fun selectSeason(season: PlexItem, focusEpisodeKey: String? = null) {
         val plex = _state.value.plex
         val on = season.serverBase ?: _state.value.detail?.serverBase
         val base = on ?: plex.baseUrl ?: return
         val token = plex.tokenFor(on) ?: return
-        viewModelScope.launch {
+        // The season chosen last is the one whose episodes show. Moving along the seasons
+        // quickly, an earlier one's episodes could arrive after a later one's and show
+        // under it.
+        seasonJob?.cancel()
+        seasonJob = viewModelScope.launch {
             _state.update {
                 it.copy(
                     detail = it.detail?.copy(
@@ -2091,6 +2184,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             }
             val episodes = runCatching { PlexApi.children(base, token, season.ratingKey) }
                 .getOrElse { emptyList() }
+            if (_state.value.detail?.selectedSeason?.ratingKey != season.ratingKey) return@launch
             // Arriving from a row lands on the episode that row was about. Choosing a
             // season by hand has no such episode in mind, and leaving it on nothing meant
             // the rail kept the previous season's scroll and the cursor had nowhere to go.
@@ -2182,7 +2276,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         // Straight away: waiting on Plex's answer made the button feel broken.
         mark(on)
         viewModelScope.launch {
-            runCatching { PlexApi.setWatchlisted(token, guid, on) }
+            writes.withLock { runCatching { PlexApi.setWatchlisted(token, guid, on) } }
                 .onSuccess { refreshHome() }
                 .onFailure { failure ->
                     mark(!on)
@@ -2213,6 +2307,14 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val on = item.serverBase
         val base = on ?: plex.baseUrl ?: return null
         val token = plex.tokenFor(on) ?: return null
+
+        // The next episode taking over from one still playing — Up Next, its countdown,
+        // the skip button. The one finishing is told to Plex as stopped where it got to,
+        // and its tick and progress change on the pages that show it. Without this it was
+        // left playing as far as the server knew, and ticked on none of them.
+        _state.value.playback
+            ?.takeIf { !it.isLive && it.ratingKey != null && it.ratingKey != item.ratingKey }
+            ?.let { finishing -> endSitting(finishing, lastPositionOf(finishing)) }
 
         return viewModelScope.launch {
             val resolved = runCatching { PlexApi.playback(base, token, item.ratingKey, mediaIndex) }
@@ -2631,6 +2733,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val base = playback.serverBase ?: plex.baseUrl ?: return
         val token = plex.tokenFor(playback.serverBase) ?: return
         val session = sessionFor(ratingKey)
+        lastPosition = ratingKey to positionMs
         timelineJob?.cancel()
         timelineJob = viewModelScope.launch {
             runCatching {
@@ -2658,7 +2761,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val base = playback.serverBase ?: plex.baseUrl ?: return
         val token = plex.tokenFor(playback.serverBase) ?: return
         viewModelScope.launch {
-            PlexApi.selectStream(base, token, partId, audioStreamId, subtitleStreamId)
+            writes.withLock { runCatching { PlexApi.selectStream(base, token, partId, audioStreamId, subtitleStreamId) } }
         }
     }
 
@@ -2794,6 +2897,46 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     private fun keepProgress(ratingKey: String, positionMs: Long, durationMs: Long) =
         _state.update { it.withProgress(ratingKey, positionMs, durationMs) }
 
+    /** Where the player last said it was, for the thing it said it about. */
+    private var lastPosition: Pair<String, Long>? = null
+
+    private fun lastPositionOf(playback: Playback): Long =
+        lastPosition?.takeIf { it.first == playback.ratingKey }?.second ?: 0L
+
+    /**
+     * The end of watching one thing: its resume point and tick on the pages showing it,
+     * and Plex told it stopped there. After any report still on its way, since one sent a
+     * moment earlier and arriving after this would put Plex back up to ten seconds.
+     */
+    private fun endSitting(playback: Playback, positionMs: Long) {
+        val ratingKey = playback.ratingKey ?: return
+        if (positionMs <= 0) return
+        keepProgress(ratingKey, positionMs, playback.durationMs)
+        val plex = _state.value.plex
+        val base = playback.serverBase ?: plex.baseUrl ?: return
+        val token = plex.tokenFor(playback.serverBase) ?: return
+        val session = sessionFor(ratingKey)
+        val earlier = timelineJob
+        // Its own job: the next episode's first report cancels the one before it, and
+        // must not take this with it.
+        viewModelScope.launch {
+            earlier?.cancelAndJoin()
+            runCatching {
+                PlexApi.reportTimeline(
+                    base = base,
+                    token = token,
+                    ratingKey = ratingKey,
+                    positionMs = positionMs,
+                    durationMs = playback.durationMs,
+                    state = "stopped",
+                    sessionId = session,
+                )
+            }
+            refreshHome()
+        }
+        lastPosition = null
+    }
+
     fun stopPlayback(positionMs: Long = 0) {
         // Back to the show's page on the episode that was playing, not the one it opened at.
         _state.value.playback?.takeIf { !it.isLive }?.let { playing ->
@@ -2802,32 +2945,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         releaseTranscode()
         if (_state.value.playback?.isLive == true) livePlayer.stop()
         _state.update { it.copy(multiview = emptyList()) }
-        val playback = _state.value.playback
-        val ratingKey = playback?.ratingKey
-        val plex = _state.value.plex
-        val base = playback?.serverBase ?: plex.baseUrl
-        val token = plex.tokenFor(playback?.serverBase)
-        if (ratingKey != null && positionMs > 0) keepProgress(ratingKey, positionMs, playback.durationMs)
-        if (ratingKey != null && base != null && token != null && positionMs > 0) {
-            // After any report still on its way: one sent a moment earlier and arriving
-            // after this would put Plex back up to ten seconds behind where it stopped.
-            val earlier = timelineJob
-            timelineJob = viewModelScope.launch {
-                earlier?.cancelAndJoin()
-                runCatching {
-                    PlexApi.reportTimeline(
-                        base = base,
-                        token = token,
-                        ratingKey = ratingKey,
-                        positionMs = positionMs,
-                        durationMs = playback.durationMs,
-                        state = "stopped",
-                        sessionId = sessionFor(ratingKey),
-                    )
-                }
-                refreshHome()
-            }
-        }
+        _state.value.playback?.let { endSitting(it, positionMs) }
         // A later play of the same thing is a new sitting, so it gets a new identifier.
         timelineSessionFor = null
         _state.update { it.copy(playback = null, upNext = null, sleep = null) }
@@ -3020,7 +3138,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
         applyWatched(item.ratingKey, watched)
         viewModelScope.launch {
-            val ok = runCatching { PlexApi.setWatched(base, token, item.ratingKey, watched) }.isSuccess
+            val ok = writes.withLock { runCatching { PlexApi.setWatched(base, token, item.ratingKey, watched) }.isSuccess }
             if (!ok) {
                 applyWatched(item.ratingKey, !watched)
                 reportPlaybackProblem("Couldn't mark that as ${if (watched) "watched" else "unwatched"}.")
@@ -3038,7 +3156,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val before = _state.value.home.continueWatching
         _state.update { it.copy(home = it.home.copy(continueWatching = before.filterNot { entry -> entry.listKey == item.listKey })) }
         viewModelScope.launch {
-            val ok = runCatching { PlexApi.removeFromContinueWatching(base, token, item.ratingKey) }.isSuccess
+            val ok = writes.withLock { runCatching { PlexApi.removeFromContinueWatching(base, token, item.ratingKey) }.isSuccess }
             if (!ok) {
                 _state.update { it.copy(home = it.home.copy(continueWatching = before)) }
                 reportPlaybackProblem("Couldn't remove that from Continue Watching.")
@@ -3047,35 +3165,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Patches the tick everywhere the same item is on screen. */
-    private fun applyWatched(ratingKey: String, watched: Boolean) {
-        fun patch(item: PlexItem): PlexItem =
-            if (item.ratingKey != ratingKey) item
-            else item.copy(
-                viewCount = if (watched) maxOf(1, item.viewCount) else 0,
-                viewOffsetMs = if (watched) 0 else item.viewOffsetMs,
-            )
-
-        _state.update { current ->
-            current.copy(
-                focused = current.focused?.let(::patch),
-                home = current.home.copy(
-                    continueWatching = current.home.continueWatching.map(::patch),
-                    recentMovies = current.home.recentMovies.map(::patch),
-                ),
-                plex = current.plex.copy(
-                    browse = current.plex.browse.mapValues { (_, browse) ->
-                        browse.copy(items = browse.items.map(::patch))
-                    }
-                ),
-                detail = current.detail?.let { detail ->
-                    detail.copy(
-                        episodes = detail.episodes.map(::patch),
-                        focusedEpisode = detail.focusedEpisode?.let(::patch),
-                    )
-                },
-            )
-        }
-    }
+    private fun applyWatched(ratingKey: String, watched: Boolean) =
+        _state.update { it.withWatched(ratingKey, watched) }
 
     /**
      * Plays the item's trailer, when the server has one to give.
@@ -4029,7 +4120,7 @@ private fun PlexDetail.asItem(): PlexItem = PlexItem(
     durationMs = durationMs,
     viewOffsetMs = viewOffsetMs,
     leafCount = leafCount,
-    viewedLeafCount = 0,
+    viewedLeafCount = viewedLeafCount,
     viewCount = viewCount,
     addedAt = 0,
     librarySectionId = null,
