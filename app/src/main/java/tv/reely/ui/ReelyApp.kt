@@ -218,6 +218,9 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
         PlayerScreen(
             playback = playback,
             onSetAudioOutput = viewModel::setAudioOutput,
+            liveWindow = remember(state.playback, state.guide.programmes, state.live) { viewModel.liveWindow() },
+            onTimeshift = viewModel::timeshiftTo,
+            onGoLive = viewModel::goLive,
             prefs = state.prefs,
             live = state.live,
             guide = state.guide,

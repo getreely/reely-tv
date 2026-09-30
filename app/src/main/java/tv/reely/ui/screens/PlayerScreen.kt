@@ -159,6 +159,9 @@ private const val AUDIO_NOTICE_MS = 9_000L
 private const val RECONNECT_TRIES = 3
 private const val RECONNECT_WAIT_MS = 3_000L
 
+/** How close to now counts as live: a scrub let go this near the live point stays live. */
+private const val LIVE_SLACK_MS = 20_000L
+
 /** How long nothing in the player may have the cursor before it's put back. */
 private const val PLAYER_RESCUE_DELAY_MS = 150L
 private const val NOTICE_MS = 2_500L
@@ -217,6 +220,15 @@ fun PlayerScreen(
     onToggleSubtitleBackground: () -> Unit,
     /** Where sound goes, by AudioOutputs' key; null for wherever the system sends it. */
     onSetAudioOutput: (String?) -> Unit = {},
+    /**
+     * The programme the live bar spans, where the channel's archive can go back into it;
+     * null for a channel that can't be rewound. See ReelyViewModel.liveWindow.
+     */
+    liveWindow: tv.reely.ui.Timeshift? = null,
+    /** Back into the programme on now, this far from its start. */
+    onTimeshift: (Long) -> Unit = {},
+    /** From behind, back to the channel as it is now. */
+    onGoLive: () -> Unit = {},
     /** A sound or subtitle choice to keep with Plex: stream ids, "0" for subtitles off. */
     onSaveStreamChoice: (audio: String?, subtitle: String?) -> Unit = { _, _ -> },
     /** Subtitles being looked for online, and looking, choosing and giving up. */
@@ -816,6 +828,46 @@ fun PlayerScreen(
      * after they timed out and were summoned back, which re-ran this against nodes that
      * existed by then. So keep asking for a few frames instead of giving up on the first.
      */
+    /*
+     * Rewinding live television. The provider only ever sends now, so going back comes
+     * out of the channel's archive: the bar spans the programme on now, with the live
+     * point moving along it, and letting go behind it plays from there. Behind, it plays
+     * like a film, with Go live to come back — or going forward to the live point does.
+     */
+    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(liveWindow != null) {
+        while (liveWindow != null) {
+            nowMs = System.currentTimeMillis()
+            delay(1_000)
+        }
+    }
+    val liveRewind = playback.isLive && liveWindow != null && slotCount == 1
+    val behindLive = !playback.isLive && playback.timeshift != null
+    val liveSpanMs = liveWindow?.let { (it.stop - it.start) * 1000 } ?: 0L
+    val liveEdgeMs = liveWindow?.let { (nowMs - it.start * 1000).coerceIn(0, liveSpanMs) } ?: 0L
+
+    /** Where in the programme live television was paused, to carry on from there. */
+    var livePausedAt by remember(playback.url) { mutableStateOf<Long?>(null) }
+
+    /*
+     * Play and pause, from the button or the remote. Coming back from a pause on live
+     * television means coming back to now, not to the moment it was paused — which is
+     * behind the live window by definition and would only fail. Unless the channel keeps
+     * an archive: then it carries on from the pause, out of that, as a recorder would.
+     */
+    fun playPause() {
+        val pausedAt = livePausedAt
+        when {
+            playback.isLive && !exoPlayer.isPlaying && liveRewind && pausedAt != null &&
+                pausedAt < liveEdgeMs - LIVE_SLACK_MS -> onTimeshift(pausedAt)
+            playback.isLive && !exoPlayer.isPlaying -> livePlayer.rejoin()
+            else -> {
+                if (playback.isLive && liveRewind) livePausedAt = liveEdgeMs
+                togglePlay(exoPlayer)
+            }
+        }
+    }
+
     fun startScrub(direction: Int, stepMs: Long) {
         scrubFirst = true
         controlsVisible = true
@@ -830,7 +882,7 @@ fun PlayerScreen(
      * cursor landed on Play and the preview, which shows only on the bar, never came up.
      */
     LaunchedEffect(scrubRequests) {
-        if (scrubRequests == 0 || playback.isLive) return@LaunchedEffect
+        if (scrubRequests == 0 || (playback.isLive && !liveRewind)) return@LaunchedEffect
         scrubberFocus.requestWhenReady()
         // Held for a frame: the effect below starts in the same frame as this one, and
         // seeing the flag already down it put the cursor straight back on Play.
@@ -882,7 +934,7 @@ fun PlayerScreen(
             // Above the transport: a prompt that is only up for a few seconds is no use
             // if reaching it means hunting for it first.
             // The effect above is putting the cursor on the bar; don't take it to Play.
-            scrubFirst && controlsVisible && !playback.isLive -> Unit
+            scrubFirst && controlsVisible && (!playback.isLive || liveRewind) -> Unit
             cameFrom != null && controlsVisible -> panelButtons.getValue(cameFrom).requestWhenReady()
             skipLabel != null -> skipFocus.requestWhenReady()
             controlsVisible -> playFocus.requestWhenReady()
@@ -1159,18 +1211,15 @@ fun PlayerScreen(
                     Key.DirectionDown -> { controlsVisible = true; false }
 
                     Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
-                        if (playback.isLive && !exoPlayer.isPlaying) livePlayer.rejoin()
-                        else togglePlay(exoPlayer)
+                        playPause()
                         true
                     }
 
                     Key.MediaFastForward, Key.MediaRewind -> {
                         val direction = if (event.key == Key.MediaFastForward) 1 else -1
-                        if (playback.isLive) {
-                            exoPlayer.seekTo((exoPlayer.currentPosition + direction * 30_000).coerceAtLeast(0))
-                        } else {
-                            startScrub(direction, 30_000)
-                        }
+                        // Live, back into the archive where there is one; forward from
+                        // live is nowhere, and a channel with no archive can't go back.
+                        if (!playback.isLive || liveRewind) startScrub(direction, 30_000)
                         true
                     }
 
@@ -1372,9 +1421,14 @@ fun PlayerScreen(
                 // Without the server's pictures, the bar shows the time alone.
                 playback = playback.copy(previewUrl = previewUrl),
                 playing = playing,
-                positionMs = positionMs,
-                durationMs = durationMs,
-                bufferedMs = bufferedMs,
+                // Live, the bar is the programme on now, and where it's got to is now.
+                positionMs = if (liveRewind) liveEdgeMs else positionMs,
+                durationMs = if (liveRewind) liveSpanMs else durationMs,
+                bufferedMs = if (liveRewind) liveEdgeMs else bufferedMs,
+                showBar = !playback.isLive || liveRewind,
+                // Nothing past now to go to, live or behind it.
+                scrubLimitMs = if (liveRewind || behindLive) liveEdgeMs else null,
+                onGoLive = if (behindLive) ({ interaction++; onGoLive() }) else null,
                 canSkipBack = canSkipBack,
                 canSkipForward = canSkipForward,
                 playFocus = playFocus,
@@ -1387,9 +1441,17 @@ fun PlayerScreen(
                 },
                 onSeekTo = { to ->
                     interaction++
-                    val target = to.coerceIn(0, (durationMs - 1_000).coerceAtLeast(0))
-                    exoPlayer.seekTo(target)
-                    positionMs = target
+                    when {
+                        // Let go behind now: out of the archive from there. At now: stays live.
+                        liveRewind -> if (to < liveEdgeMs - LIVE_SLACK_MS) onTimeshift(to)
+                        // Caught up with now from behind: the channel live again.
+                        behindLive && to >= liveEdgeMs - LIVE_SLACK_MS -> onGoLive()
+                        else -> {
+                            val target = to.coerceIn(0, (durationMs - 1_000).coerceAtLeast(0))
+                            exoPlayer.seekTo(target)
+                            positionMs = target
+                        }
+                    }
                 },
                 onScrub = { interaction++ },
                 nudge = nudge,
@@ -1397,11 +1459,7 @@ fun PlayerScreen(
                 previews = previews,
                 onTogglePlay = {
                     interaction++
-                    // Coming back from a pause on live television means coming back to
-                    // now, not to the moment it was paused — which is behind the live
-                    // window by definition and would only fail.
-                    if (playback.isLive && !exoPlayer.isPlaying) livePlayer.rejoin()
-                    else togglePlay(exoPlayer)
+                    playPause()
                 },
                 onAddChannel = { guideRequest = GuideRequest.add(live.channels.isNotEmpty()) },
                 onOpenSubtitles = { panel = Panel.SUBTITLES },
@@ -1655,6 +1713,12 @@ internal fun Controls(
     onToggleFormat: () -> Unit,
     /** Live: the programme on now from its beginning, where the channel keeps an archive. */
     onStartOver: (() -> Unit)? = null,
+    /** Whether there's a bar: always but for a live channel that can't be rewound. */
+    showBar: Boolean = !playback.isLive,
+    /** The furthest the bar can be taken: now, live or behind it. */
+    scrubLimitMs: Long? = null,
+    /** Behind live: back to the channel as it is now. */
+    onGoLive: (() -> Unit)? = null,
     onOpenSleep: () -> Unit = {},
     /** A sleep timer is set: its button is lit. */
     sleeping: Boolean = false,
@@ -1690,6 +1754,13 @@ internal fun Controls(
          * took two fifths of the screen, well over the picture it was there to control.
          */
 
+        // Behind live: the way back to now, where Skip Intro would sit above the bar.
+        if (onGoLive != null && skipLabel == null) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TvActionButton(label = "Go live", onClick = onGoLive, emphasised = true)
+            }
+        }
+
         // Skip Intro, right-aligned above the bar, when there is one to offer.
         if (skipLabel != null) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -1704,11 +1775,12 @@ internal fun Controls(
             }
         }
 
-        if (!playback.isLive) {
+        if (showBar) {
             Scrubber(
                 positionMs = positionMs,
                 durationMs = durationMs,
                 bufferedMs = bufferedMs,
+                limitMs = scrubLimitMs,
                 focusRequester = scrubberFocus,
                 onFocusState = onScrubberFocus,
                 onSeekTo = onSeekTo,
@@ -1873,9 +1945,12 @@ private fun Scrubber(
     previews: tv.reely.core.PreviewIndex? = null,
     /** The file's chapters with pictures, for a server that made those and not previews. */
     chapters: List<tv.reely.plex.PlexChapter> = emptyList(),
+    /** The furthest a scrub can go, when that's short of the end: now, on live television. */
+    limitMs: Long? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
     val total = durationMs.coerceAtLeast(1)
+    val furthest = limitMs?.coerceAtMost(durationMs) ?: (durationMs - 1_000).coerceAtLeast(0)
     /*
      * Where the scrub has got to, before it is committed. Left and right move this, not
      * the picture: seeking on every press made the player throw away its buffer and
@@ -1901,7 +1976,7 @@ private fun Scrubber(
         onNudgeUsed()
         onScrub()
         val next = ((target ?: positionMs) + press.direction * press.stepMs)
-            .coerceIn(0, (durationMs - 1_000).coerceAtLeast(0))
+            .coerceIn(0, furthest)
         target = next
         settle(next)
     }
@@ -1946,7 +2021,7 @@ private fun Scrubber(
                         // somebody is crossing a whole film.
                         val step = scrubStep(event.nativeKeyEvent.repeatCount)
                         val next = ((target ?: positionMs) + direction * step)
-                            .coerceIn(0, (durationMs - 1_000).coerceAtLeast(0))
+                            .coerceIn(0, furthest)
                         target = next
                         settle(next)
                         return@onPreviewKeyEvent true

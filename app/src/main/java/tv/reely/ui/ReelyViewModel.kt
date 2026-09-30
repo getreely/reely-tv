@@ -495,6 +495,11 @@ data class Playback(
     val audioChannels: Int = 0,
     val transcodeSession: String? = null,
     /** Which of the title's files is playing, for a server fallback to ask for the same one. */
+    /**
+     * Behind a live channel, out of its archive: the programme on now, rewound. Going
+     * forward to now, or its end, goes back to the channel live.
+     */
+    val timeshift: Timeshift? = null,
     val mediaIndex: Int = 0,
     val chapters: List<tv.reely.plex.PlexChapter> = emptyList(),
     /** The file's part, and its sound and subtitle streams with the server's choice marked. */
@@ -546,6 +551,9 @@ enum class HomeRow(val id: String, val title: String, val fromReely: Boolean = f
 /** How often a browsing screen left up asks for what has changed. */
 /** How long after starting the app it looks for a newer version. */
 private const val UPDATE_CHECK_DELAY_MS = 4_000L
+
+/** A live channel rewound into its archive: which channel, and the programme's span in epoch seconds. */
+data class Timeshift(val channelIndex: Int, val start: Long, val stop: Long)
 
 /** How soon Home is asked for again while the server isn't answering. */
 private const val HOME_RETRY_MS = 30_000L
@@ -2547,6 +2555,11 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         if (startingNext) return
         val playback = _state.value.playback ?: return
         if (playback.isLive) return
+        // Caught up with the channel, or reached the end of the programme: live again.
+        if (playback.timeshift != null) {
+            goLive()
+            return
+        }
         // The sleep timer said this episode was the last: out, with no Up Next.
         if (_state.value.sleep?.endOfEpisode == true) {
             finishAtEnd(playback)
@@ -3876,14 +3889,49 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     /** The programme on now, from its beginning, out of the channel's archive. */
     fun startOver() {
         val (channel, programme) = startOverProgramme() ?: return
-        playCatchUp(channel, programme)
+        playCatchUp(channel, programme, timeshift = Timeshift(_state.value.playback!!.channelIndex, programme.start, programme.stop))
+    }
+
+    /**
+     * What the live bar spans: the programme on now, where the channel's archive can go
+     * back into it — or, rewound already, the programme being watched behind live. Null
+     * for a channel with no archive, which can't go back at all: the provider only ever
+     * sends now.
+     */
+    fun liveWindow(): Timeshift? {
+        val playback = _state.value.playback ?: return null
+        playback.timeshift?.let { return it }
+        val (_, programme) = startOverProgramme() ?: return null
+        return Timeshift(playback.channelIndex, programme.start, programme.stop)
+    }
+
+    /** Back into the programme on now, [offsetMs] from its start, out of the archive. */
+    fun timeshiftTo(offsetMs: Long) {
+        val playback = _state.value.playback ?: return
+        val (channel, programme) = startOverProgramme() ?: return
+        playCatchUp(
+            channel, programme,
+            startAtMs = offsetMs.coerceAtLeast(0),
+            timeshift = Timeshift(playback.channelIndex, programme.start, programme.stop),
+        )
+    }
+
+    /** From behind, back to the channel as it is now. */
+    fun goLive() {
+        val timeshift = _state.value.playback?.timeshift ?: return
+        playChannel(timeshift.channelIndex)
     }
 
     /**
      * A programme from a channel's archive. It plays like a film rather than a channel:
      * from its start, with the bar to move through it, and Back returns to the guide.
      */
-    fun playCatchUp(channel: XtreamChannel, programme: tv.reely.xtream.EpgProgramme) {
+    fun playCatchUp(
+        channel: XtreamChannel,
+        programme: tv.reely.xtream.EpgProgramme,
+        startAtMs: Long = 0,
+        timeshift: Timeshift? = null,
+    ) {
         val live = _state.value.live
         val credentials = live.credentials ?: return
         val url = XtreamApi.catchUpUrl(credentials, channel, programme.start, programme.stop, live.account?.timezone)
@@ -3903,7 +3951,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                     url = url,
                     isLive = false,
                     durationMs = programme.durationSeconds * 1000,
+                    startPositionMs = startAtMs,
                     format = StreamFormat.TS,
+                    timeshift = timeshift,
                 ),
             )
         }

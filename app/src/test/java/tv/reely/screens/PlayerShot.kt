@@ -73,10 +73,18 @@ class PlayerShot {
     /** Live, with a programme on and Start over offered: the row of round buttons. */
     @Test fun liveControls() = shot("player-live-controls", live = true) { play, _ -> play.requestFocus() }
 
+    /** Live on a channel with an archive: the programme's bar, with the cursor on it. */
+    @Test fun liveRewind() = shot("player-live-rewind", live = true, rewind = true) { _, scrubber -> scrubber.requestFocus() }
+
+    /** Rewound behind live: the programme plays like a film, with Go live above the bar. */
+    @Test fun behindLive() = shot("player-behind-live", behind = true) { play, _ -> play.requestFocus() }
+
     private fun shot(
         name: String,
         skip: Boolean = false,
         live: Boolean = false,
+        rewind: Boolean = false,
+        behind: Boolean = false,
         focus: (play: FocusRequester, scrubber: FocusRequester) -> Unit,
     ) {
         val play = FocusRequester()
@@ -98,6 +106,9 @@ class PlayerShot {
                             Playback(title = "The Weigh Station", subtitle = "Northbound  ·  S2 · E5", url = "", isLive = false, durationMs = 42 * 60_000L)
                         },
                         onStartOver = if (live) ({}) else null,
+                        showBar = !live || rewind,
+                        scrubLimitMs = if (rewind || behind) 24 * 60_000L + 7_000 else null,
+                        onGoLive = if (behind) ({}) else null,
                         playing = !skip,
                         positionMs = 24 * 60_000L + 7_000,
                         durationMs = 42 * 60_000L,
