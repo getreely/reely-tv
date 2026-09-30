@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import tv.reely.plex.PlexItem
+import tv.reely.xtream.sourceTag
 import tv.reely.ui.SearchState
 import tv.reely.ui.components.HeroBackdrop
 import tv.reely.ui.components.EmptyNote
@@ -189,6 +190,7 @@ fun SearchScreen(
                     title = item.rowTitle,
                     subtitle = episodeLine(item),
                     imageUrl = imageUrl(item.serverBase, posterArt(item), 300, 450),
+                    tag = item.sourceTag,
                     progress = item.resumeFraction,
                     watched = item.isWatched,
                     onFocus = {
@@ -219,6 +221,7 @@ fun SearchScreen(
                                     title = item.title,
                                     subtitle = item.caption,
                                     imageUrl = imageUrl(item.serverBase, item.thumb, 300, 450),
+                                    tag = item.sourceTag,
                                     onFocus = {
                                         collectionFocus.onFocused(item.listKey)
                                         onFocusItem(item)
@@ -248,6 +251,7 @@ fun SearchScreen(
                     title = item.rowTitle,
                     subtitle = episodeLine(item),
                     imageUrl = imageUrl(item.serverBase, posterArt(item), 300, 450),
+                    tag = item.sourceTag,
                     progress = item.resumeFraction,
                     watched = item.isWatched,
                     onFocus = {

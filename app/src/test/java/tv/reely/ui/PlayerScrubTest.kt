@@ -44,7 +44,7 @@ class PlayerScrubTest {
                     onStepChannel = {}, onSelectChannel = {}, onOpenCategory = {}, livePlayer = livePlayer,
                     multiview = emptyList(), onAddToMultiview = {}, onRemoveTile = {}, onClearTiles = {},
                     onReplaceTile = { _, _ -> }, onCollapseToChannel = {}, onStepEpisode = {},
-                    onDecodeFailure = {}, onConvertAudio = {}, onToggleFormat = {}, onReportProgress = { _, _ -> },
+                    onDecodeFailure = {}, onConvertAudio = {}, onToggleFormat = {}, onReportProgress = { _, _, _ -> },
                     onNudgeSubtitleScale = {}, onToggleSubtitleBackground = {},
                     imageUrl = { _, _, _, _ -> null }, logoUrl = { _, _ -> null },
                 )

@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import tv.reely.plex.PlexItem
+import tv.reely.xtream.sourceTag
 import tv.reely.ui.PersonState
 import tv.reely.ui.components.EmptyNote
 import tv.reely.ui.components.ErrorNote
@@ -119,6 +120,7 @@ fun PersonScreen(
                     title = item.title,
                     subtitle = item.year?.toString() ?: item.caption,
                     imageUrl = imageUrl(item.serverBase, item.thumb, 300, 450),
+                    tag = item.sourceTag,
                     progress = item.resumeFraction,
                     watched = item.isWatched,
                     onFocus = { gridFocus.onFocused(item.listKey) },

@@ -632,13 +632,27 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onDismissPlexError = viewModel::dismissPlexError,
                 onRetryConnect = viewModel::retryConnect,
                 onSignOutPlex = viewModel::signOutPlex,
-                onSetSort = { viewModel.setSort(route.kind, it) },
-                onToggleUnwatched = { viewModel.toggleUnwatchedOnly(route.kind) },
-                onSelectGenre = { viewModel.selectGenre(route.kind, it) },
+                // The provider's grid has the same controls, answered from its own list.
+                onSetSort = {
+                    if (route.view == LibraryView.IPTV) viewModel.setIptvSort(route.kind, it)
+                    else viewModel.setSort(route.kind, it)
+                },
+                onToggleUnwatched = {
+                    if (route.view == LibraryView.IPTV) viewModel.toggleIptvUnwatched(route.kind)
+                    else viewModel.toggleUnwatchedOnly(route.kind)
+                },
+                onSelectGenre = {
+                    if (route.view == LibraryView.IPTV) viewModel.selectIptvCategory(route.kind, it)
+                    else viewModel.selectGenre(route.kind, it)
+                },
                 onDismissBrowseError = { viewModel.dismissBrowseError(route.kind) },
-                onLoadMore = { viewModel.loadMoreBrowse(route.kind) },
+                onLoadMore = { if (route.view != LibraryView.IPTV) viewModel.loadMoreBrowse(route.kind) },
                 onSelectDecade = { viewModel.selectDecade(route.kind, it) },
-                onJumpToLetter = { viewModel.jumpToLetter(route.kind, it) },
+                onJumpToLetter = {
+                    if (route.view == LibraryView.IPTV) viewModel.jumpToIptvLetter(route.kind, it)
+                    else viewModel.jumpToLetter(route.kind, it)
+                },
+                iptv = state.iptv.takeIf { it.on },
             )
 
             is Route.Search -> SearchScreen(
@@ -794,6 +808,10 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 requests = state.requests,
                 onDisconnectReely = viewModel::disconnectReely,
                 onToggleHomeRow = viewModel::toggleHomeRow,
+                iptv = state.iptv,
+                onSetIptvLibrary = viewModel::setIptvLibrary,
+                onSetIptvWins = viewModel::setIptvWins,
+                onRefreshIptv = viewModel::refreshIptvLibrary,
                 onToggleFavourite = viewModel::toggleFavouriteLibrary,
                 onToggleFormat = viewModel::toggleFormat,
                 onNudgeSubtitleScale = viewModel::nudgeSubtitleScale,
@@ -893,9 +911,10 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                             },
                         ),
                         // One list. Which server a library sits on is only worth saying
-                        // when there is more than one server to tell apart.
+                        // when there is more than one server to tell apart. The IPTV
+                        // provider's, when switched on, is one more library in it.
                         "Libraries" to choices
-                            .takeIf { it.size > 1 }
+                            .takeIf { it.size > 1 || state.iptv.on }
                             .orEmpty()
                             .map { choice ->
                                 TabMenuItem(
@@ -905,13 +924,22 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                                         choice.section.title
                                     },
                                     selected = choice.baseUrl == state.plex.baseUrl &&
-                                        choice.section.key == browse.section?.key,
+                                        choice.section.key == browse.section?.key &&
+                                        state.route != Route.Library(kind, LibraryView.IPTV),
                                 ) {
                                     menuFor = null
                                     viewModel.openLibrary(kind, choice)
                                     viewModel.navigate(Route.Library(kind, LibraryView.GRID))
                                 }
-                            },
+                            } + listOfNotNull(
+                                TabMenuItem(
+                                    label = "IPTV ${kind.title}",
+                                    selected = state.route == Route.Library(kind, LibraryView.IPTV),
+                                ) {
+                                    menuFor = null
+                                    viewModel.navigate(Route.Library(kind, LibraryView.IPTV))
+                                }.takeIf { state.iptv.on },
+                            ),
                     ),
                     focusRequester = menuFocus,
                     // Sits under the tab it belongs to, pulled back from the right edge
@@ -1016,7 +1044,9 @@ private fun routeKey(route: Route): String = when (route) {
 /** Whether the current screen has anything focusable in it yet. */
 private fun contentReady(state: ReelyState): Boolean = when (val route = state.route) {
     is Route.Home -> !state.plex.isConnected || !state.home.isEmpty
-    is Route.Library -> !state.plex.isConnected || when (route.view) {
+    is Route.Library -> if (route.view == LibraryView.IPTV) {
+        state.iptv.browseFor(route.kind).items.isNotEmpty() || !state.iptv.loading
+    } else !state.plex.isConnected || when (route.view) {
         LibraryView.COLLECTIONS -> !state.plex.browseFor(route.kind).collections.isNullOrEmpty()
         else -> state.plex.browseFor(route.kind).items.isNotEmpty()
     }

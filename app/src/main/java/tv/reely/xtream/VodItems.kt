@@ -78,6 +78,7 @@ object VodItems {
         addedAt = title.addedAt,
         qualities = listOfNotNull(title.tag),
         librarySectionId = title.categoryId,
+        titleSort = VodNames.sortName(title.name),
     )
 
     fun show(title: VodTitle): PlexItem = blank(
@@ -91,6 +92,7 @@ object VodItems {
         addedAt = title.addedAt,
         qualities = listOfNotNull(title.tag),
         librarySectionId = title.categoryId,
+        titleSort = VodNames.sortName(title.name),
     )
 
     fun seasons(showId: Int, showName: String, showPoster: String?, info: SeriesInfo): List<PlexItem> =
@@ -225,15 +227,28 @@ class IptvWatch(private val file: File, private val now: () -> Long = { System.c
         ))
     }
 
-    @Synchronized fun setWatched(item: PlexItem, watched: Boolean) {
-        val previous = marks[item.ratingKey]
-        put(item, IptvMark(
-            offsetMs = 0,
-            durationMs = previous?.durationMs ?: item.durationMs,
-            watched = watched,
-            at = if (watched) now() else previous?.at ?: now(),
-            item = item,
-        ))
+    @Synchronized fun setWatched(item: PlexItem, watched: Boolean) = setWatched(listOf(item), watched)
+
+    /** A whole season or show at once, written down once. */
+    @Synchronized fun setWatched(items: List<PlexItem>, watched: Boolean) {
+        for (item in items) {
+            val previous = marks[item.ratingKey]
+            put(item, IptvMark(
+                offsetMs = 0,
+                durationMs = previous?.durationMs ?: item.durationMs,
+                watched = watched,
+                at = if (watched) now() else previous?.at ?: now(),
+                item = item,
+            ), save = false)
+        }
+        save()
+    }
+
+    /** Off Continue Watching: where it was left is forgotten, whether it was watched isn't. */
+    @Synchronized fun forgetProgress(key: String) {
+        val mark = marks[key] ?: return
+        marks[key] = mark.copy(offsetMs = 0)
+        save()
     }
 
     /** [item] with where it was left and whether it's been watched. */
@@ -262,12 +277,12 @@ class IptvWatch(private val file: File, private val now: () -> Long = { System.c
         .sortedByDescending { it.at }
         .map { apply(it.item) }
 
-    private fun put(item: PlexItem, mark: IptvMark) {
+    private fun put(item: PlexItem, mark: IptvMark, save: Boolean = true) {
         marks.remove(item.ratingKey)
         // Kept without its progress: that's the mark's to say.
         marks[item.ratingKey] = mark.copy(item = item.copy(viewOffsetMs = 0, viewCount = 0, lastViewedAt = 0))
         while (marks.size > LIMIT) marks.remove(marks.keys.first())
-        save()
+        if (save) save()
     }
 
     private fun load(): LinkedHashMap<String, IptvMark> {

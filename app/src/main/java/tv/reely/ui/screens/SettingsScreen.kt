@@ -142,6 +142,11 @@ fun SettingsScreen(
     requests: tv.reely.ui.RequestsState = tv.reely.ui.RequestsState(),
     onDisconnectReely: () -> Unit = {},
     onToggleHomeRow: (tv.reely.ui.HomeRow) -> Unit = {},
+    /** The IPTV provider's films and series in the tabs; see Settings.iptvLibrary. */
+    iptv: tv.reely.ui.IptvState = tv.reely.ui.IptvState(),
+    onSetIptvLibrary: (Boolean) -> Unit = {},
+    onSetIptvWins: (Boolean) -> Unit = {},
+    onRefreshIptv: () -> Unit = {},
 ) {
     var section by remember { mutableStateOf(Section.PLAYBACK) }
     val sectionFocus = remember { Section.entries.associateWith { FocusRequester() } }
@@ -242,9 +247,16 @@ fun SettingsScreen(
                     onToggleFormat = onToggleFormat,
                     onToggleGuidePreview = onToggleGuidePreview,
                     onSignOutXtream = onSignOutXtream,
+                    iptv = iptv,
+                    onSetIptvLibrary = onSetIptvLibrary,
+                    onSetIptvWins = onSetIptvWins,
+                    onRefreshIptv = onRefreshIptv,
                 )
 
-                Section.HOME -> HomeSection(prefs, reelyConnected = requests.server != null, onToggleHomeRow, onSetScreensaver)
+                Section.HOME -> HomeSection(
+                    prefs, reelyConnected = requests.server != null, onToggleHomeRow, onSetScreensaver,
+                    iptvOn = iptv.on,
+                )
 
                 Section.REQUESTS -> RequestsSection(requests, onDisconnectReely)
 
@@ -474,6 +486,10 @@ private fun LiveSection(
     onToggleFormat: () -> Unit,
     onToggleGuidePreview: () -> Unit,
     onSignOutXtream: () -> Unit,
+    iptv: tv.reely.ui.IptvState,
+    onSetIptvLibrary: (Boolean) -> Unit,
+    onSetIptvWins: (Boolean) -> Unit,
+    onRefreshIptv: () -> Unit,
 ) {
     if (!live.isConnected) {
         SettingGroup("Live TV") {
@@ -538,6 +554,45 @@ private fun LiveSection(
         )
     }
 
+    SettingGroup(
+        "Movies and shows",
+        note = if (playlist) "Your provider's movies and shows need an Xtream login rather than a playlist. " +
+            "Sign out and sign in with your server, username and password to use them."
+        else "Your provider's movies and shows in the Movies and TV Shows tabs, on Home and in search, " +
+            "marked IPTV. Off, only Plex's are shown.",
+    ) {
+        if (!playlist) {
+            SettingRow(
+                title = "Show IPTV movies and shows",
+                switch = prefs.iptvLibrary,
+                onClick = { onSetIptvLibrary(!prefs.iptvLibrary) },
+            )
+            if (prefs.iptvLibrary) {
+                ChoiceRow(
+                    title = "When a title is in both",
+                    description = "Which copy shows on Home and in search, and which the IPTV library leaves out.",
+                    options = listOf(
+                        Option(false, "Plex", "Plex's copy. The IPTV library only has what Plex doesn't."),
+                        Option(true, "IPTV", "The provider's copy, in place of Plex's on Home and in search."),
+                    ),
+                    selected = prefs.iptvWins,
+                    onSelect = onSetIptvWins,
+                )
+                SettingRow(
+                    title = "Refresh movies and shows",
+                    value = when {
+                        iptv.loading -> "Refreshing…"
+                        iptv.error != null && iptv.loadedAt == 0L -> "Couldn't load"
+                        iptv.loadedAt == 0L -> "Not loaded"
+                        else -> "${iptv.movieCount} movies · ${iptv.showCount} shows"
+                    },
+                    description = iptv.error ?: iptv.loadedAt.takeIf { it > 0 }?.let { "Updated ${relativeTime(it / 1000)}" },
+                    onClick = onRefreshIptv,
+                )
+            }
+        }
+    }
+
     SettingGroup("Provider") {
         SettingRow(title = if (playlist) "Playlist" else "Server", value = live.credentials?.base?.let(::hostOf) ?: "—")
         if (!playlist) SettingRow(
@@ -563,8 +618,13 @@ private fun HomeSection(
     reelyConnected: Boolean,
     onToggle: (tv.reely.ui.HomeRow) -> Unit,
     onSetScreensaver: (Int) -> Unit,
+    iptvOn: Boolean = false,
 ) {
-    val (yours, reely) = tv.reely.ui.HomeRow.entries.partition { !it.fromReely }
+    // IPTV's rows only while its movies and shows are switched on.
+    val iptvRows = setOf(tv.reely.ui.HomeRow.IPTV_MOVIES, tv.reely.ui.HomeRow.IPTV_SHOWS)
+    val (yours, reely) = tv.reely.ui.HomeRow.entries
+        .filter { iptvOn || it !in iptvRows }
+        .partition { !it.fromReely }
     SettingGroup("Rows on Home") {
         yours.forEachIndexed { index, row ->
             SettingRow(

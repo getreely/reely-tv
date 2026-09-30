@@ -120,6 +120,20 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(LARGER_BUFFER, false)
         set(value) = prefs.edit().putBoolean(LARGER_BUFFER, value).apply()
 
+    /**
+     * The IPTV provider's films and series in the Movies and TV Shows tabs, Home and
+     * search, alongside Plex's. Off unless asked for: it's a lot to add to a library that
+     * was only Plex's, and the switch takes all of it away again.
+     */
+    var iptvLibrary: Boolean
+        get() = prefs.getBoolean(IPTV_LIBRARY, false)
+        set(value) = prefs.edit().putBoolean(IPTV_LIBRARY, value).apply()
+
+    /** A title that's in Plex and on IPTV shows as IPTV's copy rather than Plex's. */
+    var iptvWins: Boolean
+        get() = prefs.getBoolean(IPTV_WINS, false)
+        set(value) = prefs.edit().putBoolean(IPTV_WINS, value).apply()
+
     /** Where sound goes, as AudioOutputs names it; null leaves it to the system. */
     var audioOutput: String?
         get() = prefs.getString(AUDIO_OUTPUT, null)
@@ -197,6 +211,8 @@ class Settings(context: Context) {
         private const val MATCH_FRAME_RATE = "playback.matchFrameRate"
         private const val LARGER_BUFFER = "playback.largerBuffer"
         private const val AUDIO_OUTPUT = "playback.audioOutput"
+        private const val IPTV_LIBRARY = "iptv.library"
+        private const val IPTV_WINS = "iptv.wins"
         private const val HIDDEN_HOME_ROWS = "home.hiddenRows"
         private const val SKIP_INTROS = "playback.skipIntros"
         private const val SKIP_CREDITS = "playback.skipCredits"

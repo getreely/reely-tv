@@ -42,7 +42,7 @@ class ChannelNumberTest {
                     onStepChannel = {}, onSelectChannel = {}, onOpenCategory = {}, livePlayer = livePlayer,
                     multiview = emptyList(), onAddToMultiview = {}, onRemoveTile = {}, onClearTiles = {},
                     onReplaceTile = { _, _ -> }, onCollapseToChannel = {}, onStepEpisode = {},
-                    onDecodeFailure = {}, onConvertAudio = {}, onToggleFormat = {}, onReportProgress = { _, _ -> },
+                    onDecodeFailure = {}, onConvertAudio = {}, onToggleFormat = {}, onReportProgress = { _, _, _ -> },
                     onNudgeSubtitleScale = {}, onToggleSubtitleBackground = {},
                     findChannel = { if (it == 105) news else null },
                     onTuneChannel = { tuned = it },

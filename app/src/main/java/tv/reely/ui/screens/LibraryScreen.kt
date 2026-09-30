@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import tv.reely.plex.PlexItem
 import tv.reely.plex.formatDuration
+import tv.reely.xtream.sourceTag
 import tv.reely.ui.BrowseState
 import tv.reely.ui.HomeState
 import tv.reely.ui.LibraryKind
@@ -114,8 +115,12 @@ fun LibraryScreen(
     onLoadMore: () -> Unit = {},
     onSelectDecade: (String?) -> Unit = {},
     onJumpToLetter: (String) -> Unit = {},
+    /** The IPTV provider's films and series, when they're switched on; null when not. */
+    iptv: tv.reely.ui.IptvState? = null,
 ) {
-    if (!plex.isConnected) {
+    // The provider's grid needs no Plex server; everything else on the tab does.
+    val showingIptv = view == LibraryView.IPTV
+    if (!plex.isConnected && !showingIptv) {
         PlexSignInPanel(
             plex = plex,
             onStartLink = onStartLink,
@@ -129,7 +134,11 @@ fun LibraryScreen(
     }
 
     val sections = plex.sectionsFor(kind)
-    val browse: BrowseState = plex.browseFor(kind)
+    val browse: BrowseState = if (showingIptv) iptv?.browseFor(kind) ?: tv.reely.ui.IptvLibrary.emptyBrowse(kind)
+    else plex.browseFor(kind)
+    // A grid to show: a Plex library of this kind, or the provider's.
+    val hasLibrary = showingIptv || sections.isNotEmpty()
+    val iptvNew = if (kind == LibraryKind.MOVIES) home.iptvMovies else home.iptvShows
 
     // These rows belong to the library the tab is showing, not to every library of that
     // kind on the server. Picking a library from the tab menu has to change them, or the
@@ -138,6 +147,8 @@ fun LibraryScreen(
     // Section keys repeat across servers, so the server has to match as well or another
     // machine's library number two would pass for this one.
     fun here(serverBase: String?, id: String?): Boolean {
+        // IPTV's titles are the tab's whichever library is showing.
+        if (tv.reely.xtream.isIptvSource(serverBase)) return true
         if (serverBase != null && serverBase != plex.baseUrl) return false
         return sectionKey == null || id == null || id == sectionKey
     }
@@ -154,6 +165,7 @@ fun LibraryScreen(
     val recentFocus = rememberRowFocus("recent")
     val releasedFocus = rememberRowFocus("released")
     val gridFocus = rememberRowFocus("grid")
+    val iptvFocus = rememberRowFocus("iptv")
 
     /*
      * Room around a focused card, so its lift and caption are never off the bottom of the
@@ -178,7 +190,7 @@ fun LibraryScreen(
         gridState.scrollToItem(1 + jump.index)
         gridFocus.land(item.listKey)
     }
-    val showRail = view == LibraryView.GRID && browse.sort == LibrarySort.TITLE &&
+    val showRail = (view == LibraryView.GRID || showingIptv) && browse.sort == LibrarySort.TITLE &&
         browse.letters.size > 1 && browse.letters.sumOf { it.count } >= RAIL_MIN_TITLES
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -248,6 +260,7 @@ fun LibraryScreen(
                                             title = item.rowTitle,
                                             subtitle = episodeLine(item),
                                             imageUrl = imageUrl(item.serverBase, posterArt(item), 300, 450),
+                                            tag = item.sourceTag,
                                             progress = item.resumeFraction,
                                             watched = item.isWatched,
                                             onFocus = {
@@ -279,6 +292,7 @@ fun LibraryScreen(
                                             title = movie.title,
                                             subtitle = movie.caption,
                                             imageUrl = imageUrl(movie.serverBase, movie.thumb, 300, 450),
+                                            tag = movie.sourceTag,
                                             progress = movie.resumeFraction,
                                             watched = movie.isWatched,
                                             onFocus = {
@@ -342,6 +356,7 @@ fun LibraryScreen(
                                             title = item.title,
                                             subtitle = item.caption,
                                             imageUrl = imageUrl(item.serverBase, item.thumb, 300, 450),
+                                            tag = item.sourceTag,
                                             progress = item.resumeFraction,
                                             watched = item.isWatched,
                                             onFocus = {
@@ -351,6 +366,36 @@ fun LibraryScreen(
                                             onClick = { onOpenItem(item) },
                                             onLongPress = holdFor(item),
                                             modifier = rowItem(releasedFocus, item.listKey),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (view == LibraryView.HOME && iptvNew.isNotEmpty()) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            RowBlock("New on IPTV", sideways) {
+                                LazyRow(
+                                    modifier = Modifier.bleed(PAGE_MARGIN).restoreFocusTo(iptvFocus).focusGroup(),
+                                    contentPadding = PaddingValues(horizontal = PAGE_MARGIN),
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                ) {
+                                    items(iptvNew, key = { it.listKey }) { item ->
+                                        PosterCard(
+                                            title = item.title,
+                                            subtitle = item.caption,
+                                            imageUrl = imageUrl(item.serverBase, item.thumb, 300, 450),
+                                            progress = item.resumeFraction,
+                                            watched = item.isWatched,
+                                            tag = item.sourceTag,
+                                            onFocus = {
+                                                iptvFocus.onFocused(item.listKey)
+                                                onFocusItem(item)
+                                            },
+                                            onClick = { onOpenItem(item) },
+                                            onLongPress = holdFor(item),
+                                            modifier = rowItem(iptvFocus, item.listKey),
                                         )
                                     }
                                 }
@@ -422,7 +467,7 @@ fun LibraryScreen(
                             )
                             // Sort, then the watched filter, then genres. One row that runs
                             // off to the right, so a library with forty genres still fits.
-                            if (sections.isNotEmpty()) {
+                            if (hasLibrary) {
                                 CompositionLocalProvider(LocalBringIntoViewSpec provides sideways) {
                                     LazyRow(
                                         modifier = Modifier.restoreFocusTo(recentFocus).focusGroup(),
@@ -433,7 +478,9 @@ fun LibraryScreen(
                                                 label = "Sort · ${browse.sort.label}",
                                                 selected = browse.sort != LibrarySort.TITLE,
                                                 onClick = {
-                                                    val sorts = LibrarySort.entries
+                                                    // The provider has one rating, not a critics' and an audience's.
+                                                    val sorts = if (showingIptv) LibrarySort.entries - LibrarySort.AUDIENCE
+                                                    else LibrarySort.entries
                                                     choosing = ChoiceRequest(
                                                         title = "Sort by",
                                                         options = sorts.map { it.label to null },
@@ -476,7 +523,7 @@ fun LibraryScreen(
                                         if (browse.genres.isNotEmpty()) {
                                             item {
                                                 TvChip(
-                                                    label = "All genres",
+                                                    label = if (showingIptv) "All categories" else "All genres",
                                                     selected = browse.genreId == null,
                                                     onClick = { onSelectGenre(null) },
                                                 )
@@ -496,7 +543,16 @@ fun LibraryScreen(
                                 ErrorNote(message = browse.error, onDismiss = onDismissBrowseError)
                             }
                             when {
-                                sections.isEmpty() -> EmptyNote(
+                                showingIptv && iptv?.error != null && browse.items.isEmpty() ->
+                                    ErrorNote(message = iptv.error)
+
+                                showingIptv && iptv?.loading == false && browse.items.isEmpty() && !browse.isFiltered ->
+                                    EmptyNote(
+                                        if (kind == LibraryKind.MOVIES) "No movies from your IPTV provider that aren't already in Plex."
+                                        else "No shows from your IPTV provider that aren't already in Plex."
+                                    )
+
+                                !hasLibrary -> EmptyNote(
                                     "No ${kind.title.lowercase()} library on ${plex.serverName ?: "this server"}."
                                 )
 
@@ -507,7 +563,8 @@ fun LibraryScreen(
                     }
 
                     // The grid's own shape while the first page is on its way.
-                    if (sections.isNotEmpty() && browse.busy && browse.items.isEmpty()) {
+                    val gridLoading = if (showingIptv) iptv?.loading == true else browse.busy
+                    if (hasLibrary && gridLoading && browse.items.isEmpty()) {
                         items(PLACEHOLDER_COUNT) { Shimmer { PosterPlaceholder() } }
                     }
 
@@ -518,6 +575,7 @@ fun LibraryScreen(
                             imageUrl = imageUrl(item.serverBase, item.thumb, 300, 450),
                             progress = item.resumeFraction,
                             watched = item.isWatched,
+                            tag = item.sourceTag,
                             onFocus = {
                                 gridFocus.onFocused(item.listKey)
                                 onFocusItem(item)
@@ -534,7 +592,7 @@ fun LibraryScreen(
         }
 
         if (showRail) {
-            val current = focused?.takeIf { view == LibraryView.GRID }?.let(::letterOf)
+            val current = focused?.takeIf { view == LibraryView.GRID || showingIptv }?.let(::letterOf)
             LetterRail(
                 letters = browse.letters,
                 current = current,

@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
 import tv.reely.plex.PlexItem
+import tv.reely.xtream.sourceTag
 import tv.reely.plex.formatDuration
 import tv.reely.ui.PlaylistState
 import tv.reely.ui.components.EmptyNote
@@ -94,6 +95,7 @@ fun PlaylistScreen(
                     title = item.rowTitle,
                     subtitle = episodeLine(item) ?: item.caption,
                     imageUrl = imageUrl(item.serverBase, posterArt(item), 300, 450),
+                    tag = item.sourceTag,
                     progress = item.resumeFraction,
                     watched = item.isWatched,
                     onFocus = { gridFocus.onFocused(item.listKey) },

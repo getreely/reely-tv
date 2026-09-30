@@ -145,6 +145,12 @@ object VodNames {
     }
 
     fun key(name: String): String = SearchMatch.words(name).joinToString("")
+
+    /** The name as a library sorts it: "Matrix, The" goes under M, as Plex has it. Null when it's the name. */
+    fun sortName(name: String): String? {
+        val article = Regex("""^(the|a|an)\s+""", RegexOption.IGNORE_CASE).find(name) ?: return null
+        return name.substring(article.range.last + 1).takeIf { it.isNotBlank() }
+    }
 }
 
 /** The provider's on-demand side: its films and series, their pages, and their addresses. */

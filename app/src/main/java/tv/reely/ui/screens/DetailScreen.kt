@@ -1,6 +1,7 @@
 package tv.reely.ui.screens
 
 import tv.reely.ui.components.FocusReturn
+import tv.reely.xtream.sourceTag
 import tv.reely.ui.components.requestWhenReady
 import tv.reely.ui.components.EpisodeRailPlaceholder
 import tv.reely.ui.components.Shimmer
@@ -580,6 +581,7 @@ private fun TitleRow(
                         title = title.title,
                         subtitle = title.caption,
                         imageUrl = imageUrl(title.serverBase, title.thumb, 300, 450),
+                        tag = title.sourceTag,
                         progress = title.resumeFraction,
                         watched = title.isWatched,
                         onFocus = { focus.onFocused(title.listKey) },

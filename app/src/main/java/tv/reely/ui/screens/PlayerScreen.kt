@@ -231,7 +231,8 @@ fun PlayerScreen(
     /** The file's sound cannot be played here; ask the server to convert just that. */
     onConvertAudio: (Long) -> Unit,
     onToggleFormat: () -> Unit,
-    onReportProgress: (Long, Boolean) -> Unit,
+    /** Where it's up to, whether it's playing, and how long the file runs as far as the player knows (0 when it doesn't). */
+    onReportProgress: (Long, Boolean, Long) -> Unit,
     onNudgeSubtitleScale: (Float) -> Unit,
     onToggleSubtitleBackground: () -> Unit,
     /** Where sound goes, by AudioOutputs' key; null for wherever the system sends it. */
@@ -588,7 +589,7 @@ fun PlayerScreen(
                     // holds one of the provider's few streams for as long as it's loaded.
                     extraPlayers.values.forEach { it.stop() }
                     if (!playback.isLive && playback.ratingKey != null) {
-                        onReportProgress(exoPlayer.currentPosition.coerceAtLeast(0), false)
+                        onReportProgress(exoPlayer.currentPosition.coerceAtLeast(0), false, exoPlayer.duration.coerceAtLeast(0))
                     }
                 }
 
@@ -669,7 +670,7 @@ fun PlayerScreen(
                         hasAudio = tracks.containsType(C.TRACK_TYPE_AUDIO),
                         audioSelected = tracks.isTypeSelected(C.TRACK_TYPE_AUDIO),
                         isLive = now.isLive,
-                        fromPlex = now.ratingKey != null,
+                        fromPlex = now.onPlex,
                         alreadyTranscoding = now.transcoding,
                         directOnly = currentPrefs.playbackMode == Settings.MODE_DIRECT,
                     )
@@ -693,7 +694,8 @@ fun PlayerScreen(
                 // transcoder is for. Network errors are not that, and stay errors.
                 val deviceCannotPlay = playbackError.errorCode in 3_000..5_999
                 val connection = playbackError.errorCode in 2_000..2_999
-                if (deviceCannotPlay && !currentPlayback.transcoding) {
+                // Only a Plex server can convert; an IPTV provider's file plays as it is or not at all.
+                if (deviceCannotPlay && !currentPlayback.transcoding && currentPlayback.onPlex) {
                     onDecodeFailure(exoPlayer.currentPosition.coerceAtLeast(0))
                 } else if (connection && !currentPlayback.isLive && reconnects < RECONNECT_TRIES) {
                     // Live channels have their own; see LivePlayer.
@@ -701,7 +703,8 @@ fun PlayerScreen(
                     error = "Reconnecting…"
                     reconnectAt = System.currentTimeMillis() + RECONNECT_WAIT_MS * reconnects
                 } else {
-                    error = if (connection && !currentPlayback.isLive) "Lost the connection to your Plex server. Press OK to try again."
+                    error = if (connection && currentPlayback.fromIptv) "Lost the connection to your IPTV provider. Press OK to try again."
+                        else if (connection && !currentPlayback.isLive) "Lost the connection to your Plex server. Press OK to try again."
                         else describe(playbackError)
                 }
             }
@@ -793,7 +796,7 @@ fun PlayerScreen(
     LaunchedEffect(playback.ratingKey, playback.serverBase, playing) {
         if (playback.isLive || playback.ratingKey == null) return@LaunchedEffect
         while (true) {
-            onReportProgress(exoPlayer.currentPosition.coerceAtLeast(0), playing)
+            onReportProgress(exoPlayer.currentPosition.coerceAtLeast(0), playing, exoPlayer.duration.coerceAtLeast(0))
             delay(10_000)
         }
     }
@@ -1545,7 +1548,7 @@ fun PlayerScreen(
                 focusRequester = panelFocus,
                 // Found online by the server, for a file it plays as it is; a conversion
                 // burns subtitles in, and a channel has none to find.
-                onFindSubtitles = if (!playback.isLive && !playback.transcoding && playback.ratingKey != null) {
+                onFindSubtitles = if (playback.onPlex && !playback.transcoding) {
                     {
                         onFindSubtitles()
                         panel = Panel.FIND_SUBTITLES

@@ -49,6 +49,15 @@ import tv.reely.xtream.EpgProgramme
 import tv.reely.xtream.EpgStore
 import tv.reely.xtream.XmltvImporter
 import tv.reely.xtream.XtreamProgramme
+import tv.reely.xtream.IPTV_SOURCE
+import tv.reely.xtream.IptvKey
+import tv.reely.xtream.IptvWatch
+import tv.reely.xtream.VodCatalogCache
+import tv.reely.xtream.VodItems
+import tv.reely.xtream.VodNames
+import tv.reely.xtream.XtreamVod
+import tv.reely.xtream.isIptv
+import tv.reely.xtream.isIptvSource
 import java.util.UUID
 
 /**
@@ -65,7 +74,7 @@ enum class LibraryKind(val plexType: String, val title: String, val filter: Int)
  * what has arrived, or the whole library as a grid. They used to be stacked on one
  * surface, which meant scrolling past the rows to reach the library.
  */
-enum class LibraryView { HOME, GRID, COLLECTIONS }
+enum class LibraryView { HOME, GRID, COLLECTIONS, IPTV }
 
 /** Where the app is. A back stack rather than a tab index, so details can be left. */
 sealed interface Route {
@@ -225,12 +234,15 @@ data class HomeState(
     val watchlist: List<PlexItem> = emptyList(),
     /** The servers' video playlists. */
     val playlists: List<PlexItem> = emptyList(),
+    /** The newest films and series from the IPTV provider, when they're switched on. */
+    val iptvMovies: List<PlexItem> = emptyList(),
+    val iptvShows: List<PlexItem> = emptyList(),
     val busy: Boolean = false,
     val error: String? = null,
 ) {
     val isEmpty: Boolean
         get() = continueWatching.isEmpty() && recentEpisodes.isEmpty() && recentMovies.isEmpty() &&
-            watchlist.isEmpty() && playlists.isEmpty()
+            watchlist.isEmpty() && playlists.isEmpty() && iptvMovies.isEmpty() && iptvShows.isEmpty()
 }
 
 /**
@@ -514,7 +526,13 @@ data class Playback(
     val partId: Long? = null,
     val audioStreams: List<tv.reely.core.PlexStream> = emptyList(),
     val subtitleStreams: List<tv.reely.core.PlexStream> = emptyList(),
-)
+) {
+    /** From the IPTV provider's films and series: nothing to report to Plex, nothing it can convert. */
+    val fromIptv: Boolean get() = serverBase == tv.reely.xtream.IPTV_SOURCE
+
+    /** A title from a Plex server, which is told where it's up to and can convert what won't play. */
+    val onPlex: Boolean get() = !isLive && ratingKey != null && !fromIptv
+}
 
 data class PlayerPrefs(
     val subtitleScale: Float = Settings.DEFAULT_SCALE,
@@ -540,6 +558,10 @@ data class PlayerPrefs(
     val tourSeen: Boolean = true,
     /** Home's rows switched off in Settings; see HomeRow. */
     val hiddenHomeRows: Set<String> = emptySet(),
+    /** IPTV's films and series alongside Plex's; see Settings.iptvLibrary. */
+    val iptvLibrary: Boolean = false,
+    /** A title in both shows as IPTV's copy; see Settings.iptvWins. */
+    val iptvWins: Boolean = false,
 )
 
 /**
@@ -552,6 +574,8 @@ enum class HomeRow(val id: String, val title: String, val fromReely: Boolean = f
     MOVIES("movies", "Recently Added Movies"),
     WATCHLIST("watchlist", "Watchlist"),
     PLAYLISTS("playlists", "Playlists"),
+    IPTV_MOVIES("iptvMovies", "New Movies on IPTV"),
+    IPTV_SHOWS("iptvShows", "New Shows on IPTV"),
     TRENDING("trending", "Trending", fromReely = true),
     POPULAR("popular", "Popular", fromReely = true),
 }
@@ -568,6 +592,9 @@ data class Timeshift(val streamId: Int, val start: Long, val stop: Long)
 
 /** How near now counts as caught up with live, behind it in the archive. */
 private const val LIVE_CATCH_UP_MS = 20_000L
+
+/** How old the IPTV catalogue kept on the device can be before it's read from the provider again. */
+private const val IPTV_CATALOG_MS = 12L * 60 * 60 * 1000
 
 /** How soon Home is asked for again while the server isn't answering. */
 private const val HOME_RETRY_MS = 30_000L
@@ -622,6 +649,16 @@ internal fun ReelyState.withWatched(ratingKey: String, watched: Boolean, server:
     val sifted = if (!watched) marked else marked.copy(
         plex = marked.plex.copy(
             browse = marked.plex.browse.mapValues { (_, browse) ->
+                if (!browse.unwatchedOnly) browse
+                else browse.copy(items = browse.items.filterNot { it.ratingKey == ratingKey && sameServer(it.serverBase, server) })
+            },
+        ),
+        iptv = marked.iptv.copy(
+            movies = marked.iptv.movies.let { browse ->
+                if (!browse.unwatchedOnly) browse
+                else browse.copy(items = browse.items.filterNot { it.ratingKey == ratingKey && sameServer(it.serverBase, server) })
+            },
+            shows = marked.iptv.shows.let { browse ->
                 if (!browse.unwatchedOnly) browse
                 else browse.copy(items = browse.items.filterNot { it.ratingKey == ratingKey && sameServer(it.serverBase, server) })
             },
@@ -700,11 +737,17 @@ internal fun ReelyState.patchItem(
             recentEpisodes = home.recentEpisodes.map { it.copy(newest = one(it.newest)) },
             recentMovies = all(home.recentMovies),
             watchlist = all(home.watchlist),
+            iptvMovies = all(home.iptvMovies),
+            iptvShows = all(home.iptvShows),
         ),
         plex = plex.copy(
             browse = plex.browse.mapValues { (_, browse) ->
                 browse.copy(items = all(browse.items), released = all(browse.released))
             },
+        ),
+        iptv = iptv.copy(
+            movies = iptv.movies.copy(items = all(iptv.movies.items)),
+            shows = iptv.shows.copy(items = all(iptv.shows.items)),
         ),
         detail = detail?.let { page ->
             page.copy(
@@ -808,6 +851,8 @@ data class ReelyState(
      */
     val multiview: List<XtreamChannel> = emptyList(),
     val upNext: PlexItem? = null,
+    /** The IPTV provider's films and series, when switched on. */
+    val iptv: IptvState = IptvState(),
     val prefs: PlayerPrefs = PlayerPrefs(),
     val update: UpdateStatus = UpdateStatus.Idle,
     /** A newer version turned up at startup: ask whether to install it. */
@@ -849,6 +894,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 screensaverMinutes = settings.screensaverMinutes,
                 tourSeen = settings.tourSeen,
                 hiddenHomeRows = settings.hiddenHomeRows,
+                iptvLibrary = settings.iptvLibrary,
+                iptvWins = settings.iptvWins,
             )
         )
     )
@@ -1487,6 +1534,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 // Published as each server answers, so a slow one does not hold up the rest.
                 updatePlex { it.copy(libraryChoices = found.toList()) }
             }
+            // IPTV's titles are matched against every library, now they're all known.
+            refreshIptvIndex()
         }
     }
 
@@ -1742,6 +1791,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
      * happens to be connected, and the rest would come back unauthorised.
      */
     fun plexImageUrl(serverBase: String?, path: String?, width: Int, height: Int): String? {
+        // The provider's pictures are whole addresses of their own.
+        if (isIptvSource(serverBase)) return path?.takeIf { it.startsWith("http") }
         val plex = _state.value.plex
         val base = serverBase ?: plex.baseUrl ?: return null
         val token = plex.tokenFor(serverBase) ?: return null
@@ -1874,12 +1925,15 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             _state.update {
                 it.copy(
                     home = HomeState(
-                        continueWatching = onDeck.map { item -> item.withShowLogo() },
+                        continueWatching = withIptvContinue(onDeck.map { item -> item.withShowLogo() }),
                         recentEpisodes = recentEpisodes.map { group -> group.copy(newest = group.newest.withShowLogo()) },
-                        recentMovies = recentMovies,
+                        // Where IPTV's copy has been chosen over Plex's, it's the one shown.
+                        recentMovies = recentMovies.filterNot { movie -> iptv.hides(movie, it.prefs.iptvWins) },
                         // Filled in on its own, and not to be lost when the rest comes in.
                         watchlist = it.home.watchlist,
                         playlists = playlists,
+                        iptvMovies = it.home.iptvMovies,
+                        iptvShows = it.home.iptvShows,
                         busy = false,
                     )
                 )
@@ -1901,7 +1955,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val home = _state.value.home
         if (home.isEmpty) return
         val rows = tv.reely.core.HomeCache.Rows(
-            continueWatching = home.continueWatching,
+            // Plex's own: IPTV's are put back from this television's own record of them.
+            continueWatching = home.continueWatching.filterNot { it.isIptv },
             recentMovies = home.recentMovies,
             recentEpisodes = home.recentEpisodes.map { it.newest to it.count },
         )
@@ -1960,7 +2015,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
     /** A title's logo at its own size; see [PlexApi.logoUrl]. */
     fun plexLogoUrl(serverBase: String?, path: String?): String? {
-        if (path == null) return null
+        if (path == null || isIptvSource(serverBase)) return null
         val plex = _state.value.plex
         val base = serverBase ?: plex.baseUrl ?: return null
         val token = plex.tokenFor(serverBase) ?: return null
@@ -2278,6 +2333,10 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun loadDetail(route: Route.Detail) {
+        if (isIptvSource(route.serverBase)) {
+            loadIptvDetail(route)
+            return
+        }
         val ratingKey = route.ratingKey
         val plex = _state.value.plex
         val base = route.serverBase ?: plex.baseUrl ?: return
@@ -2370,6 +2429,10 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     private var seasonJob: Job? = null
 
     fun selectSeason(season: PlexItem, focusEpisodeKey: String? = null) {
+        if (season.isIptv) {
+            selectIptvSeason(season, focusEpisodeKey)
+            return
+        }
         val plex = _state.value.plex
         val on = season.serverBase ?: _state.value.detail?.serverBase
         val base = on ?: plex.baseUrl ?: return
@@ -2424,6 +2487,10 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
      */
     /** A show's or season's next episode, from its menu: see [PlexApi.nextEpisode]. */
     fun playNextEpisode(item: PlexItem) {
+        if (item.isIptv) {
+            playNextIptvEpisode(item)
+            return
+        }
         val plex = _state.value.plex
         val base = item.serverBase ?: plex.baseUrl ?: return
         val token = plex.tokenFor(item.serverBase) ?: return
@@ -2528,11 +2595,6 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         mediaIndex: Int = 0,
         playlist: Boolean = false,
     ): Job? {
-        val plex = _state.value.plex
-        val on = item.serverBase
-        val base = on ?: plex.baseUrl ?: return null
-        val token = plex.tokenFor(on) ?: return null
-
         // The next episode taking over from one still playing — Up Next, its countdown,
         // the skip button. The one finishing is told to Plex as stopped where it got to,
         // and its tick and progress change on the pages that show it. Without this it was
@@ -2540,6 +2602,12 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         _state.value.playback
             ?.takeIf { !it.isLive && it.ratingKey != null && !_state.value.isPlaying(it, item) }
             ?.let { finishing -> endSitting(finishing, lastPositionOf(finishing)) }
+
+        if (item.isIptv) return playIptv(item, queue, resume)
+        val plex = _state.value.plex
+        val on = item.serverBase
+        val base = on ?: plex.baseUrl ?: return null
+        val token = plex.tokenFor(on) ?: return null
 
         return viewModelScope.launch {
             val resolved = runCatching { PlexApi.playback(base, token, item.ratingKey, mediaIndex) }
@@ -2743,6 +2811,10 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         }
         // Reported as stopped at the very end, which is what marks it watched on the server.
         stopPlayback(playback.durationMs)
+        if (playback.fromIptv) {
+            iptvPlaying?.takeIf { it.ratingKey == playback.ratingKey }?.let { iptv.watch?.setWatched(it, true) }
+            refreshIptvContinue()
+        }
         playback.ratingKey?.let { applyWatched(it, watched = true, server = playback.serverBase) }
     }
 
@@ -2778,6 +2850,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val playback = _state.value.playback ?: return null
         // A playlist ends where it does.
         if (playback.playlist) return null
+        if (playback.fromIptv) return firstOfNextIptvSeason(playback)
         val base = playback.serverBase ?: plex.baseUrl ?: return null
         val token = plex.tokenFor(playback.serverBase) ?: return null
         val current = playback.queue.getOrNull(playback.queueIndex)
@@ -2980,9 +3053,16 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
      * Tell Plex where we are. Without this the server never learns anything was watched,
      * and Continue Watching on every device stays wrong.
      */
-    fun reportProgress(positionMs: Long, playing: Boolean) {
+    fun reportProgress(positionMs: Long, playing: Boolean, durationMs: Long = 0) {
         val playback = _state.value.playback ?: return
         val ratingKey = playback.ratingKey ?: return
+        if (playback.fromIptv) {
+            // The provider isn't told anything; this television keeps where it's up to.
+            if (durationMs > 0) iptvDurationMs = durationMs
+            lastPosition = titleOf(playback) to positionMs
+            keepIptvProgress(playback, positionMs)
+            return
+        }
         val plex = _state.value.plex
         val base = playback.serverBase ?: plex.baseUrl ?: return
         val token = plex.tokenFor(playback.serverBase) ?: return
@@ -3172,6 +3252,13 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     private fun endSitting(playback: Playback, positionMs: Long) {
         val ratingKey = playback.ratingKey ?: return
         if (positionMs <= 0) return
+        if (playback.fromIptv) {
+            keepIptvProgress(playback, positionMs)
+            keepProgress(ratingKey, positionMs, iptvDurationMs.takeIf { it > 0 } ?: playback.durationMs, IPTV_SOURCE)
+            refreshIptvContinue()
+            lastPosition = null
+            return
+        }
         keepProgress(ratingKey, positionMs, playback.durationMs, playback.serverBase)
         val plex = _state.value.plex
         val base = playback.serverBase ?: plex.baseUrl ?: return
@@ -3276,7 +3363,17 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                     .onSuccess { answered = true }
                     .getOrElse { tv.reely.plex.PlexFound() }
             }
-            val (matches, others) = tv.reely.core.SearchMatch.split(query, found.flatMap { it.items })
+            // IPTV's films and series, when switched on, matched here from the list in hand.
+            // A title in both is the winner's copy only.
+            val wins = _state.value.prefs.iptvWins
+            val fromIptv = if (_state.value.iptv.on) {
+                withContext(Dispatchers.Default) { iptv.search(query, wins) }
+            } else emptyList()
+            if (fromIptv.isNotEmpty()) answered = true
+            val (matches, others) = tv.reely.core.SearchMatch.split(
+                query,
+                found.flatMap { it.items }.filterNot { iptv.hides(it, wins) } + fromIptv,
+            )
             // Nothing by name, a misspelling most likely: then Plex's own guesses are the results.
             val results = matches.ifEmpty { others }
             val more = if (matches.isEmpty()) emptyList() else others
@@ -3396,6 +3493,10 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
      * a checkbox feels broken.
      */
     fun toggleWatched(item: PlexItem) {
+        if (item.isIptv) {
+            toggleIptvWatched(item)
+            return
+        }
         val plex = _state.value.plex
         val base = item.serverBase ?: plex.baseUrl ?: return
         val token = plex.tokenFor(item.serverBase) ?: return
@@ -3415,6 +3516,12 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Off Continue Watching, here and on the server; put back if the server says no. */
     fun removeFromContinueWatching(item: PlexItem) {
+        if (item.isIptv) {
+            iptv.watch?.forgetProgress(item.ratingKey)
+            keepProgress(item.ratingKey, 0, item.durationMs, IPTV_SOURCE)
+            refreshIptvContinue()
+            return
+        }
         val plex = _state.value.plex
         val base = item.serverBase ?: plex.baseUrl ?: return
         val token = plex.tokenFor(item.serverBase) ?: return
@@ -3566,6 +3673,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 error = null,
             )
         }
+        startIptvLibrary()
     }
 
     /**
@@ -4148,6 +4256,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun signOutXtream() {
+        stopIptvLibrary()
         livePlayer.stop()
         store.remove(*LIVE_KEYS)
         channelsJob?.cancel()
@@ -4159,6 +4268,445 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 search = it.search.copy(channels = emptyList()),
             )
         }
+    }
+
+    // ---------------------------------------------------------------- IPTV films and series
+
+    private val iptv = IptvLibrary()
+    private val iptvOptions = mutableMapOf<LibraryKind, IptvBrowseOptions>()
+    private var iptvJob: Job? = null
+    private var iptvPublishJob: Job? = null
+
+    /** The IPTV film or episode playing, for keeping where it was left. */
+    private var iptvPlaying: PlexItem? = null
+
+    /** How long the player last said the IPTV file playing runs, which its list rarely says. */
+    private var iptvDurationMs = 0L
+
+    /** The provider's films and series need an Xtream login; a playlist has none of them. */
+    private fun iptvCredentials(): XtreamCredentials? =
+        _state.value.live.credentials?.takeIf { !it.isPlaylist }
+
+    fun setIptvLibrary(on: Boolean) {
+        settings.iptvLibrary = on
+        _state.update { it.copy(prefs = it.prefs.copy(iptvLibrary = on)) }
+        if (on) startIptvLibrary() else stopIptvLibrary()
+    }
+
+    fun setIptvWins(wins: Boolean) {
+        settings.iptvWins = wins
+        _state.update { it.copy(prefs = it.prefs.copy(iptvWins = wins)) }
+        publishIptv()
+        // Plex's copies were left out of Home's rows while IPTV won; they come back.
+        if (!wins) refreshHome()
+    }
+
+    /** Read the provider's list again now, from Settings. */
+    fun refreshIptvLibrary() = startIptvLibrary(fromProvider = true)
+
+    /**
+     * Switched on, with an Xtream login: the catalogue from the device at once, then from
+     * the provider when what's kept is old. Matched against Plex's libraries as those are
+     * read, so a title in both shows once.
+     */
+    private fun startIptvLibrary(fromProvider: Boolean = false) {
+        val credentials = iptvCredentials()
+        if (!_state.value.prefs.iptvLibrary || credentials == null) {
+            stopIptvLibrary()
+            return
+        }
+        if (!fromProvider && iptvJob?.isActive == true) return
+        iptvJob?.cancel()
+        val dir = getApplication<Application>().filesDir
+        val account = (credentials.base + "|" + credentials.username).hashCode().toUInt().toString(16)
+        if (iptv.watch == null) iptv.watch = IptvWatch(java.io.File(dir, "iptv-watch-$account.json"))
+        _state.update { it.copy(iptv = it.iptv.copy(on = true, loading = true, error = null)) }
+        iptvJob = viewModelScope.launch {
+            val file = VodCatalogCache.file(dir, credentials)
+            val kept = if (fromProvider) null else withContext(Dispatchers.IO) { VodCatalogCache.read(file) }
+            if (kept != null) {
+                withContext(Dispatchers.Default) { iptv.setCatalog(kept) }
+                publishIptv()
+            }
+            launch { refreshIptvIndex() }
+            if (kept != null && System.currentTimeMillis() - kept.loadedAt < IPTV_CATALOG_MS) {
+                _state.update { it.copy(iptv = it.iptv.copy(loading = false)) }
+                return@launch
+            }
+            val read = runCatching { XtreamVod.catalog(credentials) }
+            read.onSuccess { catalog ->
+                withContext(Dispatchers.Default) { iptv.setCatalog(catalog) }
+                withContext(Dispatchers.IO) { runCatching { VodCatalogCache.write(file, catalog) } }
+                publishIptv()
+            }
+            _state.update {
+                it.copy(iptv = it.iptv.copy(loading = false, error = read.exceptionOrNull()?.readable()))
+            }
+        }
+    }
+
+    /** Switched off, or signed out of the provider: none of it anywhere. */
+    private fun stopIptvLibrary() {
+        iptvJob?.cancel()
+        iptvPublishJob?.cancel()
+        iptv.clear()
+        _state.update { current ->
+            current.copy(
+                iptv = IptvState(),
+                home = current.home.copy(
+                    iptvMovies = emptyList(),
+                    iptvShows = emptyList(),
+                    continueWatching = current.home.continueWatching.filterNot { it.isIptv },
+                ),
+                search = current.search.copy(results = current.search.results.filterNot { it.isIptv }),
+            )
+        }
+        val route = _state.value.route
+        if (route is Route.Library && route.view == LibraryView.IPTV) navigate(Route.Library(route.kind))
+        // Plex's copies were left out of Home's rows while IPTV won; they come back.
+        if (_state.value.prefs.iptvWins) refreshHome()
+    }
+
+    /** What's in Plex's libraries, to match IPTV's titles against. */
+    private suspend fun refreshIptvIndex() {
+        if (!_state.value.iptv.on) return
+        val choices = _state.value.plex.homeSources()
+        if (choices.isEmpty()) return
+        suspend fun entries(kind: LibraryKind, type: Int) = choices.filter { it.section.type == kind.plexType }
+            .map { choice ->
+                viewModelScope.async {
+                    runCatching { PlexApi.libraryEntries(choice.baseUrl, choice.token, choice.section.key, type) }
+                        .getOrDefault(emptyList())
+                }
+            }.awaitAll().flatten()
+        val movies = entries(LibraryKind.MOVIES, PlexApi.TYPE_MOVIE)
+        val shows = entries(LibraryKind.SHOWS, PlexApi.TYPE_SHOW)
+        withContext(Dispatchers.Default) { iptv.setPlex(movies, shows) }
+        publishIptv()
+    }
+
+    private fun iptvOptionsFor(kind: LibraryKind) = iptvOptions[kind] ?: IptvBrowseOptions()
+
+    /** The grids, Home's rows and Continue Watching, from the catalogue as it is now. */
+    private fun publishIptv(kinds: Collection<LibraryKind> = LibraryKind.entries) {
+        if (!_state.value.iptv.on) return
+        iptvPublishJob?.cancel()
+        iptvPublishJob = viewModelScope.launch {
+            val wins = _state.value.prefs.iptvWins
+            val built = withContext(Dispatchers.Default) {
+                kinds.associateWith { kind -> iptv.browse(kind, iptvOptionsFor(kind), wins) to iptv.newest(kind, wins) }
+            }
+            val catalog = iptv.catalog
+            val progress = iptvContinue()
+            _state.update { current ->
+                if (!current.iptv.on) return@update current
+                val movies = built[LibraryKind.MOVIES]
+                val shows = built[LibraryKind.SHOWS]
+                current.copy(
+                    iptv = current.iptv.copy(
+                        movies = movies?.first ?: current.iptv.movies,
+                        shows = shows?.first ?: current.iptv.shows,
+                        movieCount = catalog.movies.size,
+                        showCount = catalog.series.size,
+                        loadedAt = catalog.loadedAt,
+                    ),
+                    home = current.home.copy(
+                        iptvMovies = movies?.second ?: current.home.iptvMovies,
+                        iptvShows = shows?.second ?: current.home.iptvShows,
+                        continueWatching = withIptvContinue(current.home.continueWatching, progress),
+                        recentMovies = current.home.recentMovies.filterNot { iptv.hides(it, wins) },
+                    ),
+                )
+            }
+        }
+    }
+
+    /** What's part-watched from IPTV, when it's switched on. */
+    private fun iptvContinue(): List<PlexItem> =
+        if (_state.value.iptv.on) iptv.watch?.continueWatching().orEmpty() else emptyList()
+
+    /** Plex's Continue Watching with IPTV's in among it, by when each was last watched. */
+    private fun withIptvContinue(row: List<PlexItem>, progress: List<PlexItem> = iptvContinue()): List<PlexItem> =
+        continueWatchingOrder(row.filterNot { it.isIptv } + progress)
+
+    /** Continue Watching again after something from IPTV was watched, stopped or marked. */
+    private fun refreshIptvContinue() {
+        val progress = iptvContinue()
+        _state.update { it.copy(home = it.home.copy(continueWatching = withIptvContinue(it.home.continueWatching, progress))) }
+    }
+
+    fun setIptvSort(kind: LibraryKind, sort: LibrarySort) {
+        iptvOptions[kind] = iptvOptionsFor(kind).copy(sort = sort)
+        publishIptv(listOf(kind))
+    }
+
+    fun selectIptvCategory(kind: LibraryKind, categoryId: String?) {
+        iptvOptions[kind] = iptvOptionsFor(kind).copy(categoryId = categoryId)
+        publishIptv(listOf(kind))
+    }
+
+    fun toggleIptvUnwatched(kind: LibraryKind) {
+        iptvOptions[kind] = iptvOptionsFor(kind).let { it.copy(unwatchedOnly = !it.unwatchedOnly) }
+        publishIptv(listOf(kind))
+    }
+
+    /** The whole list is here, so a letter is only a matter of counting. */
+    fun jumpToIptvLetter(kind: LibraryKind, letter: String) {
+        _state.update { current ->
+            val browse = current.iptv.browseFor(kind)
+            val index = browse.letterStart(letter) ?: return@update current
+            val jumped = browse.copy(jump = GridJump(index, (browse.jump?.serial ?: 0) + 1))
+            current.copy(
+                iptv = if (kind == LibraryKind.MOVIES) current.iptv.copy(movies = jumped)
+                else current.iptv.copy(shows = jumped),
+            )
+        }
+    }
+
+    /** A series' seasons and episodes, kept a while: its page, Up Next and Play next all want them. */
+    private suspend fun iptvSeries(showId: Int): tv.reely.xtream.SeriesInfo? {
+        iptv.cachedSeries(showId)?.let { return it }
+        val credentials = iptvCredentials() ?: return null
+        val info = runCatching { XtreamVod.seriesInfo(credentials, showId) }.getOrNull() ?: return null
+        iptv.keepSeries(showId, info)
+        return info
+    }
+
+    /** Every episode of a series, as items, with where each was left. */
+    private suspend fun iptvEpisodes(showId: Int): List<Pair<tv.reely.xtream.VodSeason, List<PlexItem>>> {
+        val info = iptvSeries(showId) ?: return emptyList()
+        val title = iptv.series(showId)
+        val name = title?.name ?: info.name?.let { VodNames.parse(it).name } ?: "Series"
+        val poster = title?.poster ?: info.poster
+        return info.seasons.map { season ->
+            season to VodItems.episodes(showId, name, poster, info.backdrop, season).map(iptv::marked)
+        }
+    }
+
+    private fun iptvShowId(item: PlexItem): Int? = when (val key = IptvKey.parse(item.ratingKey)) {
+        is IptvKey.Show -> key.id
+        is IptvKey.Season -> key.showId
+        is IptvKey.Episode -> item.grandparentRatingKey?.let(IptvKey::parse)?.let { (it as? IptvKey.Show)?.id }
+        else -> null
+    }
+
+    private fun iptvSeasonNumber(item: PlexItem): Int? = when (val key = IptvKey.parse(item.ratingKey)) {
+        is IptvKey.Season -> key.number
+        is IptvKey.Episode -> item.parentRatingKey?.let(IptvKey::parse)?.let { (it as? IptvKey.Season)?.number }
+        else -> null
+    }
+
+    /** [detail] with where it was left, or how much of it has been watched. */
+    private fun markedIptvDetail(detail: PlexDetail): PlexDetail {
+        val watch = iptv.watch ?: return detail
+        if (detail.isShow) return detail.copy(viewedLeafCount = watch.watchedUnder(detail.ratingKey, season = false))
+        val mark = watch.mark(detail.ratingKey) ?: return detail
+        return detail.copy(
+            viewOffsetMs = mark.offsetMs,
+            viewCount = if (mark.watched) 1 else 0,
+            durationMs = detail.durationMs.takeIf { it > 0 } ?: mark.durationMs,
+        )
+    }
+
+    /** A film's or series' page, from the provider rather than a Plex server. */
+    private fun loadIptvDetail(route: Route.Detail) {
+        val ratingKey = route.ratingKey
+        _state.update {
+            it.copy(detail = DetailState(ratingKey = ratingKey, serverBase = IPTV_SOURCE, busy = true))
+        }
+        fun onThisPage(change: (DetailState) -> DetailState) = _state.update { current ->
+            val page = current.detail
+            if (page == null || page.ratingKey != ratingKey || page.serverBase != IPTV_SOURCE) current
+            else current.copy(detail = change(page))
+        }
+        val credentials = iptvCredentials()
+        val key = IptvKey.parse(ratingKey)
+        if (credentials == null || key == null) {
+            onThisPage { it.copy(busy = false, error = "Sign in to your IPTV provider in Live TV to watch this.") }
+            return
+        }
+        val wins = _state.value.prefs.iptvWins
+        viewModelScope.launch {
+            when (key) {
+                is IptvKey.Movie -> {
+                    val title = iptv.movie(key.id)
+                    if (title != null) {
+                        onThisPage { it.copy(detail = markedIptvDetail(VodItems.movieDetail(ratingKey, title, null))) }
+                    }
+                    val info = runCatching { XtreamVod.movieInfo(credentials, key.id) }.getOrNull()
+                    if (title == null && info == null) {
+                        onThisPage { it.copy(busy = false, error = "This title isn't available from your IPTV provider.") }
+                        return@launch
+                    }
+                    val detail = markedIptvDetail(VodItems.movieDetail(ratingKey, title, info))
+                    val related = title?.let { iptv.related(VodItems.movie(it), wins) }.orEmpty()
+                    onThisPage { it.copy(detail = detail, related = related, busy = false) }
+                }
+
+                is IptvKey.Show -> {
+                    val info = iptvSeries(key.id)
+                    val title = iptv.series(key.id)
+                    if (info == null) {
+                        onThisPage { it.copy(busy = false, error = "Couldn't load this series from your IPTV provider.") }
+                        return@launch
+                    }
+                    val name = title?.name ?: info.name?.let { VodNames.parse(it).name } ?: "Series"
+                    val poster = title?.poster ?: info.poster
+                    val detail = markedIptvDetail(VodItems.showDetail(ratingKey, title, info))
+                    val seasons = VodItems.seasons(key.id, name, poster, info).map(iptv::marked)
+                    val all = iptvEpisodes(key.id)
+                    // Where it's up to, as a Plex show's page opens: the season and episode to watch next.
+                    val upTo = PlexApi.nextEpisode(all.flatMap { it.second }).takeIf { route.seasonKey == null }
+                    val season = seasons.firstOrNull { it.ratingKey == route.seasonKey }
+                        ?: upTo?.let { next -> seasons.firstOrNull { it.ratingKey == next.parentRatingKey } }
+                        ?: seasons.firstOrNull { (it.index ?: 0) > 0 }
+                        ?: seasons.firstOrNull()
+                    val episodes = all.firstOrNull { (s, _) -> IptvKey.season(key.id, s.number) == season?.ratingKey }
+                        ?.second.orEmpty()
+                    val focus = episodes.firstOrNull { it.ratingKey == (route.episodeKey ?: upTo?.ratingKey) }
+                        ?: episodes.firstOrNull()
+                    val related = title?.let { iptv.related(VodItems.show(it), wins) }.orEmpty()
+                    onThisPage {
+                        it.copy(
+                            detail = detail.copy(title = name),
+                            seasons = seasons,
+                            selectedSeason = season,
+                            episodes = episodes,
+                            focusedEpisode = focus,
+                            related = related,
+                            busy = false,
+                        )
+                    }
+                }
+
+                else -> onThisPage { it.copy(busy = false, error = "This title isn't available from your IPTV provider.") }
+            }
+        }
+    }
+
+    /** A season of an IPTV series, from what its page already read. */
+    private fun selectIptvSeason(season: PlexItem, focusEpisodeKey: String?) {
+        val key = IptvKey.parse(season.ratingKey) as? IptvKey.Season ?: return
+        val page = _state.value.detail ?: return
+        seasonJob?.cancel()
+        seasonJob = viewModelScope.launch {
+            _state.update { it.copy(detail = it.detail?.copy(selectedSeason = season)) }
+            val episodes = iptvEpisodes(key.showId).firstOrNull { (s, _) -> s.number == key.number }?.second.orEmpty()
+            val now = _state.value.detail
+            if (now?.selectedSeason?.ratingKey != season.ratingKey || now.ratingKey != page.ratingKey ||
+                now.serverBase != page.serverBase
+            ) return@launch
+            val landOn = focusEpisodeKey?.let { wanted -> episodes.firstOrNull { it.ratingKey == wanted } }
+                ?: episodes.firstOrNull()
+            _state.update { it.copy(detail = it.detail?.copy(episodes = episodes, focusedEpisode = landOn, busy = false)) }
+        }
+    }
+
+    /** A film or episode from the provider: straight from its address, nothing to ask first. */
+    private fun playIptv(item: PlexItem, queue: List<PlexItem>, resume: Boolean): Job? {
+        val credentials = iptvCredentials()
+        if (credentials == null) {
+            reportPlaybackProblem("Sign in to your IPTV provider in Live TV to play this.")
+            return null
+        }
+        val url = when (val key = IptvKey.parse(item.ratingKey)) {
+            is IptvKey.Movie -> XtreamVod.movieUrl(credentials, key.id, key.extension)
+            is IptvKey.Episode -> XtreamVod.episodeUrl(credentials, key.id, key.extension)
+            else -> return null
+        }
+        return viewModelScope.launch {
+            val marked = iptv.marked(item)
+            val effectiveQueue = queue.ifEmpty { siblingQueue(item) }.ifEmpty {
+                if (item.type != "episode") emptyList()
+                else iptvShowId(item)?.let { show ->
+                    iptvEpisodes(show).firstOrNull { (s, _) -> s.number == iptvSeasonNumber(item) }?.second
+                }.orEmpty()
+            }
+            livePlayer.stop()
+            silenceTheme()
+            releaseTranscode()
+            iptvPlaying = item
+            iptvDurationMs = marked.durationMs
+            _state.update {
+                it.copy(
+                    multiview = emptyList(),
+                    upNext = null,
+                    playback = Playback(
+                        title = item.title,
+                        subtitle = subtitleLineFor(item),
+                        url = url,
+                        isLive = false,
+                        ratingKey = item.ratingKey,
+                        startPositionMs = if (resume) marked.viewOffsetMs else 0,
+                        durationMs = marked.durationMs,
+                        serverBase = IPTV_SOURCE,
+                        queue = effectiveQueue,
+                        queueIndex = effectiveQueue.indexOfFirst { entry -> entry.ratingKey == item.ratingKey },
+                    ),
+                )
+            }
+        }
+    }
+
+    /** Where an IPTV film or episode is up to, kept here since the provider keeps nothing. */
+    private fun keepIptvProgress(playback: Playback, positionMs: Long) {
+        val item = iptvPlaying?.takeIf { it.ratingKey == playback.ratingKey } ?: return
+        val duration = iptvDurationMs.takeIf { it > 0 } ?: playback.durationMs
+        iptv.watch?.progress(item, positionMs, duration)
+    }
+
+    /** Watched or not, for an IPTV title: a show or season is all its episodes. */
+    private fun toggleIptvWatched(item: PlexItem) {
+        val watch = iptv.watch ?: return
+        val watched = !item.isWatched
+        if (item.type == "movie" || item.type == "episode") {
+            watch.setWatched(item, watched)
+            applyWatched(item.ratingKey, watched, IPTV_SOURCE)
+            refreshIptvContinue()
+            return
+        }
+        val show = iptvShowId(item) ?: return
+        val season = iptvSeasonNumber(item)
+        viewModelScope.launch {
+            val episodes = iptvEpisodes(show)
+                .filter { (s, _) -> season == null || s.number == season }
+                .flatMap { it.second }
+            if (episodes.isEmpty()) {
+                reportPlaybackProblem("Couldn't mark that as ${if (watched) "watched" else "unwatched"}.")
+                return@launch
+            }
+            watch.setWatched(episodes, watched)
+            _state.update { current ->
+                episodes.fold(current.withWatched(item.ratingKey, watched, IPTV_SOURCE)) { state, episode ->
+                    state.withWatched(episode.ratingKey, watched, IPTV_SOURCE)
+                }
+            }
+            refreshIptvContinue()
+        }
+    }
+
+    /** A series' next episode, from its menu: as for Plex, see [PlexApi.nextEpisode]. */
+    private fun playNextIptvEpisode(item: PlexItem) {
+        val show = iptvShowId(item) ?: return
+        val season = iptvSeasonNumber(item)
+        viewModelScope.launch {
+            val all = iptvEpisodes(show).filter { (s, _) -> season == null || s.number == season }
+            val next = PlexApi.nextEpisode(all.flatMap { it.second }) ?: run {
+                reportPlaybackProblem("There are no episodes to play.")
+                return@launch
+            }
+            play(next, queue = all.firstOrNull { (_, list) -> next in list }?.second.orEmpty())
+        }
+    }
+
+    /** The first episode of the season after the one playing, for Up Next at a season's end. */
+    private suspend fun firstOfNextIptvSeason(playback: Playback): PlexItem? {
+        val current = playback.queue.getOrNull(playback.queueIndex) ?: iptvPlaying ?: return null
+        val show = iptvShowId(current) ?: return null
+        val number = iptvSeasonNumber(current) ?: return null
+        val seasons = iptvEpisodes(show)
+        val at = seasons.indexOfFirst { (s, _) -> s.number == number }
+        return seasons.getOrNull(at + 1)?.second?.firstOrNull()
     }
 
     // ---------------------------------------------------------------- Updates

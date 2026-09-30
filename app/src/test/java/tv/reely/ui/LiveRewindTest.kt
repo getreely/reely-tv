@@ -51,7 +51,7 @@ class LiveRewindTest {
                     onStepChannel = {}, onSelectChannel = {}, onOpenCategory = {}, livePlayer = livePlayer,
                     multiview = emptyList(), onAddToMultiview = {}, onRemoveTile = {}, onClearTiles = {},
                     onReplaceTile = { _, _ -> }, onCollapseToChannel = {}, onStepEpisode = {},
-                    onDecodeFailure = {}, onConvertAudio = {}, onToggleFormat = {}, onReportProgress = { _, _ -> },
+                    onDecodeFailure = {}, onConvertAudio = {}, onToggleFormat = {}, onReportProgress = { _, _, _ -> },
                     onNudgeSubtitleScale = {}, onToggleSubtitleBackground = {},
                     liveWindow = window,
                     onTimeshift = { timeshifts += it },

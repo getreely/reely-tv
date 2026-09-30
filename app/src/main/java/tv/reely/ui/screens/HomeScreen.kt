@@ -3,6 +3,7 @@ package tv.reely.ui.screens
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import tv.reely.ui.components.PosterRowPlaceholder
+import tv.reely.xtream.sourceTag
 import tv.reely.ui.components.HeroPlaceholder
 import tv.reely.ui.components.Shimmer
 import androidx.compose.foundation.focusGroup
@@ -130,6 +131,8 @@ fun HomeScreen(
     val movieFocus = rememberRowFocus("movies")
     val watchlistFocus = rememberRowFocus("watchlist")
     val playlistFocus = rememberRowFocus("playlists")
+    val iptvMovieFocus = rememberRowFocus("iptvMovies")
+    val iptvShowFocus = rememberRowFocus("iptvShows")
 
     // A row coming into focus snaps its heading to the top of the rows; see
     // rememberRowSnap. The rows keep the television's own rule for moving sideways.
@@ -237,6 +240,7 @@ fun HomeScreen(
                                             title = item.rowTitle,
                                             subtitle = episodeLine(item),
                                             imageUrl = imageUrl(item.serverBase, posterArt(item), 300, 450),
+                                            tag = item.sourceTag,
                                             progress = item.resumeFraction,
                                             watched = item.isWatched,
                                             onFocus = {
@@ -276,6 +280,7 @@ fun HomeScreen(
                                             title = movie.title,
                                             subtitle = movie.caption,
                                             imageUrl = imageUrl(movie.serverBase, movie.thumb, 300, 450),
+                                            tag = movie.sourceTag,
                                             progress = movie.resumeFraction,
                                             watched = movie.isWatched,
                                             onFocus = {
@@ -294,6 +299,39 @@ fun HomeScreen(
                             }
                         }
 
+                        // The IPTV provider's newest, when its films and series are switched on.
+                        listOf(
+                            Triple(HomeRow.IPTV_MOVIES, home.iptvMovies, iptvMovieFocus),
+                            Triple(HomeRow.IPTV_SHOWS, home.iptvShows, iptvShowFocus),
+                        ).forEach { (row, titles, focus) ->
+                            if (titles.isNotEmpty() && row.id !in hidden) {
+                                item(key = row.id) {
+                                    PosterRow(title = row.title, rowFocus = focus, sideways = sideways) {
+                                        itemsIndexed(titles, key = { _, it -> it.listKey }) { index, item ->
+                                            PosterCard(
+                                                title = item.title,
+                                                subtitle = item.caption,
+                                                imageUrl = imageUrl(item.serverBase, item.thumb, 300, 450),
+                                                tag = item.sourceTag,
+                                                progress = item.resumeFraction,
+                                                watched = item.isWatched,
+                                                onFocus = {
+                                                    focus.onFocused(item.listKey)
+                                                    onFocusItem(item)
+                                                },
+                                                onClick = { onOpenItem(item) },
+                                                onLongPress = {
+                                                    menuFrom = Triple(focus, item.listKey, index)
+                                                    menuFor = item
+                                                },
+                                                modifier = rowItem(focus, item.listKey, index),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         // The account's Watchlist, as far as the servers here have it.
                         if (home.watchlist.isNotEmpty() && HomeRow.WATCHLIST.id !in hidden) {
                             item {
@@ -303,6 +341,7 @@ fun HomeScreen(
                                             title = item.title,
                                             subtitle = item.caption,
                                             imageUrl = imageUrl(item.serverBase, item.thumb, 300, 450),
+                                            tag = item.sourceTag,
                                             progress = item.resumeFraction,
                                             watched = item.isWatched,
                                             onFocus = {
