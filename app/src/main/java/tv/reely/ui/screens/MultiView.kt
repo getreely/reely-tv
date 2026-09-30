@@ -270,6 +270,51 @@ fun ExtraTile(
 ) {
     LaunchedEffect(player, focused) { player.volume = if (focused) 1f else 0f }
 
+    /*
+     * A tile's channel going wrong. These had no handling of their own: a channel left on
+     * a while fell behind the stream and froze, and one the provider wouldn't open — too
+     * many at once, most often — sat black with nothing to say why. Behind is rejoined at
+     * once, as the main picture does; a dropped connection is tried a few more times;
+     * anything else is said on the tile.
+     */
+    var failure by remember(player) { mutableStateOf<String?>(null) }
+    var attempts by remember(player) { androidx.compose.runtime.mutableIntStateOf(0) }
+    var retryAt by remember(player) { androidx.compose.runtime.mutableLongStateOf(0L) }
+    DisposableEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                val code = (error.cause as? androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException)?.responseCode
+                when {
+                    error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW -> {
+                        player.seekToDefaultPosition()
+                        player.prepare()
+                    }
+                    code != null && code in REFUSED -> failure = "Your provider won't open another channel at once."
+                    attempts < TILE_RETRIES -> {
+                        attempts++
+                        retryAt = System.currentTimeMillis() + TILE_RETRY_MS * attempts
+                    }
+                    else -> failure = "This channel isn't playing."
+                }
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (isPlaying) {
+                    attempts = 0
+                    failure = null
+                }
+            }
+        }
+        player.addListener(listener)
+        onDispose { player.removeListener(listener) }
+    }
+    LaunchedEffect(retryAt) {
+        if (retryAt == 0L) return@LaunchedEffect
+        kotlinx.coroutines.delay((retryAt - System.currentTimeMillis()).coerceAtLeast(0))
+        player.seekToDefaultPosition()
+        player.prepare()
+    }
+
     TileFrame(
         name = name,
         focused = focused,
@@ -289,8 +334,23 @@ fun ExtraTile(
             onRelease = { it.player = null },
             modifier = Modifier.fillMaxSize(),
         )
+        failure?.let { message ->
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = message,
+                    color = tv.reely.ui.theme.Chalk,
+                    style = ReelyType.Meta,
+                    modifier = Modifier.widthIn(max = 320.dp).sheet(radius = 12).padding(horizontal = 16.dp, vertical = 10.dp),
+                )
+            }
+        }
     }
 }
+
+/** What a provider answers when it won't open another stream: over the account's limit. */
+private val REFUSED = setOf(401, 403, 429, 458, 509)
+private const val TILE_RETRIES = 3
+private const val TILE_RETRY_MS = 3_000L
 
 /**
  * The border and name plate every tile wears once there is more than one of them.

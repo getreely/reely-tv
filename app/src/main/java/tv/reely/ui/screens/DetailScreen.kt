@@ -110,11 +110,28 @@ fun DetailScreen(
     /** Whether the title is on the account's Watchlist; null when that can't be known or changed. */
     watchlisted: Boolean? = null,
     onToggleWatchlist: () -> Unit = {},
+    /** Asks for the page again, after it couldn't be loaded. */
+    onRetry: () -> Unit = {},
 ) {
     val detail = state.detail
     if (detail == null) {
         if (state.error != null) {
-            Column(modifier = modifier.fillMaxSize().padding(40.dp)) { ErrorNote(state.error) }
+            // Something to press: with only the message, the cursor had nowhere to be and
+            // the only way on was Back.
+            val retry = remember { FocusRequester() }
+            LaunchedEffect(Unit) { retry.requestWhenReady() }
+            Column(
+                modifier = modifier.fillMaxSize().padding(40.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                ErrorNote(state.error)
+                tv.reely.ui.components.TvActionButton(
+                    label = "Try again",
+                    onClick = onRetry,
+                    emphasised = true,
+                    modifier = Modifier.focusRequester(retry),
+                )
+            }
         } else {
             DetailPlaceholder(modifier = modifier.fillMaxSize())
         }

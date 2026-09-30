@@ -97,7 +97,10 @@ fun SearchScreen(
 
                         search.results.isEmpty() && search.channels.isEmpty() && search.people.isEmpty() &&
                             search.collections.isEmpty() ->
-                            EmptyNote("Nothing matched \"${search.query}\".")
+                            EmptyNote(
+                                if (search.unreachable) "Couldn't reach your Plex server to search. Try again in a moment."
+                                else "Nothing matched \"${search.query}\"."
+                            )
 
                         else -> EmptyNote(
                             listOfNotNull(

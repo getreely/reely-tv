@@ -155,6 +155,10 @@ private const val CONTROLS_TIMEOUT_MS = 6_000L
 /** Long enough to read twice from across a room, short enough not to sit on the picture. */
 private const val AUDIO_NOTICE_MS = 9_000L
 
+/** Attempts at picking a film up again after the connection drops, and the wait before the first. */
+private const val RECONNECT_TRIES = 3
+private const val RECONNECT_WAIT_MS = 3_000L
+
 /** How long nothing in the player may have the cursor before it's put back. */
 private const val PLAYER_RESCUE_DELAY_MS = 150L
 private const val NOTICE_MS = 2_500L
@@ -287,6 +291,19 @@ fun PlayerScreen(
     var bufferedMs by remember { mutableLongStateOf(0L) }
     var buffering by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    /*
+     * The connection to the server dropped mid-way. Picked up again where it stopped, a
+     * few times with a growing wait, as Plex's own app does; before, it said to try again
+     * and left nothing that would, short of leaving and resuming. After the last attempt
+     * it waits for OK.
+     */
+    var reconnects by remember { mutableIntStateOf(0) }
+    var reconnectAt by remember { mutableLongStateOf(0L) }
+    fun reconnect() {
+        error = null
+        exoPlayer.prepare()
+        exoPlayer.playWhenReady = true
+    }
     /*
      * Why there is no sound, when nothing can be done about it. Separate from `error`
      * because this is found while the picture plays: reaching the ready state clears
@@ -643,10 +660,17 @@ fun PlayerScreen(
                 // device could not handle the file — which is what the server's
                 // transcoder is for. Network errors are not that, and stay errors.
                 val deviceCannotPlay = playbackError.errorCode in 3_000..5_999
+                val connection = playbackError.errorCode in 2_000..2_999
                 if (deviceCannotPlay && !currentPlayback.transcoding) {
                     onDecodeFailure(exoPlayer.currentPosition.coerceAtLeast(0))
+                } else if (connection && !currentPlayback.isLive && reconnects < RECONNECT_TRIES) {
+                    // Live channels have their own; see LivePlayer.
+                    reconnects++
+                    error = "Reconnecting…"
+                    reconnectAt = System.currentTimeMillis() + RECONNECT_WAIT_MS * reconnects
                 } else {
-                    error = describe(playbackError)
+                    error = if (connection && !currentPlayback.isLive) "Lost the connection to your Plex server. Press OK to try again."
+                        else describe(playbackError)
                 }
             }
         }
@@ -669,7 +693,16 @@ fun PlayerScreen(
         onDispose { exoPlayer.removeAnalyticsListener(listener) }
     }
 
+    LaunchedEffect(reconnectAt) {
+        if (reconnectAt == 0L) return@LaunchedEffect
+        delay((reconnectAt - System.currentTimeMillis()).coerceAtLeast(0))
+        reconnect()
+    }
+    // Playing again: the next drop gets its full set of attempts.
+    LaunchedEffect(playing) { if (playing) reconnects = 0 }
+
     LaunchedEffect(playback.url) {
+        reconnects = 0
         audioDecoder = null
         error = null
         audioNotice = null
@@ -893,6 +926,18 @@ fun PlayerScreen(
             .onPreviewKeyEvent { event ->
                 // A reminder up has the cursor on its buttons; the keys are its.
                 if (reminder != null) return@onPreviewKeyEvent false
+                // Stuck after the connection dropped: OK, or Play, tries again from there.
+                if (error != null && !playback.isLive && reconnects >= RECONNECT_TRIES &&
+                    exoPlayer.playbackState == androidx.media3.common.Player.STATE_IDLE &&
+                    (event.key == Key.DirectionCenter || event.key == Key.Enter ||
+                        event.key == Key.MediaPlay || event.key == Key.MediaPlayPause)
+                ) {
+                    if (event.type == KeyEventType.KeyUp) {
+                        reconnects = 0
+                        reconnect()
+                    }
+                    return@onPreviewKeyEvent true
+                }
                 // Number keys type a channel, one picture on screen and nothing open over it.
                 if (playback.isLive && slotCount == 1 && !guideOpen && panel == Panel.NONE && tileMenu == null) {
                     val digit = digitOf(event.key)

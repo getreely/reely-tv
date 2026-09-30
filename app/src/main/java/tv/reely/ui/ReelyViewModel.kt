@@ -439,6 +439,8 @@ data class SearchState(
     /** Collections whose name matches: "Marvel", "James Bond", whatever the server keeps. */
     val collections: List<PlexItem> = emptyList(),
     val busy: Boolean = false,
+    /** No server answered: not the same as nothing matching, and not to be said as though it were. */
+    val unreachable: Boolean = false,
     /** What was searched for lately, newest first, to offer again when the box is empty. */
     val recent: List<String> = emptyList(),
 )
@@ -545,6 +547,9 @@ enum class HomeRow(val id: String, val title: String, val fromReely: Boolean = f
 /** How long after starting the app it looks for a newer version. */
 private const val UPDATE_CHECK_DELAY_MS = 4_000L
 
+/** How soon Home is asked for again while the server isn't answering. */
+private const val HOME_RETRY_MS = 30_000L
+
 /** How far in Plex counts something as watched, by its default setting. */
 private const val WATCHED_FRACTION = 0.9
 
@@ -601,6 +606,32 @@ internal fun ReelyState.withWatched(ratingKey: String, watched: Boolean): ReelyS
         ),
     )
 }
+
+/**
+ * Everything read as one profile, or from one server, gone when that changes: the pages,
+ * rows, search results, what was asked for in Reely and what's marked In library. A
+ * profile switch used to leave the last one's search results, actor and playlist pages
+ * and Requests behind, and a server switch left the way back to pages from the old server,
+ * which then opened whatever had the same number on the new one.
+ */
+internal fun ReelyState.forgetAccount(): ReelyState = copy(
+    home = HomeState(),
+    detail = null,
+    person = null,
+    playlist = null,
+    requestDetail = null,
+    focused = null,
+    upNext = null,
+    search = SearchState(recent = search.recent),
+    requests = requests.copy(
+        mine = emptyList(),
+        marks = tv.reely.requests.TitleMarks(),
+        ready = emptyList(),
+        plexMovies = emptySet(),
+        plexShows = emptySet(),
+    ),
+    stack = if (route is Route.Settings) listOf(Route.Home, Route.Settings) else listOf(Route.Home),
+)
 
 /** One title changed, on every screen and row holding a copy of it. */
 internal fun ReelyState.patchItem(
@@ -1176,6 +1207,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     fun submitRequest() {
         val client = reely ?: return
         val page = _state.value.requestDetail ?: return
+        // Once. A second press while the first was on its way came back "already
+        // requested", and that replaced the message saying the first had worked.
+        if (page.sending) return
         val detail = page.detail ?: return
         val title = detail.title
         val allSeasons = detail.seasons.map { it.number }.toSet()
@@ -1323,12 +1357,10 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             stopTheme()
             store.put(SecureStore.PLEX_TOKEN, next)
             store.remove(SecureStore.PLEX_SERVER_URI, SecureStore.PLEX_SERVER_TOKEN, SecureStore.PLEX_SERVER_NAME)
+            forgetAccount()
             _state.update {
                 it.copy(
                     plex = PlexState(token = next, user = target, homeUsers = plex.homeUsers, busy = true),
-                    home = HomeState(),
-                    detail = null,
-                    focused = null,
                     stack = listOf(Route.Home),
                 )
             }
@@ -1421,11 +1453,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         store.put(SecureStore.PLEX_SERVER_URI, base)
         store.put(SecureStore.PLEX_SERVER_TOKEN, token)
         store.put(SecureStore.PLEX_SERVER_NAME, name)
+        forgetAccount()
         _state.update {
             it.copy(
-                home = HomeState(),
-                detail = null,
-                focused = null,
                 plex = it.plex.copy(
                     baseUrl = base,
                     serverToken = token,
@@ -1551,6 +1581,12 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         updatePlex { it.copy(busy = true, error = null) }
         val sections = runCatching { PlexApi.sections(base, token) }.getOrElse { failure ->
             updatePlex { it.copy(busy = false, error = failure.readable()) }
+            // On Home too, where it's noticed: it was only said in Settings, and Home
+            // went on showing what was kept from last time as though all was well.
+            _state.update {
+                it.copy(home = it.home.copy(busy = false, error = "Couldn't reach your Plex server. Trying again…"))
+            }
+            retryHomeSoon()
             return
         }
         updatePlex { it.copy(busy = false, sections = sections) }
@@ -1569,7 +1605,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             SecureStore.PLEX_SERVER_TOKEN,
             SecureStore.PLEX_SERVER_NAME,
         )
-        _state.update { it.copy(plex = PlexState(), home = HomeState(), detail = null) }
+        forgetAccount()
+        _state.update { it.copy(plex = PlexState()) }
         // Nobody's rows to show the next person to sign in.
         tv.reely.core.HomeCache.clear(getApplication<Application>().filesDir)
     }
@@ -1611,6 +1648,26 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
      */
     private var homeGeneration = 0
 
+    /** See [forgetAccount]; and anything still on its way for the old one is ignored. */
+    private fun forgetAccount() {
+        homeGeneration++
+        homeRetry?.cancel()
+        plexHoldingsAt = 0L
+        lastPosition = null
+        _state.update { it.forgetAccount() }
+    }
+
+    /** Home asked for again shortly, while the server isn't answering. */
+    private var homeRetry: Job? = null
+
+    private fun retryHomeSoon() {
+        if (homeRetry?.isActive == true) return
+        homeRetry = viewModelScope.launch {
+            delay(HOME_RETRY_MS)
+            refreshHome()
+        }
+    }
+
     /**
      * Changes sent to Plex go one at a time, in the order they were made. Watched then
      * Unwatch in quick succession could otherwise reach the server the other way round,
@@ -1622,6 +1679,15 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         // Anything asked for that has arrived, said on Home as it refreshes.
         checkReadyRequests()
         val plex = _state.value.plex
+        // The server didn't answer when the app started, so there are no libraries to
+        // ask about. Asking for them again is what brings Home back once it's up; before,
+        // nothing did, and Home stayed as it was until the app was restarted.
+        // Only after asking failed: a server with no libraries at all answers with none,
+        // and asking again for ever would be the result.
+        if (plex.isConnected && plex.sections.isEmpty() && !plex.busy && plex.error != null) {
+            viewModelScope.launch { loadSections() }
+            return
+        }
         val sources = plex.homeSources().ifEmpty {
             val base = plex.baseUrl ?: return
             val token = plex.serverToken ?: return
@@ -1648,9 +1714,15 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             // The row Plex's own home screen shows, from every server, in order of when
             // each thing was last watched. It used to be ordered by when things were
             // added to the library — see continueWatchingOrder.
+            // Whether any server answered at all. None did, and the rows on screen stay as
+            // they are with a word about it: replacing them with nothing wiped Home blank
+            // on a moment's lost connection, with nothing to say why.
+            var answered = false
             val onDeck = continueWatchingOrder(
                 servers.flatMap { (base, token) ->
-                    runCatching { PlexApi.continueWatching(base, token) }.getOrElse { emptyList() }
+                    runCatching { PlexApi.continueWatching(base, token) }
+                        .onSuccess { answered = true }
+                        .getOrElse { emptyList() }
                 }
             ).take(40)
 
@@ -1679,6 +1751,14 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 else copy(logo = showLogos[serverBase to grandparentRatingKey])
 
             if (generation != homeGeneration) return@launch
+            if (!answered) {
+                _state.update {
+                    it.copy(home = it.home.copy(busy = false, error = "Couldn't reach your Plex server. Trying again…"))
+                }
+                retryHomeSoon()
+                return@launch
+            }
+            homeRetry?.cancel()
             _state.update {
                 it.copy(
                     home = HomeState(
@@ -2079,6 +2159,11 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     fun dismissBrowseError(kind: LibraryKind) = updateBrowse(kind) { it.copy(error = null) }
 
     // ---------------------------------------------------------------- Detail
+
+    /** The page showing, asked for again after it couldn't be loaded. */
+    fun retryDetail() {
+        (_state.value.route as? Route.Detail)?.let(::loadDetail)
+    }
 
     private fun loadDetail(route: Route.Detail) {
         val ratingKey = route.ratingKey
@@ -3009,8 +3094,11 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             delay(400)
             // Every pinned server, merged. Searching one of two libraries and calling it
             // "your library" is the thing this whole change is about.
+            var answered = servers.isEmpty()
             val found = servers.map { (base, token) ->
-                runCatching { PlexApi.searchAll(base, token, query) }.getOrElse { tv.reely.plex.PlexFound() }
+                runCatching { PlexApi.searchAll(base, token, query) }
+                    .onSuccess { answered = true }
+                    .getOrElse { tv.reely.plex.PlexFound() }
             }
             val (matches, others) = tv.reely.core.SearchMatch.split(query, found.flatMap { it.items })
             // Nothing by name, a misspelling most likely: then Plex's own guesses are the results.
@@ -3028,7 +3116,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 else current.copy(
                     search = current.search.copy(
                         results = results, more = more, channels = channels, people = people,
-                        collections = collections, busy = false,
+                        collections = collections, busy = false, unreachable = !answered,
                     )
                 )
             }

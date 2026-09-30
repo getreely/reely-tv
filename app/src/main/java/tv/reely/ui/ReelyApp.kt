@@ -633,6 +633,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                     // of the new one rather than wherever the last one was scrolled to.
                     DetailScreen(
                         state = detail,
+                        onRetry = viewModel::retryDetail,
                         imageUrl = viewModel::plexImageUrl,
                         backdropUrl = viewModel::plexBackdropUrl,
                 logoUrl = viewModel::plexLogoUrl,
