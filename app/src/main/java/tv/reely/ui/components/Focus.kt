@@ -43,6 +43,18 @@ suspend fun FocusRequester.requestWhenReady(
 }
 
 /**
+ * The cursor onto the first of [targets] that is on screen. The last should be somewhere
+ * that is always there: a place to put the cursor that may not exist at that moment —
+ * the button a menu was opened from, Play under a grid of channels, a card taken away —
+ * left it nowhere, or on the bare picture, and the remote did nothing until something
+ * else moved it.
+ */
+suspend fun focusFirstOf(vararg targets: FocusRequester): Boolean {
+    for (target in targets) if (target.requestWhenReady()) return true
+    return false
+}
+
+/**
  * Remembers where the cursor was in a row, so leaving it and coming back returns to the
  * same card rather than to whichever one happens to be nearest.
  *

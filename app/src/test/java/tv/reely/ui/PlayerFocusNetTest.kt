@@ -97,4 +97,19 @@ class PlayerFocusNetTest {
         press(Key.DirectionCenter)
         assertEquals(listOf("Low.Orbit.1080p.srt"), added)
     }
+
+    /** Added: the search goes, and the cursor is back on the controls, working. */
+    @Test fun `after adding subtitles the controls work straight away`() {
+        `subtitles found online can be chosen with the remote`()
+        // What the app does once they're added: the search is over.
+        search = null
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        val focused = compose.onAllNodes(androidx.compose.ui.test.isFocused()).fetchSemanticsNodes()
+        assertTrue("something in the controls has the cursor", focused.isNotEmpty())
+        // And it's on a button: OK on Subtitles opens its menu again.
+        press(Key.DirectionCenter)
+        assertTrue("the Subtitles menu opened from where the cursor was", showing("Find subtitles online"))
+    }
 }

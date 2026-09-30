@@ -3,6 +3,7 @@ package tv.reely.ui.screens
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import tv.reely.core.AudioOutputs
 import tv.reely.ui.components.FollowAudioOutput
+import tv.reely.ui.components.focusFirstOf
 import tv.reely.ui.components.rememberOutputPicker
 import tv.reely.ui.components.ConnectChosenOutput
 import tv.reely.core.renderersFor
@@ -900,7 +901,7 @@ fun PlayerScreen(
      */
     LaunchedEffect(scrubRequests) {
         if (scrubRequests == 0 || (playback.isLive && !liveRewind)) return@LaunchedEffect
-        scrubberFocus.requestWhenReady()
+        focusFirstOf(scrubberFocus, playFocus, rootFocus)
         // Held for a frame: the effect below starts in the same frame as this one, and
         // seeing the flag already down it put the cursor straight back on Play.
         withFrameNanos { }
@@ -922,7 +923,10 @@ fun PlayerScreen(
     var hasFocus by remember { mutableStateOf(true) }
     var bareFocus by remember { mutableStateOf(false) }
     var refocus by remember { mutableIntStateOf(0) }
-    val lostCursor = !hasFocus || (bareFocus && (panel != Panel.NONE || tileMenu != null || postPlay))
+    // Lost: nowhere at all, or on the bare picture while there's something up that should
+    // have it — a menu, the tile menu, Up Next, or the controls themselves.
+    val lostCursor = !hasFocus ||
+        (bareFocus && (panel != Panel.NONE || tileMenu != null || postPlay || (controlsVisible && !guideOpen && slotCount == 1)))
     LaunchedEffect(lostCursor) {
         if (!lostCursor) return@LaunchedEffect
         // Anything moving the cursor on purpose has a moment to do it first.
@@ -941,20 +945,29 @@ fun PlayerScreen(
         if (guideOpen) return@LaunchedEffect
         val cameFrom = closedPanel
         closedPanel = null
+        // Each with the picture itself to fall back on, which is always there and takes
+        // the keys: see focusFirstOf.
         when {
-            postPlay -> upNextFocus.requestWhenReady()
-            tileMenu != null -> tileMenuFocus.requestWhenReady()
+            postPlay -> focusFirstOf(upNextFocus, rootFocus)
+            tileMenu != null -> focusFirstOf(tileMenuFocus, rootFocus)
             panel != Panel.NONE -> {
                 closedPanel = panel
-                panelFocus.requestWhenReady()
+                focusFirstOf(panelFocus, rootFocus)
             }
             // Above the transport: a prompt that is only up for a few seconds is no use
             // if reaching it means hunting for it first.
             // The effect above is putting the cursor on the bar; don't take it to Play.
             scrubFirst && controlsVisible && (!playback.isLive || liveRewind) -> Unit
-            cameFrom != null && controlsVisible -> panelButtons.getValue(cameFrom).requestWhenReady()
-            skipLabel != null -> skipFocus.requestWhenReady()
-            controlsVisible -> playFocus.requestWhenReady()
+            // Finding subtitles is reached from the Subtitles menu and has no button of
+            // its own: back to Subtitles. Asking for a button that wasn't there left the
+            // cursor behind the controls, and nothing on them worked until they'd gone.
+            cameFrom != null && controlsVisible -> focusFirstOf(
+                panelButtons.getValue(if (cameFrom == Panel.FIND_SUBTITLES) Panel.SUBTITLES else cameFrom),
+                playFocus,
+                rootFocus,
+            )
+            skipLabel != null -> focusFirstOf(skipFocus, playFocus, rootFocus)
+            controlsVisible -> focusFirstOf(playFocus, rootFocus)
             else -> rootFocus.requestWhenReady()
         }
     }
@@ -970,10 +983,10 @@ fun PlayerScreen(
     LaunchedEffect(skipLabel != null) {
         if (guideOpen || postPlay || tileMenu != null || panel != Panel.NONE) return@LaunchedEffect
         if (skipLabel != null) {
-            if (!(controlsVisible && atTopOfControls)) skipFocus.requestWhenReady()
+            if (!(controlsVisible && atTopOfControls)) focusFirstOf(skipFocus, rootFocus)
         } else if (skipFocused) {
             skipFocused = false
-            if (controlsVisible) playFocus.requestWhenReady() else rootFocus.requestWhenReady()
+            if (controlsVisible) focusFirstOf(playFocus, rootFocus) else rootFocus.requestWhenReady()
         }
     }
 
@@ -1569,10 +1582,10 @@ fun PlayerScreen(
         LaunchedEffect(reminder) {
             if (reminder != null) {
                 hadReminder = true
-                reminderFocus.requestWhenReady()
+                focusFirstOf(reminderFocus, rootFocus)
             } else if (hadReminder) {
                 hadReminder = false
-                if (controlsVisible && !playback.isLive) playFocus.requestWhenReady() else rootFocus.requestWhenReady()
+                if (controlsVisible && !playback.isLive) focusFirstOf(playFocus, rootFocus) else rootFocus.requestWhenReady()
             }
         }
         reminder?.let { due ->

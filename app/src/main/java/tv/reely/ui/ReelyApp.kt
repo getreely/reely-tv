@@ -399,7 +399,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 viewModel.goBack()
             }
             BackStep.LIBRARY_HOME -> gridRoute?.let { viewModel.navigate(Route.Library(it.kind, LibraryView.HOME)) }
-            BackStep.UP_TO_TAB -> currentTabFocus.requestFocus()
+            BackStep.UP_TO_TAB -> runCatching { currentTabFocus.requestFocus() }
             BackStep.ASK_EXIT -> confirmExit = true
         }
     }
@@ -433,6 +433,9 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     var itemMenuClosed by remember { mutableIntStateOf(0) }
     LaunchedEffect(itemMenu, itemMenuClosed) {
         if (itemMenu != null) itemMenuFocus.requestWhenReady()
+        // The card held. When what was chosen took it away (Mark watched off Continue
+        // Watching, say), its row puts the cursor on the card beside it (FollowRemovals),
+        // and with no row left, the net below puts it on the page.
         else if (itemMenuClosed > 0) heldCard.requester?.let { tv.reely.ui.components.FocusReturn.to(it) }
     }
     fun closeItemMenu() {
