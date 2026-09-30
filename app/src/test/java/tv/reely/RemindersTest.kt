@@ -36,4 +36,10 @@ class RemindersTest {
     @Test fun `one per programme`() {
         assertEquals(later.key, later.copy(title = "Renamed").key)
     }
+
+    /** Back in the app hours later: a reminder that came due meanwhile isn't said then. */
+    @Test fun `a reminder long past isn't said on coming back`() {
+        org.junit.Assert.assertTrue(Reminders.stillWorthSaying(justStarted, now))
+        org.junit.Assert.assertFalse(Reminders.stillWorthSaying(longGone, now))
+    }
 }

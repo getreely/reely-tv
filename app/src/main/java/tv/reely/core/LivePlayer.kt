@@ -116,6 +116,25 @@ class LivePlayer(context: Context) {
     fun isShowing(url: String): Boolean =
         loaded == url && player.playbackState != Player.STATE_IDLE
 
+    /**
+     * Out of sight — Home on the remote, another app. The stream is let go of, which hangs
+     * up on the provider: paused, it kept the connection, and with it one of the account's
+     * few streams, and the guide's preview carried on playing over the launcher, having
+     * nothing to stop it. The channel is kept, to pick up again on the way back.
+     */
+    fun park() {
+        if (loaded == null) return
+        player.stop()
+    }
+
+    /** Back in sight: the channel parked, again, at the live edge. */
+    fun unpark() {
+        if (loaded == null || player.playbackState != Player.STATE_IDLE) return
+        player.seekToDefaultPosition()
+        player.prepare()
+        player.playWhenReady = true
+    }
+
     fun stop() {
         loaded = null
         retries = 0

@@ -553,8 +553,9 @@ fun PlayerScreen(
                 Lifecycle.Event.ON_STOP -> {
                     exoPlayer.playWhenReady = false
                     // The other tiles are players too, and a player nobody stopped keeps
-                    // playing over the launcher. Twice bitten.
-                    extraPlayers.values.forEach { it.playWhenReady = false }
+                    // playing over the launcher. Twice bitten. Stopped, not paused: each
+                    // holds one of the provider's few streams for as long as it's loaded.
+                    extraPlayers.values.forEach { it.stop() }
                     if (!playback.isLive && playback.ratingKey != null) {
                         onReportProgress(exoPlayer.currentPosition.coerceAtLeast(0), false)
                     }
@@ -2446,15 +2447,30 @@ private fun applyServerChoice(player: ExoPlayer, playback: Playback) {
     builder?.let { player.trackSelectionParameters = it.build() }
 }
 
+/**
+ * A track chosen in the panel. The choice is of this file's track, which the next
+ * episode doesn't have; its language is kept too, so the next episode starts with the
+ * same subtitles or sound. Before, subtitles turned on for one episode were off again for
+ * the next unless the server happened to pick them.
+ */
 private fun applyTrack(player: ExoPlayer, trackType: Int, choice: TrackChoice) {
     val builder = player.trackSelectionParameters.buildUpon()
     val group = choice.group
+    val language = group?.getTrackFormat(0)?.language?.takeIf { it.isNotBlank() && it != C.LANGUAGE_UNDETERMINED }
     player.trackSelectionParameters = if (group == null) {
-        builder.clearOverridesOfType(trackType).setTrackTypeDisabled(trackType, true).build()
+        builder.clearOverridesOfType(trackType).setTrackTypeDisabled(trackType, true)
+            .apply { if (trackType == C.TRACK_TYPE_TEXT) setPreferredTextLanguage(null) }
+            .build()
     } else {
         builder
             .setTrackTypeDisabled(trackType, false)
             .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, 0))
+            .apply {
+                if (language != null) {
+                    if (trackType == C.TRACK_TYPE_TEXT) setPreferredTextLanguage(language)
+                    else if (trackType == C.TRACK_TYPE_AUDIO) setPreferredAudioLanguage(language)
+                }
+            }
             .build()
     }
 }

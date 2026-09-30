@@ -51,4 +51,8 @@ object Reminders {
 
     /** How long after a programme starts its reminder is still worth showing. */
     const val GRACE_SECONDS = 10L * 60
+
+    /** Said on coming back to the app: within the same grace, or it's missed. */
+    fun stillWorthSaying(reminder: Reminder, nowSeconds: Long): Boolean =
+        nowSeconds - reminder.start <= GRACE_SECONDS
 }

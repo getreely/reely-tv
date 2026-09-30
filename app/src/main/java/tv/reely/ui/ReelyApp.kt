@@ -296,11 +296,16 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
                 viewModel.silenceTheme()
+                viewModel.livePlayer.park()
                 wasStopped = true
             }
             // Back from the launcher or a screensaver: whatever was added meanwhile.
             // Not the first start, which loads everything anyway.
-            if (event == Lifecycle.Event.ON_START && wasStopped) viewModel.refreshVisible()
+            if (event == Lifecycle.Event.ON_START && wasStopped) {
+                viewModel.livePlayer.unpark()
+                viewModel.dropStaleReminder()
+                viewModel.refreshVisible()
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }

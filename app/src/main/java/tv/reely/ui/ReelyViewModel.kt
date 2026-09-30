@@ -2706,6 +2706,16 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
     fun dismissReminder() = _state.update { it.copy(dueReminder = null) }
 
+    /**
+     * Back to the app after a while away. A reminder that came due meanwhile would still
+     * say its programme was starting, hours later; one that far gone goes unsaid.
+     */
+    fun dropStaleReminder() = _state.update { current ->
+        val due = current.dueReminder ?: return@update current
+        if (tv.reely.core.Reminders.stillWorthSaying(due, System.currentTimeMillis() / 1000)) current
+        else current.copy(dueReminder = null)
+    }
+
     /** The channel of the programme starting, from wherever the reminder was said. */
     fun watchReminder() {
         val due = _state.value.dueReminder ?: return
