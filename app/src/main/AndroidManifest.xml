@@ -56,8 +56,14 @@
         android:theme="@style/Theme.ReelyTv"
         android:usesCleartextTraffic="true">
 
+        <!--
+          The banner on the activity as well as the application: some home screens look for
+          it on the activity that launches, and show the square icon in a grey frame without.
+        -->
         <activity
             android:name=".MainActivity"
+            android:banner="@drawable/reely_banner_wordmark"
+            android:icon="@mipmap/reely_icon"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
             android:exported="true"
             android:launchMode="singleTop"
