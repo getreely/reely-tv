@@ -125,6 +125,7 @@ fun SettingsScreen(
     onToggleLargerBuffer: () -> Unit,
     onToggleSkipIntros: () -> Unit,
     onToggleSkipCredits: () -> Unit = {},
+    onSetAudioOutput: (String?) -> Unit = {},
     onSetScreensaver: (Int) -> Unit = {},
     onNudgeThemeVolume: (Float) -> Unit,
     onRefreshChannels: () -> Unit,
@@ -227,6 +228,7 @@ fun SettingsScreen(
                     onToggleLargerBuffer = onToggleLargerBuffer,
                     onToggleSkipIntros = onToggleSkipIntros,
                     onToggleSkipCredits = onToggleSkipCredits,
+                    onSetAudioOutput = onSetAudioOutput,
                     onNudgeThemeVolume = onNudgeThemeVolume,
                 )
 
@@ -295,6 +297,7 @@ private fun PlaybackSection(
     onToggleSkipIntros: () -> Unit,
     onToggleSkipCredits: () -> Unit,
     onNudgeThemeVolume: (Float) -> Unit,
+    onSetAudioOutput: (String?) -> Unit,
 ) {
     SettingGroup("Video") {
         ChoiceRow(
@@ -345,6 +348,39 @@ private fun PlaybackSection(
             ),
             selected = prefs.largerBuffer,
             onSelect = { onToggleLargerBuffer() },
+        )
+    }
+
+    SettingGroup("Sound") {
+        // What's connected or paired now, plus what was chosen if it's neither: it's still
+        // the choice, and used again as soon as it's back.
+        val outputs = tv.reely.ui.components.rememberAudioOutputs()
+        val chosen = prefs.audioOutput
+        val gone = chosen != null && outputs.none { it.key == chosen }
+        val options = buildList<Option<String?>> {
+            add(Option(null, "Automatic", "Wherever the Fire TV sends sound."))
+            outputs.forEach { output ->
+                add(
+                    Option(
+                        output.key,
+                        output.label,
+                        when {
+                            !output.connected -> "Paired. Connects when something plays; the TV if it can't."
+                            output.kind == tv.reely.core.AudioOutput.Kind.BLUETOOTH -> "Bluetooth"
+                            output.kind == tv.reely.core.AudioOutput.Kind.USB -> "USB"
+                            else -> null
+                        },
+                    )
+                )
+            }
+            if (gone) add(Option(chosen, "Your last choice", "Not found. The TV is used instead."))
+        }
+        ChoiceRow(
+            title = "Play sound on",
+            description = "Headphones and speakers paired with the Fire TV. When the one chosen isn't there, the TV.",
+            options = options,
+            selected = chosen,
+            onSelect = onSetAudioOutput,
         )
     }
 

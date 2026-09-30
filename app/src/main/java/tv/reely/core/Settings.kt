@@ -120,6 +120,11 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(LARGER_BUFFER, false)
         set(value) = prefs.edit().putBoolean(LARGER_BUFFER, value).apply()
 
+    /** Where sound goes, as AudioOutputs names it; null leaves it to the system. */
+    var audioOutput: String?
+        get() = prefs.getString(AUDIO_OUTPUT, null)
+        set(value) = prefs.edit().putString(AUDIO_OUTPUT, value).apply()
+
     /**
      * A show's theme tune under its page. Off unless asked for: something that makes
      * noise on its own should be chosen rather than discovered.
@@ -191,6 +196,7 @@ class Settings(context: Context) {
         private const val PLAYBACK_MODE = "playback.mode"
         private const val MATCH_FRAME_RATE = "playback.matchFrameRate"
         private const val LARGER_BUFFER = "playback.largerBuffer"
+        private const val AUDIO_OUTPUT = "playback.audioOutput"
         private const val HIDDEN_HOME_ROWS = "home.hiddenRows"
         private const val SKIP_INTROS = "playback.skipIntros"
         private const val SKIP_CREDITS = "playback.skipCredits"

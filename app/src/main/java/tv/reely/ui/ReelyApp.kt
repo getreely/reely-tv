@@ -209,10 +209,15 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
         return
     }
 
+    // Live TV's sound where it was sent, in the guide's preview as much as full screen.
+    val livePlayers = remember { listOf(viewModel.livePlayer.player) }
+    tv.reely.ui.components.FollowAudioOutput(livePlayers, state.prefs.audioOutput)
+
     val playback = state.playback
     if (playback != null) {
         PlayerScreen(
             playback = playback,
+            onSetAudioOutput = viewModel::setAudioOutput,
             prefs = state.prefs,
             live = state.live,
             guide = state.guide,
@@ -766,6 +771,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onToggleLargerBuffer = viewModel::toggleLargerBuffer,
                 onToggleSkipIntros = viewModel::toggleSkipIntros,
                 onToggleSkipCredits = viewModel::toggleSkipCredits,
+                onSetAudioOutput = viewModel::setAudioOutput,
                 onSetScreensaver = viewModel::setScreensaverMinutes,
                 onNudgeThemeVolume = viewModel::nudgeThemeVolume,
                 onSetPlaybackMode = viewModel::setPlaybackMode,

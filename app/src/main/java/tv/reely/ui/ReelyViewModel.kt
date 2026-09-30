@@ -511,6 +511,8 @@ data class PlayerPrefs(
     val themeVolume: Float = Settings.DEFAULT_THEME_VOLUME,
     val matchFrameRate: Boolean = true,
     val largerBuffer: Boolean = false,
+    /** Where sound goes (see AudioOutputs); null for wherever the system sends it. */
+    val audioOutput: String? = null,
     /** Straight past an episode's intro, where the server has marked one. */
     val skipIntros: Boolean = false,
     /** Straight on to the next episode at the credits, where there is one. */
@@ -655,6 +657,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 themeVolume = settings.themeVolume,
                 matchFrameRate = settings.matchFrameRate,
                 largerBuffer = settings.largerBuffer,
+                audioOutput = settings.audioOutput,
                 skipIntros = settings.skipIntros,
                 skipCredits = settings.skipCredits,
                 screensaverMinutes = settings.screensaverMinutes,
@@ -3831,6 +3834,11 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val next = !settings.skipIntros
         settings.skipIntros = next
         _state.update { it.copy(prefs = it.prefs.copy(skipIntros = next)) }
+    }
+
+    fun setAudioOutput(key: String?) {
+        settings.audioOutput = key
+        _state.update { it.copy(prefs = it.prefs.copy(audioOutput = key)) }
     }
 
     fun toggleLargerBuffer() {

@@ -14,6 +14,18 @@
     <!-- Sideloaded builds update themselves; the system installer does the actual work. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!--
+      Headphones and speakers already paired with the television, listed in the player's
+      sound menu and connected from there. Not required: a television with no Bluetooth
+      still plays through its own speakers.
+    -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-feature
+        android:name="android.hardware.bluetooth"
+        android:required="false" />
+
     <!-- A television app, but not required so the same APK installs on a phone for quick checks. -->
     <uses-feature
         android:name="android.software.leanback"

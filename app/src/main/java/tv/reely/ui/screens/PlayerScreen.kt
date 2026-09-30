@@ -1,6 +1,10 @@
 package tv.reely.ui.screens
 
 import androidx.media3.exoplayer.analytics.AnalyticsListener
+import tv.reely.core.AudioOutputs
+import tv.reely.ui.components.FollowAudioOutput
+import tv.reely.ui.components.rememberOutputPicker
+import tv.reely.ui.components.ConnectChosenOutput
 import tv.reely.core.renderersFor
 import tv.reely.ui.components.LoadingRing
 import androidx.activity.compose.BackHandler
@@ -204,6 +208,8 @@ fun PlayerScreen(
     onReportProgress: (Long, Boolean) -> Unit,
     onNudgeSubtitleScale: (Float) -> Unit,
     onToggleSubtitleBackground: () -> Unit,
+    /** Where sound goes, by AudioOutputs' key; null for wherever the system sends it. */
+    onSetAudioOutput: (String?) -> Unit = {},
     /** A sound or subtitle choice to keep with Plex: stream ids, "0" for subtitles off. */
     onSaveStreamChoice: (audio: String?, subtitle: String?) -> Unit = { _, _ -> },
     /** Subtitles being looked for online, and looking, choosing and giving up. */
@@ -353,6 +359,9 @@ fun PlayerScreen(
         tiles.map { XtreamApi.streamUrl(credentials, it, live.format) }
     }.orEmpty()
     val extraPlayers = remember { mutableStateMapOf<String, ExoPlayer>() }
+    // Sound where it was sent. Live TV's own player is kept there by the app, guide and all.
+    FollowAudioOutput(listOf(ownPlayer) + extraPlayers.values, prefs.audioOutput)
+    ConnectChosenOutput(prefs.audioOutput)
     LaunchedEffect(extraUrls) {
         extraUrls.forEach { url ->
             if (url !in extraPlayers) extraPlayers[url] = buildExtraPlayer(context, url)
@@ -1393,6 +1402,8 @@ fun PlayerScreen(
                     }
                 },
                 onClose = { panel = Panel.NONE },
+                audioOutput = prefs.audioOutput,
+                onPickOutput = onSetAudioOutput,
                 onNudgeScale = onNudgeSubtitleScale,
                 onToggleBackground = onToggleSubtitleBackground,
                 modifier = Modifier.align(Alignment.CenterEnd),
@@ -2198,8 +2209,15 @@ internal fun TrackPanel(
     onPicked: (Int, Int?) -> Unit = { _, _ -> },
     onToggleBackground: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Where the sound is going, by AudioOutputs' key; null for Automatic. */
+    audioOutput: String? = null,
+    onPickOutput: (String?) -> Unit = {},
 ) {
     val trackType = if (panel == Panel.SUBTITLES) C.TRACK_TYPE_TEXT else C.TRACK_TYPE_AUDIO
+    val picker = rememberOutputPicker(onPickOutput)
+    val outputs = picker.outputs
+    val context = LocalContext.current
+    val pairing = remember { AudioOutputs.pairingIntent(context) }
     val choices = remember(tracksVersion, panel) { trackChoices(player, trackType) }
 
     MenuPanel(modifier = modifier.focusGroup().focusRequester(focusRequester)) {
@@ -2238,6 +2256,45 @@ internal fun TrackPanel(
                         icon = { SearchGlyph(it, size = 20.dp) },
                         onClick = onFindSubtitles,
                     )
+                }
+            }
+            if (panel == Panel.AUDIO) {
+                // Somewhere else for the sound: headphones, a speaker. What's chosen is kept
+                // for next time, and used whenever it's there; when it isn't, the TV.
+                item { MenuSection("Play sound on") }
+                val chosen = outputs.firstOrNull { it.key == audioOutput && it.connected }
+                item {
+                    MenuItem(
+                        label = "Automatic",
+                        detail = if (audioOutput != null && chosen == null && picker.connecting == null)
+                            "Using the TV until yours is connected" else null,
+                        checked = chosen == null && picker.connecting == null,
+                        onClick = { picker.pick(null) },
+                    )
+                }
+                itemsIndexed(outputs, key = { _, output -> output.key }) { _, output ->
+                    MenuItem(
+                        label = output.label,
+                        detail = when {
+                            picker.connecting == output.key -> "Connecting…"
+                            picker.failed == output.key -> "Couldn't connect. Is it on and nearby?"
+                            !output.connected -> "Paired · select to connect"
+                            output.kind == tv.reely.core.AudioOutput.Kind.BLUETOOTH -> "Bluetooth"
+                            output.kind == tv.reely.core.AudioOutput.Kind.USB -> "USB"
+                            else -> null
+                        },
+                        checked = output == chosen,
+                        onClick = { picker.pick(output) },
+                    )
+                }
+                if (pairing != null) {
+                    item {
+                        MenuItem(
+                            label = "Pair something new",
+                            icon = { PlusGlyph(it, size = 18.dp) },
+                            onClick = { runCatching { context.startActivity(pairing) } },
+                        )
+                    }
                 }
             }
             if (panel == Panel.SUBTITLES) {
