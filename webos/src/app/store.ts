@@ -72,7 +72,15 @@ export interface Browse {
   decades: plex.PlexGenre[];
   /** How many titles start with each letter, in the order shown: the A–Z jump. */
   letters: plex.PlexLetter[];
+  /** The tab's own home of rows, everything, or the library's collections. */
+  view: LibraryView;
+  /** The library's newest releases, for the tab's home. */
+  released: PlexItem[];
+  /** The library's collections; null until they're in. */
+  collections: PlexItem[] | null;
 }
+
+export type LibraryView = "home" | "grid" | "collections";
 
 /** The narrowing asked of Plex, as query parameters. */
 export const filtersOf = (b: Pick<Browse, "unwatched" | "genre" | "decade">) =>
@@ -301,6 +309,7 @@ export interface AppState {
 const emptyBrowse = (): Browse => ({
   choice: null, items: [], total: 0, busy: false, sort: "titleSort:asc", error: null,
   unwatched: false, genre: null, decade: null, genres: [], decades: [], letters: [],
+  view: "home", released: [], collections: null,
 });
 
 export function initialState(): AppState {
@@ -355,6 +364,8 @@ export const isConnected = (s: AppState) => !!s.plex.baseUrl && !!s.plex.serverT
 const PIN_TRIES = 300;
 const PIN_EVERY_MS = 2_000;
 const GRID_PAGE = 120;
+/** How long before a server that couldn't be reached is looked for again. */
+export const SERVER_RETRY_MS = 30_000;
 
 export class App {
   private current: AppState = initialState();
@@ -531,6 +542,8 @@ export class App {
   }
 
   signOut() {
+    if (this.retry) clearTimeout(this.retry);
+    this.retry = null;
     for (const key of ["plexToken", "plexAccountToken", "plexUser", "server"]) this.store.remove(key);
     const fresh = initialState();
     // What's kept on the TV rather than the account stays: recent searches and playback choices.
@@ -568,12 +581,26 @@ export class App {
     if (this.current.plex.token !== token) return;
     if (!chosen) {
       this.setPlex({ servers, finding: false, error: servers.length ? "Can't find your Plex server. Make sure it's on." : "No Plex servers on this account." });
+      // It keeps looking, every little while, as well as at Try again.
+      this.lookAgainSoon(token);
       return;
     }
     this.store.set("server", chosen.server.name);
     this.setPlex({ servers, serverName: chosen.server.name, baseUrl: chosen.base, serverToken: chosen.server.accessToken, libraries, finding: false, error: null });
     await this.refreshHome();
     void this.loadIptv();
+  }
+
+  private retry: ReturnType<typeof setTimeout> | null = null;
+
+  /** Looks for the server again in a while, if it's still not there. */
+  private lookAgainSoon(token: string) {
+    if (this.retry) clearTimeout(this.retry);
+    this.retry = setTimeout(() => {
+      this.retry = null;
+      const p = this.current.plex;
+      if (p.token === token && !p.finding && (!p.baseUrl || this.current.homeError)) void this.connect(token);
+    }, SERVER_RETRY_MS);
   }
 
   // ---------------------------------------------------------------- Profiles
@@ -609,6 +636,10 @@ export class App {
     if (run !== this.homeRun) return;
     if (!rows) {
       this.set((s) => ({ ...s, homeBusy: false, homeError: "Couldn't reach your Plex server. Trying again…" }));
+      // Addresses change: a router hands the server a new one, the server moves house. Its
+      // addresses are looked up afresh, and wherever it answers now is where it's used from.
+      const token = this.current.plex.token;
+      if (token) this.lookAgainSoon(token);
       return;
     }
     this.plexHome = rows;
@@ -883,7 +914,7 @@ export class App {
         [kind]: {
           ...s.browse[kind], choice: target, items: [], busy: true, error: null,
           // Another library's genres and decades aren't this one's.
-          ...(switching ? { genre: null, decade: null, genres: [], decades: [], letters: [] } : {}),
+          ...(switching ? { genre: null, decade: null, genres: [], decades: [], letters: [], released: [], collections: null } : {}),
         },
       },
     }));
@@ -899,7 +930,22 @@ export class App {
       if (this.current.browse[kind].choice === target) this.setBrowse(kind, { genres, decades });
     });
     void this.loadLetters(kind);
+    void this.loadTabHome(kind, target);
     await this.loadMore(kind);
+  }
+
+  /** The tab's own home: this library's newest releases, and its collections. */
+  private async loadTabHome(kind: Kind, choice: LibraryChoice) {
+    const type = kind === "movie" ? plex.TYPE_MOVIE : plex.TYPE_SHOW;
+    const [released, collections] = await Promise.all([
+      plex.items(choice.baseUrl, choice.token, `/library/sections/${choice.section.key}/all?type=${type}&sort=originallyAvailableAt:desc`, 40).catch(() => [] as PlexItem[]),
+      plex.collections(choice.baseUrl, choice.token, choice.section.key).catch(() => [] as PlexItem[]),
+    ]);
+    if (this.current.browse[kind].choice === choice) this.setBrowse(kind, { released, collections });
+  }
+
+  setLibraryView(kind: Kind, view: LibraryView) {
+    this.setBrowse(kind, { view });
   }
 
   private setBrowse(kind: Kind, change: Partial<Browse>) {

@@ -323,8 +323,12 @@ test("arrows move along a row and down to the next; Back from a tab goes Home", 
   await expect(page.locator(".tab:focus")).toHaveText("Home");
   await press(page, "ArrowRight");
   await expect(page.locator(".tab:focus")).toHaveText("Movies");
-  await expect(page.locator(".grid .card").first()).toBeVisible();
+  // The tab's own home, as on the Fire TV; All has the whole library.
+  await expect(page.getByRole("heading", { name: "Recently Released" })).toBeVisible();
   await expect(page.locator(".tab:focus")).toHaveText("Movies");
+  await page.screenshot({ path: "shots/lg-movies-home.png" });
+  await page.getByRole("button", { name: "All", exact: true }).click();
+  await expect(page.locator(".grid .card").first()).toBeVisible();
   await press(page, "Escape");
   await expect(page.getByText("Recently Added Movies")).toBeVisible();
 });

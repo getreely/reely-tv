@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { App } from "../../src/app/store";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { App, SERVER_RETRY_MS } from "../../src/app/store";
 import { useFetcher } from "../../src/core/http";
 import { clearProblem, lastProblem, recordProblem } from "../../src/core/crash";
 import { slidesFrom } from "../../src/ui/screensaver";
@@ -120,6 +120,24 @@ describe("the LG app's state", () => {
     await app.startSignIn();
     expect(app.state.plex.baseUrl).toBeNull();
     expect(app.state.plex.error).toBe("Can't find your Plex server. Make sure it's on.");
+  });
+
+  it("a server that's off is looked for again, and found once it's back", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      let up = false;
+      const on = fakePlex({ serverUp: true });
+      const off = fakePlex({ serverUp: false });
+      useFetcher((input, init) => (up ? on.fetch : off.fetch)(input, init));
+      await app.startSignIn();
+      expect(app.state.plex.baseUrl).toBeNull();
+      up = true;
+      await vi.advanceTimersByTimeAsync(SERVER_RETRY_MS + 1);
+      for (let i = 0; i < 20 && !app.state.plex.baseUrl; i++) await Promise.resolve();
+      expect(app.state.plex.baseUrl).toBe(SERVER);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("a show's page lands on the episode it's up to", async () => {

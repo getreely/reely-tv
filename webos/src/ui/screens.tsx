@@ -198,7 +198,7 @@ export function Library(props: { app: App; state: AppState; kind: Kind }) {
   const browse = state.browse[kind];
   const libraries = app.librariesOf(kind);
   const [choosing, setChoosing] = useState<"genre" | "decade" | null>(null);
-  useRescue([browse.items.length > 0, browse.choice]);
+  useRescue([browse.items.length > 0, browse.choice, browse.view, browse.released.length > 0, browse.collections != null]);
   if (!libraries.length) {
     return <div class="center"><p class="note">No {kind === "movie" ? "movie" : "TV"} library on {state.plex.serverName ?? "this server"}.</p></div>;
   }
@@ -207,14 +207,71 @@ export function Library(props: { app: App; state: AppState; kind: Kind }) {
     const at = await app.jumpTo(kind, letter);
     if (at >= 0) setTimeout(() => focus(document.querySelectorAll<HTMLElement>(".grid .card")[at]), 0);
   };
+  // The provider's library is a grid only; Plex's open on the tab's own home, as the Fire TV's do.
+  const view = isIptvChoice(browse.choice) ? "grid" : browse.view;
+  const libraryPills = libraries.length > 1
+    ? libraries.map((l) => (
+        <Pill key={l.serverName + l.section.key} label={l.section.title} on={browse.choice === l} onPress={() => void app.openLibrary(kind, l)} />
+      ))
+    : null;
+  const views = isIptvChoice(browse.choice) ? null : (
+    <>
+      <Pill label="Home" on={view === "home"} onPress={() => app.setLibraryView(kind, "home")} />
+      <Pill label="All" on={view === "grid"} onPress={() => app.setLibraryView(kind, "grid")} />
+      <Pill label="Collections" on={view === "collections"} onPress={() => app.setLibraryView(kind, "collections")} />
+    </>
+  );
+  if (view === "home") {
+    const resumable = state.home.continueWatching.filter((i) => (kind === "movie" ? i.type === "movie" : i.type === "episode"));
+    const iptvNew = kind === "movie" ? state.home.iptvMovies : state.home.iptvShows;
+    let first = true;
+    const auto = () => { const was = first; first = false; return was; };
+    const poster = (i: PlexItem, key: string) => (
+      <Card key={key} item={i} autofocus={auto()} title={plex.rowTitle(i)} sub={i.type === "episode" ? episodeLine(i) : plex.caption(i)}
+        image={app.image(i.serverBase, i.type === "episode" ? i.grandparentThumb ?? i.thumb : i.thumb, 300, 450)}
+        progress={plex.resumeFraction(i)} watched={plex.isWatched(i)} onPress={() => open(app, i)} />
+    );
+    return (
+      <div>
+        <div class="toolbar">{views}{libraryPills}</div>
+        {resumable.length ? <Row title="Continue Watching">{resumable.map((i) => poster(i, `c:${plex.listKey(i)}`))}</Row> : null}
+        {kind === "movie" && state.home.recentMovies.length ? <Row title="Recently Added">{state.home.recentMovies.map((i) => poster(i, `r:${plex.listKey(i)}`))}</Row> : null}
+        {kind === "show" && state.home.recentEpisodes.length ? (
+          <Row title="Recently Added">
+            {state.home.recentEpisodes.map((g) => (
+              <Card key={`r:${groupKey(g)}`} item={g.newest} autofocus={auto()} title={g.showTitle} sub={g.count > 1 ? `${g.count} new episodes` : plex.caption(g.newest)}
+                image={app.image(g.serverBase, g.thumb, 300, 450)} badge={g.count} onPress={() => open(app, g.newest)} />
+            ))}
+          </Row>
+        ) : null}
+        {browse.released.length ? <Row title="Recently Released">{browse.released.map((i) => poster(i, `n:${plex.listKey(i)}`))}</Row> : null}
+        {iptvNew.length ? <Row title="New on IPTV">{iptvNew.map((i) => poster(i, `i:${plex.listKey(i)}`))}</Row> : null}
+        {browse.collections == null ? <div class="center" style={{ height: "12rem" }}><Spinner /></div> : null}
+      </div>
+    );
+  }
+  if (view === "collections") {
+    const collections = browse.collections;
+    return (
+      <div>
+        <div class="toolbar">{views}{libraryPills}</div>
+        {collections == null ? <div class="center" style={{ height: "12rem" }}><Spinner /></div>
+          : !collections.length ? <p class="note" style={{ margin: "1rem 3rem" }}>No collections in {browse.choice?.section.title ?? "this library"} yet. Collections made in Plex show up here.</p>
+          : (
+            <div class="grid">
+              {collections.map((c, i) => (
+                <Card key={plex.listKey(c)} autofocus={i === 0} title={c.title} sub={plex.caption(c)} image={app.image(c.serverBase, c.thumb, 300, 450)} onPress={() => open(app, c)} />
+              ))}
+            </div>
+          )}
+      </div>
+    );
+  }
   return (
     <div>
       <div class="toolbar">
-        {libraries.length > 1
-          ? libraries.map((l) => (
-              <Pill key={l.serverName + l.section.key} label={l.section.title} on={browse.choice === l} onPress={() => void app.openLibrary(kind, l)} />
-            ))
-          : null}
+        {views}
+        {libraryPills}
         {sorts.map(([key, label]) => (
           <Pill key={key} label={label} on={browse.sort === key} onPress={() => void app.setSort(kind, key)} />
         ))}
