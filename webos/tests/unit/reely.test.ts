@@ -236,3 +236,39 @@ describe("Reely, without a server", () => {
     expect(plexHas({ kind: "show", tmdbId: 0, tvdbId: 81189, title: "BB" }, new Set(), new Set(["tvdb://81189"]))).toBe(true);
   });
 });
+
+import { badgeFor, shownRows } from "../../src/api/reely";
+
+describe("browsing rows, as the Fire TV shows them", () => {
+  const film = (id: number): RequestTitle => ({ kind: "movie", tmdbId: id, tvdbId: 0, title: `Film ${id}` });
+  const show = (id: number): RequestTitle => ({ kind: "show", tmdbId: id, tvdbId: 0, title: `Show ${id}` });
+  it("leave out what's in the library, and drop a row left empty", () => {
+    const marks = noMarks();
+    marks.movies.set(1, "In library");
+    marks.movies.set(2, "Downloading");
+    marks.showsByTmdb.set(4, "Partial");
+    const of = (t: RequestTitle) => badgeFor(t, marks, [], new Set(["tmdb://6"]), new Set());
+    const rows = shownRows(
+      [
+        { id: "provider:max:movie", title: "Movies on Max", titles: [film(1), film(2), film(3)] },
+        { id: "shows", title: "Trending Shows", titles: [show(4), show(5)] },
+        { id: "topMovies", title: "Top Rated Movies", titles: [film(6)] },
+      ],
+      of,
+    );
+    expect(rows.map((r) => r.title)).toEqual(["Movies on Max", "Trending Shows"]);
+    expect(rows[0].titles.map((t) => t.title)).toEqual(["Film 2", "Film 3"]);
+    expect(rows[1].titles.map((t) => t.title)).toEqual(["Show 4", "Show 5"]);
+  });
+  it("what's held comes first, then my own request, then anybody's", () => {
+    const title = film(550);
+    const mine: RequestRecord[] = [{ id: 1, title, status: "approved", seasons: null }];
+    const asked = noMarks();
+    asked.requested.add("movie-550");
+    expect(badgeFor(title, asked, mine, new Set(), new Set())).toBe("Approved");
+    expect(badgeFor(title, asked, [], new Set(), new Set())).toBe("Requested");
+    const held = noMarks();
+    held.movies.set(550, "In library");
+    expect(badgeFor(title, held, mine, new Set(), new Set())).toBe("In library");
+  });
+});

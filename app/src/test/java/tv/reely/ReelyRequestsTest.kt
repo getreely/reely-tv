@@ -275,4 +275,23 @@ class ReelyRequestsTest {
         val held = tv.reely.requests.TitleMarks(movies = mapOf(550 to "In library"))
         assertEquals("In library", tv.reely.ui.RequestsState(mine = mine, marks = held).badgeFor(title))
     }
+    @Test fun `browsing rows leave out what's in the library, and drop a row left empty`() {
+        fun film(id: Int) = tv.reely.requests.RequestTitle("movie", id, 0, "Film $id", null, null, null, null)
+        fun show(id: Int) = tv.reely.requests.RequestTitle("show", id, 0, "Show $id", null, null, null, null)
+        val rows = listOf(
+            tv.reely.requests.RequestRow("provider:max:movie", "Movies on Max", listOf(film(1), film(2), film(3))),
+            tv.reely.requests.RequestRow("shows", "Trending Shows", listOf(show(4), show(5))),
+            tv.reely.requests.RequestRow("topMovies", "Top Rated Movies", listOf(film(6))),
+        )
+        val marks = tv.reely.requests.TitleMarks(
+            movies = mapOf(1 to "In library", 2 to "Downloading"),
+            showsByTmdb = mapOf(4 to "Partial"),
+        )
+        // In Plex, though Reely never added it: in the library all the same.
+        val state = tv.reely.ui.RequestsState(rows = rows, marks = marks, plexMovies = setOf("tmdb://6"))
+        assertEquals(listOf("Movies on Max", "Trending Shows"), state.shownRows.map { it.title })
+        assertEquals(listOf("Film 2", "Film 3"), state.shownRows[0].titles.map { it.title })
+        // A show with seasons still to come is still there to ask for.
+        assertEquals(listOf("Show 4", "Show 5"), state.shownRows[1].titles.map { it.title })
+    }
 }

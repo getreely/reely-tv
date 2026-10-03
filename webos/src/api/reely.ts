@@ -459,3 +459,34 @@ export class ReelyRequests {
     return { kind: "refused", message: errorOf(text) ?? "Reely couldn't take that request. Try again." };
   }
 }
+
+/**
+ * What a poster says, as the Fire TV's Requests has it: in Plex already, else Reely's own
+ * word, else where this account's ask has got to.
+ */
+export function badgeFor(
+  title: RequestTitle,
+  marks: TitleMarks,
+  mine: RequestRecord[],
+  plexMovies: Set<string>,
+  plexShows: Set<string>,
+): string | undefined {
+  const mark = badge(marks, title);
+  if ((mark == null || mark === "Requested") && plexHas(title, plexMovies, plexShows)) return "In library";
+  if (mark != null && mark !== "Requested") return mark;
+  const status = mine.find((r) => requestKey(r.title) === requestKey(title))?.status;
+  if (status === "approved") return "Approved";
+  if (status === "denied") return "Declined";
+  if (status === "pending") return "Requested";
+  return mark;
+}
+
+/** The browsing rows less what's in the library already; a row left empty isn't shown. */
+export function shownRows(rows: RequestRow[], badgeOf: (t: RequestTitle) => string | undefined): RequestRow[] {
+  const out: RequestRow[] = [];
+  for (const row of rows) {
+    const titles = row.titles.filter((t) => badgeOf(t) !== "In library");
+    if (titles.length) out.push({ ...row, titles });
+  }
+  return out;
+}

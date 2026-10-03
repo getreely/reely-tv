@@ -157,7 +157,7 @@ internal fun TouchHome(viewModel: ReelyViewModel, state: ReelyState, actions: To
                 HomeRow.TRENDING to listOf("movies", "shows"),
                 HomeRow.POPULAR to listOf("popularMovies", "popularShows"),
             ).forEach { (row, ids) ->
-                val titles = interleave(ids.map { id -> state.requests.rows.firstOrNull { it.id == id }?.titles.orEmpty() })
+                val titles = interleave(ids.map { id -> state.requests.shownRows.firstOrNull { it.id == id }?.titles.orEmpty() })
                 if (titles.isNotEmpty() && shown(row)) item(key = row.id) {
                     TouchRow(row.title) {
                         items(titles, key = { it.key }) { title ->

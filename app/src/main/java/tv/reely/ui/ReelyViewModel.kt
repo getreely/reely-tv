@@ -151,6 +151,16 @@ data class RequestsState(
      * holds first (Downloading, In library, Partial), then this account's own request
      * (Approved, Declined), then anybody's open request.
      */
+    /**
+     * The discovery rows less what's in the library already: there's nothing to ask for
+     * in those. A show with seasons still to come stays (Partial), as does anything on
+     * its way. Search still finds them; a row left empty isn't shown.
+     */
+    val shownRows: List<tv.reely.requests.RequestRow>
+        get() = rows.mapNotNull { row ->
+            row.copy(titles = row.titles.filterNot { badgeFor(it) == "In library" }).takeIf { it.titles.isNotEmpty() }
+        }
+
     fun badgeFor(title: tv.reely.requests.RequestTitle): String? {
         val mark = marks.badge(title)
         // In Plex already, whether or not Reely keeps track of it: Reely only knows what
@@ -1113,15 +1123,15 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
      * What the Plex libraries here hold, by outside id, to mark a Reely title In library
      * when it's there. Read at most every ten minutes: it's every title at once.
      */
-    private fun refreshPlexHoldings() {
+    private fun refreshPlexHoldings(): kotlinx.coroutines.Job? {
         val now = System.currentTimeMillis()
-        if (now - plexHoldingsAt < PLEX_HOLDINGS_MS) return
+        if (now - plexHoldingsAt < PLEX_HOLDINGS_MS) return null
         // Only the libraries switched on here: a server's library that has been turned off
         // isn't one this television watches from, so what's in it isn't "in the library".
         val choices = _state.value.plex.homeSources()
-        if (choices.isEmpty()) return
+        if (choices.isEmpty()) return null
         plexHoldingsAt = now
-        viewModelScope.launch {
+        return viewModelScope.launch {
             suspend fun idsOf(kind: String, type: Int) = choices.filter { it.section.type == kind }.map { choice ->
                 async {
                     runCatching { PlexApi.libraryGuids(choice.baseUrl, choice.token, choice.section.key, type) }
@@ -1137,13 +1147,16 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     /** Reely's discovery rows and this account's requests. */
     fun loadRequests() {
         val client = reely ?: return
-        refreshPlexHoldings()
+        val holdings = refreshPlexHoldings()
         _state.update { it.copy(requests = it.requests.copy(loading = it.requests.rows.isEmpty(), error = null)) }
         viewModelScope.launch {
             val rows = async { runCatching { client.explore() } }
             val mine = async { runCatching { client.myRequests() } }
             val marks = async { runCatching { client.marks() } }
             val found = rows.await()
+            // What's in the libraries already, before the rows are shown: titles that are
+            // there are left out of them, and mustn't vanish from under the cursor after.
+            holdings?.join()
             _state.update { current ->
                 current.copy(
                     requests = current.requests.copy(
