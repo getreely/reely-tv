@@ -39,6 +39,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -572,3 +573,27 @@ fun LiveTabGlyph(color: Color, size: Dp = 22.dp) = androidx.compose.foundation.C
 
 @Composable
 fun RequestTabGlyph(color: Color, size: Dp = 22.dp) = tv.reely.ui.components.PlusGlyph(color, size)
+
+/**
+ * A page's picture across the top: 16:10 of the width in portrait, but no taller than
+ * [HERO_MAX] — held sideways, or on a tablet, it would otherwise fill the screen.
+ */
+@Composable
+fun Modifier.heroHeight(): Modifier {
+    // Half the screen at most: sideways, a picture any taller leaves nothing else in view.
+    val screenHalf = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp / 2).dp
+    return heroHeight(minOf(HERO_MAX, screenHalf))
+}
+
+private fun Modifier.heroHeight(max: Dp): Modifier = this
+    .fillMaxWidth()
+    .then(
+        Modifier.layout { measurable, constraints ->
+            val width = constraints.maxWidth
+            val height = minOf(width * 10 / 16, max.roundToPx())
+            val placeable = measurable.measure(androidx.compose.ui.unit.Constraints.fixed(width, height))
+            layout(width, height) { placeable.place(0, 0) }
+        }
+    )
+
+private val HERO_MAX = 320.dp

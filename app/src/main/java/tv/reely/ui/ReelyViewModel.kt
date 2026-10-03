@@ -901,6 +901,10 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     )
     val state: StateFlow<ReelyState> = _state.asStateFlow()
 
+    /** For tests: the state as a screen should find it, set outright. */
+    @androidx.annotation.VisibleForTesting
+    internal fun setStateForTest(change: (ReelyState) -> ReelyState) = _state.update(change)
+
     private val clientId: String = store.get(SecureStore.PLEX_CLIENT_ID)
         ?: UUID.randomUUID().toString().also { store.put(SecureStore.PLEX_CLIENT_ID, it) }
 

@@ -124,7 +124,7 @@ internal fun TouchRequestTitle(viewModel: ReelyViewModel, state: ReelyState, rou
     val page = state.requestDetail?.takeIf { it.title.key == route.title.key }
     val status = state.requests.statusOf(route.title)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        Box(Modifier.fillMaxWidth().aspectRatio(16f / 10f)) {
+        Box(Modifier.heroHeight()) {
             AsyncImage(page?.detail?.backdrop ?: route.title.poster, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Ink.copy(alpha = 0.35f), Color.Transparent, Ink))))
             Box(Modifier.padding(4.dp)) {

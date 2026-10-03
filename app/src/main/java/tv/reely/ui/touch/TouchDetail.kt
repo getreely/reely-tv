@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -81,9 +82,9 @@ internal fun TouchDetail(viewModel: ReelyViewModel, state: ReelyState, actions: 
 
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
         item(key = "hero") {
-            Box(Modifier.fillMaxWidth().aspectRatio(16f / 10f)) {
+            Box(Modifier.heroHeight()) {
                 AsyncImage(
-                    model = viewModel.plexBackdropUrl(page.serverBase, detail.art ?: detail.thumb),
+                    model = actions.image(page.serverBase, detail.art ?: detail.thumb, 720, 405),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
@@ -205,7 +206,8 @@ private fun Actions(viewModel: ReelyViewModel, page: DetailState, watchlisted: B
         TouchPrimaryButton(
             label = if (resumeFrom > 0) "Resume" else "Play",
             onClick = { viewModel.playFromDetail() },
-            modifier = Modifier.fillMaxWidth(),
+            // A finger's width on a phone; not a bar across a tablet.
+            modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth(),
             icon = { PlayGlyph(it, 18.dp) },
         )
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

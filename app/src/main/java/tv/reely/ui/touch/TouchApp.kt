@@ -80,7 +80,11 @@ internal fun TouchTab.matches(route: Route): Boolean = when (this) {
  * left exactly as they are.
  */
 @Composable
-fun TouchApp(viewModel: ReelyViewModel = viewModel()) {
+fun TouchApp(
+    viewModel: ReelyViewModel = viewModel(),
+    /** Where pictures come from; the server's, unless a test has its own. */
+    imageUrl: ((String?, String?, Int, Int) -> String?)? = null,
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
     tv.reely.ui.screens.InstallerLauncher(
@@ -170,19 +174,26 @@ fun TouchApp(viewModel: ReelyViewModel = viewModel()) {
             )
         },
         hold = { menuFor = it },
-        image = { base, path, w, h -> viewModel.plexImageUrl(base, path, w, h) },
+        image = imageUrl ?: { base, path, w, h -> viewModel.plexImageUrl(base, path, w, h) },
         search = { viewModel.navigate(Route.Search) },
         settings = { viewModel.navigate(Route.Settings) },
         profile = if (state.plex.canSwitchUser) ({ pickingProfile = true }) else null,
     )
 
     TouchTheme {
+        // A phone held sideways has the height for little but what it's showing: the tabs
+        // go down the side instead of across the bottom.
+        val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+        val sideways = configuration.screenWidthDp > configuration.screenHeightDp && configuration.screenHeightDp < 560
         Scaffold(
             containerColor = Ink,
-            bottomBar = { TouchNavBar(state, onSelect = { viewModel.navigate(it.route) }) },
+            bottomBar = { if (!sideways) TouchNavBar(state, onSelect = { viewModel.navigate(it.route) }) },
         ) { padding ->
-            Box(Modifier.fillMaxSize().padding(padding)) {
-                TouchContent(viewModel, state, actions)
+            Row(Modifier.fillMaxSize().padding(padding)) {
+                if (sideways) TouchNavRail(state, onSelect = { viewModel.navigate(it.route) })
+                Box(Modifier.weight(1f).fillMaxSize()) {
+                    TouchContent(viewModel, state, actions)
+                }
             }
         }
 
@@ -263,6 +274,36 @@ private fun TouchNavBar(state: ReelyState, onSelect: (TouchTab) -> Unit) {
             )
         }
     }
+}
+
+@Composable
+private fun TouchNavRail(state: ReelyState, onSelect: (TouchTab) -> Unit) {
+    val top = state.stack.first()
+    androidx.compose.material3.NavigationRail(containerColor = SurfaceRaised) {
+        TouchTab.entries.forEach { tab ->
+            val selected = tab.matches(top)
+            androidx.compose.material3.NavigationRailItem(
+                selected = selected,
+                onClick = { onSelect(tab) },
+                icon = { tabGlyph(tab, if (selected) Ink else Muted) },
+                label = { Text(tab.label, maxLines = 1) },
+                colors = androidx.compose.material3.NavigationRailItemDefaults.colors(
+                    indicatorColor = Chalk,
+                    selectedTextColor = Chalk,
+                    unselectedTextColor = Muted,
+                ),
+            )
+        }
+    }
+}
+
+@Composable
+private fun tabGlyph(tab: TouchTab, color: Color) = when (tab) {
+    TouchTab.HOME -> HomeTabGlyph(color)
+    TouchTab.MOVIES -> FilmTabGlyph(color)
+    TouchTab.SHOWS -> ShowTabGlyph(color)
+    TouchTab.LIVE -> LiveTabGlyph(color)
+    TouchTab.REQUESTS -> RequestTabGlyph(color)
 }
 
 @Composable

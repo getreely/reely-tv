@@ -380,8 +380,9 @@ private fun PlaybackSection(
         val outputs = tv.reely.ui.components.rememberAudioOutputs()
         val chosen = prefs.audioOutput
         val gone = chosen != null && outputs.none { it.key == chosen }
+        val device = deviceName()
         val options = buildList<Option<String?>> {
-            add(Option(null, "Automatic", "Wherever the Fire TV sends sound."))
+            add(Option(null, "Automatic", "Wherever $device sends sound."))
             outputs.forEach { output ->
                 add(
                     Option(
@@ -400,7 +401,8 @@ private fun PlaybackSection(
         }
         ChoiceRow(
             title = "Play sound on",
-            description = "Headphones and speakers paired with the Fire TV. When the one chosen isn't there, the TV.",
+            description = "Headphones and speakers paired with ${deviceName()}. When the one chosen isn't there, " +
+                if (LocalCompactSettings.current) "its own speaker." else "the TV.",
             options = options,
             selected = chosen,
             onSelect = onSetAudioOutput,
@@ -1225,3 +1227,7 @@ private fun CompactSettings(section: Section, onSection: (Section) -> Unit, cont
         }
     }
 }
+
+/** What to call the device in a setting: the television's own name for it, or a phone's. */
+@Composable
+private fun deviceName(): String = if (LocalCompactSettings.current) "this device" else "the Fire TV"
