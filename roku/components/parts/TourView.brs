@@ -22,6 +22,8 @@ sub paint()
     key.text = s.key
     key.visible = s.key <> ""
     keyBack.visible = s.key <> ""
+    ' The words up under the title when there's no button to show.
+    m.top.findNode("body").translation = Iif_(s.key <> "", [540, 530], [540, 450])
     ' The pill as wide as what's on it.
     width = 56 + Len(s.key) * 18
     key.width = width
