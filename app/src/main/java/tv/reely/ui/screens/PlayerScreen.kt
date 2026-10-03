@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -1489,7 +1490,11 @@ fun PlayerScreen(
             // No remote to press Back on: the way out is on the screen too.
             TouchBack(
                 onClick = { onExit(exoPlayer.currentPosition.coerceAtLeast(0)) },
-                modifier = Modifier.align(Alignment.TopStart).padding(16.dp),
+                // Clear of a phone's camera cutout, which sideways sits at this edge.
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.displayCutout)
+                    .padding(16.dp),
             )
         }
         if (controlsShowing) {
