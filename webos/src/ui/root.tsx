@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { App, AppState, Route } from "../app/store";
 import { isConnected } from "../app/store";
-import { arrived, focus, rescue } from "./focus";
+import { arrived, focus, lastPressAt, rescue } from "./focus";
+import { Screensaver, slidesFrom } from "./screensaver";
 import { playDirect, Player } from "./player";
 import { Detail, Home, Library, Profiles, SignIn } from "./screens";
 import { Requests, RequestTitlePage } from "./requests";
@@ -38,6 +39,17 @@ export function Root(props: { app: App }) {
   const [menuFor, setMenuFor] = useState<PlexItem | null>(null);
   // Kept here, so coming back from a channel finds the guide still up.
   const [guide, setGuide] = useState(false);
+  const [saver, setSaver] = useState(false);
+  // The screensaver: after the minutes set without a button, never over something playing.
+  useEffect(() => {
+    const t = setInterval(() => {
+      const s = app.state;
+      const minutes = s.prefs.screensaverMinutes;
+      const busy = s.playing != null || s.live.watching != null || s.live.due != null;
+      if (minutes > 0 && !busy && Date.now() - lastPressAt() > minutes * 60_000) setSaver(true);
+    }, 5_000);
+    return () => clearInterval(t);
+  }, [app]);
   // Reminders, looked at every little while wherever the app is.
   useEffect(() => {
     const t = setInterval(() => app.checkReminders(), 15_000);
@@ -84,6 +96,7 @@ export function Root(props: { app: App }) {
       : null,
   };
 
+  if (saver && !state.playing && state.live.watching == null) return <Screensaver slides={slidesFrom(app, state)} onWake={() => setSaver(false)} />;
   if (state.playing) return <Player app={app} playing={state.playing} />;
   const watching = state.live.watching != null ? state.live.channels[state.live.watching] : null;
   if (watching) return <LivePlayer app={app} state={state} channel={watching} />;

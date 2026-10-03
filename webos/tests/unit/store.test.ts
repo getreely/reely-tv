@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { App } from "../../src/app/store";
 import { useFetcher } from "../../src/core/http";
+import { clearProblem, lastProblem, recordProblem } from "../../src/core/crash";
+import { slidesFrom } from "../../src/ui/screensaver";
+import { noMarks } from "../../src/api/reely";
 import { MemoryStorage, Store } from "../../src/core/storage";
 
 const SERVER = "http://192.168.1.20:32400";
@@ -298,10 +301,10 @@ describe("playback settings", () => {
     app.setUpNextSeconds(5);
     app.toggleHomeRow("playlists");
     app.toggleHomeRow("playlists");
-    expect(app.state.prefs).toEqual({ playbackMode: "transcode", maxBitrateKbps: 8_000, skipIntros: true, skipCredits: false, upNextSeconds: 5, hiddenRows: [], iptvLibrary: false, iptvWins: false });
+    expect(app.state.prefs).toMatchObject({ playbackMode: "transcode", maxBitrateKbps: 8_000, skipIntros: true, skipCredits: false, upNextSeconds: 5, hiddenRows: [], iptvLibrary: false, iptvWins: false });
     const again = new App(app.store, instant);
     await again.start();
-    expect(again.state.prefs).toEqual({ playbackMode: "transcode", maxBitrateKbps: 8_000, skipIntros: true, skipCredits: false, upNextSeconds: 5, hiddenRows: [], iptvLibrary: false, iptvWins: false });
+    expect(again.state.prefs).toMatchObject({ playbackMode: "transcode", maxBitrateKbps: 8_000, skipIntros: true, skipCredits: false, upNextSeconds: 5, hiddenRows: [], iptvLibrary: false, iptvWins: false });
   });
 
   it("Always convert converts what the TV could play, at the quality chosen", async () => {
@@ -533,6 +536,55 @@ describe("the provider's movies and shows", () => {
     expect(app.state.home.iptvShows[0].viewedLeafCount).toBe(2);
     const again = new App(app.store, instant);
     expect(again.iptv.watch?.mark("e92.mp4")?.watched).toBe(true);
+  });
+});
+
+describe("ready notices, the problem report and the screensaver's pictures", () => {
+  const dune = { kind: "movie", tmdbId: 438631, tvdbId: 0, title: "Dune", year: 2021, poster: null, overview: null } as any;
+  const fakeReely = (approved: boolean, held: boolean) => {
+    (app as any).client = () => ({
+      myRequests: async () => [{ id: 1, title: dune, status: approved ? "approved" : "pending", seasons: null }],
+      marks: async () => ({ ...noMarks(), movies: new Map(held ? [[438631, "In library"]] : []) }),
+    });
+  };
+
+  it("the first look takes in what was ready already; what arrives after is said, until dismissed", async () => {
+    fakeReely(true, true);
+    await app.checkReadyRequests();
+    expect(app.state.requests.ready).toEqual([]);
+    expect(app.store.json("readySeen", null)).toEqual(["movie:t438631"]);
+
+    app.store.setJson("readySeen", []);
+    await app.checkReadyRequests();
+    expect(app.state.requests.ready.map((t) => t.title)).toEqual(["Dune"]);
+    app.dismissReady(dune);
+    expect(app.state.requests.ready).toEqual([]);
+    await app.checkReadyRequests();
+    expect(app.state.requests.ready).toEqual([]);
+  });
+
+  it("something approved but not here yet isn't ready", async () => {
+    app.store.setJson("readySeen", []);
+    fakeReely(true, false);
+    await app.checkReadyRequests();
+    expect(app.state.requests.ready).toEqual([]);
+  });
+
+  it("a problem is kept, the last one only, until it's cleared", () => {
+    recordProblem(app.store, new Error("first"), 1);
+    recordProblem(app.store, new TypeError("second"), 2);
+    expect(lastProblem(app.store)).toMatchObject({ at: 2, message: "second" });
+    clearProblem(app.store);
+    expect(lastProblem(app.store)).toBeNull();
+  });
+
+  it("the screensaver shows each picture once, from what's on Home", () => {
+    (app as any).current.plex = { ...app.state.plex, baseUrl: SERVER, serverToken: "server-token" };
+    const film = { ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025, art: "/art/1", thumb: "/t/1", serverBase: SERVER } as any;
+    const state = { ...app.state, home: { ...app.state.home, continueWatching: [film], recentMovies: [film, { ...film, ratingKey: "m2", art: null }] } };
+    const slides = slidesFrom(app, state);
+    expect(slides).toHaveLength(1);
+    expect(slides[0]).toMatchObject({ title: "Low Orbit", caption: "2025" });
   });
 });
 

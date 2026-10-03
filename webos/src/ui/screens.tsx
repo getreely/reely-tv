@@ -97,8 +97,24 @@ export function Home(props: { app: App; state: AppState }) {
     first = false;
     return was;
   };
+  const ready = state.requests.ready[0] ?? null;
   return (
     <div>
+      {ready ? (
+        <div class="ready">
+          {ready.poster ? <img src={ready.poster} alt="" /> : null}
+          <div class="ready-words">
+            <div class="name">{ready.title} is ready to watch</div>
+            <div class="facts">
+              {state.requests.ready.length > 1
+                ? `You asked for it. And ${state.requests.ready.length === 2 ? "1 more" : `${state.requests.ready.length - 1} more`} after this.`
+                : "You asked for it, and it's here."}
+            </div>
+          </div>
+          <Pill label="Watch" primary onPress={() => void app.openReady(ready)} />
+          <Pill label="Dismiss" onPress={() => app.dismissReady(ready)} />
+        </div>
+      ) : null}
       {state.homeError ? <p class="note error" style={{ margin: "0 3rem" }}>{state.homeError}</p> : null}
       {home.continueWatching.length ? (
         <Row title="Continue Watching">

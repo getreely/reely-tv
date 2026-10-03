@@ -165,6 +165,8 @@ export interface RequestsState {
   query: string;
   results: RequestTitle[];
   searching: boolean;
+  /** Asked for, and now on the server: "Dune is ready to watch". */
+  ready: RequestTitle[];
 }
 
 export interface RequestPage {
@@ -221,7 +223,11 @@ export interface Prefs {
   iptvLibrary: boolean;
   /** A title in both: the provider's copy shown rather than Plex's. */
   iptvWins: boolean;
+  /** Minutes without a button before the screensaver; 0 for none. */
+  screensaverMinutes: number;
 }
+
+export const SCREENSAVER_CHOICES = [0, 3, 5, 10];
 
 export interface IptvState {
   loading: boolean;
@@ -250,7 +256,7 @@ export const HOME_ROWS: Array<[HomeRowId, string]> = [
 ];
 
 export const UP_NEXT_CHOICES = [0, 5, 10, 12, 15, 20, 30];
-const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], iptvLibrary: false, iptvWins: false };
+const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], iptvLibrary: false, iptvWins: false, screensaverMinutes: 3 };
 
 /** As the Fire TV offers them. */
 export const BITRATE_CHOICES = [0, 20_000, 12_000, 8_000, 4_000, 2_000];
@@ -330,7 +336,7 @@ const emptyLive = (): LiveState => ({
 
 const emptyRequests = (): RequestsState => ({
   address: null, connecting: false, loading: false, error: null, rows: [], mine: [], marks: reely.noMarks(),
-  plexMovies: new Set(), plexShows: new Set(), query: "", results: [], searching: false,
+  plexMovies: new Set(), plexShows: new Set(), query: "", results: [], searching: false, ready: [],
 });
 
 /** A poster's word in Requests: In library, Downloading, Approved and the rest. */
@@ -454,6 +460,7 @@ export class App {
         hiddenRows: Array.isArray(prefs.hiddenRows) ? prefs.hiddenRows.filter((r) => HOME_ROWS.some(([id]) => id === r)) : [],
         iptvLibrary: prefs.iptvLibrary === true,
         iptvWins: prefs.iptvWins === true,
+        screensaverMinutes: SCREENSAVER_CHOICES.includes(prefs.screensaverMinutes ?? -1) ? prefs.screensaverMinutes! : DEFAULT_PREFS.screensaverMinutes,
       },
     }));
     const live = this.store.json<XtreamCredentials | null>("xtream", null);
@@ -605,6 +612,64 @@ export class App {
     this.set((s) => ({ ...s, homeBusy: false, homeError: null }));
     this.composeHome();
     void this.refreshWatchlist();
+    void this.checkReadyRequests();
+  }
+
+  /**
+   * Whether anything asked for has arrived, as the Fire TV looks. The first look takes in
+   * what was ready already without saying so: that isn't news.
+   */
+  async checkReadyRequests() {
+    const client = this.client();
+    if (!client) return;
+    const mine = await client.myRequests().catch(() => null);
+    if (!mine) return;
+    const kept = this.store.json<string[] | null>("readySeen", null);
+    const seen = new Set(kept ?? []);
+    if (!mine.some((r) => r.status === "approved" && !seen.has(reely.requestKey(r.title)))) {
+      if (kept == null) this.store.setJson("readySeen", []);
+      this.setRequests({ mine });
+      return;
+    }
+    const marks = await client.marks().catch(() => null);
+    if (!marks) return;
+    const arrived = reely.readyRequests(mine, marks, seen);
+    if (kept == null) {
+      this.store.setJson("readySeen", arrived.map(reely.requestKey));
+      this.setRequests({ mine, marks });
+      return;
+    }
+    this.setRequests({ mine, marks, ready: arrived });
+  }
+
+  /** Put away without watching: not said again. */
+  dismissReady(title: RequestTitle) {
+    const key = reely.requestKey(title);
+    const seen = this.store.json<string[]>("readySeen", []);
+    if (!seen.includes(key)) this.store.setJson("readySeen", [...seen, key]);
+    this.setRequests({ ready: this.current.requests.ready.filter((t) => reely.requestKey(t) !== key) });
+  }
+
+  /** What arrived: its page on the server, found by name, kind and year; else Search with its name. */
+  async openReady(title: RequestTitle) {
+    this.dismissReady(title);
+    const kind = title.kind === "show" ? "show" : "movie";
+    const servers = this.current.plex.libraries
+      .map((l) => [l.baseUrl, l.token] as const)
+      .filter(([base], i, all) => all.findIndex(([b]) => b === base) === i);
+    for (const [base, token] of servers) {
+      const found = (await plex.searchAll(base, token, title.title).catch(() => null))?.items.find(
+        (i) => i.type === kind && i.title.toLowerCase() === title.title.toLowerCase() && (title.year == null || i.year == null || i.year === title.year),
+      );
+      if (found) {
+        this.navigate({ name: "detail", ratingKey: found.ratingKey, serverBase: found.serverBase });
+        return;
+      }
+    }
+    // The box filled in before the screen opens on it.
+    const searching = this.setQuery(title.title);
+    this.navigate({ name: "search" });
+    await searching;
   }
 
   /**
@@ -1811,6 +1876,10 @@ export class App {
   toggleHomeRow(id: HomeRowId) {
     const hidden = this.current.prefs.hiddenRows;
     this.setPrefs({ hiddenRows: hidden.includes(id) ? hidden.filter((r) => r !== id) : [...hidden, id] });
+  }
+
+  setScreensaver(minutes: number) {
+    if (SCREENSAVER_CHOICES.includes(minutes)) this.setPrefs({ screensaverMinutes: minutes });
   }
 
   setUpNextSeconds(upNextSeconds: number) {

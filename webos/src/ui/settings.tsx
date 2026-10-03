@@ -1,6 +1,8 @@
 import type { ComponentChildren } from "preact";
 import type { App, AppState, PlaybackMode } from "../app/store";
-import { BITRATE_CHOICES, HOME_ROWS, UP_NEXT_CHOICES } from "../app/store";
+import { useState } from "preact/hooks";
+import { BITRATE_CHOICES, HOME_ROWS, SCREENSAVER_CHOICES, UP_NEXT_CHOICES } from "../app/store";
+import { clearProblem, lastProblem } from "../core/crash";
 import { Pill, useRescue } from "./parts";
 
 /*
@@ -50,6 +52,8 @@ export function Settings(props: { app: App; state: AppState; onProfiles: () => v
   const { app, state } = props;
   const { prefs, plex, live, requests } = state;
   useRescue([]);
+  const [problem, setProblem] = useState(() => lastProblem(app.store));
+  const [reading, setReading] = useState(false);
   const mode = MODES.find(([m]) => m === prefs.playbackMode) ?? MODES[0];
   return (
     <div class="settings">
@@ -147,10 +151,29 @@ export function Settings(props: { app: App; state: AppState; onProfiles: () => v
         )}
       </Group>
 
+      <Group title="Screensaver">
+        <Setting title="Screensaver" note="Your library's artwork and the time, when the remote's been put down.">
+          {SCREENSAVER_CHOICES.map((m) => (
+            <Pill key={m} label={m === 0 ? "Off" : `After ${m} minutes`} on={prefs.screensaverMinutes === m} onPress={() => app.setScreensaver(m)} />
+          ))}
+        </Setting>
+      </Group>
+
       <Group title="About">
         <Setting title="Version" note={__APP_VERSION__} />
         <Setting title="Reely" note="Your Plex library, live TV and requests, on your TV." />
       </Group>
+
+      {problem ? (
+        <Group title="Problem report">
+          <Setting title="Something went wrong" note={`${new Date(problem.at).toLocaleString()}  ·  ${problem.message}`}>
+            <Pill label={reading ? "Hide" : "View"} onPress={() => setReading(!reading)} />
+            <Pill label="Clear" onPress={() => { clearProblem(app.store); setProblem(null); setReading(false); }} />
+          </Setting>
+          {reading ? <pre class="problem">{problem.detail ?? problem.message}</pre> : null}
+          <p class="note">Kept on this TV only. Nothing is sent anywhere.</p>
+        </Group>
+      ) : null}
     </div>
   );
 }

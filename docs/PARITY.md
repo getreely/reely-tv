@@ -49,19 +49,19 @@ app (Amazon's Vega SDK, React Native), which can reuse the LG app's TypeScript c
 | Matching with Plex, winner chosen | ✅ | ✅ | ✅ | ⬜ | ⬜ |
 | Progress and watched kept on the device | ✅ | ✅ | ✅ | ⬜ | ⬜ |
 | **Requests (Reely)** | | | | | |
-| Connect, rows, search, your requests, ready notices | ✅ | ✅ | 🟡 (no ready notices yet) | ⬜ | ⬜ |
+| Connect, rows, search, your requests, ready notices | ✅ | ✅ | ✅ | ⬜ | ⬜ |
 | Request with seasons and library | ✅ | ✅ | ✅ | ⬜ | ⬜ |
 | Rows leave out what's in the library; Reely sends three pages a row | ✅ | ✅ | ✅ | ⬜ | ⬜ |
 | **App** | | | | | |
 | Settings (every row) | ✅ | ✅ (same rows) | 🟡 (playback, Plex, Live TV, Requests, about) | ⬜ | ⬜ |
 | Updates from GitHub | ✅ | ✅ | — (store) | — (store) | — (store) |
-| Screensaver, remote tour | ✅ | — | ⬜ | ⬜ | — |
-| Crash report | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
+| Screensaver, remote tour | ✅ | — | 🟡 (screensaver; no tour yet) | ⬜ | — |
+| Crash report | ✅ | ✅ | ✅ (problem report) | ⬜ | ⬜ |
 
 ## Tests
 
 | App | Where | How |
 |---|---|---|
 | Fire TV / Android TV and phone | `app/src/test` | `./gradlew :app:testDebugUnitTest` (Robolectric, Compose UI tests, screenshots with `-Pscreenshots`) |
-| LG | `webos/` | `npm test` (unit, 156) and `npm run e2e` (browser, the built app as the TV opens it); `npm run package` makes `reely-lg.ipk` |
+| LG | `webos/` | `npm test` (unit, 160) and `npm run e2e` (browser, the built app as the TV opens it); `npm run package` makes `reely-lg.ipk` |
 | Roku | `roku/` | `npm run check` (BrighterScript compile), `npm test` (unit, BrightScript simulator) and `npm run e2e` (the app in the SceneGraph simulator, driven by the remote protocol, against a stand-in Plex); `npm run package` makes `reely-roku.zip` |

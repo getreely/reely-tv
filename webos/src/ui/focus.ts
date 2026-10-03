@@ -38,7 +38,10 @@ export function focus(el: HTMLElement | null | undefined) {
   el.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
 
-let pressedAt = 0;
+let pressedAt = Date.now();
+
+/** When a button was last pressed: how long the remote's been put down, for the screensaver. */
+export const lastPressAt = () => pressedAt;
 let arrivedAt = 0;
 
 /** A new screen: until a key is pressed on it, the cursor belongs in its content. */
