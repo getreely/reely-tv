@@ -32,7 +32,7 @@ app (Amazon's Vega SDK, React Native), which can reuse the LG app's TypeScript c
 | Sound and subtitle tracks, kept with Plex; subtitle size and style | ✅ | ✅ | 🟡 (tracks kept with Plex; no subtitle size or style) | ⬜ | ⬜ |
 | Find subtitles online | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
 | Skip intro and credits; Up Next; next season | ✅ | ✅ | ✅ | ⬜ | ⬜ |
-| Chapters, preview pictures while scrubbing | ✅ | ✅ | 🟡 (chapters) | ⬜ | ⬜ |
+| Chapters, preview pictures while scrubbing | ✅ | ✅ | ✅ | ⬜ | ⬜ |
 | Sleep timer | ✅ | ✅ | ✅ | ⬜ | ⬜ |
 | Choose where sound plays (Bluetooth headphones) | ✅ | ✅ | — | — | ⬜ |
 | Touch: tap, double-tap skip, drag the bar | — | ✅ | — | — | ⬜ |
@@ -55,7 +55,7 @@ app (Amazon's Vega SDK, React Native), which can reuse the LG app's TypeScript c
 | **App** | | | | | |
 | Settings (every row) | ✅ | ✅ (same rows) | 🟡 (playback, Plex, Live TV, Requests, about) | ⬜ | ⬜ |
 | Updates from GitHub | ✅ | ✅ | — (store) | — (store) | — (store) |
-| Screensaver, remote tour | ✅ | — | 🟡 (screensaver; no tour yet) | ⬜ | — |
+| Screensaver, remote tour | ✅ | — | ✅ | ⬜ | — |
 | Crash report | ✅ | ✅ | ✅ (problem report) | ⬜ | ⬜ |
 
 ## Tests

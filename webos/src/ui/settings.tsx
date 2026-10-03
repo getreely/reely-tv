@@ -162,6 +162,9 @@ export function Settings(props: { app: App; state: AppState; onProfiles: () => v
       <Group title="About">
         <Setting title="Version" note={__APP_VERSION__} />
         <Setting title="Reely" note="Your Plex library, live TV and requests, on your TV." />
+        <Setting title="Take the tour" note="How to get around with the remote.">
+          <Pill label="Take the tour" onPress={() => app.takeTour()} />
+        </Setting>
       </Group>
 
       {problem ? (

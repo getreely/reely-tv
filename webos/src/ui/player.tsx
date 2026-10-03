@@ -46,6 +46,9 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
   const introSkipped = useRef<string | null>(null);
   const creditsOffered = useRef<string | null>(null);
   const leaving = useRef(false);
+  // Skipping: held (pressed again and again), it goes further each time; a picture of where it lands.
+  const skips = useRef({ at: 0, count: 0 });
+  const [preview, setPreview] = useState<{ ms: number; until: number } | null>(null);
   // The sleep timer, read by the video's handlers without restarting them.
   const sleepRef = useRef<Sleep>(null);
   sleepRef.current = sleep;
@@ -189,12 +192,18 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
             return true;
           case "left":
           case "rewind":
-            v.currentTime = Math.max(0, v.currentTime - SKIP_MS / 1000);
-            return true;
           case "right":
-          case "forward":
-            v.currentTime = Math.min(v.duration || Infinity, v.currentTime + SKIP_MS / 1000);
+          case "forward": {
+            const back = a === "left" || a === "rewind";
+            const s = skips.current;
+            s.count = Date.now() - s.at < 450 ? s.count + 1 : 0;
+            s.at = Date.now();
+            const step = (s.count < 4 ? SKIP_MS : s.count < 10 ? SKIP_MS * 3 : SKIP_MS * 6) / 1000;
+            const to = back ? Math.max(0, v.currentTime - step) : Math.min(v.duration || Infinity, v.currentTime + step);
+            v.currentTime = to;
+            setPreview({ ms: Math.floor(to * 1000), until: Date.now() + 1500 });
             return true;
+          }
           case "down":
           case "up":
           case "info":
@@ -219,6 +228,12 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
   const sub = playing.item.type === "episode" ? episodeLine(playing.item) : null;
   const fraction = duration > 0 ? Math.min(1, position / duration) : 0;
   const sleepNote = sleep?.endOfEpisode ? "Sleep at the end of this" : sleep?.atMs ? `Sleep in ${Math.max(1, Math.ceil((sleep.atMs - Date.now()) / 60_000))} min` : null;
+  useEffect(() => {
+    if (!preview) return;
+    const t = setTimeout(() => setPreview(null), Math.max(0, preview.until - Date.now()));
+    return () => clearTimeout(t);
+  }, [preview]);
+  const previewUrl = preview && playing.playback.previewUrl ? playing.playback.previewUrl.replace("{ms}", String(preview.ms)) : null;
   const seconds = upNext?.endsAt ? Math.max(0, Math.ceil((upNext.endsAt - Date.now()) / 1000)) : null;
   return (
     <div class="player" data-layer>
@@ -236,6 +251,12 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
       <div class={"player-bar" + (controls || paused ? " on" : "")}>
         <div class="player-title">{title}</div>
         {sub ? <div class="facts">{sub}</div> : null}
+        {preview ? (
+          <div class="preview" style={{ left: `${Math.min(92, Math.max(8, (duration > 0 ? preview.ms / duration : 0) * 100))}%` }}>
+            {previewUrl ? <img src={previewUrl} alt="" /> : null}
+            <span>{clock(preview.ms)}</span>
+          </div>
+        ) : null}
         <div class="scrub"><i style={{ width: `${fraction * 100}%` }} /></div>
         <div class="player-times">
           <span>{paused ? "Paused  ·  " : ""}{clock(position)}{sleepNote ? `  ·  ${sleepNote}` : ""}</span>

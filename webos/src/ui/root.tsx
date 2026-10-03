@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { App, AppState, Route } from "../app/store";
 import { isConnected } from "../app/store";
-import { arrived, focus, lastPressAt, rescue } from "./focus";
+import { arrived, arrowedOnto, focus, lastMoveAt, lastPressAt, rescue } from "./focus";
 import { Screensaver, slidesFrom } from "./screensaver";
+import { Tour } from "./tour";
 import { playDirect, Player } from "./player";
 import { Detail, Home, Library, Profiles, SignIn } from "./screens";
 import { Requests, RequestTitlePage } from "./requests";
@@ -71,6 +72,9 @@ export function Root(props: { app: App }) {
   }, [state.askWho]);
   // Back from a page or the player: the cursor onto something on the screen arrived at.
   useEffect(() => {
+    // Moving along the tabs opens each, and the cursor stays on the tabs.
+    const alongTabs = (document.activeElement as HTMLElement | null)?.classList.contains("tab") && Date.now() - lastMoveAt() < 1000;
+    if (alongTabs) return;
     arrived();
     const t = setTimeout(rescue, 0);
     return () => clearTimeout(t);
@@ -99,7 +103,7 @@ export function Root(props: { app: App }) {
   if (saver && !state.playing && state.live.watching == null) return <Screensaver slides={slidesFrom(app, state)} onWake={() => setSaver(false)} />;
   if (state.playing) return <Player app={app} playing={state.playing} />;
   const watching = state.live.watching != null ? state.live.channels[state.live.watching] : null;
-  if (watching) return <LivePlayer app={app} state={state} channel={watching} />;
+  if (watching) return <LivePlayer app={app} state={state} channel={watching} onGuide={() => { setGuide(true); app.stopLive(); }} />;
 
   const connected = isConnected(state);
   const route = state.route;
@@ -114,6 +118,8 @@ export function Root(props: { app: App }) {
             class={"tab" + (sameTab(route, target) ? " on" : "")}
             data-focus
             onClick={() => app.navigate(target)}
+            // Moving onto a tab opens it, as the Fire TV's do.
+            onFocus={(e) => { if (arrowedOnto(e.currentTarget) && !sameTab(app.state.route, target)) app.navigate(target); }}
           >
             {label}
           </button>
@@ -179,6 +185,8 @@ export function Root(props: { app: App }) {
       ) : null}
       {choosingProfile ? <Profiles app={app} state={state} onClose={() => setChoosingProfile(false)} /> : null}
       {state.live.due ? <ReminderNotice app={app} state={state} /> : null}
+      {/* The tour, once, when there's a library to get around. */}
+      {connected && !state.prefs.tourSeen && !choosingProfile && !state.homeBusy ? <Tour onDone={() => app.finishTour()} /> : null}
       {menuFor ? (
         <ItemMenu item={menuFor} image={app.image(menuFor.serverBase, menuFor.art ?? menuFor.thumb, 960, 540)} actions={menuActions} onClose={() => setMenuFor(null)} />
       ) : null}

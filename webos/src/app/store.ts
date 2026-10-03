@@ -225,6 +225,8 @@ export interface Prefs {
   iptvWins: boolean;
   /** Minutes without a button before the screensaver; 0 for none. */
   screensaverMinutes: number;
+  /** The remote's tour has been seen (or skipped). */
+  tourSeen: boolean;
 }
 
 export const SCREENSAVER_CHOICES = [0, 3, 5, 10];
@@ -256,7 +258,7 @@ export const HOME_ROWS: Array<[HomeRowId, string]> = [
 ];
 
 export const UP_NEXT_CHOICES = [0, 5, 10, 12, 15, 20, 30];
-const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], iptvLibrary: false, iptvWins: false, screensaverMinutes: 3 };
+const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], iptvLibrary: false, iptvWins: false, screensaverMinutes: 3, tourSeen: false };
 
 /** As the Fire TV offers them. */
 export const BITRATE_CHOICES = [0, 20_000, 12_000, 8_000, 4_000, 2_000];
@@ -461,6 +463,7 @@ export class App {
         iptvLibrary: prefs.iptvLibrary === true,
         iptvWins: prefs.iptvWins === true,
         screensaverMinutes: SCREENSAVER_CHOICES.includes(prefs.screensaverMinutes ?? -1) ? prefs.screensaverMinutes! : DEFAULT_PREFS.screensaverMinutes,
+        tourSeen: prefs.tourSeen === true,
       },
     }));
     const live = this.store.json<XtreamCredentials | null>("xtream", null);
@@ -1876,6 +1879,15 @@ export class App {
   toggleHomeRow(id: HomeRowId) {
     const hidden = this.current.prefs.hiddenRows;
     this.setPrefs({ hiddenRows: hidden.includes(id) ? hidden.filter((r) => r !== id) : [...hidden, id] });
+  }
+
+  /** The tour over: not shown again unless asked for from Settings. */
+  finishTour() {
+    this.setPrefs({ tourSeen: true });
+  }
+
+  takeTour() {
+    this.setPrefs({ tourSeen: false });
   }
 
   setScreensaver(minutes: number) {

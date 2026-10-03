@@ -3,8 +3,14 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 const SERVER = "http://192.168.1.20:32400";
 
 /** plex.tv and one server, answering as they do; what was told to the server is kept. */
-async function fakePlex(page: Page) {
+async function fakePlex(page: Page, options: { tour?: boolean } = {}) {
   const timeline: string[] = [];
+  // The remote's tour seen already, except where it's what's tested; kept across a reload.
+  if (!options.tour) {
+    await page.addInitScript(() => {
+      if (!localStorage.getItem("reely:prefs")) localStorage.setItem("reely:prefs", JSON.stringify({ tourSeen: true }));
+    });
+  }
   let claims = 0;
   const json = (route: Route, value: unknown) =>
     route.fulfill({ status: 200, contentType: "application/json", headers: { "Access-Control-Allow-Origin": "*" }, body: JSON.stringify(value) });
@@ -222,6 +228,9 @@ test("the player: Skip Intro, another sound track kept with Plex, Up Next on to 
   await page.screenshot({ path: "shots/lg-player-skip-intro.png" });
   await press(page, "Enter");
   await expect(page.locator(".skip-prompt")).toHaveCount(0);
+  // Left skips back, with a picture of where it lands from Plex's index.
+  await press(page, "ArrowLeft");
+  await expect(page.locator(".preview img")).toHaveAttribute("src", /\/library\/parts\/5\/indexes\/sd\/\d+\?X-Plex-Token=server-token/);
 
   // Down: sound, subtitles, sleep timer. The commentary, kept with Plex and converted.
   await press(page, "ArrowDown");
@@ -281,6 +290,22 @@ test("holding OK on a poster opens its menu; a Home row can be switched off", as
   await expect(page.getByText("Continue Watching")).toHaveCount(0);
 });
 
+test("the remote's tour comes up once, after signing in, and steps through to the end", async ({ page }) => {
+  await fakePlex(page, { tour: true });
+  await page.goto("/");
+  await press(page, "Enter");
+  await expect(page.getByText("Welcome to Reely")).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator(".pill:focus")).toHaveText("Next");
+  await page.screenshot({ path: "shots/lg-tour.png" });
+  for (let i = 0; i < 6; i++) await press(page, "Enter");
+  await expect(page.getByText("You're all set")).toBeVisible();
+  await press(page, "Enter");
+  await expect(page.locator(".tour")).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByText("Recently Added Movies")).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator(".tour")).toHaveCount(0);
+});
+
 test("arrows move along a row and down to the next; Back from a tab goes Home", async ({ page }) => {
   await fakePlex(page);
   await page.goto("/");
@@ -293,11 +318,13 @@ test("arrows move along a row and down to the next; Back from a tab goes Home", 
   await press(page, "ArrowRight");
   await expect(page.locator(".card:focus .title")).toHaveText("Glasshouse");
   // Up and up again reaches the tabs; along to Movies and in.
+  // Up into the tabs lands on the one that's open; moving along opens each, as on the Fire TV.
   await press(page, "ArrowUp", 3);
-  await expect(page.locator(".tab:focus")).toBeVisible();
-  await page.getByRole("button", { name: "Movies" }).focus();
-  await press(page, "Enter");
+  await expect(page.locator(".tab:focus")).toHaveText("Home");
+  await press(page, "ArrowRight");
+  await expect(page.locator(".tab:focus")).toHaveText("Movies");
   await expect(page.locator(".grid .card").first()).toBeVisible();
+  await expect(page.locator(".tab:focus")).toHaveText("Movies");
   await press(page, "Escape");
   await expect(page.getByText("Recently Added Movies")).toBeVisible();
 });
@@ -423,13 +450,16 @@ test("Live TV: sign in to a provider, pick a category, watch, change channel, fa
   await stream;
   await expect(page.locator(".player-title")).toContainText("News 24");
   const next = page.waitForRequest((r) => r.url().includes("/live/me/secret/102.m3u8"));
-  await press(page, "ArrowDown");
+  await press(page, "ArrowRight");
   await next;
   await expect(page.locator(".player-title")).toContainText("World Report");
   // The green key (404) favorites it; Back goes to the list, and Favorites is offered.
   await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { keyCode: 404, bubbles: true } as KeyboardEventInit)));
   await expect(page.locator(".player-title")).toContainText("♥");
-  await press(page, "Escape");
+  // Down: the guide, as on the Fire TV.
+  await press(page, "ArrowDown");
+  await expect(page.locator(".guide")).toBeVisible();
+  await page.getByRole("button", { name: "Channels" }).click();
   await expect(page.locator(".channel").first()).toBeVisible();
   await press(page, "Escape");
   await expect(page.getByRole("button", { name: "Favorites" })).toBeVisible();
@@ -438,6 +468,7 @@ test("Live TV: sign in to a provider, pick a category, watch, change channel, fa
   // The guide: time across. What's over plays from the archive; what's to come, a reminder.
   await page.getByRole("button", { name: "News", exact: true }).click();
   await page.getByRole("button", { name: "Guide" }).click();
+  await expect(page.locator(".guide")).toBeVisible();
   await expect(page.locator(".programme", { hasText: "Morning Briefing" }).first()).toBeVisible();
   await page.locator(".programme", { hasText: "Late Edition" }).first().focus();
   await expect(page.locator(".guide-about")).toContainText("OK to be reminded when it starts");

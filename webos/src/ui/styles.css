@@ -212,3 +212,12 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 @keyframes saver-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes saver-drift { from { transform: scale(1); } to { transform: scale(1.08); } }
 .problem { margin: 0.6rem 0; padding: 1rem; max-height: 20rem; overflow: auto; background: var(--raised); border-radius: 0.8rem; font-size: 0.85rem; white-space: pre-wrap; color: var(--muted); }
+
+/* Where a skip lands: the picture from Plex's index, and the time, over the bar. */
+.preview { position: absolute; bottom: 6.2rem; transform: translateX(-50%); display: grid; justify-items: center; }
+.preview img { width: 16rem; height: 9rem; object-fit: cover; border-radius: 0.6rem; border: 0.12rem solid var(--chalk); background: #000; }
+.preview span { margin-top: 0.4rem; font-weight: 600; }
+
+/* The remote's tour. */
+.tour { max-width: 46rem; text-align: center; }
+.tour-key { padding: 0.4rem 1rem; border-radius: 999px; background: var(--high); color: var(--accent); font-weight: 600; }

@@ -64,6 +64,15 @@ export function rescue() {
   focus(pool.find((el) => el.hasAttribute("data-autofocus")) ?? pool[0]);
 }
 
+let movedAt = 0;
+let movedTo: HTMLElement | null = null;
+
+/** When the cursor was last moved with the arrows. */
+export const lastMoveAt = () => movedAt;
+
+/** Whether the arrows just put the cursor on [el]: a tab opens when it's arrived at that way, and only then. */
+export const arrowedOnto = (el: EventTarget | null) => el != null && el === movedTo && Date.now() - movedAt < 400;
+
 export function move(direction: "up" | "down" | "left" | "right"): boolean {
   const all = focusables();
   const active = document.activeElement as HTMLElement | null;
@@ -74,7 +83,16 @@ export function move(direction: "up" | "down" | "left" | "right"): boolean {
   const others = all.filter((el) => el !== active);
   const at = nextIndex(active.getBoundingClientRect(), others.map((el) => el.getBoundingClientRect()), direction);
   if (at < 0) return false;
-  focus(others[at]);
+  let target = others[at];
+  // Up into the tabs lands on the tab that's open, as on the Fire TV, not whichever is
+  // nearest: otherwise going up would open another one.
+  if (target.classList.contains("tab") && !active.classList.contains("tab")) {
+    const open = document.querySelector<HTMLElement>(".tabs .tab.on");
+    if (open && all.includes(open)) target = open;
+  }
+  movedAt = Date.now();
+  movedTo = target;
+  focus(target);
   return true;
 }
 

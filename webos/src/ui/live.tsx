@@ -188,7 +188,7 @@ function GuideGrid(props: { app: App; state: AppState; now: number }) {
  * A channel, full screen. Up and down or Channel Up/Down change it; numbers tune one;
  * OK shows what's on; the green key favorites it; Back goes back to the list.
  */
-export function LivePlayer(props: { app: App; state: AppState; channel: XtreamChannel }) {
+export function LivePlayer(props: { app: App; state: AppState; channel: XtreamChannel; onGuide?: () => void }) {
   const { app, state, channel } = props;
   const video = useRef<HTMLVideoElement>(null);
   const [banner, setBanner] = useState(true);
@@ -236,9 +236,11 @@ export function LivePlayer(props: { app: App; state: AppState; channel: XtreamCh
     switch (a) {
       case "stop": app.stopLive(); return true;
       case "back": return false; // the app's Back: off the channel, back to its list
-      case "up": case "channelUp": app.stepChannel(-1); return true;
-      case "down": case "channelDown": app.stepChannel(1); return true;
-      case "ok": case "info": setBanner((b) => !b); return true;
+      // As on the Fire TV: left and right change channel (or skip, in the archive), down opens the guide.
+      case "channelUp": app.stepChannel(-1); return true;
+      case "channelDown": app.stepChannel(1); return true;
+      case "down": props.onGuide?.(); return true;
+      case "up": case "ok": case "info": setBanner((b) => !b); return true;
       case "green": app.toggleFavorite(channel); setBanner(true); return true;
       case "yellow":
         // Start over: this programme from its beginning, from the channel's archive.
@@ -246,8 +248,16 @@ export function LivePlayer(props: { app: App; state: AppState; channel: XtreamCh
         setBanner(true);
         return true;
       case "blue": app.goLive(); setBanner(true); return true;
-      case "left": case "rewind": if (catchUp && video.current) video.current.currentTime = Math.max(0, video.current.currentTime - 10); setBanner(true); return true;
-      case "right": case "forward": if (catchUp && video.current) video.current.currentTime += 10; setBanner(true); return true;
+      case "left": case "rewind":
+        if (catchUp && video.current) video.current.currentTime = Math.max(0, video.current.currentTime - 10);
+        else if (a === "left") app.stepChannel(-1);
+        setBanner(true);
+        return true;
+      case "right": case "forward":
+        if (catchUp && video.current) video.current.currentTime += 10;
+        else if (a === "right") app.stepChannel(1);
+        setBanner(true);
+        return true;
       case "playPause": if (catchUp && video.current) { if (video.current.paused) void video.current.play(); else video.current.pause(); } return true;
     }
     return true;
@@ -265,7 +275,7 @@ export function LivePlayer(props: { app: App; state: AppState; channel: XtreamCh
         {catchUp ? <div class="facts">{catchUp.programme.title}  ·  {time(catchUp.programme.start)}–{time(catchUp.programme.stop)}  ·  From the archive</div>
           : on ? <div class="facts">{on.title}  ·  {time(on.start)}–{time(on.stop)}</div> : null}
         <div class="facts" style={{ color: "var(--faint)" }}>
-          {[catchUp ? "Left and right skip  ·  Blue key: go live" : "Up and down change channel", startOver ? "Yellow key: start over" : null,
+          {[catchUp ? "Left and right skip  ·  Blue key: go live" : "Left and right change channel  ·  Down: the guide", startOver ? "Yellow key: start over" : null,
             `Green key: ${fav ? "remove from" : "add to"} Favorites`].filter(Boolean).join("  ·  ")}
         </div>
       </div>
