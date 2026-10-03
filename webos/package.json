@@ -1,0 +1,24 @@
+{
+  "name": "reely-webos",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Reely for LG TVs (webOS): Plex, live TV and Requests, with the remote.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "package": "npm run build && node scripts/package.mjs"
+  },
+  "dependencies": {
+    "preact": "^10.29.8"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56",
+    "@preact/preset-vite": "^2.10.6",
+    "typescript": "^7.0.2",
+    "vite": "^6.4.3",
+    "vitest": "^3.2.7"
+  }
+}
