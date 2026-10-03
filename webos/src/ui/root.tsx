@@ -5,7 +5,7 @@ import { arrived, focus, rescue } from "./focus";
 import { playDirect, Player } from "./player";
 import { Detail, Home, Library, Profiles, SignIn } from "./screens";
 import { Requests, RequestTitlePage } from "./requests";
-import { Live, LivePlayer } from "./live";
+import { Live, LivePlayer, ReminderNotice } from "./live";
 import { collectionKey, ListPageView, personKey, Search } from "./search";
 import { Settings } from "./settings";
 import { ItemMenu } from "./menu";
@@ -36,6 +36,14 @@ export function Root(props: { app: App }) {
   const [state, setState] = useState<AppState>(app.state);
   const [choosingProfile, setChoosingProfile] = useState(false);
   const [menuFor, setMenuFor] = useState<PlexItem | null>(null);
+  // Kept here, so coming back from a channel finds the guide still up.
+  const [guide, setGuide] = useState(false);
+  // Reminders, looked at every little while wherever the app is.
+  useEffect(() => {
+    const t = setInterval(() => app.checkReminders(), 15_000);
+    app.checkReminders();
+    return () => clearInterval(t);
+  }, [app]);
   const video = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => app.subscribe(setState), [app]);
@@ -123,7 +131,7 @@ export function Root(props: { app: App }) {
         ) : route.name === "detail" ? (
           <Detail app={app} state={state} onPlay={onPlay} />
         ) : route.name === "live" ? (
-          <Live app={app} state={state} />
+          <Live app={app} state={state} guide={guide} onGuide={setGuide} />
         ) : route.name === "requests" ? (
           <Requests app={app} state={state} />
         ) : route.name === "requestTitle" ? (
@@ -157,6 +165,7 @@ export function Root(props: { app: App }) {
         </div>
       ) : null}
       {choosingProfile ? <Profiles app={app} state={state} onClose={() => setChoosingProfile(false)} /> : null}
+      {state.live.due ? <ReminderNotice app={app} state={state} /> : null}
       {menuFor ? (
         <ItemMenu item={menuFor} image={app.image(menuFor.serverBase, menuFor.art ?? menuFor.thumb, 960, 540)} actions={menuActions} onClose={() => setMenuFor(null)} />
       ) : null}

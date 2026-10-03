@@ -38,12 +38,12 @@ app (Amazon's Vega SDK, React Native), which can reuse the LG app's TypeScript c
 | Touch: tap, double-tap skip, drag the bar | — | ✅ | — | — | ⬜ |
 | **Live TV** | | | | | |
 | Xtream login and M3U playlists | ✅ | ✅ | ✅ | ⬜ | ⬜ |
-| Categories, favorites, recently watched | ✅ | ✅ | 🟡 (categories, favorites) | ⬜ | ⬜ |
-| Guide (grid on TV, list on phone), now and next | ✅ | ✅ | 🟡 (now and next on each channel) | ⬜ | ⬜ |
-| Catch-up, start over, rewind and Go live | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
-| Reminders | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
+| Categories, favorites, recently watched | ✅ | ✅ | ✅ | ⬜ | ⬜ |
+| Guide (grid on TV, list on phone), now and next | ✅ | ✅ | ✅ (grid) | ⬜ | ⬜ |
+| Catch-up, start over, rewind and Go live | ✅ | ✅ | ✅ (coloured keys) | ⬜ | ⬜ |
+| Reminders | ✅ | ✅ | ✅ | ⬜ | ⬜ |
 | Channel up/down, numbers on the remote | ✅ | ✅ (swipe) | ✅ | ⬜ | ⬜ |
-| Multiview | ✅ | 🟡 (through the player's menus) | ⬜ | — | ⬜ |
+| Multiview | ✅ | 🟡 (through the player's menus) | — (webOS gives an app one video at a time) | — | ⬜ |
 | **IPTV movies and shows** | | | | | |
 | Switch, tabs' IPTV library, Home rows, search, IPTV badge | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
 | Matching with Plex, winner chosen | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
@@ -63,5 +63,5 @@ app (Amazon's Vega SDK, React Native), which can reuse the LG app's TypeScript c
 | App | Where | How |
 |---|---|---|
 | Fire TV / Android TV and phone | `app/src/test` | `./gradlew :app:testDebugUnitTest` (Robolectric, Compose UI tests, screenshots with `-Pscreenshots`) |
-| LG | `webos/` | `npm test` (unit, 148) and `npm run e2e` (browser, the built app as the TV opens it); `npm run package` makes `reely-lg.ipk` |
+| LG | `webos/` | `npm test` (unit, 152) and `npm run e2e` (browser, the built app as the TV opens it); `npm run package` makes `reely-lg.ipk` |
 | Roku | `roku/` | `npm run check` (BrighterScript compile), `npm test` (unit, BrightScript simulator) and `npm run e2e` (the app in the SceneGraph simulator, driven by the remote protocol, against a stand-in Plex); `npm run package` makes `reely-roku.zip` |

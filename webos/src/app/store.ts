@@ -123,7 +123,29 @@ export interface LiveState {
   error: string | null;
   /** The channel on screen, by its place in [channels]. */
   watching: number | null;
+  /** Channels watched lately, newest first, by stream id. */
+  recent: number[];
+  /** A programme from the archive playing instead of the channel live. */
+  catchUp: { programme: Programme; url: string } | null;
+  /** The guide's listings, what's been as well as what's coming, by stream id. */
+  table: Record<number, Programme[]>;
+  reminders: Reminder[];
+  /** A reminder whose programme is starting: up on screen until it's answered. */
+  due: Reminder | null;
 }
+
+/** "Starting now", asked for from the guide. */
+export interface Reminder {
+  streamId: number;
+  channelName: string;
+  title: string;
+  /** Epoch seconds. */
+  start: number;
+}
+
+/** Not one of the provider's: what was watched lately. */
+export const RECENT: XtreamCategory = { id: "reely:recent", name: "Recently watched" };
+const RECENT_KEPT = 20;
 
 /** Not one of the provider's: the channels marked as favorites, from all of them. */
 export const FAVORITES: XtreamCategory = { id: "reely:favorites", name: "Favorites" };
@@ -270,6 +292,7 @@ const emptySearch = (recent: string[]): SearchState => ({
 
 const emptyLive = (): LiveState => ({
   credentials: null, account: null, categories: [], category: null, channels: [], guide: {}, favorites: [], busy: false, error: null, watching: null,
+  recent: [], catchUp: null, table: {}, reminders: [], due: null,
 });
 
 const emptyRequests = (): RequestsState => ({
@@ -355,6 +378,10 @@ export class App {
       this.stopLive();
       return true;
     }
+    if (s.live.due) {
+      this.dismissReminder();
+      return true;
+    }
     if (s.route.name === "live" && s.live.category) {
       this.closeCategory();
       return true;
@@ -390,7 +417,14 @@ export class App {
       },
     }));
     const live = this.store.json<XtreamCredentials | null>("xtream", null);
-    if (live) this.setLive({ credentials: live, favorites: this.store.json<number[]>("favorites", []) });
+    if (live) {
+      this.setLive({
+        credentials: live,
+        favorites: this.store.json<number[]>("favorites", []),
+        recent: this.store.json<number[]>("recentChannels", []),
+        reminders: this.store.json<Reminder[]>("reminders", []).filter((r) => r.start * 1000 > Date.now() - 60 * 60_000),
+      });
+    }
     const reelyUrl = this.store.get("reelyUrl");
     if (reelyUrl) this.setRequests({ address: reelyUrl });
     const token = this.store.get("plexToken");
@@ -1095,7 +1129,7 @@ export class App {
   signOutLive() {
     this.allChannels = null;
     this.store.remove("xtream");
-    this.set((s) => ({ ...s, live: { ...emptyLive(), favorites: s.live.favorites } }));
+    this.set((s) => ({ ...s, live: { ...emptyLive(), favorites: s.live.favorites, recent: s.live.recent } }));
   }
 
   async loadLive() {
@@ -1112,7 +1146,7 @@ export class App {
 
   shownCategories(): XtreamCategory[] {
     const live = this.current.live;
-    return live.favorites.length ? [FAVORITES, ...live.categories] : live.categories;
+    return [...(live.favorites.length ? [FAVORITES] : []), ...(live.recent.length ? [RECENT] : []), ...live.categories];
   }
 
   async openCategory(category: XtreamCategory) {
@@ -1120,9 +1154,12 @@ export class App {
     if (!c) return;
     this.setLive({ category, channels: [], busy: true, error: null });
     try {
+      const recent = this.current.live.recent;
       const channels = category.id === FAVORITES.id
         ? (await xtream.liveChannels(c)).filter((ch) => this.current.live.favorites.includes(ch.streamId))
-        : await xtream.liveChannels(c, category.id);
+        : category.id === RECENT.id
+          ? stableSort((await xtream.liveChannels(c)).filter((ch) => recent.includes(ch.streamId)), (a, b) => recent.indexOf(a.streamId) - recent.indexOf(b.streamId))
+          : await xtream.liveChannels(c, category.id);
       if (this.current.live.category !== category) return;
       this.setLive({ channels, busy: false });
       void this.loadGuide(channels.slice(0, 40));
@@ -1132,7 +1169,106 @@ export class App {
   }
 
   closeCategory() {
-    this.setLive({ category: null, channels: [], watching: null });
+    this.setLive({ category: null, channels: [], watching: null, catchUp: null });
+  }
+
+  /** The guide's listings for these channels: what's been, for catch-up, and what's coming. */
+  async loadTable(channels: XtreamChannel[]) {
+    const c = this.current.live.credentials;
+    if (!c) return;
+    const wanted = channels.filter((ch) => !this.current.live.table[ch.streamId]);
+    for (let i = 0; i < wanted.length; i += 4) {
+      const batch = wanted.slice(i, i + 4);
+      const found = await Promise.all(batch.map((ch) => xtream.epgTable(c, ch.streamId).catch(() => [] as Programme[])));
+      if (this.current.live.credentials !== c) return;
+      const table = { ...this.current.live.table };
+      batch.forEach((ch, n) => { table[ch.streamId] = found[n]; });
+      this.setLive({ table });
+    }
+  }
+
+  /** A programme that's over, from the channel's archive; or this one from its start. */
+  playCatchUp(index: number, programme: Programme): boolean {
+    const live = this.current.live;
+    const channel = live.channels[index];
+    const c = live.credentials;
+    if (!channel || !c) return false;
+    const url = xtream.catchUpUrl(c, channel, programme.start, programme.stop, live.account?.timezone ?? null);
+    if (!url) return false;
+    this.noteWatched(channel);
+    this.setLive({ watching: index, catchUp: { programme, url } });
+    return true;
+  }
+
+  /** Back to the channel as it is now. */
+  goLive() {
+    this.setLive({ catchUp: null });
+  }
+
+  /** Whether [channel] keeps an archive this programme is still in. */
+  canCatchUp(channel: XtreamChannel, programme: Programme, now = Math.floor(Date.now() / 1000)): boolean {
+    const from = xtream.catchUpFrom(channel, now);
+    return !!this.current.live.credentials && !xtream.isPlaylist(this.current.live.credentials) && from != null && programme.start >= from && programme.start < now;
+  }
+
+  private noteWatched(channel: XtreamChannel) {
+    const recent = [channel.streamId, ...this.current.live.recent.filter((id) => id !== channel.streamId)].slice(0, RECENT_KEPT);
+    this.store.setJson("recentChannels", recent);
+    this.setLive({ recent });
+  }
+
+  // ---------------------------------------------------------------- Reminders
+
+  toggleReminder(channel: XtreamChannel, programme: Programme) {
+    const now = this.current.live.reminders;
+    const has = now.some((r) => r.streamId === channel.streamId && r.start === programme.start);
+    const reminders = has
+      ? now.filter((r) => !(r.streamId === channel.streamId && r.start === programme.start))
+      : [...now, { streamId: channel.streamId, channelName: channel.name, title: programme.title, start: programme.start }];
+    this.store.setJson("reminders", reminders);
+    this.setLive({ reminders });
+  }
+
+  hasReminder(channel: XtreamChannel, programme: Programme) {
+    return this.current.live.reminders.some((r) => r.streamId === channel.streamId && r.start === programme.start);
+  }
+
+  /** A reminder whose programme starts within the minute comes due, once; old ones go. */
+  checkReminders(nowMs = Date.now()) {
+    const live = this.current.live;
+    if (live.due) return;
+    const due = live.reminders.find((r) => r.start * 1000 - nowMs <= 60_000 && nowMs - r.start * 1000 < 10 * 60_000);
+    const kept = live.reminders.filter((r) => r !== due && nowMs - r.start * 1000 < 10 * 60_000);
+    if (due || kept.length !== live.reminders.length) {
+      this.store.setJson("reminders", kept);
+      this.setLive({ reminders: kept, due: due ?? null });
+    }
+  }
+
+  dismissReminder() {
+    this.setLive({ due: null });
+  }
+
+  /** The reminded channel, wherever it is in the lists. */
+  async watchReminder() {
+    const due = this.current.live.due;
+    const c = this.current.live.credentials;
+    this.setLive({ due: null });
+    if (!due || !c) return;
+    let at = this.current.live.channels.findIndex((ch) => ch.streamId === due.streamId);
+    if (at < 0) {
+      try {
+        const all = await xtream.liveChannels(c);
+        const channel = all.find((ch) => ch.streamId === due.streamId);
+        if (!channel) return;
+        this.setLive({ category: null, channels: [channel] });
+        at = 0;
+      } catch (error) {
+        this.setLive({ error: readable(error) });
+        return;
+      }
+    }
+    this.watchChannel(at);
   }
 
   /** Now and next for what's on screen, a few at a time so the panel isn't flooded. */
@@ -1156,27 +1292,29 @@ export class App {
   }
 
   watchChannel(index: number) {
-    if (index < 0 || index >= this.current.live.channels.length) return;
-    this.setLive({ watching: index });
+    const channel = this.current.live.channels[index];
+    if (!channel) return;
+    this.noteWatched(channel);
+    this.setLive({ watching: index, catchUp: null });
   }
 
   /** Channel up and down, round the list's ends. */
   stepChannel(by: number) {
     const live = this.current.live;
     if (live.watching == null || !live.channels.length) return;
-    this.setLive({ watching: (live.watching + by + live.channels.length) % live.channels.length });
+    this.watchChannel((live.watching + by + live.channels.length) % live.channels.length);
   }
 
   /** A channel by the number on it, as typed on the remote. */
   tuneNumber(number: number): boolean {
     const at = this.current.live.channels.findIndex((ch) => ch.number === number);
     if (at < 0) return false;
-    this.setLive({ watching: at });
+    this.watchChannel(at);
     return true;
   }
 
   stopLive() {
-    this.setLive({ watching: null });
+    this.setLive({ watching: null, catchUp: null });
   }
 
   /** Where the channel plays from: the provider's HLS, which the TV plays itself. */
@@ -1262,7 +1400,8 @@ export class App {
     const channels = this.current.search.channels;
     const at = channels.findIndex((ch) => ch.streamId === channel.streamId);
     if (at < 0) return;
-    this.setLive({ category: null, channels, watching: at });
+    this.noteWatched(channel);
+    this.setLive({ category: null, channels, watching: at, catchUp: null });
     void this.loadGuide(channels.slice(0, 12));
   }
 

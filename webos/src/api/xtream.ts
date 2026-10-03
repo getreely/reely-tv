@@ -295,6 +295,24 @@ export function catchUpProgramme(channel: XtreamChannel, listing: Programme[], a
 
 // ---------------------------------------------------------------- The guide
 
+/** A channel's whole listing the panel holds, what's been as well as what's coming: the guide's grid. */
+export async function epgTable(c: XtreamCredentials, streamId: number): Promise<Programme[]> {
+  if (isPlaylist(c)) return [];
+  const root = await askJson(api(c, "get_simple_data_table", { stream_id: String(streamId) }), { timeoutMs: 30_000 });
+  const listings = Array.isArray(root?.epg_listings) ? root.epg_listings : [];
+  const programmes = listings
+    .map((e: any): Programme | null => {
+      const start = Number(e.start_timestamp) || parsePanelTime(e.start);
+      const stop = Number(e.stop_timestamp) || parsePanelTime(e.end);
+      if (!start || !stop || stop <= start) return null;
+      return { channelId: String(streamId), start, stop, title: decodeField(e.title) || "Untitled", description: decodeField(e.description) || null };
+    })
+    .filter((p: Programme | null): p is Programme => p !== null);
+  // Panels repeat a programme now and then; once each, in order.
+  const seen = new Set<number>();
+  return stableSort(programmes, (a: Programme, b: Programme) => a.start - b.start).filter((p: Programme) => !seen.has(p.start) && !!seen.add(p.start));
+}
+
 /** Now and next for one channel, from the panel; titles come base64, mostly. */
 export async function shortEpg(c: XtreamCredentials, streamId: number, limit = 4): Promise<Programme[]> {
   if (isPlaylist(c)) return [];

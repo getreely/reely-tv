@@ -387,9 +387,17 @@ test("Live TV: sign in to a provider, pick a category, watch, change channel, fa
       if (action === "get_live_categories") return send([{ category_id: "1", category_name: "News" }, { category_id: "2", category_name: "Sport" }]);
       if (action === "get_live_streams") {
         return send([
-          { stream_id: 101, num: 101, name: "News 24", stream_icon: "", epg_channel_id: "news" },
+          { stream_id: 101, num: 101, name: "News 24", stream_icon: "", epg_channel_id: "news", tv_archive: 1, tv_archive_duration: 3 },
           { stream_id: 102, num: 102, name: "World Report", stream_icon: "", epg_channel_id: "world" },
         ]);
+      }
+      if (action === "get_simple_data_table") {
+        // News keeps an archive: what was on before, what's on, and what's next.
+        return send({ epg_listings: [
+          { title: btoa("Morning Briefing"), description: btoa("The day's news."), start_timestamp: String(now - 4200), stop_timestamp: String(now - 600) },
+          { title: btoa("The Evening Report"), description: "", start_timestamp: String(now - 600), stop_timestamp: String(now + 1200) },
+          { title: btoa("Late Edition"), description: "", start_timestamp: String(now + 1200), stop_timestamp: String(now + 4800) },
+        ] });
       }
       if (action === "get_short_epg") {
         return send({ epg_listings: [{ title: btoa("The Evening Report"), description: "", start_timestamp: String(now - 600), stop_timestamp: String(now + 1200) }] });
@@ -425,4 +433,24 @@ test("Live TV: sign in to a provider, pick a category, watch, change channel, fa
   await expect(page.locator(".channel").first()).toBeVisible();
   await press(page, "Escape");
   await expect(page.getByRole("button", { name: "Favorites" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Recently watched" })).toBeVisible();
+
+  // The guide: time across. What's over plays from the archive; what's to come, a reminder.
+  await page.getByRole("button", { name: "News", exact: true }).click();
+  await page.getByRole("button", { name: "Guide" }).click();
+  await expect(page.locator(".programme", { hasText: "Morning Briefing" }).first()).toBeVisible();
+  await page.locator(".programme", { hasText: "Late Edition" }).first().focus();
+  await expect(page.locator(".guide-about")).toContainText("OK to be reminded when it starts");
+  await press(page, "Enter");
+  await expect(page.locator(".programme.reminded")).toContainText("Late Edition");
+  await page.screenshot({ path: "shots/lg-guide.png" });
+  const archive = page.waitForRequest((r) => /\/timeshift\/me\/secret\/\d+\/[\d:-]+\/101\.ts$/.test(r.url()));
+  await page.locator(".programme", { hasText: "Morning Briefing" }).first().focus();
+  await expect(page.locator(".guide-about")).toContainText("OK to watch it again");
+  await press(page, "Enter");
+  await archive;
+  await expect(page.locator(".player-bar")).toContainText("From the archive");
+  // Back from the archive: the guide, as it was.
+  await press(page, "Escape");
+  await expect(page.locator(".guide")).toBeVisible();
 });

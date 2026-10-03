@@ -402,6 +402,63 @@ describe("telling Plex where playback got to", () => {
   });
 });
 
+describe("Live TV's guide, catch-up and reminders", () => {
+  const news = { streamId: 1, number: 1, name: "News", icon: null, epgChannelId: null, archiveDays: 3 };
+  const sport = { streamId: 2, number: 2, name: "Sport", icon: null, epgChannelId: null, archiveDays: 0 };
+  const setLive = (c: object) => (app as unknown as { setLive: (c: object) => void }).setLive(c);
+  const signedIn = () => setLive({ credentials: { base: "http://panel:8080", username: "me", password: "pw" }, account: { timezone: "UTC" }, channels: [news, sport] });
+
+  it("watching a channel keeps it as recently watched, newest first, and offers the list", () => {
+    signedIn();
+    app.watchChannel(1);
+    app.watchChannel(0);
+    expect(app.state.live.recent).toEqual([1, 2]);
+    expect(app.store.json("recentChannels", [])).toEqual([1, 2]);
+    expect(app.shownCategories().map((c) => c.name)).toEqual(["Recently watched"]);
+  });
+
+  it("start over plays this programme from the archive; Go live goes back; a channel without one can't", () => {
+    signedIn();
+    const now = Math.floor(Date.now() / 1000);
+    const on = { channelId: "1", start: now - 1200, stop: now + 600, title: "The Evening Report", description: null };
+    expect(app.canCatchUp(news, on, now)).toBe(true);
+    expect(app.canCatchUp(sport, on, now)).toBe(false);
+    expect(app.playCatchUp(0, on)).toBe(true);
+    expect(app.state.live.catchUp?.url).toMatch(/^http:\/\/panel:8080\/timeshift\/me\/pw\/30\/\d{4}-\d{2}-\d{2}:\d{2}-\d{2}\/1\.ts$/);
+    expect(app.state.live.watching).toBe(0);
+    app.goLive();
+    expect(app.state.live.catchUp).toBeNull();
+    expect(app.playCatchUp(1, on)).toBe(false);
+  });
+
+  it("a reminder comes due a minute before, once, and is kept until then", () => {
+    signedIn();
+    const start = Math.floor(Date.now() / 1000) + 600;
+    const later = { channelId: "2", start, stop: start + 1800, title: "The Match", description: null };
+    app.toggleReminder(sport, later);
+    expect(app.hasReminder(sport, later)).toBe(true);
+    expect(app.store.json<unknown[]>("reminders", [])).toHaveLength(1);
+    app.checkReminders(start * 1000 - 5 * 60_000);
+    expect(app.state.live.due).toBeNull();
+    app.checkReminders(start * 1000 - 30_000);
+    expect(app.state.live.due?.title).toBe("The Match");
+    expect(app.state.live.reminders).toEqual([]);
+    app.dismissReminder();
+    app.checkReminders(start * 1000);
+    expect(app.state.live.due).toBeNull();
+  });
+
+  it("watching from a reminder finds the channel and tunes it", async () => {
+    signedIn();
+    const start = Math.floor(Date.now() / 1000);
+    app.toggleReminder(sport, { channelId: "2", start, stop: start + 60, title: "The Match", description: null });
+    app.checkReminders();
+    await app.watchReminder();
+    expect(app.state.live.watching).toBe(1);
+    expect(app.state.live.due).toBeNull();
+  });
+});
+
 describe("Back in Live TV", () => {
   it("leaves the channel, then the category, then goes Home", () => {
     app.navigate({ name: "live" });
