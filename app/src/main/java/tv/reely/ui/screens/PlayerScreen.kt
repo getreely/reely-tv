@@ -32,6 +32,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -1493,7 +1495,7 @@ fun PlayerScreen(
                 // Clear of a phone's camera cutout, which sideways sits at this edge.
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.displayCutout)
+                    .windowInsetsPadding(WindowInsets.displayCutout)
                     .padding(16.dp),
             )
         }
