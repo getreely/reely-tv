@@ -243,6 +243,8 @@ sub choose(what as string)
     end for
     m.choosing = what
     m.chooser = CreateObject("roSGNode", "Chooser")
+    ' Over the whole screen, tabs and all, from inside a page that starts under them.
+    m.chooser.translation = [0, -130]
     m.chooser.current = current
     m.chooser.options = names
     m.chooser.title = Iif_(what = "genre", "Genre", "Decade")

@@ -19,7 +19,7 @@
     <Poster id="art" translation="[1340, 0]" width="580" height="326" loadDisplayMode="scaleToZoom" />
     <Label id="title" translation="[1380, 350]" width="500" color="0xF5F2F0FF" wrap="true" maxLines="2" />
     <Label id="sub" translation="[1380, 450]" width="500" color="0xB9B4B1FF" />
-    <LabelList id="list" translation="[1370, 510]" itemSize="[520, 64]" numRows="8" vertFocusAnimationStyle="floatingFocus"
+    <LabelList id="list" translation="[1380, 510]" itemSize="[480, 64]" numRows="8" vertFocusAnimationStyle="floatingFocus"
       focusBitmapUri="pkg:/images/pill.9.png" color="0xF5F2F0FF" focusedColor="0x0A0909FF" />
   </children>
 </component>

@@ -53,6 +53,10 @@ sub paint()
     for i = 0 to m.ids.Count() - 1
         open = m.ids[i] = m.top.current
         here = m.focused and i = m.at
+        #if DEBUG
+            ' Where the cursor is, for the end-to-end test to follow.
+            if here then print "TAB "; m.ids[i]
+        #end if
         m.pills[i].visible = here or open
         if here then
             m.pills[i].uri = "pkg:/images/pill.9.png"

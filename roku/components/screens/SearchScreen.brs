@@ -65,7 +65,7 @@ sub answered(r as object)
         { title: "Other results", items: a.more }
     ]
     ShowRows_(m.rows, rows)
-    m.rows.itemSize = [1240, 500]
+    m.rows.itemSize = [1140, 500]
     parts = []
     found = a.results.Count() + a.more.Count()
     if found > 0 then parts.Push(found.ToStr() + " in your library")

@@ -7,6 +7,7 @@ import http from "node:http";
 import { spawn } from "node:child_process";
 
 const asked = [];
+const queries = [];
 const timeline = [];
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
 const episode = (key, index, viewed = false) => ({
@@ -17,6 +18,7 @@ let port = 0;
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://x");
   asked.push(url.pathname);
+  queries.push(url.pathname + url.search);
   const send = (v) => { res.writeHead(200, { "Content-Type": "application/json" }); res.end(JSON.stringify(v)); };
   const meta = (Metadata) => send({ MediaContainer: { Metadata } });
   switch (url.pathname) {
@@ -40,6 +42,9 @@ const server = http.createServer((req, res) => {
     case "/playlists": return meta([{ ratingKey: "p1", type: "playlist", title: "Road Trip", leafCount: 2 }]);
     case "/library/sections/watchlist/all": return meta([{ guid: "plex://movie/low-orbit", type: "movie", title: "Low Orbit" }]);
     case "/library/all": return meta([{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025, addedAt: 9, guid: "plex://movie/low-orbit" }]);
+    case "/hubs/search": return send({ MediaContainer: { Hub: [
+      { type: "movie", Metadata: [{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025, addedAt: 9 }] },
+      { type: "actor", Metadata: [{ id: "77", tag: "Mara Lowe", type: "actor" }] }] } });
     case "/library/sections/1/genre": return send({ MediaContainer: { Directory: [{ key: "7", title: "Drama" }] } });
     case "/library/sections/1/decade": return send({ MediaContainer: { Directory: [{ key: "2020", title: "2020s" }] } });
     case "/library/sections/1/firstCharacter": return send({ MediaContainer: { Directory: [{ key: "L", title: "L", size: 1 }] } });
@@ -81,6 +86,24 @@ const snap = async (name) => {
   await until(`screenshot ${name}`, () => existsSync(shot) && statSync(shot).mtimeMs > before, 8000);
   await wait(300);
   copyFileSync(shot, `shots/${name}.png`);
+};
+// The last place the debug build said the cursor was ("TAB home", "PILL Genre").
+const lastSaid = (kind) => {
+  const found = [...output.matchAll(new RegExp(`^${kind} (.+?)\\r?$`, "gm"))];
+  return found.length ? found[found.length - 1][1].trim() : null;
+};
+// Along a row with the arrows until the cursor is on [target]: each press waited for, and
+// pressed again if the simulator let it go while it was busy.
+const moveTo = async (kind, target, direction) => {
+  for (let tries = 0; tries < 20 && lastSaid(kind) !== target; tries++) {
+    const before = lastSaid(kind);
+    const count = output.length;
+    await key(direction);
+    const end = Date.now() + 1500;
+    while (Date.now() < end && (output.length === count || lastSaid(kind) === before)) await wait(100);
+    await wait(250);
+  }
+  if (lastSaid(kind) !== target) throw new Error(`Couldn't get to ${kind} ${target}; on ${lastSaid(kind)}`);
 };
 const failures = [];
 const expect = (what, ok) => { if (!ok) failures.push(what); console.log(`${ok ? "PASS" : "FAIL"} ${what}`); };
@@ -126,7 +149,7 @@ try {
   await snap("roku-movies");
   expect("Movies opens on arriving at its tab", asked.includes("/library/sections/1/firstCharacter"));
   // Along to Settings, which opens on OK.
-  for (let i = 0; i < 5; i++) { await key("Right"); await wait(400); }
+  await moveTo("TAB", "settings", "Right");
   await key("Select");
   await wait(1500);
   await snap("roku-settings");
@@ -140,6 +163,40 @@ try {
   await key("Back");
   await wait(1500);
   await snap("roku-home-from-settings");
+  // The poster menu, on the * key, as Roku apps have it.
+  await key("Info");
+  await wait(1000);
+  await snap("roku-poster-menu");
+  expect("no crash after the poster menu", !/BRIGHTSCRIPT_CRASH|Runtime Error|Syntax Error|Error processing/i.test(output));
+  await key("Back");
+  await wait(800);
+  // Search: typed on the keyboard, the results in rows.
+  await key("Up"); await wait(600);
+  await moveTo("TAB", "search", "Right");
+  await key("Select");
+  await wait(1200);
+  for (const c of "low") { await key(`Lit_${c}`); await wait(250); }
+  await until("the search", () => queries.some((q) => q.startsWith("/hubs/search") && q.includes("query=low")), 10000).catch(() => undefined);
+  await wait(2000);
+  await snap("roku-search");
+  expect("searching asks the server as it's typed", queries.some((q) => q.startsWith("/hubs/search") && q.includes("query=low")));
+  // Movies, the grid, narrowed by genre.
+  await key("Up"); await wait(600);
+  await moveTo("TAB", "movies", "Left");
+  await wait(1500);
+  await key("Down"); await wait(700);
+  await moveTo("PILL", "All", "Right");
+  await key("Select"); await wait(1500);
+  await key("Down"); await wait(700);
+  await moveTo("PILL", "Genre", "Right");
+  await key("Select"); await wait(1500);
+  await snap("roku-genre-chooser");
+  await key("Down"); await wait(600);
+  await key("Select");
+  await until("the grid narrowed by genre", () => queries.some((q) => q.startsWith("/library/sections/1/all") && q.includes("genre=7")), 10000).catch(() => undefined);
+  await wait(1500);
+  await snap("roku-movies-drama");
+  expect("a genre narrows the library", queries.some((q) => q.startsWith("/library/sections/1/all") && q.includes("genre=7")));
   expect("no crash", !/BRIGHTSCRIPT_CRASH|Runtime Error|Syntax Error/i.test(output));
 } catch (error) {
   failures.push(String(error.message ?? error));

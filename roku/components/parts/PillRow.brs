@@ -43,6 +43,10 @@ sub paint()
     for i = 0 to m.pills.Count() - 1
         isOn = on <> invalid and i < on.Count() and on[i] = true
         if focused and i = m.top.focusIndex then
+            #if DEBUG
+                ' Where the cursor is, for the end-to-end test to follow.
+                print "PILL "; m.top.labels[i]
+            #end if
             m.pills[i].uri = "pkg:/images/pill.9.png"
             m.pills[i].blendColor = "0xF5F2F0FF"
             m.texts[i].color = "0x0A0909FF"

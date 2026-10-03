@@ -19,13 +19,13 @@ app (Amazon's Vega SDK, React Native), which can reuse the LG app's TypeScript c
 | Home: Continue Watching, recent episodes and movies, Watchlist, playlists | ✅ | ✅ | ✅ | ✅ | ⬜ |
 | Home rows switched on and off | ✅ | ✅ | ✅ | 🟡 (built; simulator test to come) | ⬜ |
 | Movies / TV Shows: tab home, library grid, collections | ✅ | ✅ | ✅ | 🟡 (tab home tested; grid and collections built) | ⬜ |
-| Library sort, unwatched, genre, decade, A–Z | ✅ | ✅ (A–Z by sort) | ✅ | 🟡 (built; simulator test to come) | ⬜ |
+| Library sort, unwatched, genre, decade, A–Z | ✅ | ✅ (A–Z by sort) | ✅ | 🟡 (genre tested; the rest built) | ⬜ |
 | Title page: play/resume/restart, watched, Watchlist, trailer, version | ✅ | ✅ | ✅ | 🟡 (play and resume tested; the rest built) | ⬜ |
 | Seasons and episodes; show opens where it's up to | ✅ | ✅ | ✅ | ✅ | ⬜ |
 | Cast and actor pages, More like this, collections' pages | ✅ | ✅ | ✅ | 🟡 (built; simulator test to come) | ⬜ |
 | Playlists: play, shuffle | ✅ | ✅ | ✅ | 🟡 (built; simulator test to come) | ⬜ |
-| Hold a poster for its menu | ✅ | ✅ (long press) | ✅ | 🟡 (the ✱ key, as Roku apps do; built) | ⬜ |
-| Search: titles, people, collections, channels, recent searches | ✅ | ✅ | ✅ | 🟡 (titles, people, collections, recent searches; built) | ⬜ |
+| Hold a poster for its menu | ✅ | ✅ (long press) | ✅ | ✅ (the ✱ key, as Roku apps do) | ⬜ |
+| Search: titles, people, collections, channels, recent searches | ✅ | ✅ | ✅ | 🟡 (titles and people tested; collections and recent searches built; channels with Live TV) | ⬜ |
 | **Player** | | | | | |
 | Direct play, conversion when needed, quality limit | ✅ | ✅ | ✅ | 🟡 (conversion tested; quality limit built) | ⬜ |
 | Resume, progress and watched kept with Plex | ✅ | ✅ | ✅ | ✅ | ⬜ |
