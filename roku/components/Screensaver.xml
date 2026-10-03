@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The screensaver, as the Fire TV's: the library's artwork one picture at a time, drifting
+     slowly so nothing sits still on the screen, with what each is from and the time. The
+     Roku starts it when the remote's been put down while Reely is open, and puts it away
+     at any button. The pictures are the ones Reely kept from Home. -->
+<component name="Screensaver" extends="Scene">
+  <script type="text/brightscript" uri="pkg:/components/Screensaver.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/extras.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
+  <children>
+    <Rectangle width="1920" height="1080" color="0x08090BFF" />
+    <Poster id="a" width="2016" height="1134" loadDisplayMode="scaleToZoom" opacity="0" />
+    <Poster id="b" width="2016" height="1134" loadDisplayMode="scaleToZoom" opacity="0" />
+    <Poster uri="pkg:/images/white.png" translation="[0, 760]" width="1920" height="320" blendColor="0x08090BB3" />
+    <Label id="title" translation="[96, 880]" width="1500" color="0xF2F4F7FF" />
+    <Label id="caption" translation="[96, 950]" width="1500" color="0xB3BAC4FF" />
+    <Label id="clock" translation="[1424, 56]" width="400" horizAlign="right" color="0xF2F4F7FF" />
+    <Timer id="next" repeat="true" />
+    <Timer id="tick" duration="15" repeat="true" />
+    <Animation id="fade" duration="1.5" easeFunction="linear">
+      <FloatFieldInterpolator id="fadeIn" key="[0, 1]" keyValue="[0, 1]" />
+      <FloatFieldInterpolator id="fadeOut" key="[0, 1]" keyValue="[1, 0]" />
+    </Animation>
+    <Animation id="drift" easeFunction="linear">
+      <Vector2DFieldInterpolator id="driftAt" key="[0, 1]" keyValue="[[0, 0], [-96, -54]]" />
+    </Animation>
+  </children>
+</component>

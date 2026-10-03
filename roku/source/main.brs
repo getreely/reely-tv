@@ -1,5 +1,12 @@
 ' Reely for Roku: one scene, which does the rest.
 sub Main(args as dynamic)
+    #if DEBUG
+        ' The screensaver on its own, for its test.
+        if args <> invalid and Str_(args.screensaver) = "1" then
+            RunScreenSaver()
+            return
+        end if
+    #end if
     screen = CreateObject("roSGScreen")
     port = CreateObject("roMessagePort")
     screen.SetMessagePort(port)
@@ -13,6 +20,20 @@ sub Main(args as dynamic)
     #end if
     screen.getGlobalNode().addFields({ plexTv: plexTv, discover: discover })
     scene = screen.CreateScene("MainScene")
+    screen.Show()
+    while true
+        msg = Wait(0, port)
+        if type(msg) = "roSGScreenEvent" and msg.IsScreenClosed() then return
+    end while
+end sub
+
+' Reely's own screensaver, which the Roku starts when the remote's been put down while
+' Reely is open (screensaver_private in the manifest): the library's artwork and the time.
+sub RunScreenSaver()
+    screen = CreateObject("roSGScreen")
+    port = CreateObject("roMessagePort")
+    screen.SetMessagePort(port)
+    screen.CreateScene("Screensaver")
     screen.Show()
     while true
         msg = Wait(0, port)

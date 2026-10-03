@@ -16,6 +16,7 @@ sub work()
                 print "  at "; f.filename; ":"; f.line_number
             end for
         #end if
+        Problem_Keep(op, e)
         out = { op: op, id: a.id, failed: true }
     end try
     m.top.result = out

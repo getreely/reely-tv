@@ -10,6 +10,8 @@
   </interface>
   <script type="text/brightscript" uri="pkg:/components/screens/SettingsScreen.brs" />
   <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/extras.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
   <children>
     <Rectangle id="clip" width="1920" height="950" color="0x00000000" clippingRect="[0, 0, 1920, 950]">

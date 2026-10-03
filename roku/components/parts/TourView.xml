@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- How to get around with the remote, a step at a time, as the Fire TV's tour: once after
+     signing in, and again from Settings. Next, Back and Skip; Back on the remote goes back
+     a step, or out from the first. -->
+<component name="TourView" extends="Group">
+  <interface>
+    <field id="done" type="boolean" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/parts/TourView.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/extras.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
+  <children>
+    <Rectangle width="1920" height="1080" color="0x08090BE6" />
+    <Poster uri="pkg:/images/card.9.png" blendColor="0x15171BFF" translation="[460, 250]" width="1000" height="580" />
+    <Label id="count" translation="[540, 300]" width="840" color="0x7F8792FF" />
+    <Label id="title" translation="[540, 350]" width="840" color="0xF2F4F7FF" />
+    <Poster id="keyBack" uri="pkg:/images/pill.9.png" blendColor="0x2E6BFFFF" translation="[540, 440]" height="56" />
+    <Label id="key" translation="[540, 440]" height="56" horizAlign="center" vertAlign="center" color="0xFFFFFFFF" />
+    <Label id="body" translation="[540, 530]" width="840" color="0xB3BAC4FF" wrap="true" lineSpacing="8" />
+    <PillRow id="actions" translation="[540, 730]" fontSize="26" />
+  </children>
+</component>

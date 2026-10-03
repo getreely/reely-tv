@@ -54,7 +54,7 @@ end sub
 ' The settings kept on this Roku, with the Fire TV's defaults.
 function Prefs_() as object
     p = ReadJson_("prefs", {})
-    defaults = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], streamFormat: "m3u8", iptvLibrary: false, iptvWins: false }
+    defaults = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], streamFormat: "m3u8", iptvLibrary: false, iptvWins: false, screensaver: true, tourSeen: false }
     for each k in defaults
         if p[k] = invalid then p[k] = defaults[k]
     end for
@@ -206,15 +206,15 @@ sub answered(r as object)
                 Trace_("iptv home " + Join_(names, ", "))
             #end if
             h.watchlist = Arr_(m.global.home.watchlist)
-            m.global.home = h
+            setHome(h)
         else if m.plexHome <> invalid then
-            m.global.home = m.plexHome
+            setHome(m.plexHome)
         end if
     else if r.op = "homeUsers" then
         profile = { user: r.user, homeUsers: Arr_(r.users) }
         m.global.profile = profile
         WriteJson_("plexProfile", profile)
-        if m.askWho = true and profile.homeUsers.Count() > 1 then showProfiles()
+        if m.askWho = true and profile.homeUsers.Count() > 1 then showProfiles() else maybeTour()
         m.askWho = false
     else if r.op = "switchUser" then
         onSwitched(r.answer)
@@ -313,7 +313,22 @@ sub showHome()
     if IptvReady_() then
         Ask_("iptvHome", { home: a })
     else
-        m.global.home = a
+        setHome(a)
+    end if
+end sub
+
+' Home as shown, and its artwork kept for the screensaver, which runs on its own.
+sub setHome(h as object)
+    m.global.home = h
+    slides = []
+    for each s in Saver_Slides(h, 12)
+        slides.Push({ u: Image_(s.base, s.path, 1920, 1080), t: s.title, c: s.caption })
+    end for
+    kept = FormatJson(slides)
+    if slides.Count() > 0 and kept <> m.store.Read("saverSlides") then
+        m.store.Write("saverSlides", kept)
+        m.store.Flush()
+        Trace_("saver kept " + slides.Count().ToStr())
     end if
 end sub
 
@@ -444,6 +459,8 @@ sub onGo(event as object)
         else if Bool_(route.prefs.iptvWins) <> Bool_(before.iptvWins) then
             showHome()
         end if
+    else if route.name = "tour" then
+        showTour()
     else if route.name = "iptvRefresh" then
         loadIptv(true)
     else if route.name = "tab" then
@@ -683,6 +700,35 @@ sub closeProfiles()
     if m.profiles = invalid then return
     m.overlays.removeChild(m.profiles)
     m.profiles = invalid
+    c = topScreen()
+    if c <> invalid then c.focusIn = true
+    maybeTour()
+end sub
+
+' ------------------------------------------------------------------ The tour
+
+' Once, after signing in (and choosing who's watching), as the other apps show it.
+sub maybeTour()
+    if not Bool_(m.global.prefs.tourSeen) then showTour()
+end sub
+
+sub showTour()
+    if m.tour <> invalid or m.profiles <> invalid or m.page = "player" then return
+    m.tour = CreateObject("roSGNode", "TourView")
+    m.tour.observeField("done", "onTourDone")
+    m.overlays.appendChild(m.tour)
+    m.tour.setFocus(true)
+end sub
+
+sub onTourDone()
+    m.overlays.removeChild(m.tour)
+    m.tour = invalid
+    p = m.global.prefs
+    if not Bool_(p.tourSeen) then
+        p.tourSeen = true
+        m.global.prefs = p
+        WriteJson_("prefs", p)
+    end if
     c = topScreen()
     if c <> invalid then c.focusIn = true
 end sub

@@ -53,10 +53,10 @@ app (Amazon's Vega SDK, React Native), which can reuse the LG app's TypeScript c
 | Request with seasons and library | ✅ | ✅ | ✅ | ✅ | ⬜ |
 | Rows leave out what's in the library; Reely sends three pages a row | ✅ | ✅ | ✅ | 🟡 (what Reely has in the library left out; Plex's own check not yet) | ⬜ |
 | **App** | | | | | |
-| Settings (every row) | ✅ | ✅ (same rows) | ✅ (all but frame rate, buffer and Bluetooth, which webOS handles itself) | 🟡 (Playback, Episodes, Home rows, Plex and profiles, Live TV, Requests, About; not yet screensaver, tour) | ⬜ |
+| Settings (every row) | ✅ | ✅ (same rows) | ✅ (all but frame rate, buffer and Bluetooth, which webOS handles itself) | ✅ (all but frame rate, buffer, Bluetooth and subtitle style, which the Roku handles itself) | ⬜ |
 | Updates from GitHub | ✅ | ✅ | — (store) | — (store) | — (store) |
-| Screensaver, remote tour | ✅ | — | ✅ | ⬜ | — |
-| Crash report | ✅ | ✅ | ✅ (problem report) | ⬜ | ⬜ |
+| Screensaver, remote tour | ✅ | — | ✅ | ✅ (the Roku starts the screensaver after its own idle time, set in its Settings) | — |
+| Crash report | ✅ | ✅ | ✅ (problem report) | 🟡 (problem report of what fails in background work; Roku gives apps no hook for the rest) | ⬜ |
 
 ## Tests
 
@@ -64,4 +64,4 @@ app (Amazon's Vega SDK, React Native), which can reuse the LG app's TypeScript c
 |---|---|---|
 | Fire TV / Android TV and phone | `app/src/test` | `./gradlew :app:testDebugUnitTest` (Robolectric, Compose UI tests, screenshots with `-Pscreenshots`) |
 | LG | `webos/` | `npm test` (unit, 168) and `npm run e2e` (browser, the built app as the TV opens it); `npm run package` makes `reely-lg.ipk` |
-| Roku | `roku/` | `npm run check` (BrighterScript compile), `npm test` (unit, 251, BrightScript simulator) and `npm run e2e` (the app in the SceneGraph simulator, driven by the remote protocol, against a stand-in Plex); `npm run package` makes `reely-roku.zip` |
+| Roku | `roku/` | `npm run check` (BrighterScript compile), `npm test` (unit, 261, BrightScript simulator) and `npm run e2e` (the app in the SceneGraph simulator, driven by the remote protocol, against a stand-in Plex); `npm run package` makes `reely-roku.zip` |

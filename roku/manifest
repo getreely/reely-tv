@@ -10,3 +10,5 @@ splash_min_time=600
 ui_resolutions=fhd
 bs_const=DEBUG=false
 supports_input_launch=1
+screensaver_private=1
+screensaver_title=Reely

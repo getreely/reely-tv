@@ -37,6 +37,7 @@ sub handleRequest(q as dynamic)
                 print "  at "; f.filename; ":"; f.line_number
             end for
         #end if
+        Problem_Keep(q.op, e)
         out.failed = true
     end try
     if q.reply <> invalid then q.reply.result = out

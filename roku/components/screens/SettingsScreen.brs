@@ -163,9 +163,29 @@ function Settings_() as object
         out.Push({ group: "Requests", title: "Not connected", note: "Connect to Reely from the Request tab to ask for movies and shows.", labels: ["Go to Request"], on: [false], key: "goRequests" })
     end if
 
+    saver = true
+    if p.screensaver <> invalid then saver = Bool_(p.screensaver)
+    out.Push({ group: "Screensaver", title: "Screensaver", note: Iif_(saver, "Your library's artwork and the time, when the remote's been put down. When it starts is set on your Roku: Settings > Theme > Screensaver.", "The time alone, on black, when the remote's been put down."), labels: ["Library artwork", "Off"], on: [saver, not saver], key: "screensaver" })
+
     out.Push({ group: "About", title: "Version", note: CreateObject("roAppInfo").GetVersion(), labels: [], on: [], key: "" })
     out.Push({ group: "", title: "Reely", note: "Your Plex library, live TV and requests, on your TV.", labels: [], on: [], key: "" })
+    out.Push({ group: "", title: "Take the tour", note: "How to get around with the remote.", labels: ["Take the tour"], on: [false], key: "tour" })
     out.Push({ group: "", title: "Licenses", note: "Geist, the typeface (SIL Open Font License 1.1)", labels: [], on: [], key: "" })
+
+    ' What went wrong last, kept on this Roku only.
+    raw = CreateObject("roRegistrySection", "reely").Read("problem")
+    problem = invalid
+    if raw <> "" then problem = ParseJson(raw)
+    if problem <> invalid and type(problem) = "roAssociativeArray" then
+        note = DateOf_(Num_(problem.at)) + "  ·  " + Str_(problem.message)
+        extra = 0
+        if m.reading = true then
+            detail = Problem_Detail(problem)
+            note = detail + Chr(10) + "Kept on this Roku only. Nothing is sent anywhere."
+            extra = (detail.Split(Chr(10)).Count()) * 34
+        end if
+        out.Push({ group: "Problem report", title: "Something went wrong", note: note, labels: [Iif_(m.reading = true, "Hide", "View"), "Clear"], on: [false, false], key: "problem", extra: extra })
+    end if
     return out
 end function
 
@@ -260,7 +280,9 @@ sub build()
         n.wrap = true
         n.translation = [0, y + 44]
         m.body.appendChild(n)
+        top = y
         y = y + 84
+        if st.extra <> invalid then y = y + st.extra
         if st.labels.Count() > 0 then
             pills = CreateObject("roSGNode", "PillRow")
             pills.fontSize = 24
@@ -269,7 +291,7 @@ sub build()
             pills.translation = [0, y + 4]
             pills.observeField("pressed", "onPressed")
             m.body.appendChild(pills)
-            m.rows.Push({ key: st.key, pills: pills, top: y - 84 })
+            m.rows.Push({ key: st.key, pills: pills, top: top })
             y = y + 74
         end if
         y = y + 16
@@ -354,6 +376,23 @@ sub onPressed(event as object)
         p.hiddenRows = list
     else if key = "streamFormat" then
         p.streamFormat = Iif_(i = 0, "m3u8", "ts")
+    else if key = "screensaver" then
+        p.screensaver = i = 0
+    else if key = "tour" then
+        m.top.go = { name: "tour" }
+        return
+    else if key = "problem" then
+        if i = 0 then
+            m.reading = not (m.reading = true)
+        else
+            store = CreateObject("roRegistrySection", "reely")
+            store.Delete("problem")
+            store.Flush()
+            m.reading = false
+            m.at = 0
+        end if
+        build()
+        return
     else if key = "iptvLibrary" then
         p.iptvLibrary = i = 0
     else if key = "iptvWins" then

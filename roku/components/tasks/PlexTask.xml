@@ -10,6 +10,7 @@
   <script type="text/brightscript" uri="pkg:/components/tasks/PlexTask.brs" />
   <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
   <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/extras.brs" />
   <script type="text/brightscript" uri="pkg:/source/lib/http.brs" />
   <script type="text/brightscript" uri="pkg:/source/lib/plexapi.brs" />
   <script type="text/brightscript" uri="pkg:/source/lib/xtream.brs" />

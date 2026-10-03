@@ -12,7 +12,7 @@ const timeline = [];
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
 const episode = (key, index, viewed = false) => ({
   ratingKey: key, type: "episode", title: `Episode ${index}`, index, parentIndex: 1, parentRatingKey: "s1",
-  grandparentRatingKey: "show1", grandparentTitle: "Northbound", addedAt: 1000 + index, viewCount: viewed ? 1 : 0, duration: 60000,
+  grandparentRatingKey: "show1", grandparentTitle: "Northbound", addedAt: 1000 + index, viewCount: viewed ? 1 : 0, duration: 60000, thumb: `/library/metadata/${key}/thumb`,
 });
 let port = 0;
 // A stand-in Xtream panel: a login, two categories, two channels and their guide.
@@ -126,20 +126,20 @@ const server = http.createServer((req, res) => {
     case "/identity": return send({});
     case "/library/sections": return send({ MediaContainer: { Directory: [{ key: "1", title: "Movies", type: "movie" }, { key: "2", title: "TV Shows", type: "show" }] } });
     case "/hubs": return send({ MediaContainer: { Hub: [{ Metadata: [{ ...episode("e2", 2), viewOffset: 20000, lastViewedAt: 5 }] }] } });
-    case "/library/sections/1/all": return meta([{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025, addedAt: 9 }]);
+    case "/library/sections/1/all": return meta([{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025, addedAt: 9, art: "/library/metadata/m1/art" }]);
     case "/library/sections/2/all": {
       const start = Number(url.searchParams.get("X-Plex-Container-Start") ?? 0);
       const all = Array.from({ length: 333 }, (_, i) => episode(`n${i}`, i + 1));
       return meta(all.slice(start, start + 200));
     }
     case "/library/metadata/show1": return meta([{ ratingKey: "show1", type: "show", title: "Northbound", year: 2024, summary: "A long-haul driver.", OnDeck: { Metadata: [{ ratingKey: "e2" }] } }]);
-    case "/library/metadata/show1/related": return send({ MediaContainer: { Hub: [{ Metadata: [{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025, addedAt: 9 }] }] } });
+    case "/library/metadata/show1/related": return send({ MediaContainer: { Hub: [{ Metadata: [{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025, addedAt: 9, art: "/library/metadata/m1/art" }] }] } });
     case "/library/metadata/show1/extras": return meta([]);
     case "/playlists": return meta([{ ratingKey: "p1", type: "playlist", title: "Road Trip", leafCount: 2 }]);
     case "/library/sections/watchlist/all": return meta([{ guid: "plex://movie/low-orbit", type: "movie", title: "Low Orbit" }]);
-    case "/library/all": return meta([{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025, addedAt: 9, guid: "plex://movie/low-orbit" }]);
+    case "/library/all": return meta([{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025, addedAt: 9, art: "/library/metadata/m1/art", guid: "plex://movie/low-orbit" }]);
     case "/hubs/search": return send({ MediaContainer: { Hub: [
-      { type: "movie", Metadata: [{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025, addedAt: 9 }] },
+      { type: "movie", Metadata: [{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025, addedAt: 9, art: "/library/metadata/m1/art" }] },
       { type: "actor", Metadata: [{ id: "77", tag: "Mara Lowe", type: "actor" }] }] } });
     case "/library/sections/1/genre": return send({ MediaContainer: { Directory: [{ key: "7", title: "Drama" }] } });
     case "/library/sections/1/decade": return send({ MediaContainer: { Directory: [{ key: "2020", title: "2020s" }] } });
@@ -172,7 +172,13 @@ mkdirSync("shots", { recursive: true });
 
 // Under a terminal, so Ctrl+S takes a screenshot.
 const shot = "build/shot.png";
-const sim = spawn("script", ["-qfc", `npx brs-cli -e -s ${shot} -c 0 -k plexTv=http://127.0.0.1:${port},discover=http://127.0.0.1:${port} build/debug.zip`, "/dev/null"], { stdio: ["pipe", "pipe", "pipe"] });
+// The registry kept on disk, fresh for each run: the screensaver, run on its own at the
+// end, reads what the app kept there.
+const simData = `${process.cwd()}/build/simdata`;
+rmSync(simData, { recursive: true, force: true });
+const launch = (links) => spawn("script", ["-qfc", `npx brs-cli -e -y -s ${shot} -c 0 -k ${links} build/debug.zip`, "/dev/null"],
+  { stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, XDG_DATA_HOME: simData } });
+let sim = launch(`plexTv=http://127.0.0.1:${port},discover=http://127.0.0.1:${port}`);
 let output = "";
 sim.stdout.on("data", (d) => { output += d.toString(); });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -229,9 +235,22 @@ try {
   await wait(1200);
   await snap("roku-whos-watching");
   await key("Select");
+  // Then the tour, once: Next, then Skip.
+  await until("the tour", () => output.includes("TRACE tour step 1"), 10000).catch(() => undefined);
+  expect("the remote tour after choosing who's watching", output.includes("TRACE tour step 1"));
+  await wait(1200);
+  await snap("roku-tour");
+  await key("Select");
+  await until("the tour's next step", () => output.includes("TRACE tour step 2"), 5000).catch(() => undefined);
   await wait(800);
+  await snap("roku-tour-step-2");
+  await moveTo("PILL", "Skip tour", "Right");
+  await key("Select");
+  await until("the tour put away", () => output.includes("TRACE tour done"), 5000).catch(() => undefined);
+  expect("Next and Skip tour", output.includes("TRACE tour step 2") && output.includes("TRACE tour done"));
   await wait(2500);
   await snap("roku-home");
+  expect("Home's artwork kept for the screensaver", output.includes("TRACE saver kept"));
   expect("signed in with the code, found the server", asked.includes("/api/v2/resources") && asked.includes("/identity"));
   expect("episodes paged until the show was counted whole", asked.filter((p) => p === "/library/sections/2/all").length === 2);
   expect("the Watchlist row finds the title on the server", asked.includes("/library/sections/watchlist/all") && asked.includes("/library/all"));
@@ -564,6 +583,18 @@ try {
   await wait(1500);
   await snap("roku-iptv-series");
   expect("no crash", !/BRIGHTSCRIPT_CRASH|Runtime Error|Syntax Error/i.test(output));
+  // The screensaver, as the Roku starts it: on its own, with the pictures the app kept.
+  sim.kill("SIGKILL");
+  await wait(2000);
+  output = "";
+  sim = launch("screensaver=1");
+  sim.stdout.on("data", (d) => { output += d.toString(); });
+  await until("the screensaver", () => output.includes("TRACE saver slide "), 30000).catch(() => undefined);
+  const count = Number(lastSaid("TRACE saver slides") ?? 0);
+  expect("the screensaver shows Home's artwork", count > 0 && !!lastSaid("TRACE saver slide"));
+  await wait(2500);
+  await snap("roku-screensaver");
+  expect("the screensaver runs without a crash", !/BRIGHTSCRIPT_CRASH|Runtime Error|Syntax Error/i.test(output));
 } catch (error) {
   failures.push(String(error.message ?? error));
   console.error(error.message ?? error);
