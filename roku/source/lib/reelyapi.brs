@@ -110,3 +110,20 @@ function ReelyApi_Request(c as object, t as object, seasons as dynamic, libraryI
     if message = "" then message = "Reely couldn't take that request. Try again."
     return { outcome: "refused", approved: false, message: message, cookie: r.cookie }
 end function
+
+' Whether anything asked for has arrived: { problem, cookie, mine, marks }.
+function ReelyApi_Ready(c as object) as object
+    mine = ReelyApi_Call(c, "/api/v1/requests?mine=1")
+    if mine.problem <> "" then return { problem: mine.problem, cookie: "" }
+    c.cookie = mine.cookie
+    movies = ReelyApi_Call(c, "/api/v1/movies")
+    shows = ReelyApi_Call(c, "/api/v1/shows")
+    asked = ReelyApi_Call(c, "/api/v1/requests")
+    m1 = invalid
+    if movies.json <> invalid then m1 = movies.json.movies
+    s1 = invalid
+    if shows.json <> invalid then s1 = shows.json.shows
+    o1 = invalid
+    if asked.json <> invalid then o1 = asked.json.requests
+    return { problem: "", cookie: c.cookie, mine: Reely_ParseRecords(mine.json), marks: Reely_ParseMarks(m1, s1, o1) }
+end function

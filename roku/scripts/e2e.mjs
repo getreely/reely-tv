@@ -48,6 +48,8 @@ const panel = (url, send) => {
 // A stand-in Reely: a session from the Plex sign-in, then its rows, a show's page and a request.
 const reelyAsked = [];
 let reelySignedIn = false;
+// Set part way through: what was asked for has been approved, and has arrived.
+let reelyArrived = false;
 const reelyApi = (req, res, url) => {
   const reply = (code, v, cookie) => {
     res.writeHead(code, { "Content-Type": "application/json", ...(cookie ? { "Set-Cookie": cookie } : {}) });
@@ -59,7 +61,7 @@ const reelyApi = (req, res, url) => {
     const path = url.pathname;
     if (path === "/api/v1/auth/plex/token") {
       reelySignedIn = JSON.parse(body || "{}").token === "account-token";
-      return reelySignedIn ? reply(200, { status: "ok" }, "reely_session=abc; Path=/; HttpOnly") : reply(401, { error: "plex.tv: Unauthorized" });
+      return reelySignedIn ? reply(200, { status: "ok" }, "reely_session=abc; Path=/; HttpOnly") : reply(401, { error: "plex.tv didn't accept that sign-in" });
     }
     // The simulator's HTTP, like a browser's, neither shows Set-Cookie nor sends Cookie, so
     // a signed-in simulator is let in without it; the cookie itself is unit-tested.
@@ -69,10 +71,10 @@ const reelyApi = (req, res, url) => {
         movies: [{ tmdbId: 603, kind: "movie", title: "The Matrix", year: 1999 }, { tmdbId: 438631, kind: "movie", title: "Dune", year: 2021 }],
         shows: [{ tmdbId: 1399, kind: "show", title: "Game of Thrones", year: 2011 }] });
       case "/api/v1/movies": return reply(200, { movies: [{ tmdbId: 603, filePath: "/m/matrix.mkv" }] });
-      case "/api/v1/shows": return reply(200, { shows: [] });
+      case "/api/v1/shows": return reply(200, { shows: reelyArrived ? [{ tmdbId: 1399, onDisk: 20, aired: 73, wanted: 53 }] : [] });
       case "/api/v1/requests":
         if (req.method === "POST") { reelyAsked.push(JSON.parse(body)); return reply(201, { status: "pending" }); }
-        return reply(200, { requests: reelyAsked.map((r, i) => ({ id: i + 1, ...r, status: "pending" })) });
+        return reply(200, { requests: reelyAsked.map((r, i) => ({ id: i + 1, ...r, status: reelyArrived ? "approved" : "pending" })) });
       case "/api/v1/preview/show/1399": return reply(200, { imageBase: "https://image.tmdb.org/t/p", inLibraries: [],
         preview: { kind: "show", tmdbId: 1399, title: "Game of Thrones", overview: "Seven noble families fight for the land.", genres: ["Drama"], status: "Ended",
           seasons: [{ number: 1, name: "Season 1" }, { number: 2, name: "Season 2" }, { number: 3, name: "Season 3" }] } });
@@ -458,6 +460,28 @@ try {
   await until("the profile's Home", () => asked.filter((p) => p === "/hubs").length > hubsBefore, 15000).catch(() => undefined);
   await wait(3000);
   await snap("roku-switched-profile");
+  // The show asked for is approved and arrives; back to the owner, Home is read again and says so.
+  reelyArrived = true;
+  await toTabs();
+  await moveTo("TAB", "settings", "Right");
+  await key("Select"); await wait(1500);
+  await moveTo("PILL", "Switch profile", "Down");
+  await key("Select");
+  await until("the profiles again", () => (output.match(/TRACE who's watching/g) ?? []).length >= 3, 5000).catch(() => undefined);
+  await wait(800);
+  await key("Left"); await wait(600);
+  await key("Select");
+  await until("back to the owner", () => output.includes("TRACE switched to Ann"), 10000).catch(() => undefined);
+  await until("ready to watch", () => output.includes("TRACE ready Game of Thrones"), 20000).catch(() => undefined);
+  expect("a request that's arrived is said on Home", output.includes("TRACE ready Game of Thrones"));
+  await wait(2500);
+  await snap("roku-ready-to-watch");
+  await key("Up"); await wait(600);
+  await key("Select");
+  await until("looked for in Plex", () => queries.some((q) => q.startsWith("/hubs/search") && q.includes("Game")), 10000).catch(() => undefined);
+  expect("Watch looks for it in the libraries", queries.some((q) => q.startsWith("/hubs/search") && q.includes("Game")));
+  await wait(2000);
+  await snap("roku-ready-watch");
   expect("no crash", !/BRIGHTSCRIPT_CRASH|Runtime Error|Syntax Error/i.test(output));
 } catch (error) {
   failures.push(String(error.message ?? error));

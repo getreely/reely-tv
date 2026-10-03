@@ -62,7 +62,8 @@ sub Main()
 
     ' Signing in: what each refusal says.
     Expect("in", Reely_SignInProblem(200, ""), "")
-    Expect("plex.tv's refusal in words", Reely_SignInProblem(401, FormatJson({ error: "plex.tv: Unauthorized: <?xml version=" + Chr(34) + "1.0" + Chr(34) + "?><errors><error>Invalid authentication token.</error></errors>" })), Reely_PlexRejectedText())
+    Expect("this device's sign-in refused", Reely_SignInProblem(401, FormatJson({ error: "plex.tv didn't accept that sign-in" })), Reely_PlexRejectedText())
+    Expect("Reely's own Plex link refused: the owner's to fix", Reely_SignInProblem(502, FormatJson({ error: "plex.tv: Unauthorized: <?xml version=" + Chr(34) + "1.0" + Chr(34) + "?><errors><error>Invalid authentication token.</error></errors>" })), Reely_OwnerLinkBrokenText())
     Expect("not shared", Reely_SignInProblem(403, "{}"), "Your Plex account doesn't have access to this server's requests.")
     Expect("markup is never shown", Reely_SignInProblem(502, FormatJson({ error: "<html>Bad gateway</html>" })), "Reely couldn't do that. Try again.")
     Expect("Reely's own words", Reely_SignInProblem(500, FormatJson({ error: "Reely is updating." })), "Reely is updating.")
@@ -70,4 +71,19 @@ sub Main()
     Expect("the session sent back", ReelyApi_Headers("reely_session=abc", true), { "Accept": "application/json", "Content-Type": "application/json", "Cookie": "reely_session=abc" })
     Expect("no session, no Cookie", ReelyApi_Headers("", false), { "Accept": "application/json" })
     Expect("a header named in lower case", Reely_CookieFrom([{ "set-cookie": "reely_session=xyz; Path=/" }]), "reely_session=xyz")
+
+    ' Ready to watch: approved, arrived (a show partly), not said already.
+    readyMarks = Reely_ParseMarks([{ tmdbId: 10, filePath: "/a.mkv" }, { tmdbId: 11 }], [{ tmdbId: 20, onDisk: 2, aired: 10, wanted: 8 }], [])
+    asked = [
+        { title: { kind: "movie", tmdbId: 10, tvdbId: 0, title: "Here" }, status: "approved" },
+        { title: { kind: "movie", tmdbId: 11, tvdbId: 0, title: "Not yet" }, status: "approved" },
+        { title: { kind: "show", tmdbId: 20, tvdbId: 0, title: "Partly" }, status: "approved" },
+        { title: { kind: "movie", tmdbId: 10, tvdbId: 0, title: "Here" }, status: "approved" },
+        { title: { kind: "movie", tmdbId: 30, tvdbId: 0, title: "Asked" }, status: "pending" }]
+    ready = Reely_ReadyRequests(asked, readyMarks, {})
+    Expect("what's arrived, once each", [ready.Count(), ready[0].title, ready[1].title], [2, "Here", "Partly"])
+    Expect("not said twice", Reely_ReadyRequests(asked, readyMarks, { "movie:t10": true }).Count(), 1)
+    plexItems = [{ type: "show", title: "Here", year: 2020 }, { type: "movie", title: "here", year: 2021 }]
+    Expect("found in Plex by kind, name and year", Reely_FindInPlex({ kind: "movie", title: "Here", year: 2021 }, plexItems).year, 2021)
+    Expect("not another year's", Reely_FindInPlex({ kind: "movie", title: "Here", year: 1999 }, plexItems), invalid)
 end sub

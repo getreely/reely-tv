@@ -56,7 +56,7 @@ class ReelyRequestsTest {
                     signIns++
                     if (JSONObject(body).getString("token") == "profile-token") {
                         // A Home profile's sign-in, which plex.tv takes only from the device that switched.
-                        ex.reply(401, """{"error":"plex.tv: Unauthorized: <errors><error>Invalid authentication token.</error></errors>"}""")
+                        ex.reply(401, """{"error":"plex.tv didn't accept that sign-in"}""")
                         return@createContext
                     }
                     assertEquals("plex-account-token", JSONObject(body).getString("token"))
@@ -151,11 +151,18 @@ class ReelyRequestsTest {
         assertEquals("Your Plex account doesn't have access to this server's requests.", reely().signIn())
     }
 
-    @Test fun `plex_tv turning the sign-in down is said in words, not passed on as markup`() = runBlocking {
+    @Test fun `plex_tv turning this device's sign-in down is said in words`() = runBlocking {
         signInStatus = 401
-        signInError = "plex.tv: Unauthorized: <?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<errors>\n  <error>Invalid authentication token.</error>\n</errors>"
+        signInError = "plex.tv didn't accept that sign-in"
         assertEquals(ReelyRequests.PLEX_REJECTED, reely().signIn())
+    }
+
+    @Test fun `Reely's own Plex link failing is the owner's to fix, and never shown as markup`() = runBlocking {
+        // What Reely sends when the sharing check, made with the owner's saved sign-in, is refused.
         signInStatus = 502
+        signInError = "plex.tv: Unauthorized: <?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<errors>\n  <error>Invalid authentication token.</error>\n</errors>"
+        assertEquals(ReelyRequests.OWNER_LINK_BROKEN, reely().signIn())
+        signInStatus = 500
         signInError = "<html><body>Bad gateway</body></html>"
         assertEquals("Reely couldn't do that. Try again.", reely().signIn())
     }

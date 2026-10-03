@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { useFetcher } from "../../src/core/http";
 import {
-  badge, isValid, PLEX_REJECTED, librariesFor, noMarks, normalize, plexHas, preferredLibrary, readyRequests, ReelyRequests, requestKey,
+  badge, isValid, OWNER_LINK_BROKEN, PLEX_REJECTED, librariesFor, noMarks, normalize, plexHas, preferredLibrary, readyRequests, ReelyRequests, requestKey,
   type RequestRecord, type RequestTitle,
 } from "../../src/api/reely";
 
@@ -111,11 +111,16 @@ describe("Reely requests", () => {
     expect(await reely().signIn()).toBe("Your Plex account doesn't have access to this server's requests.");
     await expect(reely().explore()).rejects.toThrow("Your Plex account doesn't have access to this server's requests.");
   });
-  it("plex.tv turning the sign-in down is said in words, not passed on as markup", async () => {
+  it("plex.tv turning this device's sign-in down is said in words", async () => {
     server.signInStatus = 401;
-    server.signInError = 'plex.tv: Unauthorized: <?xml version="1.0" encoding="UTF-8"?>\n<errors>\n  <error>Invalid authentication token.</error>\n</errors>';
+    server.signInError = "plex.tv didn't accept that sign-in";
     expect(await reely().signIn()).toBe(PLEX_REJECTED);
+  });
+  it("Reely's own Plex link failing is the owner's to fix, and never shown as markup", async () => {
     server.signInStatus = 502;
+    server.signInError = 'plex.tv: Unauthorized: <?xml version="1.0" encoding="UTF-8"?>\n<errors>\n  <error>Invalid authentication token.</error>\n</errors>';
+    expect(await reely().signIn()).toBe(OWNER_LINK_BROKEN);
+    server.signInStatus = 500;
     server.signInError = "<html><body>Bad gateway</body></html>";
     expect(await reely().signIn()).toBe("Reely couldn't do that. Try again.");
   });

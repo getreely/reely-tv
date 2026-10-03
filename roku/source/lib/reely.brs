@@ -276,6 +276,10 @@ function Reely_ErrorOf(body as string) as string
     return e
 end function
 
+function Reely_OwnerLinkBrokenText() as string
+    return "Reely's link to Plex has stopped working, so it can't check who the server is shared with. The server's owner can fix it in Reely: Settings, Plex, Unlink, then Link my Plex account."
+end function
+
 function Reely_PlexRejectedText() as string
     return "Plex didn't accept this device's sign-in, so Reely can't sign you in. Sign out of Plex in Settings and sign in again, then connect."
 end function
@@ -287,7 +291,9 @@ function Reely_SignInProblem(code as integer, body as string) as string
     j = ParseJson(body)
     raw = ""
     if j <> invalid and type(j) = "roAssociativeArray" then raw = LCase(Str_(j.error))
-    if Instr(1, raw, "invalid authentication token") > 0 or (Left(raw, 7) = "plex.tv" and Instr(1, raw, "unauthorized") > 0) then return Reely_PlexRejectedText()
+    if Instr(1, raw, "didn't accept that sign-in") > 0 then return Reely_PlexRejectedText()
+    ' The sharing check, made with the owner's saved Plex sign-in, refused: the owner's to fix.
+    if code = 502 and Left(raw, 7) = "plex.tv" then return Reely_OwnerLinkBrokenText()
     if code = 403 then return "Your Plex account doesn't have access to this server's requests."
     if code = 404 then return "That server doesn't sign in from the TV yet. Update Reely."
     if code = 412 then return "Signing in with Plex isn't set up on this Reely server yet."
@@ -310,4 +316,32 @@ function Reely_CookieFrom(headers as dynamic) as string
         end for
     end for
     return ""
+end function
+
+' Which of this account's approved requests have arrived: in the library (a show partly
+' there counts); anything in [seen], keyed by Reely_Key, has been said already.
+function Reely_ReadyRequests(mine as object, marks as object, seen as object) as object
+    out = []
+    keys = {}
+    for each r in mine
+        key = Reely_Key(r.title)
+        if r.status = "approved" and not seen.DoesExist(key) and not keys.DoesExist(key) then
+            mark = Reely_Badge(marks, r.title)
+            if mark = "In library" or (r.title.kind = "show" and mark = "Partial") then
+                keys[key] = true
+                out.Push(r.title)
+            end if
+        end if
+    end for
+    return out
+end function
+
+' The Plex title a request became: the same kind and name, and the same year when both say.
+function Reely_FindInPlex(t as object, items as object) as dynamic
+    for each i in items
+        if i.type = t.kind and LCase(i.title) = LCase(t.title) then
+            if t.year = 0 or i.year = invalid or i.year = 0 or i.year = t.year then return i
+        end if
+    end for
+    return invalid
 end function

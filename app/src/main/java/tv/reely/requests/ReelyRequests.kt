@@ -194,6 +194,7 @@ class ReelyRequests(
                 when {
                     response.isSuccessful -> null
                     plexRejected(error) -> PLEX_REJECTED
+                    ownerLinkBroken(response.code, error) -> OWNER_LINK_BROKEN
                     response.code == 403 -> "Your Plex account doesn't have access to this server's requests."
                     response.code == 404 -> "That server doesn't sign in from the TV yet. Update Reely."
                     response.code == 412 -> "Signing in with Plex isn't set up on this Reely server yet."
@@ -440,21 +441,32 @@ class ReelyRequests(
 
         /** Reely's errors are {"error": "…"}, written to be shown as they are. */
         /**
-         * What Reely says when plex.tv turned down the Plex sign-in it was given: the sign-in
-         * on this device has been ended by Plex (a password change, or signed out of all
-         * devices), though the server it plays from may still let it in.
+         * Reely's answer when plex.tv turned down the sign-in this device gave it: the sign-in
+         * here was ended by Plex (a password change, or signed out of all devices).
          */
         const val PLEX_REJECTED = "Plex didn't accept this device's sign-in, so Reely can't sign you in. " +
             "Sign out of Plex in Settings and sign in again, then connect."
 
+        /**
+         * Reely couldn't check who the Plex server is shared with: the owner's own Plex
+         * sign-in, saved when Plex was linked in Reely, has stopped working. Only the
+         * owner signs in without that check, so everybody else is turned away until it's
+         * linked again. Nothing on this device can fix it.
+         */
+        const val OWNER_LINK_BROKEN = "Reely's link to Plex has stopped working, so it can't check who the " +
+            "server is shared with. The server's owner can fix it in Reely: Settings, Plex, Unlink, then " +
+            "Link my Plex account."
+
         private fun errorOf(text: String?): String? =
             text?.let { runCatching { JSONObject(it).optString("error").takeIf(String::isNotBlank) }.getOrNull() }
 
-        /** Reely passing on plex.tv's refusal of the token, in whatever words it uses. */
-        internal fun plexRejected(error: String?): Boolean {
-            val e = error?.lowercase() ?: return false
-            return "invalid authentication token" in e || (e.startsWith("plex.tv") && "unauthorized" in e)
-        }
+        /** Reely's words for plex.tv refusing the token it was given. */
+        internal fun plexRejected(error: String?): Boolean =
+            error?.lowercase()?.contains("didn't accept that sign-in") == true
+
+        /** Reely passing on plex.tv's refusal of its own saved sign-in, from the sharing check. */
+        internal fun ownerLinkBroken(code: Int, error: String?): Boolean =
+            code == 502 && error?.lowercase()?.startsWith("plex.tv") == true
 
         /** Reely's own words, but never a page of markup passed on from somewhere else. */
         internal fun readable(error: String?): String? =

@@ -300,16 +300,27 @@ export function parseRecords(root: any): RequestRecord[] {
 
 /** Reely's errors are {"error": "…"}, written to be shown as they are. */
 /**
- * Reely passing on plex.tv's refusal of the Plex sign-in it was given: the sign-in here
- * was ended by Plex (a password change, or signed out of all devices).
+ * Reely's answer when plex.tv turned down the sign-in this device gave it: the sign-in
+ * here was ended by Plex (a password change, or signed out of all devices).
  */
 export const PLEX_REJECTED =
   "Plex didn't accept this device's sign-in, so Reely can't sign you in. Sign out of Plex in Settings and sign in again, then connect.";
 
+/** Reely's words for plex.tv refusing the token it was given. */
 export function plexRejected(error: string | undefined): boolean {
-  const e = error?.toLowerCase();
-  if (!e) return false;
-  return e.includes("invalid authentication token") || (e.startsWith("plex.tv") && e.includes("unauthorized"));
+  return !!error && error.toLowerCase().includes("didn't accept that sign-in");
+}
+
+/**
+ * Reely couldn't check who the Plex server is shared with: the owner's own Plex sign-in,
+ * saved when Plex was linked in Reely, has stopped working. Only the owner signs in without
+ * that check, so everybody else is turned away until it's linked again.
+ */
+export const OWNER_LINK_BROKEN =
+  "Reely's link to Plex has stopped working, so it can't check who the server is shared with. The server's owner can fix it in Reely: Settings, Plex, Unlink, then Link my Plex account.";
+
+export function ownerLinkBroken(code: number, error: string | undefined): boolean {
+  return code === 502 && !!error && error.toLowerCase().startsWith("plex.tv");
 }
 
 /** Reely's own words, but never a page of markup passed on from somewhere else. */
@@ -360,6 +371,7 @@ export class ReelyRequests {
       if (this.signedIn) return undefined;
       const error = errorOf(text);
       if (plexRejected(error)) return PLEX_REJECTED;
+      if (ownerLinkBroken(code, error)) return OWNER_LINK_BROKEN;
       switch (code) {
         case 403: return "Your Plex account doesn't have access to this server's requests.";
         case 404: return "That server doesn't sign in from the TV yet. Update Reely.";
