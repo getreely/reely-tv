@@ -236,7 +236,7 @@ try {
   await wait(800);
   // Search: typed on the keyboard, the results in rows.
   await key("Up"); await wait(600);
-  await moveTo("TAB", "search", "Right");
+  await moveTo("TAB", "search", "Left");
   await key("Select");
   await wait(1200);
   for (const c of "low") { await key(`Lit_${c}`); await wait(250); }
@@ -246,7 +246,7 @@ try {
   expect("searching asks the server as it's typed", queries.some((q) => q.startsWith("/hubs/search") && q.includes("query=low")));
   // Movies, the grid, narrowed by genre.
   await key("Up"); await wait(600);
-  await moveTo("TAB", "movies", "Left");
+  await moveTo("TAB", "movies", "Right");
   await wait(1500);
   await key("Down"); await wait(700);
   await moveTo("PILL", "All", "Right");

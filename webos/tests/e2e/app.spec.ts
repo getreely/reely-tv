@@ -394,7 +394,7 @@ test("Requests: connect, rows without what's in the library, and ask for a show"
   await page.goto("/");
   await press(page, "Enter");
   await expect(page.getByText("Recently Added Movies")).toBeVisible({ timeout: 10_000 });
-  await page.getByRole("button", { name: "Requests" }).click();
+  await page.getByRole("button", { name: "Request", exact: true }).click();
   await page.getByPlaceholder("Reely address, like 192.168.1.5:8788").fill("192.168.1.5:8788");
   await page.getByRole("button", { name: "Connect" }).click();
   await expect(page.getByText("Trending Movies")).toBeVisible();

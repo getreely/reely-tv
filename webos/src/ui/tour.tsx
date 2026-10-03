@@ -12,7 +12,7 @@ export const TOUR: Array<{ title: string; body: string; key: string | null }> = 
   { title: "Welcome to Reely", body: "A quick look at getting around with your remote. It takes a minute, and you can skip it.", key: null },
   {
     title: "The top row",
-    body: "Press Up to reach the tabs: Home, Movies, TV Shows, Live TV and Requests. Search and Settings are on the right. Moving onto a tab opens it.",
+    body: "Press Up to reach the tabs: Search, Home, Movies, TV Shows, Live TV and Request. Settings is the gear on the right. Moving onto a tab opens it.",
     key: "Up",
   },
   {
@@ -32,7 +32,7 @@ export const TOUR: Array<{ title: string; body: string; key: string | null }> = 
   },
   {
     title: "Can't find something?",
-    body: "The Requests tab finds movies and shows your server doesn't have yet and asks for them. The first time, enter your Reely address there.",
+    body: "The Request tab finds movies and shows your server doesn't have yet and asks for them. The first time, enter your Reely address there.",
     key: null,
   },
   { title: "You're all set", body: "You can take this tour again from Settings, under About.", key: null },

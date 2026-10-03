@@ -21,8 +21,41 @@ const TABS: Array<[string, Route]> = [
   ["Movies", { name: "library", kind: "movie" }],
   ["TV Shows", { name: "library", kind: "show" }],
   ["Live TV", { name: "live" }],
-  ["Requests", { name: "requests" }],
+  ["Request", { name: "requests" }],
 ];
+
+/** The Fire TV's glass and gear (Icons.kt), drawn the same way. */
+function SearchGlyph() {
+  return (
+    <svg class="glyph" viewBox="0 0 100 100" aria-hidden="true">
+      <circle cx="42" cy="42" r="30" fill="none" stroke="currentColor" stroke-width="12" />
+      <line x1="63" y1="63" x2="86" y2="86" stroke="currentColor" stroke-width="12" stroke-linecap="round" />
+    </svg>
+  );
+}
+
+function GearGlyph() {
+  const teeth = Array.from({ length: 8 }, (_, i) => (i * Math.PI) / 4);
+  return (
+    <svg class="glyph" viewBox="0 0 100 100" aria-hidden="true">
+      <circle cx="50" cy="50" r="27" fill="none" stroke="currentColor" stroke-width="13" />
+      {teeth.map((a) => (
+        <line key={a} x1={50 + Math.cos(a) * 27} y1={50 + Math.sin(a) * 27} x2={50 + Math.cos(a) * 45} y2={50 + Math.sin(a) * 45}
+          stroke="currentColor" stroke-width="12" stroke-linecap="round" />
+      ))}
+    </svg>
+  );
+}
+
+/** The time at the far right, quietly, as on the Fire TV. */
+function Clock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 20_000);
+    return () => clearInterval(t);
+  }, []);
+  return <span class="clock">{now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>;
+}
 
 const sameTab = (a: Route, b: Route) => a.name === b.name && (a.name !== "library" || (b.name === "library" && a.kind === b.kind));
 
@@ -112,6 +145,12 @@ export function Root(props: { app: App }) {
     <div class="app">
       <nav class="tabs">
         <img class="brand" src="mark.svg" alt="Reely" />
+        {connected ? (
+          // Search first, as a glass, as on the Fire TV.
+          <button class={"tab icon" + (route.name === "search" ? " on" : "")} data-focus aria-label="Search" onClick={() => app.navigate({ name: "search" })}>
+            <SearchGlyph />
+          </button>
+        ) : null}
         {TABS.map(([label, target]) => (
           <button
             key={label}
@@ -126,17 +165,15 @@ export function Root(props: { app: App }) {
         ))}
         {connected ? (
           <span class="tabs-end">
-            <button class={"tab" + (route.name === "search" ? " on" : "")} data-focus onClick={() => app.navigate({ name: "search" })}>
-              Search
-            </button>
             {state.plex.homeUsers.length > 1 ? (
               <button class="tab" data-focus onClick={() => setChoosingProfile(true)}>
                 {state.plex.user?.title ?? "Profiles"}
               </button>
             ) : null}
-            <button class={"tab" + (route.name === "settings" ? " on" : "")} data-focus onClick={() => app.navigate({ name: "settings" })}>
-              Settings
+            <button class={"tab icon" + (route.name === "settings" ? " on" : "")} data-focus aria-label="Settings" onClick={() => app.navigate({ name: "settings" })}>
+              <GearGlyph />
             </button>
+            <Clock />
           </span>
         ) : null}
       </nav>
