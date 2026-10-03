@@ -47,6 +47,8 @@ export interface PlexSession {
   baseUrl: string | null;
   serverToken: string | null;
   libraries: LibraryChoice[];
+  /** The account's Watchlist, as Plex's own ids ("plex://movie/…"). */
+  watchlist: Set<string>;
   /** Looking for the server: at home first, then the internet. */
   finding: boolean;
   error: string | null;
@@ -59,7 +61,19 @@ export interface Browse {
   busy: boolean;
   sort: string;
   error: string | null;
+  unwatched: boolean;
+  genre: plex.PlexGenre | null;
+  decade: plex.PlexGenre | null;
+  /** What this library can be narrowed to. */
+  genres: plex.PlexGenre[];
+  decades: plex.PlexGenre[];
+  /** How many titles start with each letter, in the order shown: the A–Z jump. */
+  letters: plex.PlexLetter[];
 }
+
+/** The narrowing asked of Plex, as query parameters. */
+export const filtersOf = (b: Pick<Browse, "unwatched" | "genre" | "decade">) =>
+  `${b.unwatched ? "&unwatched=1" : ""}${b.genre ? `&genre=${encodeURIComponent(b.genre.id)}` : ""}${b.decade ? `&decade=${encodeURIComponent(b.decade.id)}` : ""}`;
 
 export interface DetailPage {
   key: string;
@@ -71,6 +85,9 @@ export interface DetailPage {
   /** The episode the page is about: the one it was opened on, else the one you're up to. */
   focused: PlexItem | null;
   related: PlexItem[];
+  trailers: plex.PlexExtra[];
+  /** Which of several copies of the title plays. */
+  versionIndex: number;
   busy: boolean;
   error: string | null;
 }
@@ -88,6 +105,8 @@ export interface Playing {
   sessionId: string;
   /** The rest of the season, for the next episode. */
   queue: PlexItem[];
+  /** Which copy of the title. */
+  mediaIndex: number;
 }
 
 export interface LiveState {
@@ -180,6 +199,7 @@ const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntr
 export const BITRATE_CHOICES = [0, 20_000, 12_000, 8_000, 4_000, 2_000];
 
 const PEOPLE_RESULTS = 20;
+const WATCHLIST_ROW = 40;
 const CHANNEL_RESULTS = 30;
 
 export interface AppState {
@@ -203,14 +223,17 @@ export interface AppState {
   prefs: Prefs;
 }
 
-const emptyBrowse = (): Browse => ({ choice: null, items: [], total: 0, busy: false, sort: "titleSort:asc", error: null });
+const emptyBrowse = (): Browse => ({
+  choice: null, items: [], total: 0, busy: false, sort: "titleSort:asc", error: null,
+  unwatched: false, genre: null, decade: null, genres: [], decades: [], letters: [],
+});
 
 export function initialState(): AppState {
   return {
     route: { name: "home" },
     stack: [{ name: "home" }],
     signIn: { code: null, url: null, busy: false, error: null },
-    plex: { token: null, user: null, homeUsers: [], servers: [], serverName: null, baseUrl: null, serverToken: null, libraries: [], finding: false, error: null },
+    plex: { token: null, user: null, homeUsers: [], servers: [], serverName: null, baseUrl: null, serverToken: null, libraries: [], watchlist: new Set(), finding: false, error: null },
     home: emptyHome(),
     homeBusy: false,
     homeError: null,
@@ -489,6 +512,102 @@ export class App {
       return;
     }
     this.set((s) => ({ ...s, home: { ...rows, watchlist: s.home.watchlist }, homeBusy: false, homeError: null }));
+    void this.refreshWatchlist();
+  }
+
+  /** Changes made here, so a list read before one isn't put over it. */
+  private watchlistEdits = 0;
+
+  /**
+   * The account's Watchlist, and which of it the servers here have, in the Watchlist's
+   * own order. Something no server has can't be opened or played, so it isn't shown.
+   */
+  async refreshWatchlist() {
+    const token = this.current.plex.token;
+    if (!token) return;
+    const edits = this.watchlistEdits;
+    let guids: string[];
+    try {
+      guids = await plex.watchlist(token);
+    } catch {
+      return;
+    }
+    if (this.current.plex.token !== token) return;
+    if (this.watchlistEdits === edits) this.setPlex({ watchlist: new Set(guids) });
+    const servers = this.current.plex.libraries
+      .map((l) => [l.baseUrl, l.token] as const)
+      .filter(([base], i, all) => all.findIndex(([b]) => b === base) === i);
+    const found: PlexItem[] = [];
+    for (let i = 0; i < Math.min(guids.length, WATCHLIST_ROW); i += 8) {
+      const batch = await Promise.all(
+        guids.slice(i, Math.min(i + 8, WATCHLIST_ROW)).map(async (guid) => {
+          for (const [base, serverToken] of servers) {
+            const item = await plex.byGuid(base, serverToken, guid).catch(() => null);
+            if (item) return item;
+          }
+          return null;
+        }),
+      );
+      batch.forEach((item) => { if (item) found.push(item); });
+    }
+    if (this.current.plex.token !== token) return;
+    this.set((s) => ({ ...s, home: { ...s.home, watchlist: found } }));
+  }
+
+  /** On the Watchlist, or off it, for the title whose page this is; the button flips at once. */
+  async toggleWatchlist() {
+    const guid = this.current.detail?.detail?.guid;
+    const token = this.current.plex.token;
+    if (!guid || !token) return;
+    const on = !this.current.plex.watchlist.has(guid);
+    const mark = (listed: boolean) => {
+      const next = new Set(this.current.plex.watchlist);
+      if (listed) next.add(guid); else next.delete(guid);
+      this.setPlex({ watchlist: next });
+    };
+    this.watchlistEdits++;
+    mark(on);
+    try {
+      await plex.setWatchlisted(token, guid, on);
+      void this.refreshWatchlist();
+    } catch (error) {
+      mark(!on);
+      const key = this.current.detail?.key;
+      if (key) this.setDetail(key, { error: readable(error) });
+    }
+  }
+
+  /** Watched, or not: the film, or the episode a show's page is on. Then the page and Home again. */
+  async toggleWatched() {
+    const page = this.current.detail;
+    const d = page?.detail;
+    if (!page || !d || !page.serverBase) return;
+    const token = this.tokenFor(page.serverBase);
+    if (!token) return;
+    const target = plex.isShow(d) ? page.focused : null;
+    const key = target?.ratingKey ?? d.ratingKey;
+    const watched = target ? plex.isWatched(target) : d.viewCount > 0;
+    try {
+      await plex.setWatched(page.serverBase, token, key, !watched);
+    } catch (error) {
+      this.setDetail(page.key, { error: readable(error) });
+      return;
+    }
+    void this.refreshHome();
+    if (this.current.detail?.key === page.key) {
+      if (target) {
+        const episodes = page.episodes.map((e) => (e.ratingKey === key ? { ...e, viewCount: watched ? 0 : 1, viewOffsetMs: 0 } : e));
+        const focused = episodes.find((e) => e.ratingKey === key) ?? null;
+        this.setDetail(page.key, { episodes, focused });
+      } else {
+        this.setDetail(page.key, { detail: { ...d, viewCount: watched ? 0 : 1, viewOffsetMs: 0 } });
+      }
+    }
+  }
+
+  chooseVersion(versionIndex: number) {
+    const key = this.current.detail?.key;
+    if (key) this.setDetail(key, { versionIndex });
   }
 
   // ---------------------------------------------------------------- Libraries
@@ -502,13 +621,75 @@ export class App {
     if (!target) return;
     const same = this.current.browse[kind].choice === target && this.current.browse[kind].items.length > 0;
     if (same) return;
-    this.set((s) => ({ ...s, browse: { ...s.browse, [kind]: { ...s.browse[kind], choice: target, items: [], busy: true, error: null } } }));
+    const switching = this.current.browse[kind].choice !== target;
+    this.set((s) => ({
+      ...s,
+      browse: {
+        ...s.browse,
+        [kind]: {
+          ...s.browse[kind], choice: target, items: [], busy: true, error: null,
+          // Another library's genres and decades aren't this one's.
+          ...(switching ? { genre: null, decade: null, genres: [], decades: [], letters: [] } : {}),
+        },
+      },
+    }));
+    const type = kind === "movie" ? plex.TYPE_MOVIE : plex.TYPE_SHOW;
+    void Promise.all([
+      plex.genres(target.baseUrl, target.token, target.section.key, type).catch(() => []),
+      plex.decades(target.baseUrl, target.token, target.section.key, type).catch(() => []),
+    ]).then(([genres, decades]) => {
+      if (this.current.browse[kind].choice === target) this.setBrowse(kind, { genres, decades });
+    });
+    void this.loadLetters(kind);
     await this.loadMore(kind);
   }
 
+  private setBrowse(kind: Kind, change: Partial<Browse>) {
+    this.set((s) => ({ ...s, browse: { ...s.browse, [kind]: { ...s.browse[kind], ...change } } }));
+  }
+
   async setSort(kind: Kind, sort: string) {
-    this.set((s) => ({ ...s, browse: { ...s.browse, [kind]: { ...s.browse[kind], sort, items: [], busy: true } } }));
+    this.setBrowse(kind, { sort, items: [], busy: true });
     await this.loadMore(kind);
+  }
+
+  /** Unwatched only, a genre, a decade: the grid again from the top, narrowed. */
+  async setFilter(kind: Kind, change: Partial<Pick<Browse, "unwatched" | "genre" | "decade">>) {
+    this.setBrowse(kind, { ...change, items: [], total: 0, busy: true, error: null });
+    void this.loadLetters(kind);
+    await this.loadMore(kind);
+  }
+
+  private async loadLetters(kind: Kind) {
+    const b = this.current.browse[kind];
+    const choice = b.choice;
+    if (!choice) return;
+    const filters = filtersOf(b);
+    const letters = await plex
+      .firstCharacters(choice.baseUrl, choice.token, choice.section.key, kind === "movie" ? plex.TYPE_MOVIE : plex.TYPE_SHOW, filters)
+      .catch(() => [] as plex.PlexLetter[]);
+    const now = this.current.browse[kind];
+    if (now.choice === choice && filtersOf(now) === filters) this.setBrowse(kind, { letters });
+  }
+
+  /**
+   * Where [letter] starts in the A–Z grid, loading down to it first: its place, or -1.
+   * Only for the A–Z order, which is the one the counts are in.
+   */
+  async jumpTo(kind: Kind, letter: string): Promise<number> {
+    const b = this.current.browse[kind];
+    const at = b.letters.findIndex((l) => l.letter === letter);
+    if (at < 0 || b.sort !== "titleSort:asc") return -1;
+    const offset = b.letters.slice(0, at).reduce((n, l) => n + l.count, 0);
+    for (let guard = 0; guard < 100; guard++) {
+      const now = this.current.browse[kind];
+      if (now.items.length > offset) return offset;
+      if (now.total <= now.items.length && !now.busy && now.items.length > 0) return Math.min(offset, now.items.length - 1);
+      const before = now.items.length;
+      await this.loadMore(kind);
+      if (this.current.browse[kind].items.length === before) return -1;
+    }
+    return -1;
   }
 
   /** The next page of the grid, in before it's reached. */
@@ -518,11 +699,12 @@ export class App {
     if (!choice) return;
     const offset = browse.items.length;
     const type = kind === "movie" ? plex.TYPE_MOVIE : plex.TYPE_SHOW;
+    const filters = filtersOf(browse);
     try {
-      const page = await plex.items(choice.baseUrl, choice.token, `/library/sections/${choice.section.key}/all?type=${type}&sort=${browse.sort}`, GRID_PAGE, offset);
+      const page = await plex.items(choice.baseUrl, choice.token, `/library/sections/${choice.section.key}/all?type=${type}&sort=${browse.sort}${filters}`, GRID_PAGE, offset);
       const now = this.current.browse[kind];
-      // Not over a different library or order chosen meanwhile.
-      if (now.choice !== choice || now.sort !== browse.sort || now.items.length !== offset) return;
+      // Not over a different library, order or narrowing chosen meanwhile.
+      if (now.choice !== choice || now.sort !== browse.sort || filtersOf(now) !== filters || now.items.length !== offset) return;
       const seen = new Set(now.items.map(plex.listKey));
       const items = [...now.items, ...page.filter((i) => !seen.has(plex.listKey(i)))];
       this.set((s) => ({ ...s, browse: { ...s.browse, [kind]: { ...now, items, busy: false, total: page.length < GRID_PAGE ? items.length : Math.max(now.total, items.length + 1) } } }));
@@ -543,7 +725,7 @@ export class App {
     const base = serverBase ?? this.current.plex.baseUrl;
     const token = this.tokenFor(base);
     const key = `${base}|${ratingKey}`;
-    this.set((s) => ({ ...s, detail: { key, serverBase: base, detail: null, seasons: [], season: null, episodes: [], focused: null, related: [], busy: true, error: null } }));
+    this.set((s) => ({ ...s, detail: { key, serverBase: base, detail: null, seasons: [], season: null, episodes: [], focused: null, related: [], trailers: [], versionIndex: 0, busy: true, error: null } }));
     if (!base || !token) {
       this.setDetail(key, { busy: false, error: "Couldn't reach the server this title is on." });
       return;
@@ -553,6 +735,7 @@ export class App {
       if (!detail) throw new Error("That title isn't on the server any more.");
       this.setDetail(key, { detail });
       plex.related(base, token, ratingKey).then((related) => this.setDetail(key, { related }));
+      plex.trailers(base, token, ratingKey).then((trailers) => this.setDetail(key, { trailers }));
       if (plex.isShow(detail)) {
         const seasons = (await plex.children(base, token, ratingKey)).filter((i) => i.type === "season");
         // The season it's up to (or the episode it was opened on), else the first proper one.
@@ -596,7 +779,7 @@ export class App {
    * Plays [item] from where it was left, or the top. [direct] is asked of the TV's own
    * player: the file as it is when it can, else Plex's conversion.
    */
-  async play(item: PlexItem, resume: boolean, direct: (p: plex.PlexPlayback) => boolean, queue: PlexItem[] = []) {
+  async play(item: PlexItem, resume: boolean, direct: (p: plex.PlexPlayback) => boolean, queue: PlexItem[] = [], mediaIndex = 0) {
     const base = item.serverBase ?? this.current.plex.baseUrl;
     const token = this.tokenFor(base);
     if (!base || !token) {
@@ -604,14 +787,14 @@ export class App {
       return;
     }
     try {
-      const playback = await plex.playback(base, token, item.ratingKey);
+      const playback = await plex.playback(base, token, item.ratingKey, mediaIndex);
       if (!playback) throw new Error("That file isn't on the server any more.");
       const sessionId = randomHex(12);
       const mode = this.current.prefs.playbackMode;
       const asIs = mode === "direct" ? true : mode === "transcode" ? false : direct(playback);
-      const url = asIs ? playback.url : this.converted(base, token, item.ratingKey, sessionId);
+      const url = asIs ? playback.url : this.converted(base, token, item.ratingKey, sessionId, mediaIndex);
       const startMs = resume && item.viewOffsetMs > 0 && !(item.durationMs > 0 && item.viewOffsetMs >= item.durationMs * 0.95) ? item.viewOffsetMs : 0;
-      this.set((s) => ({ ...s, playError: null, playing: { item, base, token, playback, url, direct: asIs, startMs, sessionId, queue } }));
+      this.set((s) => ({ ...s, playError: null, playing: { item, base, token, playback, url, direct: asIs, startMs, sessionId, queue, mediaIndex } }));
     } catch (error) {
       this.set((s) => ({ ...s, playError: readable(error) }));
     }
@@ -621,16 +804,16 @@ export class App {
   convert(positionMs: number) {
     const p = this.current.playing;
     if (!p || !p.direct) return false;
-    const url = this.converted(p.base, p.token, p.item.ratingKey, p.sessionId);
+    const url = this.converted(p.base, p.token, p.item.ratingKey, p.sessionId, p.mediaIndex);
     this.set((s) => ({ ...s, playing: { ...p, url, direct: false, startMs: positionMs } }));
     return true;
   }
 
   /** Plex's conversion, at the quality chosen in Settings. */
-  private converted(base: string, token: string, ratingKey: string, sessionId: string) {
+  private converted(base: string, token: string, ratingKey: string, sessionId: string, mediaIndex = 0) {
     const kbps = this.current.prefs.maxBitrateKbps;
     const resolution = kbps >= 20_000 ? "3840x2160" : kbps === 0 || kbps >= 8_000 ? "1920x1080" : "1280x720";
-    return plex.transcodeUrl(base, token, ratingKey, sessionId, kbps, resolution);
+    return plex.transcodeUrl(base, token, ratingKey, sessionId, kbps, resolution, mediaIndex);
   }
 
   /**
@@ -654,13 +837,14 @@ export class App {
     // A conversion running for the old choice stops; the new one starts afresh.
     if (!p.direct) void plex.stopTranscode(p.base, p.token, p.sessionId);
     const sessionId = randomHex(12);
-    const url = asIs ? playback.url : this.converted(p.base, p.token, p.item.ratingKey, sessionId);
+    const url = asIs ? playback.url : this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex);
     this.set((s) => ({ ...s, playing: { ...p, playback, url, direct: asIs, startMs: positionMs, sessionId } }));
   }
 
   /** Where playback is, told to the server: what keeps Continue Watching right everywhere. */
   report(positionMs: number, durationMs: number, state: "playing" | "paused" | "stopped", p: Playing | null = this.current.playing) {
-    if (!p) return Promise.resolve();
+    // A trailer isn't something to pick up again.
+    if (!p || p.item.type === "clip") return Promise.resolve();
     return plex.reportTimeline(p.base, p.token, p.item.ratingKey, positionMs, durationMs || p.item.durationMs, state, p.sessionId);
   }
 
@@ -671,6 +855,7 @@ export class App {
     // Told about the sitting just ended, which is no longer the one in the state.
     await this.report(positionMs, durationMs, "stopped", p);
     if (!p.direct) void plex.stopTranscode(p.base, p.token, p.sessionId);
+    if (p.item.type === "clip") return;
     // What was watched shows as watched, and where it was left, on the way back.
     void this.refreshHome();
     const page = this.current.detail;

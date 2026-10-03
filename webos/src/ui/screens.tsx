@@ -4,7 +4,7 @@ import type { PlexHomeUser, PlexItem } from "../api/plex";
 import { groupKey } from "../app/home";
 import type { App, AppState, Kind } from "../app/store";
 import { formatDuration } from "../core/quality";
-import { onKeys } from "./focus";
+import { focus, onKeys } from "./focus";
 import { Card, Pill, Qr, Row, Spinner, useRescue } from "./parts";
 import { PersonButton } from "./search";
 
@@ -127,6 +127,14 @@ export function Home(props: { app: App; state: AppState }) {
           ))}
         </Row>
       ) : null}
+      {home.watchlist.length ? (
+        <Row title="Watchlist">
+          {home.watchlist.map((i) => (
+            <Card key={`w:${plex.listKey(i)}`} autofocus={auto()} title={i.title} sub={plex.caption(i)} image={img(i, 300, 450)}
+              watched={plex.isWatched(i)} onPress={() => open(app, i)} />
+          ))}
+        </Row>
+      ) : null}
       {home.playlists.length ? (
         <Row title="Playlists">
           {home.playlists.map((i) => (
@@ -143,11 +151,16 @@ export function Library(props: { app: App; state: AppState; kind: Kind }) {
   const { app, state, kind } = props;
   const browse = state.browse[kind];
   const libraries = app.librariesOf(kind);
+  const [choosing, setChoosing] = useState<"genre" | "decade" | null>(null);
   useRescue([browse.items.length > 0, browse.choice]);
   if (!libraries.length) {
     return <div class="center"><p class="note">No {kind === "movie" ? "movie" : "TV"} library on {state.plex.serverName ?? "this server"}.</p></div>;
   }
   const sorts: Array<[string, string]> = [["titleSort:asc", "A–Z"], ["addedAt:desc", "Recently added"], ["originallyAvailableAt:desc", "Newest releases"], ["rating:desc", "Critic rating"]];
+  const jump = async (letter: string) => {
+    const at = await app.jumpTo(kind, letter);
+    if (at >= 0) setTimeout(() => focus(document.querySelectorAll<HTMLElement>(".grid .card")[at]), 0);
+  };
   return (
     <div>
       <div class="toolbar">
@@ -159,7 +172,27 @@ export function Library(props: { app: App; state: AppState; kind: Kind }) {
         {sorts.map(([key, label]) => (
           <Pill key={key} label={label} on={browse.sort === key} onPress={() => void app.setSort(kind, key)} />
         ))}
+        <Pill label="Unwatched" on={browse.unwatched} onPress={() => void app.setFilter(kind, { unwatched: !browse.unwatched })} />
+        {browse.genres.length ? <Pill label={browse.genre ? browse.genre.title : "Genre"} on={!!browse.genre} onPress={() => setChoosing("genre")} /> : null}
+        {browse.decades.length ? <Pill label={browse.decade ? browse.decade.title : "Decade"} on={!!browse.decade} onPress={() => setChoosing("decade")} /> : null}
       </div>
+      {browse.sort === "titleSort:asc" && browse.letters.length > 1 ? (
+        <div class="letters">
+          {browse.letters.map((l) => (
+            <button key={l.letter} class="letter" data-focus onClick={() => void jump(l.letter)}>{l.letter}</button>
+          ))}
+        </div>
+      ) : null}
+      {choosing ? (
+        <Chooser
+          title={choosing === "genre" ? "Genre" : "Decade"}
+          options={choosing === "genre" ? browse.genres : browse.decades}
+          chosen={choosing === "genre" ? browse.genre : browse.decade}
+          onChoose={(g) => { setChoosing(null); void app.setFilter(kind, choosing === "genre" ? { genre: g } : { decade: g }); }}
+          onClose={() => setChoosing(null)}
+        />
+      ) : null}
+      {!browse.busy && !browse.items.length && !browse.error ? <p class="note" style={{ margin: "1rem 3rem" }}>Nothing here matches. Try fewer filters.</p> : null}
       {browse.error ? <p class="note error" style={{ margin: "0 3rem" }}>{browse.error}</p> : null}
       <div class="grid">
         {browse.items.map((i, index) => (
@@ -177,6 +210,25 @@ export function Library(props: { app: App; state: AppState; kind: Kind }) {
       </div>
       {browse.busy ? <div class="center" style={{ height: "12rem" }}><Spinner /></div> : null}
       <MoreWhenNear app={app} kind={kind} count={browse.items.length} more={browse.total > browse.items.length && !browse.busy} />
+    </div>
+  );
+}
+
+/** One of a list, or all of them: a genre or a decade. */
+function Chooser(props: { title: string; options: plex.PlexGenre[]; chosen: plex.PlexGenre | null; onChoose: (g: plex.PlexGenre | null) => void; onClose: () => void }) {
+  useEffect(() => onKeys((a) => { if (a === "back") { props.onClose(); return true; } return false; }), []);
+  useRescue([]);
+  return (
+    <div class="layer" data-layer>
+      <div class="panel chooser">
+        <h1 class="big">{props.title}</h1>
+        <div class="toolbar flush centered">
+          <Pill label="All" on={!props.chosen} autofocus={!props.chosen} onPress={() => props.onChoose(null)} />
+          {props.options.map((g) => (
+            <Pill key={g.id} label={g.title} on={props.chosen?.id === g.id} autofocus={props.chosen?.id === g.id} onPress={() => props.onChoose(g)} />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -226,8 +278,22 @@ export function Detail(props: { app: App; state: AppState; onPlay: (item: PlexIt
           <div class="actions">
             <Pill label={resumeFrom > 0 ? "Resume" : "Play"} primary autofocus onPress={() => { const i = playItem(); if (i) props.onPlay(i, true); }} />
             {resumeFrom > 0 ? <Pill label="Restart" onPress={() => { const i = playItem(); if (i) props.onPlay(i, false); }} /> : null}
+            {!show || target ? <Pill label={(target ? plex.isWatched(target) : d.viewCount > 0) ? "Unwatch" : "Watched"} onPress={() => void app.toggleWatched()} /> : null}
+            {d.guid ? <Pill label="Watchlist" on={state.plex.watchlist.has(d.guid)} onPress={() => void app.toggleWatchlist()} /> : null}
+            {page.trailers.length ? (
+              <Pill label="Trailer" onPress={() => {
+                const t = page.trailers[0];
+                props.onPlay({ ...emptyItem(t.ratingKey, t.title, "clip"), serverBase: page.serverBase, durationMs: t.durationMs }, false);
+              }} />
+            ) : null}
           </div>
         ) : null}
+        {!show && d.versions.length > 1 ? (
+          <div class="actions">
+            {d.versions.map((v, i) => <Pill key={i} label={v.label} on={page.versionIndex === i} onPress={() => app.chooseVersion(i)} />)}
+          </div>
+        ) : null}
+        {page.error ? <p class="note error">{page.error}</p> : null}
         {d.summary ? <div class="summary">{d.summary}</div> : null}
       </div>
       {page.seasons.length > 1 ? (

@@ -16,11 +16,11 @@ app (Amazon's Vega SDK, React Native), which can reuse the LG app's TypeScript c
 | Signed in, no server: says so, keeps looking, Try again | ✅ | ✅ | 🟡 (says so, Try again) | 🟡 (says so) | ⬜ |
 | Plex Home profiles, PINs, "Who's watching?" after sign-in | ✅ | ✅ | ✅ | ⬜ | ⬜ |
 | Several servers, libraries from all of them | ✅ | ✅ | ✅ | ⬜ | ⬜ |
-| Home: Continue Watching, recent episodes and movies, Watchlist, playlists | ✅ | ✅ | 🟡 (no Watchlist yet) | 🟡 (Continue Watching, recent episodes and movies) | ⬜ |
+| Home: Continue Watching, recent episodes and movies, Watchlist, playlists | ✅ | ✅ | ✅ | 🟡 (Continue Watching, recent episodes and movies) | ⬜ |
 | Home rows switched on and off | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
 | Movies / TV Shows: tab home, library grid, collections | ✅ | ✅ | 🟡 (grid) | ⬜ | ⬜ |
-| Library sort, unwatched, genre, decade, A–Z | ✅ | ✅ (A–Z by sort) | 🟡 (sort) | ⬜ | ⬜ |
-| Title page: play/resume/restart, watched, Watchlist, trailer, version | ✅ | ✅ | 🟡 (play/resume/restart) | 🟡 (play/resume/restart) | ⬜ |
+| Library sort, unwatched, genre, decade, A–Z | ✅ | ✅ (A–Z by sort) | ✅ | ⬜ | ⬜ |
+| Title page: play/resume/restart, watched, Watchlist, trailer, version | ✅ | ✅ | ✅ | 🟡 (play/resume/restart) | ⬜ |
 | Seasons and episodes; show opens where it's up to | ✅ | ✅ | ✅ | ✅ | ⬜ |
 | Cast and actor pages, More like this, collections' pages | ✅ | ✅ | ✅ | ⬜ | ⬜ |
 | Playlists: play, shuffle | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
@@ -63,5 +63,5 @@ app (Amazon's Vega SDK, React Native), which can reuse the LG app's TypeScript c
 | App | Where | How |
 |---|---|---|
 | Fire TV / Android TV and phone | `app/src/test` | `./gradlew :app:testDebugUnitTest` (Robolectric, Compose UI tests, screenshots with `-Pscreenshots`) |
-| LG | `webos/` | `npm test` (unit, 144) and `npm run e2e` (browser, the built app as the TV opens it); `npm run package` makes `reely-lg.ipk` |
+| LG | `webos/` | `npm test` (unit, 148) and `npm run e2e` (browser, the built app as the TV opens it); `npm run package` makes `reely-lg.ipk` |
 | Roku | `roku/` | `npm run check` (BrighterScript compile), `npm test` (unit, BrightScript simulator) and `npm run e2e` (the app in the SceneGraph simulator, driven by the remote protocol, against a stand-in Plex); `npm run package` makes `reely-roku.zip` |

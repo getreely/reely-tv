@@ -52,7 +52,8 @@ export function Root(props: { app: App }) {
 
   const onPlay = (item: Parameters<App["play"]>[0], resume: boolean) => {
     const probe = video.current ?? document.createElement("video");
-    void app.play(item, resume, (p) => playDirect(probe, p), state.detail?.episodes ?? []);
+    const version = item.type === "movie" ? state.detail?.versionIndex ?? 0 : 0;
+    void app.play(item, resume, (p) => playDirect(probe, p), item.type === "episode" ? state.detail?.episodes ?? [] : [], version);
   };
 
   if (state.playing) return <Player app={app} playing={state.playing} />;

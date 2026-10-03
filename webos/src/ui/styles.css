@@ -161,3 +161,10 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .option .facts { margin-left: auto; }
 .option:focus { background: var(--chalk); color: var(--ink); }
 .option:focus .tick { color: var(--ink); }
+
+/* A library's A–Z jump, and the genre and decade choosers. */
+.letters { display: flex; flex-wrap: wrap; padding: 0 3rem 0.4rem; }
+.letter { min-width: 2.2rem; padding: 0.3rem 0.5rem; margin: 0 0.25rem 0.25rem 0; border-radius: 0.6rem; color: var(--muted); font-weight: 600; }
+.letter:focus { background: var(--chalk); color: var(--ink); }
+.chooser { max-width: 70rem; max-height: 80vh; overflow-y: auto; }
+.toolbar.centered { justify-content: center; }

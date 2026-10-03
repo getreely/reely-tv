@@ -205,6 +205,89 @@ describe("search, as the Fire TV searches", () => {
   });
 });
 
+describe("a title's page and a library's filters", () => {
+  /** A server with 300 films, A–Z, and plex.tv's Watchlist; everything asked is kept. */
+  function library() {
+    const asked: string[] = [];
+    const listed = new Set(["plex://movie/a1"]);
+    const films = Array.from({ length: 300 }, (_, i) => ({ ratingKey: `f${i}`, type: "movie", title: `${i < 100 ? "A" : i < 250 ? "B" : "C"} film ${i}` }));
+    const json = (v: unknown) => new Response(JSON.stringify(v), { headers: { "Content-Type": "application/json" } });
+    useFetcher(async (input, init) => {
+      const url = new URL(String(input));
+      const method = init?.method ?? "GET";
+      asked.push(`${method} ${url.pathname}${url.search.replace(/[?&]X-Plex-Token=[^&]*/, "")}`);
+      if (url.host === "discover.provider.plex.tv") {
+        if (url.pathname === "/library/sections/watchlist/all") return json({ MediaContainer: { Metadata: [...listed].map((guid) => ({ guid })) } });
+        const key = url.searchParams.get("ratingKey");
+        if (url.pathname === "/actions/addToWatchlist") listed.add(`plex://movie/${key}`);
+        if (url.pathname === "/actions/removeFromWatchlist") listed.delete(`plex://movie/${key}`);
+        return json({});
+      }
+      if (url.pathname === "/library/all") return json({ MediaContainer: { Metadata: url.searchParams.get("guid") === "plex://movie/a1" ? [{ ratingKey: "f0", type: "movie", title: "A film 0" }] : [] } });
+      if (url.pathname === "/library/sections/1/firstCharacter") return json({ MediaContainer: { Directory: [{ title: "A", size: 100 }, { title: "B", size: 150 }, { title: "C", size: 50 }] } });
+      if (url.pathname === "/library/sections/1/genre") return json({ MediaContainer: { Directory: [{ key: "9", title: "Drama" }] } });
+      if (url.pathname === "/library/sections/1/decade") return json({ MediaContainer: { Directory: [{ key: "1990", title: "1990s" }, { key: "2020", title: "2020s" }] } });
+      if (url.pathname === "/library/sections/1/all") {
+        const start = Number(url.searchParams.get("X-Plex-Container-Start") ?? 0);
+        const size = Number(url.searchParams.get("X-Plex-Container-Size") ?? 300);
+        return json({ MediaContainer: { Metadata: films.slice(start, start + size) } });
+      }
+      if (url.pathname === "/library/metadata/f0") return json({ MediaContainer: { Metadata: [{ ratingKey: "f0", type: "movie", title: "A film 0", guid: "plex://movie/a1", viewCount: 0 }] } });
+      return json({ MediaContainer: {} });
+    });
+    const section = { key: "1", title: "Films", type: "movie" };
+    (app as any).current.plex = { ...app.state.plex, token: "account-token", baseUrl: SERVER, serverToken: "server-token",
+      libraries: [{ serverName: "Living Room", baseUrl: SERVER, token: "server-token", section }] };
+    return { asked, listed };
+  }
+  const settle = async () => { for (let i = 0; i < 30; i++) await new Promise((r) => setTimeout(r, 0)); };
+
+  it("the Watchlist row has what a server here has; the button flips at once and sticks", async () => {
+    const { listed } = library();
+    await app.refreshWatchlist();
+    expect(app.state.home.watchlist.map((i) => i.title)).toEqual(["A film 0"]);
+    app.navigate({ name: "detail", ratingKey: "f0", serverBase: SERVER });
+    await settle();
+    expect(app.state.plex.watchlist.has("plex://movie/a1")).toBe(true);
+    const off = app.toggleWatchlist();
+    expect(app.state.plex.watchlist.has("plex://movie/a1")).toBe(false);
+    await off;
+    await settle();
+    expect(listed.has("plex://movie/a1")).toBe(false);
+    expect(app.state.home.watchlist).toEqual([]);
+  });
+
+  it("Watched tells Plex and shows straight away", async () => {
+    const { asked } = library();
+    app.navigate({ name: "detail", ratingKey: "f0", serverBase: SERVER });
+    await settle();
+    await app.toggleWatched();
+    expect(asked.some((a) => a.startsWith("GET /:/scrobble?key=f0"))).toBe(true);
+    expect(app.state.detail?.detail?.viewCount).toBe(1);
+  });
+
+  it("Unwatched, a genre and a decade go to Plex; another narrowing starts again from the top", async () => {
+    const { asked } = library();
+    await app.openLibrary("movie");
+    await settle();
+    expect(app.state.browse.movie.genres.map((g) => g.title)).toEqual(["Drama"]);
+    expect(app.state.browse.movie.decades.map((g) => g.title)).toEqual(["2020s", "1990s"]);
+    await app.setFilter("movie", { unwatched: true, genre: app.state.browse.movie.genres[0] });
+    expect(asked.filter((a) => a.startsWith("GET /library/sections/1/all")).pop()).toContain("&unwatched=1&genre=9");
+    expect(asked.filter((a) => a.startsWith("GET /library/sections/1/firstCharacter")).pop()).toContain("&unwatched=1&genre=9");
+  });
+
+  it("A–Z: a letter further down than what's loaded loads down to it", async () => {
+    library();
+    await app.openLibrary("movie");
+    await settle();
+    expect(app.state.browse.movie.items).toHaveLength(120);
+    const at = await app.jumpTo("movie", "C");
+    expect(at).toBe(250);
+    expect(app.state.browse.movie.items[at].title).toBe("C film 250");
+  });
+});
+
 describe("playback settings", () => {
   it("are kept, and an unknown quality is refused", async () => {
     app.setPlaybackMode("transcode");
