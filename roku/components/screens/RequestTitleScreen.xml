@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A title to ask Reely for, as the other apps show it: what it is, whether it's here
+     already, which library it goes to, which seasons, and Request (or Add). -->
+<component name="RequestTitleScreen" extends="Group">
+  <interface>
+    <field id="route" type="assocarray" onChange="open" />
+    <field id="go" type="assocarray" alwaysNotify="true" />
+    <field id="menu" type="assocarray" alwaysNotify="true" />
+    <field id="focusIn" type="boolean" alwaysNotify="true" onChange="focusIn" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/screens/RequestTitleScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/reely.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/ScreenKit.brs" />
+  <children>
+    <Poster id="backdrop" translation="[0, 0]" width="1920" height="950" loadDisplayMode="scaleToZoom" opacity="0.35" />
+    <Rectangle translation="[0, 0]" width="1100" height="950" color="0x0A0909CC" />
+    <Label id="title" translation="[96, 40]" width="1500" color="0xF5F2F0FF" wrap="true" maxLines="2" />
+    <Label id="facts" translation="[96, 150]" width="1500" color="0xB9B4B1FF" />
+    <Label id="summary" translation="[96, 200]" width="1100" color="0xB9B4B1FF" wrap="true" maxLines="4" />
+    <Label id="note" translation="[96, 400]" width="1500" color="0xB9B4B1FF" wrap="true" />
+    <PillRow id="actions" translation="[96, 490]" fontSize="28" />
+    <Label id="librariesTitle" translation="[96, 590]" color="0x86807EFF" text="LIBRARY" visible="false" />
+    <PillRow id="libraries" translation="[96, 630]" fontSize="24" visibleWidth="1700" />
+    <Label id="seasonsTitle" translation="[96, 730]" color="0x86807EFF" text="SEASONS" visible="false" />
+    <PillRow id="seasons" translation="[96, 770]" fontSize="24" visibleWidth="1700" />
+  </children>
+</component>

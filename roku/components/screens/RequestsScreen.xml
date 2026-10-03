@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Request tab, as the other apps have it: connecting to Reely; then a search, your
+     requests and Reely's rows, each poster marked with where it's got to. -->
+<component name="RequestsScreen" extends="Group">
+  <interface>
+    <field id="route" type="assocarray" onChange="open" />
+    <field id="go" type="assocarray" alwaysNotify="true" />
+    <field id="menu" type="assocarray" alwaysNotify="true" />
+    <field id="refresh" type="assocarray" alwaysNotify="true" onChange="load" />
+    <field id="focusIn" type="boolean" alwaysNotify="true" onChange="focusIn" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/screens/RequestsScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/reely.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/ScreenKit.brs" />
+  <children>
+    <Group id="connect" visible="false">
+      <Label id="connectTitle" translation="[0, 60]" width="1920" horizAlign="center" color="0xF5F2F0FF" text="Ask for movies and shows" />
+      <Label id="connectNote" translation="[460, 140]" width="1000" horizAlign="center" color="0xB9B4B1FF" wrap="true"
+        text="Requests go to Reely, the server owner's app for adding movies and shows. Enter its address; you're signed in with your Plex account." />
+      <Label id="connectError" translation="[360, 270]" width="1200" horizAlign="center" color="0xFF5E69FF" wrap="true" />
+      <LabelList id="form" translation="[560, 380]" itemSize="[800, 76]" numRows="3" vertFocusAnimationStyle="floatingFocus"
+        focusBitmapUri="pkg:/images/pill.9.png" color="0xF5F2F0FF" focusedColor="0x0A0909FF" />
+    </Group>
+    <Group id="browse" visible="false">
+      <PillRow id="search" translation="[96, 0]" fontSize="26" />
+      <Label id="note" translation="[96, 90]" width="1700" color="0xB9B4B1FF" wrap="true" />
+      <RowList id="rows" translation="[96, 90]" itemComponentName="PosterItem" numRows="2"
+        rowItemSpacing="[[24, 0]]" itemSpacing="[0, 44]" showRowLabel="[true]" rowLabelColor="0xF5F2F0FF"
+        rowLabelOffset="[[0, 14]]" rowFocusAnimationStyle="floatingFocus" drawFocusFeedback="false" />
+    </Group>
+  </children>
+</component>

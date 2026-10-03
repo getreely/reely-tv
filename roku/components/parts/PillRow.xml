@@ -10,6 +10,8 @@
     <field id="pressed" type="integer" alwaysNotify="true" />
     <field id="fontSize" type="integer" value="26" />
     <field id="rowWidth" type="float" />
+    <!-- How wide the row may show; past it, the pills slide so the cursor's stays in view. 0: no limit. -->
+    <field id="visibleWidth" type="float" value="0" />
   </interface>
   <script type="text/brightscript" uri="pkg:/components/parts/PillRow.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />

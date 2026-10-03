@@ -97,6 +97,10 @@ sub ShowRows_(list as object, rows as object)
                     if it.newCount > 1 then caption = it.newCount.ToStr() + " new episodes"
                     PosterContent_(row, it.showTitle, caption, Image_(it.serverBase, it.thumb, 300, 450), it.newCount, invalid)
                     kept.Push(it.newest)
+                else if r.plain = true then
+                    ' Not from Plex: a title, a line under it and a picture, as they come.
+                    PosterContent_(row, it.title, Str_(it.caption), Str_(it.poster), invalid, invalid)
+                    kept.Push(it)
                 else if r.people = true then
                     c = PosterContent_(row, it.name, Str_(it.role), Image_(it.serverBase, Str_(it.thumb), 240, 240), invalid, invalid)
                     c.addFields({ round: true })

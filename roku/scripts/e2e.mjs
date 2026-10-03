@@ -17,11 +17,13 @@ const episode = (key, index, viewed = false) => ({
 let port = 0;
 // A stand-in Xtream panel: a login, two categories, two channels and their guide.
 const b64 = (t) => Buffer.from(t).toString("base64");
+const schedule = Math.floor(Date.now() / 60000) * 60 - 900;
 const panel = (url, send) => {
   const q = url.searchParams;
   if (q.get("username") !== "ann" || q.get("password") !== "pw") return send({ user_info: { auth: 0 } });
   const now = Math.floor(Date.now() / 1000);
-  const half = Math.floor(now / 1800) * 1800;
+  // Programmes placed round the moment the test began, so none starts or ends during it.
+  const half = schedule;
   switch (q.get("action")) {
     case null: return send({ user_info: { auth: 1, status: "Active", max_connections: "2", active_cons: "0", exp_date: "1893456000" },
       server_info: { timezone: "UTC", time_now: new Date(now * 1000).toISOString().slice(0, 19).replace("T", " "), timestamp_now: now } });
@@ -43,6 +45,43 @@ const panel = (url, send) => {
   }
   return send([]);
 };
+// A stand-in Reely: a session from the Plex sign-in, then its rows, a show's page and a request.
+const reelyAsked = [];
+let reelySignedIn = false;
+const reelyApi = (req, res, url) => {
+  const reply = (code, v, cookie) => {
+    res.writeHead(code, { "Content-Type": "application/json", ...(cookie ? { "Set-Cookie": cookie } : {}) });
+    res.end(JSON.stringify(v));
+  };
+  let body = "";
+  req.on("data", (c) => { body += c; });
+  req.on("end", () => {
+    const path = url.pathname;
+    if (path === "/api/v1/auth/plex/token") {
+      reelySignedIn = JSON.parse(body || "{}").token === "account-token";
+      return reelySignedIn ? reply(200, { status: "ok" }, "reely_session=abc; Path=/; HttpOnly") : reply(401, { error: "plex.tv: Unauthorized" });
+    }
+    // The simulator's HTTP, like a browser's, neither shows Set-Cookie nor sends Cookie, so
+    // a signed-in simulator is let in without it; the cookie itself is unit-tested.
+    if (!(req.headers.cookie ?? "").includes("reely_session=abc") && !reelySignedIn) return reply(401, { error: "login required" });
+    switch (path) {
+      case "/api/v1/explore": return reply(200, { imageBase: "https://image.tmdb.org/t/p",
+        movies: [{ tmdbId: 603, kind: "movie", title: "The Matrix", year: 1999 }, { tmdbId: 438631, kind: "movie", title: "Dune", year: 2021 }],
+        shows: [{ tmdbId: 1399, kind: "show", title: "Game of Thrones", year: 2011 }] });
+      case "/api/v1/movies": return reply(200, { movies: [{ tmdbId: 603, filePath: "/m/matrix.mkv" }] });
+      case "/api/v1/shows": return reply(200, { shows: [] });
+      case "/api/v1/requests":
+        if (req.method === "POST") { reelyAsked.push(JSON.parse(body)); return reply(201, { status: "pending" }); }
+        return reply(200, { requests: reelyAsked.map((r, i) => ({ id: i + 1, ...r, status: "pending" })) });
+      case "/api/v1/preview/show/1399": return reply(200, { imageBase: "https://image.tmdb.org/t/p", inLibraries: [],
+        preview: { kind: "show", tmdbId: 1399, title: "Game of Thrones", overview: "Seven noble families fight for the land.", genres: ["Drama"], status: "Ended",
+          seasons: [{ number: 1, name: "Season 1" }, { number: 2, name: "Season 2" }, { number: 3, name: "Season 3" }] } });
+      case "/api/v1/auth/me": return reply(200, { user: { id: 3, role: "user", mayAdd: false, defaultLibraryId: 2 } });
+      case "/api/v1/libraries": return reply(200, { libraries: [{ id: 1, name: "Movies", kind: "movies" }, { id: 2, name: "TV", kind: "shows" }, { id: 3, name: "Kids TV", kind: "shows" }] });
+    }
+    reply(404, { error: "not here" });
+  });
+};
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://x");
   asked.push(url.pathname);
@@ -50,6 +89,7 @@ const server = http.createServer((req, res) => {
   const send = (v) => { res.writeHead(200, { "Content-Type": "application/json" }); res.end(JSON.stringify(v)); };
   const meta = (Metadata) => send({ MediaContainer: { Metadata } });
   if (url.pathname === "/player_api.php") return panel(url, send);
+  if (url.pathname.startsWith("/api/v1/")) return reelyApi(req, res, url);
   switch (url.pathname) {
     case "/api/v2/pins": return send({ id: 1, code: "R0KU" });
     case "/api/v2/pins/1": return send({ authToken: "account-token" });
@@ -345,6 +385,41 @@ try {
   await wait(1500);
   expect("from the panel's timeshift address", /^TRACE catch-up from \/timeshift\/ann\/pw\/60\/\d{4}-\d{2}-\d{2}:\d{2}-\d{2}\/101\.ts/m.test(output));
   await key("Back"); await wait(1200);
+  // Requests: connect to Reely, its rows less what's in the library, and ask for a show.
+  // Back from a tab's page goes Home, as on the Fire TV; up from there to the tabs.
+  await key("Back"); await wait(1500);
+  await toTabs();
+  await moveTo("TAB", "requests", "Right");
+  await wait(1200);
+  await key("Down"); await wait(800);
+  await typeInto("address", `127.0.0.1:${port}`);
+  await key("Down"); await wait(500);
+  await key("Select");
+  await until("Reely's rows", () => output.includes("TRACE reely rows"), 15000).catch(() => undefined);
+  expect("connects to Reely with the Plex sign-in", output.includes("TRACE reely connected"));
+  await wait(2000);
+  await snap("roku-requests");
+  // Down from the first row (Dune: The Matrix is in the library) to the shows'.
+  await key("Down"); await wait(800);
+  await key("Select");
+  await until("the show's page", () => output.includes("TRACE reely title"), 10000).catch(() => undefined);
+  expect("a title's page, and it can be asked for", output.includes("TRACE reely title can ask"));
+  await wait(1200);
+  await snap("roku-request-title");
+  // The libraries (TV, the default, and Kids TV), then the seasons: Season 1 off.
+  await key("Down"); await wait(600);
+  await key("Down"); await wait(600);
+  await key("Select"); await wait(800);
+  await key("Up"); await wait(600);
+  await key("Up"); await wait(600);
+  await key("Select");
+  await until("asked", () => output.includes("TRACE reely asked"), 10000).catch(() => undefined);
+  await wait(1000);
+  await snap("roku-request-sent");
+  const sent = reelyAsked[0];
+  console.log("Reely was asked: " + JSON.stringify(sent));
+  expect("asks for the show, the seasons chosen, in the default library",
+    !!sent && sent.tmdbId === 1399 && JSON.stringify(sent.seasons) === "[2,3]" && sent.libraryId === 2);
   expect("no crash", !/BRIGHTSCRIPT_CRASH|Runtime Error|Syntax Error/i.test(output));
 } catch (error) {
   failures.push(String(error.message ?? error));

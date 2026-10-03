@@ -8,6 +8,7 @@ sub init()
     m.global.observeField("prefs", "build")
     m.global.observeField("session", "build")
     m.global.observeField("live", "build")
+    m.global.observeField("reely", "build")
 end sub
 
 function Modes_() as object
@@ -133,6 +134,13 @@ function Settings_() as object
         out.Push({ group: "", title: "Stream type", note: "Try the other if channels stutter or won't start.", labels: ["HLS", "MPEG-TS"], on: [format <> "ts", format = "ts"], key: "streamFormat" })
     else
         out.Push({ group: "Live TV", title: "Not set up", note: "Sign in to your provider from the Live TV tab.", labels: ["Go to Live TV"], on: [false], key: "goLive" })
+    end if
+
+    reely = m.global.reely
+    if reely <> invalid and Str_(reely.base) <> "" then
+        out.Push({ group: "Requests", title: "Reely", note: HostOf_(Str_(reely.base)), labels: ["Disconnect"], on: [false], key: "reelyOff" })
+    else
+        out.Push({ group: "Requests", title: "Not connected", note: "Connect to Reely from the Request tab to ask for movies and shows.", labels: ["Go to Request"], on: [false], key: "goRequests" })
     end if
 
     out.Push({ group: "About", title: "Version", note: CreateObject("roAppInfo").GetVersion(), labels: [], on: [], key: "" })
@@ -301,6 +309,12 @@ sub onPressed(event as object)
         live = m.global.live
         ' The login goes; Favorites and the rest are kept for when it comes back.
         m.top.go = { name: "live", live: { favorites: Arr_(live.favorites), recent: Arr_(live.recent), reminders: [] } }
+        return
+    else if key = "reelyOff" then
+        m.top.go = { name: "reely", reely: {} }
+        return
+    else if key = "goRequests" then
+        m.top.go = { name: "tab", tab: "requests" }
         return
     else if key = "goLive" then
         m.top.go = { name: "tab", tab: "live" }

@@ -10,7 +10,7 @@ sub init()
         m.store.Flush()
     end if
     ' The session is {} while signed out: a field made from invalid can't hold one later.
-    m.global.addFields({ clientId: clientId, session: {}, home: {}, watchlist: [], recentSearches: ReadJson_("recentSearches", []), prefs: Prefs_(), live: ReadJson_("live", {}) })
+    m.global.addFields({ clientId: clientId, session: {}, home: {}, watchlist: [], recentSearches: ReadJson_("recentSearches", []), prefs: Prefs_(), live: ReadJson_("live", {}), reely: ReadJson_("reely", {}) })
     m.http = {}
     m.signIn = m.top.findNode("signIn")
     m.shell = m.top.findNode("shell")
@@ -279,7 +279,7 @@ sub openTab(id as string)
         shows: { name: "library", kind: "show" },
         search: { name: "search" },
         live: { name: "live" },
-        requests: { name: "note", title: "Requests", text: "Requests are coming to Reely on Roku." },
+        requests: { name: "requests" },
         settings: { name: "settings" }
     }
     route = routes[id]
@@ -299,7 +299,7 @@ sub clearScreens()
 end sub
 
 function screenFor(route as object) as object
-    names = { home: "HomeScreen", library: "LibraryScreen", detail: "DetailScreen", list: "ListScreen", search: "SearchScreen", settings: "SettingsScreen", note: "NoteScreen", live: "LiveScreen" }
+    names = { home: "HomeScreen", library: "LibraryScreen", detail: "DetailScreen", list: "ListScreen", search: "SearchScreen", settings: "SettingsScreen", note: "NoteScreen", live: "LiveScreen", requests: "RequestsScreen", requestTitle: "RequestTitleScreen" }
     node = CreateObject("roSGNode", names[route.name])
     node.observeField("go", "onGo")
     node.observeField("menu", "onMenu")
@@ -356,6 +356,14 @@ sub onGo(event as object)
     else if route.name = "tab" then
         openTab(route.tab)
         intoScreen()
+    else if route.name = "reely" then
+        m.global.reely = route.reely
+        WriteJson_("reely", route.reely)
+    else if route.name = "refreshRequests" then
+        ' The tab under a title just asked for: its marks asked again.
+        for each entry in m.stack
+            if entry.node.subtype() = "RequestsScreen" then entry.node.refresh = {}
+        end for
     else if route.name = "live" then
         m.global.live = route.live
         WriteJson_("live", route.live)

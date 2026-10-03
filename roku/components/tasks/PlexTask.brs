@@ -74,6 +74,16 @@ function answerFor(op as string, a as object) as object
         out.guide = XtreamApi_ShortEpg(a.credentials, a.streamIds)
     else if op = "liveTable" then
         out.table = XtreamApi_Table(a.credentials, a.streamIds)
+    else if op = "reelySignIn" then
+        out.answer = ReelyApi_SignInAny(a.reely)
+    else if op = "reelyHome" then
+        out.answer = ReelyApi_Home(a.reely)
+    else if op = "reelySearch" then
+        out.answer = ReelyApi_Search(a.reely, Str_(a.query))
+    else if op = "reelyDetail" then
+        out.answer = ReelyApi_Detail(a.reely, a.title)
+    else if op = "reelyRequest" then
+        out.answer = ReelyApi_Request(a.reely, a.title, a.seasons, Int(Num_(a.libraryId)))
     else if op = "switchUser" then
         out.answer = PlexApi_SwitchUser(g.plexTv, a.token, a.uuid, Str_(a.pin), cid)
     end if

@@ -9,6 +9,9 @@ sub build()
     m.group.removeChildrenIndex(m.group.getChildCount(), 0)
     m.pills = []
     m.texts = []
+    m.lefts = []
+    m.widths = []
+    m.shift = 0
     font = FontOf_("pkg:/fonts/geist_semibold.ttf", m.top.fontSize)
     h = Int(m.top.fontSize * 2.1)
     x = 0
@@ -30,6 +33,8 @@ sub build()
         m.group.appendChild(label)
         m.pills.Push(pill)
         m.texts.Push(label)
+        m.lefts.Push(x)
+        m.widths.Push(w)
         x = x + w + 12
     end for
     m.top.rowWidth = x
@@ -39,6 +44,7 @@ end sub
 
 sub paint()
     focused = m.top.hasFocus()
+    slide()
     on = m.top.on
     for i = 0 to m.pills.Count() - 1
         isOn = on <> invalid and i < on.Count() and on[i] = true
@@ -59,6 +65,24 @@ sub paint()
             m.pills[i].blendColor = "0x221E1FFF"
             m.texts[i].color = "0xF5F2F0FF"
         end if
+    end for
+end sub
+
+' The cursor's pill in view, when the row is wider than it may show.
+sub slide()
+    limit = m.top.visibleWidth
+    i = m.top.focusIndex
+    if limit <= 0 or m.lefts = invalid or i >= m.lefts.Count() then return
+    left = m.lefts[i]
+    right = left + m.widths[i]
+    if left - m.shift < 0 then m.shift = left
+    if right - m.shift > limit then m.shift = right - limit
+    m.group.translation = [-m.shift, 0]
+    ' Pills cut by the edge are left out rather than shown in half.
+    for k = 0 to m.pills.Count() - 1
+        inside = m.lefts[k] - m.shift >= 0 and m.lefts[k] + m.widths[k] - m.shift <= limit
+        m.pills[k].visible = inside
+        m.texts[k].visible = inside
     end for
 end sub
 

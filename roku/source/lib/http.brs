@@ -1,6 +1,6 @@
 ' Asking servers, from a Task (never the render thread, which Roku won't let block).
 
-' The answer: { code, body, json }, code 0 when nothing came back in time.
+' The answer: { code, body, json, headers }, code 0 when nothing came back in time.
 function Http_Ask(url as string, method = "GET" as string, headers = invalid as dynamic, body = "" as string, timeoutMs = 20000 as integer) as object
     t = Http_Transfer(url, method, headers)
     port = CreateObject("roMessagePort")
@@ -11,12 +11,13 @@ function Http_Ask(url as string, method = "GET" as string, headers = invalid as 
     else
         started = t.AsyncPostFromString(body)
     end if
-    result = { code: 0, body: "", json: invalid }
+    result = { code: 0, body: "", json: invalid, headers: [] }
     if not started then return result
     msg = Wait(timeoutMs, port)
     if type(msg) = "roUrlEvent" then
         result.code = msg.GetResponseCode()
         result.body = msg.GetString()
+        result.headers = msg.GetResponseHeadersArray()
         if result.body <> "" then result.json = ParseJson(result.body)
     else
         t.AsyncCancel()
@@ -31,6 +32,8 @@ function Http_Transfer(url as string, method as string, headers as dynamic) as o
     t.InitClientCertificates()
     t.RetainBodyOnError(true)
     t.EnableEncodings(true)
+    ' Cookies kept by the Roku as well as handed in by hand (Reely's session is one).
+    t.EnableCookies()
     if headers <> invalid then t.SetHeaders(headers)
     t.SetRequest(method)
     return t
