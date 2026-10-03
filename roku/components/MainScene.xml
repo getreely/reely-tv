@@ -1,41 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Reely: signing in, Home, a title's page and the player, as the Fire TV app has them. -->
+<!-- Reely: signing in, finding the server, then the tabs and their pages, the poster menu
+     and the player, as the Fire TV app has them. -->
 <component name="MainScene" extends="Scene">
   <script type="text/brightscript" uri="pkg:/components/MainScene.brs" />
   <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
   <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/ScreenKit.brs" />
   <children>
     <Rectangle id="ground" width="1920" height="1080" color="0x0A0909FF" />
-    <!-- The mark, as on Fire TV: the "r" and the bar under it, not the name. -->
-    <Poster id="brand" uri="pkg:/images/mark.png" width="29" height="60" translation="[96, 40]" />
 
     <Group id="signIn" visible="false">
+      <!-- The mark, as on Fire TV: the "r" and the bar under it. -->
+      <Poster uri="pkg:/images/mark.png" width="29" height="60" translation="[96, 40]" />
       <Label id="signInTitle" width="1920" translation="[0, 330]" horizAlign="center" color="0xF5F2F0FF" text="Sign in to watch your library" />
       <Label id="signInHint" width="1920" translation="[0, 420]" horizAlign="center" color="0xB9B4B1FF" wrap="true" />
       <Label id="code" width="1920" translation="[0, 500]" horizAlign="center" color="0xF5F2F0FF" />
       <Label id="signInNote" width="1920" translation="[0, 640]" horizAlign="center" color="0x86807EFF" />
     </Group>
 
-    <RowList id="home" translation="[96, 130]" visible="false"
-      itemComponentName="PosterItem" numRows="3" rowItemSpacing="[[24, 0]]" itemSpacing="[0, 44]"
-      showRowLabel="[true]" rowLabelColor="0xF5F2F0FF" rowLabelOffset="[[0, 14]]" rowFocusAnimationStyle="floatingFocus"
-      drawFocusFeedback="false" />
-
-    <Group id="detail" visible="false">
-      <Poster id="backdrop" width="1920" height="1080" loadDisplayMode="scaleToZoom" opacity="0.35" />
-      <Label id="detailTitle" translation="[96, 140]" width="1300" color="0xF5F2F0FF" />
-      <Label id="detailFacts" translation="[96, 230]" width="1300" color="0xB9B4B1FF" />
-      <Label id="upNext" translation="[96, 280]" width="1300" color="0xF5F2F0FF" />
-      <Label id="detailSummary" translation="[96, 330]" width="1100" height="130" wrap="true" maxLines="3" color="0xB9B4B1FF" />
-      <ButtonGroup id="actions" translation="[96, 480]" layoutDirection="horiz" itemSpacings="[20]"
-        iconUri="" focusedIconUri="" focusBitmapUri="pkg:/images/white.png" minWidth="220" buttonHeight="72"
-        textColor="0xF5F2F0FF" focusedTextColor="0x0A0909FF" />
-      <LabelList id="seasons" translation="[96, 600]" itemSize="[300, 56]" numRows="7" vertFocusAnimationStyle="floatingFocus" focusBitmapUri="pkg:/images/white.png" color="0xB9B4B1FF" focusedColor="0x0A0909FF" />
-      <LabelList id="episodes" translation="[440, 600]" itemSize="[1300, 56]" numRows="7" vertFocusAnimationStyle="floatingFocus" focusBitmapUri="pkg:/images/white.png" color="0xB9B4B1FF" focusedColor="0x0A0909FF" />
+    <Group id="shell" visible="false">
+      <NavBar id="nav" />
+      <Group id="screens" translation="[0, 130]" />
     </Group>
 
-    <Video id="player" width="1920" height="1080" visible="false" />
-
-    <Label id="status" translation="[96, 1000]" width="1700" color="0xFF5E69FF" />
+    <PlayerView id="player" visible="false" />
+    <Group id="overlays" />
+    <Label id="status" translation="[96, 1010]" width="1700" color="0xFF5E69FF" />
+    <Timer id="claimTimer" duration="2" repeat="true" />
+    <Timer id="retryTimer" duration="30" repeat="false" />
   </children>
 </component>

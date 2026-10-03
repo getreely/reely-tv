@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A page with only something to say. -->
+<component name="NoteScreen" extends="Group">
+  <interface>
+    <field id="route" type="assocarray" onChange="open" />
+    <field id="go" type="assocarray" alwaysNotify="true" />
+    <field id="menu" type="assocarray" alwaysNotify="true" />
+    <field id="focusIn" type="boolean" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
+  <script type="text/brightscript" uri="pkg:/components/screens/NoteScreen.brs" />
+  <children>
+    <Label id="title" translation="[0, 300]" width="1920" horizAlign="center" color="0xF5F2F0FF" />
+    <Label id="text" translation="[0, 390]" width="1920" horizAlign="center" color="0xB9B4B1FF" />
+  </children>
+</component>

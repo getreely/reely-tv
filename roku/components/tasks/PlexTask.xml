@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One thing asked of Plex, off the render thread: set op and args and run; result
+     comes back with the same op and id. -->
+<component name="PlexTask" extends="Task">
+  <interface>
+    <field id="op" type="string" />
+    <field id="args" type="assocarray" />
+    <field id="result" type="assocarray" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/tasks/PlexTask.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/http.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/plexapi.brs" />
+</component>

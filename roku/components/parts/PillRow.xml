@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pills in a row, as the other apps' chips: a white pill under the cursor, an outline
+     for the one that's on. Left and right move along; OK presses. -->
+<component name="PillRow" extends="Group">
+  <interface>
+    <field id="labels" type="array" onChange="build" />
+    <!-- Which are on, by index. -->
+    <field id="on" type="array" onChange="paint" />
+    <field id="focusIndex" type="integer" value="0" onChange="paint" />
+    <field id="pressed" type="integer" alwaysNotify="true" />
+    <field id="fontSize" type="integer" value="26" />
+    <field id="rowWidth" type="float" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/parts/PillRow.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
+  <children>
+    <Group id="pills" />
+  </children>
+</component>

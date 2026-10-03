@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The tabs across the top, as on the Fire TV: the mark, Home to Requests on the left,
+     Search and Settings on the right. Moving onto a tab opens it. -->
+<component name="NavBar" extends="Group">
+  <interface>
+    <!-- The tab that's open, by id; set from outside when a page changes it. -->
+    <field id="current" type="string" onChange="paint" />
+    <!-- A tab arrived at or pressed: its id. -->
+    <field id="chosen" type="string" alwaysNotify="true" />
+    <!-- Down out of the tabs, into the page. -->
+    <field id="leave" type="boolean" alwaysNotify="true" />
+    <field id="takeFocus" type="boolean" alwaysNotify="true" onChange="takeFocus" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/parts/NavBar.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
+  <children>
+    <Poster id="mark" uri="pkg:/images/mark.png" width="29" height="60" translation="[96, 30]" />
+    <Group id="tabs" />
+  </children>
+</component>

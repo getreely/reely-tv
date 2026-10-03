@@ -35,6 +35,14 @@ const server = http.createServer((req, res) => {
       return meta(all.slice(start, start + 200));
     }
     case "/library/metadata/show1": return meta([{ ratingKey: "show1", type: "show", title: "Northbound", year: 2024, summary: "A long-haul driver.", OnDeck: { Metadata: [{ ratingKey: "e2" }] } }]);
+    case "/library/metadata/show1/related": return send({ MediaContainer: { Hub: [{ Metadata: [{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025, addedAt: 9 }] }] } });
+    case "/library/metadata/show1/extras": return meta([]);
+    case "/playlists": return meta([{ ratingKey: "p1", type: "playlist", title: "Road Trip", leafCount: 2 }]);
+    case "/library/sections/watchlist/all": return meta([{ guid: "plex://movie/low-orbit", type: "movie", title: "Low Orbit" }]);
+    case "/library/all": return meta([{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025, addedAt: 9, guid: "plex://movie/low-orbit" }]);
+    case "/library/sections/1/genre": return send({ MediaContainer: { Directory: [{ key: "7", title: "Drama" }] } });
+    case "/library/sections/1/decade": return send({ MediaContainer: { Directory: [{ key: "2020", title: "2020s" }] } });
+    case "/library/sections/1/firstCharacter": return send({ MediaContainer: { Directory: [{ key: "L", title: "L", size: 1 }] } });
     case "/library/metadata/show1/children": return meta([{ ratingKey: "s1", type: "season", title: "Season 1", index: 1 }]);
     case "/library/metadata/s1/children": return meta([episode("e1", 1, true), episode("e2", 2), episode("e3", 3)]);
     case "/library/metadata/e2": return meta([{ ...episode("e2", 2), Media: [{ container: "mkv", videoCodec: "h264", audioCodec: "dca", Part: [{ key: "/library/parts/5/file.mkv" }] }] }]);
@@ -57,7 +65,7 @@ mkdirSync("shots", { recursive: true });
 
 // Under a terminal, so Ctrl+S takes a screenshot.
 const shot = "build/shot.png";
-const sim = spawn("script", ["-qfc", `npx brs-cli -e -s ${shot} -c 0 -k plexTv=http://127.0.0.1:${port} build/debug.zip`, "/dev/null"], { stdio: ["pipe", "pipe", "pipe"] });
+const sim = spawn("script", ["-qfc", `npx brs-cli -e -s ${shot} -c 0 -k plexTv=http://127.0.0.1:${port},discover=http://127.0.0.1:${port} build/debug.zip`, "/dev/null"], { stdio: ["pipe", "pipe", "pipe"] });
 let output = "";
 sim.stdout.on("data", (d) => { output += d.toString(); });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -83,14 +91,17 @@ try {
   await snap("roku-home");
   expect("signed in with the code, found the server", asked.includes("/api/v2/resources") && asked.includes("/identity"));
   expect("episodes paged until the show was counted whole", asked.filter((p) => p === "/library/sections/2/all").length === 2);
+  expect("the Watchlist row finds the title on the server", asked.includes("/library/sections/watchlist/all") && asked.includes("/library/all"));
   // OK on Continue Watching opens the show on the episode it's up to.
   await key("Select");
   await until("the show's episodes", () => asked.includes("/library/metadata/s1/children"));
-  await wait(1500);
+  await wait(2000);
   await snap("roku-show");
-  // Play: DTS sound the Roku can't play, so it goes to Plex's conversion.
+  // Resume: DTS sound the Roku can't play, so it goes to Plex's conversion.
+  const before = asked.filter((p) => p === "/library/metadata/e2").length;
+  const hubs = asked.filter((p) => p === "/hubs").length;
   await key("Select");
-  await until("the file", () => asked.includes("/library/metadata/e2"));
+  await until("the file", () => asked.filter((p) => p === "/library/metadata/e2").length > before);
   await wait(3000);
   await key("Back");
   await until("the stop told to Plex", () => timeline.includes("stopped@e2"), 10000);
@@ -100,13 +111,35 @@ try {
   await wait(1500);
   await snap("roku-back-on-show");
   expect("Back from the player returns to the show with its episodes", asked.filter((p) => p === "/library/metadata/s1/children").length >= 2);
-  // Back to Home, which asks again: Continue Watching has moved on.
-  const hubs = asked.filter((p) => p === "/hubs").length;
-  await key("Back");
-  await until("Home again", () => asked.filter((p) => p === "/hubs").length > hubs, 10000);
-  await wait(2000);
-  await snap("roku-home-again");
+  await until("Home asked again", () => asked.filter((p) => p === "/hubs").length > hubs, 10000);
   expect("Home refreshes after watching", asked.filter((p) => p === "/hubs").length > hubs);
+  await key("Back");
+  await wait(1500);
+  await snap("roku-home-again");
+  // Up to the tabs; moving onto Movies opens it.
+  const moviePages = asked.filter((p) => p === "/library/sections/1/all").length;
+  await key("Up");
+  await wait(500);
+  await key("Right");
+  await until("the Movies library", () => asked.includes("/library/sections/1/genre") && asked.filter((p) => p === "/library/sections/1/all").length > moviePages, 10000);
+  await wait(2000);
+  await snap("roku-movies");
+  expect("Movies opens on arriving at its tab", asked.includes("/library/sections/1/firstCharacter"));
+  // Along to Settings, which opens on OK.
+  for (let i = 0; i < 5; i++) { await key("Right"); await wait(400); }
+  await key("Select");
+  await wait(1500);
+  await snap("roku-settings");
+  // Down to Skip intros, and on.
+  await key("Down"); await wait(300);
+  await key("Down"); await wait(300);
+  await key("Left"); await wait(300);
+  await key("Select");
+  await wait(1200);
+  await snap("roku-settings-skip-intros");
+  await key("Back");
+  await wait(1500);
+  await snap("roku-home-from-settings");
   expect("no crash", !/BRIGHTSCRIPT_CRASH|Runtime Error|Syntax Error/i.test(output));
 } catch (error) {
   failures.push(String(error.message ?? error));

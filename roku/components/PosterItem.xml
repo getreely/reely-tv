@@ -15,7 +15,13 @@
     <!-- The cursor: an outline round the picture alone, so the name below stays readable. -->
     <Rectangle id="ring" color="0xF5F2F0FF" visible="false" />
     <Rectangle id="frame" color="0x221E1FFF" />
-    <Poster id="art" loadDisplayMode="scaleToZoom" />
+    <!-- A person's photo is round; a title's picture square-cornered. -->
+    <MaskGroup id="mask">
+      <Poster id="art" loadDisplayMode="scaleToZoom" />
+    </MaskGroup>
+    <Poster id="tick" uri="pkg:/images/badge.png" width="40" height="40" blendColor="0x0A0909CC" visible="false" />
+    <Label id="tickMark" text="✓" width="40" height="40" horizAlign="center" vertAlign="center" color="0xF5F2F0FF" visible="false" />
+    <Label id="tag" color="0xF5F2F0FF" visible="false" />
     <Rectangle id="track" color="0x0A090999" visible="false" />
     <Rectangle id="progress" color="0xFF5E69FF" visible="false" />
     <Poster id="badge" uri="pkg:/images/badge.png" width="44" height="44" visible="false" />

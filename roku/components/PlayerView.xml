@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The player, as the Fire TV's: the Roku's own video with its trick-play pictures from
+     Plex's index; Skip Intro; Up Next when the credits start; down for sound, subtitles,
+     chapters and the sleep timer; where it's got to told to Plex. -->
+<component name="PlayerView" extends="Group">
+  <interface>
+    <!-- { item, resume, queue, mediaIndex, trailer }: plays it. -->
+    <field id="request" type="assocarray" onChange="start" />
+    <!-- Over: { item, finished }. -->
+    <field id="done" type="assocarray" alwaysNotify="true" />
+    <field id="takeFocus" type="boolean" alwaysNotify="true" onChange="takeFocus" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/PlayerView.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/ScreenKit.brs" />
+  <children>
+    <Rectangle width="1920" height="1080" color="0x000000FF" />
+    <Video id="video" width="1920" height="1080" />
+    <Label id="wait" translation="[0, 500]" width="1920" horizAlign="center" color="0xB9B4B1FF" />
+    <Group id="skip" visible="false" translation="[1500, 860]">
+      <Poster uri="pkg:/images/pill.9.png" blendColor="0xF5F2F0FF" width="300" height="72" />
+      <Label id="skipLabel" text="Skip Intro" width="300" height="72" horizAlign="center" vertAlign="center" color="0x0A0909FF" />
+    </Group>
+    <Group id="upNext" visible="false" translation="[1180, 780]">
+      <Poster uri="pkg:/images/card.9.png" blendColor="0x171415F0" width="660" height="190" />
+      <Label id="upNextLabel" text="Up next" translation="[30, 24]" color="0xB9B4B1FF" />
+      <Label id="upNextTitle" translation="[30, 64]" width="600" color="0xF5F2F0FF" />
+      <Label id="upNextHint" translation="[30, 124]" width="600" color="0xB9B4B1FF" />
+    </Group>
+    <Label id="sleepNote" translation="[96, 40]" width="1700" color="0xF5F2F0FF" />
+    <Group id="options" visible="false">
+      <Rectangle translation="[1380, 0]" width="540" height="1080" color="0x171415F5" />
+      <Label id="optionsTitle" text="Sound, subtitles and more" translation="[1420, 50]" width="480" color="0xB9B4B1FF" />
+      <LabelList id="optionList" translation="[1410, 110]" itemSize="[480, 58]" numRows="15" vertFocusAnimationStyle="floatingFocus"
+        focusBitmapUri="pkg:/images/pill.9.png" color="0xF5F2F0FF" focusedColor="0x0A0909FF" />
+    </Group>
+    <Timer id="ticker" duration="0.5" repeat="true" />
+    <Timer id="sleepTimer" repeat="false" />
+  </children>
+</component>

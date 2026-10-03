@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One of a list, over the screen: a genre, a decade, a sort. Back leaves it as it was. -->
+<component name="Chooser" extends="Group">
+  <interface>
+    <field id="title" type="string" onChange="build" />
+    <field id="options" type="array" onChange="build" />
+    <field id="current" type="integer" value="-1" />
+    <!-- The index chosen, or -1 for none (Back). -->
+    <field id="picked" type="integer" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/parts/Chooser.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
+  <children>
+    <Rectangle width="1920" height="1080" color="0x0A0909D9" />
+    <Poster id="panel" uri="pkg:/images/card.9.png" blendColor="0x171415FF" width="760" height="860" translation="[580, 110]" />
+    <Label id="heading" translation="[640, 150]" width="640" color="0xF5F2F0FF" />
+    <LabelList id="list" translation="[640, 240]" itemSize="[640, 64]" numRows="11" vertFocusAnimationStyle="floatingFocus"
+      focusBitmapUri="pkg:/images/pill.9.png" focusFootprintBitmapUri="" color="0xF5F2F0FF" focusedColor="0x0A0909FF" />
+  </children>
+</component>

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A title's page, as on the Fire TV: play, resume or restart, watched, the Watchlist,
+     the trailer, which copy; a show's seasons and episodes, opening where it's up to;
+     the cast, and more like it. -->
+<component name="DetailScreen" extends="Group">
+  <interface>
+    <field id="route" type="assocarray" onChange="open" />
+    <field id="go" type="assocarray" alwaysNotify="true" />
+    <field id="play" type="assocarray" alwaysNotify="true" />
+    <field id="menu" type="assocarray" alwaysNotify="true" />
+    <field id="focusIn" type="boolean" alwaysNotify="true" onChange="focusIn" />
+    <!-- Back from the player: the page again, on the episode just watched. -->
+    <field id="refresh" type="assocarray" alwaysNotify="true" onChange="refreshed" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/screens/DetailScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/ScreenKit.brs" />
+  <children>
+    <Poster id="backdrop" translation="[0, -130]" width="1920" height="1080" loadDisplayMode="scaleToZoom" opacity="0.35" />
+    <Group id="page">
+      <Label id="title" translation="[96, 10]" width="1500" color="0xF5F2F0FF" />
+      <Label id="facts" translation="[96, 100]" width="1500" color="0xB9B4B1FF" />
+      <Label id="upNext" translation="[96, 150]" width="1500" color="0xF5F2F0FF" />
+      <Label id="summary" translation="[96, 200]" width="1100" height="130" wrap="true" maxLines="3" color="0xB9B4B1FF" />
+      <PillRow id="actions" translation="[96, 350]" fontSize="28" />
+      <PillRow id="versions" translation="[96, 430]" fontSize="22" visible="false" />
+      <Label id="note" translation="[96, 430]" width="1500" color="0xFF5E69FF" />
+      <LabelList id="seasons" translation="[96, 490]" itemSize="[300, 56]" numRows="7" vertFocusAnimationStyle="floatingFocus"
+        focusBitmapUri="pkg:/images/pill.9.png" color="0xB9B4B1FF" focusedColor="0x0A0909FF" />
+      <LabelList id="episodes" translation="[440, 490]" itemSize="[1300, 56]" numRows="7" vertFocusAnimationStyle="floatingFocus"
+        focusBitmapUri="pkg:/images/pill.9.png" color="0xB9B4B1FF" focusedColor="0x0A0909FF" />
+      <RowList id="rows" translation="[96, 980]" itemComponentName="PosterItem" numRows="2"
+        rowItemSpacing="[[24, 0]]" itemSpacing="[0, 44]" showRowLabel="[true]" rowLabelColor="0xF5F2F0FF"
+        rowLabelOffset="[[0, 14]]" rowFocusAnimationStyle="floatingFocus" drawFocusFeedback="false" />
+    </Group>
+  </children>
+</component>

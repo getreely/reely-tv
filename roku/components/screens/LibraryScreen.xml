@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Movies or TV Shows, as on the Fire TV: the tab's own home of rows, the whole library
+     sorted and narrowed with an A–Z jump, or its collections. -->
+<component name="LibraryScreen" extends="Group">
+  <interface>
+    <field id="route" type="assocarray" onChange="open" />
+    <field id="go" type="assocarray" alwaysNotify="true" />
+    <field id="menu" type="assocarray" alwaysNotify="true" />
+    <field id="focusIn" type="boolean" alwaysNotify="true" onChange="focusIn" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/screens/LibraryScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/ScreenKit.brs" />
+  <children>
+    <PillRow id="views" translation="[96, 10]" />
+    <PillRow id="tools" translation="[96, 88]" visible="false" fontSize="24" />
+    <PillRow id="letters" translation="[96, 158]" visible="false" fontSize="22" />
+    <Label id="note" translation="[96, 240]" width="1700" color="0xB9B4B1FF" wrap="true" />
+    <RowList id="rows" translation="[96, 100]" itemComponentName="PosterItem" numRows="2"
+      rowItemSpacing="[[24, 0]]" itemSpacing="[0, 44]" showRowLabel="[true]" rowLabelColor="0xF5F2F0FF"
+      rowLabelOffset="[[0, 14]]" rowFocusAnimationStyle="floatingFocus" drawFocusFeedback="false" />
+    <MarkupGrid id="grid" translation="[96, 230]" itemComponentName="PosterItem" itemSize="[240, 424]"
+      itemSpacing="[24, 36]" numColumns="6" numRows="2" drawFocusFeedback="false" vertFocusAnimationStyle="floatingFocus" />
+  </children>
+</component>

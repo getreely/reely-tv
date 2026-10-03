@@ -87,3 +87,9 @@ function Join_(parts as object, sep as string) as string
     end for
     return out
 end function
+
+' Both sides are worked out before the choice: never one that only holds when [test] does.
+function Iif_(test as boolean, yes as dynamic, no as dynamic) as dynamic
+    if test then return yes
+    return no
+end function

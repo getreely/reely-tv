@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Home: Continue Watching, new episodes and films, the Watchlist, playlists. -->
+<component name="HomeScreen" extends="Group">
+  <interface>
+    <field id="route" type="assocarray" />
+    <field id="go" type="assocarray" alwaysNotify="true" />
+    <field id="menu" type="assocarray" alwaysNotify="true" />
+    <field id="focusIn" type="boolean" alwaysNotify="true" onChange="focusIn" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/screens/HomeScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/ScreenKit.brs" />
+  <children>
+    <Label id="note" translation="[96, 40]" width="1700" color="0xFF5E69FF" />
+    <RowList id="rows" translation="[96, 30]" itemComponentName="PosterItem" numRows="3"
+      rowItemSpacing="[[24, 0]]" itemSpacing="[0, 44]" showRowLabel="[true]" rowLabelColor="0xF5F2F0FF"
+      rowLabelOffset="[[0, 14]]" rowFocusAnimationStyle="floatingFocus" drawFocusFeedback="false" />
+  </children>
+</component>

@@ -2,6 +2,10 @@ sub init()
     m.ring = m.top.findNode("ring")
     m.frame = m.top.findNode("frame")
     m.art = m.top.findNode("art")
+    m.mask = m.top.findNode("mask")
+    m.tick = m.top.findNode("tick")
+    m.tickMark = m.top.findNode("tickMark")
+    m.tickMark.font = PosterFont_("pkg:/fonts/geist_bold.ttf", 24)
     m.track = m.top.findNode("track")
     m.progress = m.top.findNode("progress")
     m.badge = m.top.findNode("badge")
@@ -17,6 +21,18 @@ sub layout()
     h = m.top.height
     if w <= 0 or h <= 0 then return
     pic = h - 64
+    c = m.top.itemContent
+    round = c <> invalid and c.round = true
+    if round then
+        ' A person: a circle the width of the slot, the name under it.
+        pic = w
+        m.mask.maskUri = "pkg:/images/circle.png"
+        m.mask.maskSize = [w, w]
+        m.frame.visible = false
+    else
+        m.mask.maskUri = ""
+        m.frame.visible = true
+    end if
     m.ring.translation = [-5, -5]
     m.ring.width = w + 10
     m.ring.height = pic + 10
@@ -24,6 +40,8 @@ sub layout()
     m.frame.height = pic
     m.art.width = w
     m.art.height = pic
+    m.tick.translation = [w - 48, 8]
+    m.tickMark.translation = [w - 48, 8]
     m.track.translation = [0, pic - 6]
     m.track.width = w
     m.track.height = 6
@@ -35,6 +53,8 @@ sub layout()
     m.title.width = w
     m.sub.translation = [0, pic + 34]
     m.sub.width = w
+    m.title.horizAlign = Iif_(round, "center", "left")
+    m.sub.horizAlign = Iif_(round, "center", "left")
     show()
 end sub
 
@@ -44,6 +64,9 @@ sub show()
     m.art.uri = c.HDPOSTERURL
     m.title.text = c.title
     m.sub.text = c.description
+    watched = c.watched = true and (c.badgeCount = invalid or c.badgeCount <= 1)
+    m.tick.visible = watched
+    m.tickMark.visible = watched
     count = c.badgeCount
     if count <> invalid and count > 1 then
         text = Plex_BadgeText(count)
@@ -85,3 +108,4 @@ function PosterFont_(uri as string, size as integer) as object
     f.size = size
     return f
 end function
+

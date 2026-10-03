@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Search, as the Fire TV's: people, the movies and shows that match by name, collections,
+     and Plex's other guesses; recent searches while the box is empty. -->
+<component name="SearchScreen" extends="Group">
+  <interface>
+    <field id="route" type="assocarray" />
+    <field id="go" type="assocarray" alwaysNotify="true" />
+    <field id="menu" type="assocarray" alwaysNotify="true" />
+    <field id="focusIn" type="boolean" alwaysNotify="true" onChange="focusIn" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/screens/SearchScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/ScreenKit.brs" />
+  <children>
+    <MiniKeyboard id="keyboard" translation="[96, 20]" />
+    <Label id="recentTitle" translation="[96, 520]" text="Recent searches" color="0xF5F2F0FF" visible="false" />
+    <LabelList id="recent" translation="[96, 580]" itemSize="[420, 56]" numRows="7" vertFocusAnimationStyle="floatingFocus"
+      focusBitmapUri="pkg:/images/pill.9.png" color="0xB9B4B1FF" focusedColor="0x0A0909FF" />
+    <Label id="note" translation="[620, 20]" width="1200" color="0xB9B4B1FF" wrap="true" />
+    <RowList id="rows" translation="[620, 80]" itemComponentName="PosterItem" numRows="2"
+      rowItemSpacing="[[24, 0]]" itemSpacing="[0, 44]" showRowLabel="[true]" rowLabelColor="0xF5F2F0FF"
+      rowLabelOffset="[[0, 14]]" rowFocusAnimationStyle="floatingFocus" drawFocusFeedback="false" itemSize="[1240, 500]" />
+    <Timer id="pause" duration="0.6" />
+  </children>
+</component>
