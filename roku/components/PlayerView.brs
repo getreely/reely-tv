@@ -24,6 +24,7 @@ sub init()
     m.video.observeField("state", "onState")
     m.video.observeField("position", "onPosition")
     m.optionList.observeField("itemSelected", "onOption")
+    m.optionList.observeField("itemFocused", "onOptionFocused")
     m.ticker.observeField("fire", "onTick")
     m.sleepTimer.observeField("fire", "onSleep")
     m.sleepEnd = false
@@ -139,6 +140,7 @@ end sub
 
 sub onState()
     s = m.video.state
+    Trace_("video " + s)
     if s = "playing" then
         m.wait.text = ""
     else if s = "paused" then
@@ -170,24 +172,24 @@ sub onTick()
     if m.p = invalid then return
     ms = m.video.position * 1000
     prefs = m.global.prefs
-    intro = Plex_MarkerAt(m.p.markers, "intro", ms)
-    if intro <> invalid and not m.introDone and prefs <> invalid and prefs.skipIntros = true then
+    nextUp = Plex_NextInQueue(m.queue, m.item)
+    cues = Plex_PlayerCues(m.p.markers, ms, prefs, { introDone: m.introDone, creditsOffered: m.creditsOffered, hasNext: nextUp <> invalid, sleepAtEnd: m.sleepEnd })
+    if cues.skipTo >= 0 then
         m.introDone = true
-        m.video.seek = intro.endMs / 1000
+        m.video.seek = cues.skipTo / 1000
     end if
-    showSkip = intro <> invalid and not m.options.visible and not m.upNext.visible and ms < intro.endMs - 1000
+    showSkip = cues.showSkip and not m.options.visible and not m.upNext.visible
     if showSkip and not m.skip.visible then
+        Trace_("skip intro shown")
         m.skip.visible = true
         m.skip.setFocus(true)
     else if not showSkip and m.skip.visible then
         m.skip.visible = false
         if m.skip.isInFocusChain() then m.video.setFocus(true)
     end if
-    credits = Plex_MarkerAt(m.p.markers, "credits", ms)
-    nextUp = Plex_NextInQueue(m.queue, m.item)
-    if credits <> invalid and not m.creditsOffered and nextUp <> invalid and not m.sleepEnd then
+    if cues.playNext or cues.upNext then
         m.creditsOffered = true
-        if prefs <> invalid and prefs.skipCredits = true then
+        if cues.playNext then
             playNext(nextUp)
             return
         end if
@@ -199,6 +201,7 @@ sub onTick()
         m.top.findNode("upNextTitle").text = Join_([Plex_Caption(nextUp), nextUp.title], " · ")
         m.upNext.visible = true
         m.upNext.setFocus(true)
+        Trace_("up next " + nextUp.ratingKey)
     end if
     if m.upNext.visible then
         hint = "OK to play  ·  Back to keep watching"
@@ -298,6 +301,7 @@ sub showOptions()
     end for
     m.optionList.content = content
     m.options.visible = true
+    Trace_("options shown")
     m.skip.visible = false
     m.optionList.setFocus(true)
     ' The first thing that can be chosen, not a heading.
@@ -324,6 +328,11 @@ end sub
 sub hideOptions()
     m.options.visible = false
     m.video.setFocus(true)
+end sub
+
+sub onOptionFocused()
+    i = m.optionList.itemFocused
+    if m.optionIds <> invalid and i >= 0 and i < m.optionIds.Count() then Trace_("option " + m.optionIds[i])
 end sub
 
 sub onOption()
@@ -392,6 +401,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
         intro = Plex_MarkerAt(m.p.markers, "intro", m.video.position * 1000)
         m.introDone = true
         if intro <> invalid then m.video.seek = intro.endMs / 1000
+        Trace_("skipped intro")
         m.skip.visible = false
         m.video.setFocus(true)
         return true

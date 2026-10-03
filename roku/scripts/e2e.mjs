@@ -50,7 +50,13 @@ const server = http.createServer((req, res) => {
     case "/library/sections/1/firstCharacter": return send({ MediaContainer: { Directory: [{ key: "L", title: "L", size: 1 }] } });
     case "/library/metadata/show1/children": return meta([{ ratingKey: "s1", type: "season", title: "Season 1", index: 1 }]);
     case "/library/metadata/s1/children": return meta([episode("e1", 1, true), episode("e2", 2), episode("e3", 3)]);
-    case "/library/metadata/e2": return meta([{ ...episode("e2", 2), Media: [{ container: "mkv", videoCodec: "h264", audioCodec: "dca", Part: [{ key: "/library/parts/5/file.mkv" }] }] }]);
+    case "/library/metadata/e2": return meta([{ ...episode("e2", 2), viewOffset: 20000,
+      Media: [{ container: "mkv", videoCodec: "h264", audioCodec: "dca", Part: [{ id: 5, key: "/library/parts/5/file.mkv", Stream: [
+        { id: 11, streamType: 2, displayTitle: "English (DTS 5.1)", selected: true, codec: "dca" },
+        { id: 12, streamType: 2, displayTitle: "Commentary (AAC Stereo)", codec: "aac" },
+        { id: 21, streamType: 3, displayTitle: "English (SRT)", codec: "srt", key: "/library/streams/21" }] }] }],
+      Marker: [{ type: "intro", startTimeOffset: 0, endTimeOffset: 30000 }, { type: "credits", startTimeOffset: 50000, endTimeOffset: 60000 }],
+      Chapter: [{ tag: "Cold open", startTimeOffset: 0 }, { tag: "Last stop", startTimeOffset: 52000 }] }]);
     case "/:/timeline": timeline.push(`${url.searchParams.get("state")}@${url.searchParams.get("ratingKey")}`); return send({});
     case "/photo/:/transcode": res.writeHead(200, { "Content-Type": "image/png" }); return res.end(png);
   }
@@ -125,7 +131,25 @@ try {
   const hubs = asked.filter((p) => p === "/hubs").length;
   await key("Select");
   await until("the file", () => asked.filter((p) => p === "/library/metadata/e2").length > before);
-  await wait(3000);
+  // Resumed inside the intro: Skip Intro is offered, and OK skips it.
+  await until("Skip Intro", () => output.includes("TRACE skip intro shown"), 15000).catch(() => undefined);
+  await wait(800);
+  await snap("roku-player-skip-intro");
+  expect("Skip Intro is offered in the intro", output.includes("TRACE skip intro shown"));
+  await key("Select");
+  await until("the intro skipped", () => output.includes("TRACE skipped intro"), 5000).catch(() => undefined);
+  expect("OK skips the intro", output.includes("TRACE skipped intro"));
+  // The options panel: sound, subtitles, chapters and the sleep timer.
+  await key("Down");
+  await until("the options", () => output.includes("TRACE options shown"), 5000).catch(() => undefined);
+  await wait(800);
+  await snap("roku-player-options");
+  expect("Down opens sound, subtitles, chapters and sleep", output.includes("TRACE options shown"));
+  // A chapter, chosen: the panel closes and it plays on. (The simulator doesn't play
+  // video, so Up Next at the credits is tested in tests/player.test.brs instead.)
+  await moveTo("TRACE option", "chapter:52000", "Down");
+  await key("Select");
+  await wait(800);
   await key("Back");
   await until("the stop told to Plex", () => timeline.includes("stopped@e2"), 10000);
   expect("stopping tells Plex where it got to", timeline.includes("stopped@e2"));

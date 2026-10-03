@@ -33,7 +33,7 @@
     <Group id="options" visible="false">
       <Rectangle translation="[1380, 0]" width="540" height="1080" color="0x171415F5" />
       <Label id="optionsTitle" text="Sound, subtitles and more" translation="[1420, 50]" width="480" color="0xB9B4B1FF" />
-      <LabelList id="optionList" translation="[1410, 110]" itemSize="[480, 58]" numRows="15" vertFocusAnimationStyle="floatingFocus"
+      <LabelList id="optionList" translation="[1410, 110]" itemSize="[440, 58]" numRows="15" vertFocusAnimationStyle="floatingFocus"
         focusBitmapUri="pkg:/images/pill.9.png" color="0xF5F2F0FF" focusedColor="0x0A0909FF" />
     </Group>
     <Timer id="ticker" duration="0.5" repeat="true" />

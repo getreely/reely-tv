@@ -93,3 +93,10 @@ function Iif_(test as boolean, yes as dynamic, no as dynamic) as dynamic
     if test then return yes
     return no
 end function
+
+' What the end-to-end test follows: said in a debug build only.
+sub Trace_(what as string)
+    #if DEBUG
+        print "TRACE "; what
+    #end if
+end sub

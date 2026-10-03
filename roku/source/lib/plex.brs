@@ -256,6 +256,27 @@ function Plex_NextInQueue(queue as object, item as object) as dynamic
     return invalid
 end function
 
+' What the player does at [ms]: skip the intro by itself (skipTo, -1 for no), offer Skip
+' Intro, and at the credits offer the next one (upNext), or go straight on to it
+' (playNext) when Settings says skip credits. [state] is what's happened so far:
+' { introDone, creditsOffered, hasNext, sleepAtEnd }.
+function Plex_PlayerCues(markers as object, ms as dynamic, prefs as dynamic, state as object) as object
+    out = { skipTo: -1, showSkip: false, intro: invalid, upNext: false, playNext: false }
+    skipIntros = prefs <> invalid and prefs.skipIntros = true
+    skipCredits = prefs <> invalid and prefs.skipCredits = true
+    intro = Plex_MarkerAt(markers, "intro", ms)
+    out.intro = intro
+    if intro <> invalid then
+        if not state.introDone and skipIntros then out.skipTo = intro.endMs
+        out.showSkip = ms < intro.endMs - 1000
+    end if
+    credits = Plex_MarkerAt(markers, "credits", ms)
+    if credits <> invalid and not state.creditsOffered and state.hasNext and not state.sleepAtEnd then
+        if skipCredits then out.playNext = true else out.upNext = true
+    end if
+    return out
+end function
+
 ' The intro or credits marker [ms] is in, or invalid.
 function Plex_MarkerAt(markers as object, kind as string, ms as dynamic) as dynamic
     for each mk in markers
