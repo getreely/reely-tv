@@ -7,6 +7,7 @@ sub init()
     m.at = 0
     m.global.observeField("prefs", "build")
     m.global.observeField("session", "build")
+    m.global.observeField("live", "build")
 end sub
 
 function Modes_() as object
@@ -114,10 +115,51 @@ function Settings_() as object
         out.Push({ group: "", title: "Connection", note: ConnectionKind_(Str_(s.base)), labels: [], on: [], key: "" })
     end if
 
+    live = m.global.live
+    creds = invalid
+    if live <> invalid then creds = live.credentials
+    if creds <> invalid and (Str_(creds.base) <> "" or Str_(creds.playlistUrl) <> "") then
+        playlist = Str_(creds.playlistUrl) <> ""
+        where = HostOf_(Iif_(playlist, Str_(creds.playlistUrl), Str_(creds.base)))
+        out.Push({ group: "Live TV", title: Iif_(playlist, "Playlist", "Server"), note: where, labels: ["Sign out of live TV"], on: [false], key: "liveSignOut" })
+        account = live.account
+        if not playlist and account <> invalid then
+            facts = [Str_(account.status)]
+            if Str_(account.maxConnections) <> "" then facts.Push(Str_(account.activeConnections) + " of " + Str_(account.maxConnections) + " connections in use")
+            if Str_(account.expiresAt) <> "" then facts.Push("Until " + DateOf_(Num_(account.expiresAt)))
+            out.Push({ group: "", title: "Account", note: Join_(facts, "  ·  "), labels: [], on: [], key: "" })
+        end if
+        format = Str_(p.streamFormat)
+        out.Push({ group: "", title: "Stream type", note: "Try the other if channels stutter or won't start.", labels: ["HLS", "MPEG-TS"], on: [format <> "ts", format = "ts"], key: "streamFormat" })
+    else
+        out.Push({ group: "Live TV", title: "Not set up", note: "Sign in to your provider from the Live TV tab.", labels: ["Go to Live TV"], on: [false], key: "goLive" })
+    end if
+
     out.Push({ group: "About", title: "Version", note: CreateObject("roAppInfo").GetVersion(), labels: [], on: [], key: "" })
     out.Push({ group: "", title: "Reely", note: "Your Plex library, live TV and requests, on your TV.", labels: [], on: [], key: "" })
     out.Push({ group: "", title: "Licenses", note: "Geist, the typeface (SIL Open Font License 1.1)", labels: [], on: [], key: "" })
     return out
+end function
+
+' Where from, without the login an address may carry.
+function HostOf_(address as string) as string
+    rest = address
+    at = Instr(1, rest, "://")
+    if at > 0 then rest = Mid(rest, at + 3)
+    slash = Instr(1, rest, "/")
+    if slash > 0 then rest = Left(rest, slash - 1)
+    q = Instr(1, rest, "?")
+    if q > 0 then rest = Left(rest, q - 1)
+    login = Instr(1, rest, "@")
+    if login > 0 then rest = Mid(rest, login + 1)
+    return rest
+end function
+
+function DateOf_(epoch as dynamic) as string
+    d = CreateObject("roDateTime")
+    d.FromSeconds(Int(epoch))
+    d.ToLocalTime()
+    return d.AsDateString("long-date")
 end function
 
 function Bitrates_() as object
@@ -253,6 +295,16 @@ sub onPressed(event as object)
         end for
         if not found then list.Push(id)
         p.hiddenRows = list
+    else if key = "streamFormat" then
+        p.streamFormat = Iif_(i = 0, "m3u8", "ts")
+    else if key = "liveSignOut" then
+        live = m.global.live
+        ' The login goes; Favorites and the rest are kept for when it comes back.
+        m.top.go = { name: "live", live: { favorites: Arr_(live.favorites), recent: Arr_(live.recent), reminders: [] } }
+        return
+    else if key = "goLive" then
+        m.top.go = { name: "tab", tab: "live" }
+        return
     else if key = "signOut" then
         m.top.go = { name: "signOut" }
         return

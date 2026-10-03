@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Live TV, as the other apps have it: signing in to the provider (a server login or an
+     M3U playlist); then categories, channels with what's on, and the guide as a grid. -->
+<component name="LiveScreen" extends="Group">
+  <interface>
+    <field id="route" type="assocarray" onChange="open" />
+    <field id="go" type="assocarray" alwaysNotify="true" />
+    <field id="menu" type="assocarray" alwaysNotify="true" />
+    <!-- A channel to watch: { channels, index, catchUp }. -->
+    <field id="watch" type="assocarray" alwaysNotify="true" />
+    <field id="focusIn" type="boolean" alwaysNotify="true" onChange="focusIn" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/screens/LiveScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/xtream.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/ScreenKit.brs" />
+  <children>
+    <Group id="signIn" visible="false">
+      <Label id="signInTitle" translation="[0, 40]" width="1920" horizAlign="center" color="0xF5F2F0FF" text="Watch live TV from your provider" />
+      <Label id="signInNote" translation="[0, 120]" width="1920" horizAlign="center" color="0xB9B4B1FF"
+        text="Sign in with the details your IPTV provider gave you. Reely doesn't provide channels." />
+      <PillRow id="modes" translation="[660, 190]" fontSize="26" />
+      <Label id="signInError" translation="[0, 280]" width="1920" horizAlign="center" color="0xFF5E69FF" wrap="true" />
+      <LabelList id="form" translation="[560, 340]" itemSize="[800, 76]" numRows="6" vertFocusAnimationStyle="floatingFocus"
+        focusBitmapUri="pkg:/images/pill.9.png" color="0xF5F2F0FF" focusedColor="0x0A0909FF" />
+    </Group>
+
+    <Group id="live" visible="false">
+      <PillRow id="views" translation="[96, 0]" fontSize="26" />
+      <Label id="note" translation="[540, 110]" width="1280" color="0xB9B4B1FF" wrap="true" />
+      <LabelList id="categories" translation="[96, 90]" itemSize="[400, 60]" numRows="13" vertFocusAnimationStyle="floatingFocus"
+        focusBitmapUri="pkg:/images/pill.9.png" color="0xF5F2F0FF" focusedColor="0x0A0909FF" />
+      <MarkupList id="channels" translation="[540, 90]" itemComponentName="ChannelItem" itemSize="[1284, 104]" itemSpacing="[0, 12]"
+        numRows="7" drawFocusFeedback="false" vertFocusAnimationStyle="floatingFocus" />
+      <Group id="guide" visible="false">
+        <Label id="about" translation="[96, 80]" width="1700" color="0xF5F2F0FF" />
+        <Label id="aboutFacts" translation="[96, 130]" width="1700" color="0xB9B4B1FF" />
+        <TimeGrid id="grid" translation="[96, 190]" numRows="6" duration="10800" channelInfoWidth="300"
+          programTitleColor="0xF5F2F0FF" programTitleFocusedColor="0x0A0909FF" channelInfoColor="0xF5F2F0FF" />
+      </Group>
+    </Group>
+  </children>
+</component>

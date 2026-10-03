@@ -347,7 +347,7 @@ sub onOption()
     else if kind = "audio" or kind = "subtitle" then
         chooseStream(kind, value)
     else if kind = "chapter" then
-        m.video.seek = Val(value) / 1000
+        m.video.seek = Num_(value) / 1000
     else if kind = "sleep" then
         minutes = Int(Val(value))
         m.sleepTimer.control = "stop"
@@ -375,6 +375,10 @@ sub chooseStream(kind as string, id as string)
     first = m.p.audio.Count() > 0 and m.p.audio[0].selected
     m.forceConvert = kind = "audio" and not first
     begin(Int(m.video.position * 1000))
+end sub
+
+sub stopNow()
+    finish(false)
 end sub
 
 sub onSleep()

@@ -5,6 +5,7 @@
   <script type="text/brightscript" uri="pkg:/components/MainScene.brs" />
   <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
   <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/xtream.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/ScreenKit.brs" />
   <children>
@@ -25,9 +26,11 @@
     </Group>
 
     <PlayerView id="player" visible="false" />
+    <LiveView id="liveView" visible="false" />
     <Group id="overlays" />
     <Label id="status" translation="[96, 1010]" width="1700" color="0xFF5E69FF" />
     <Timer id="claimTimer" duration="2" repeat="true" />
     <Timer id="retryTimer" duration="30" repeat="false" />
+    <Timer id="reminderTimer" duration="30" repeat="true" />
   </children>
 </component>

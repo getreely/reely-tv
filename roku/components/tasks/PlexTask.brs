@@ -64,6 +64,16 @@ function answerFor(op as string, a as object) as object
         out.ok = PlexApi_Timeline(a.base, a.token, a.ratingKey, a.state, Int(a.ms), Int(a.durationMs), a.session, cid)
     else if op = "homeUsers" then
         out.users = PlexApi_HomeUsers(g.plexTv, a.token, cid)
+    else if op = "liveLogin" then
+        out.answer = XtreamApi_Login(a.credentials)
+    else if op = "liveCategories" then
+        out.categories = XtreamApi_Categories(a.credentials)
+    else if op = "liveChannels" then
+        out.channels = XtreamApi_Channels(a.credentials, Str_(a.categoryId))
+    else if op = "liveEpg" then
+        out.guide = XtreamApi_ShortEpg(a.credentials, a.streamIds)
+    else if op = "liveTable" then
+        out.table = XtreamApi_Table(a.credentials, a.streamIds)
     else if op = "switchUser" then
         out.answer = PlexApi_SwitchUser(g.plexTv, a.token, a.uuid, Str_(a.pin), cid)
     end if

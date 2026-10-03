@@ -9,6 +9,8 @@
     <!-- Over: { item, finished }. -->
     <field id="done" type="assocarray" alwaysNotify="true" />
     <field id="takeFocus" type="boolean" alwaysNotify="true" onChange="takeFocus" />
+    <!-- Stop now, as Back would: a reminder's channel is to be watched instead. -->
+    <field id="stopNow" type="boolean" alwaysNotify="true" onChange="stopNow" />
   </interface>
   <script type="text/brightscript" uri="pkg:/components/PlayerView.brs" />
   <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />

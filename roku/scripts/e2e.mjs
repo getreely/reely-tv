@@ -15,12 +15,41 @@ const episode = (key, index, viewed = false) => ({
   grandparentRatingKey: "show1", grandparentTitle: "Northbound", addedAt: 1000 + index, viewCount: viewed ? 1 : 0, duration: 60000,
 });
 let port = 0;
+// A stand-in Xtream panel: a login, two categories, two channels and their guide.
+const b64 = (t) => Buffer.from(t).toString("base64");
+const panel = (url, send) => {
+  const q = url.searchParams;
+  if (q.get("username") !== "ann" || q.get("password") !== "pw") return send({ user_info: { auth: 0 } });
+  const now = Math.floor(Date.now() / 1000);
+  const half = Math.floor(now / 1800) * 1800;
+  switch (q.get("action")) {
+    case null: return send({ user_info: { auth: 1, status: "Active", max_connections: "2", active_cons: "0", exp_date: "1893456000" },
+      server_info: { timezone: "UTC", time_now: new Date(now * 1000).toISOString().slice(0, 19).replace("T", " "), timestamp_now: now } });
+    case "get_live_categories": return send([{ category_id: "1", category_name: "News" }, { category_id: "2", category_name: "Sport" }]);
+    case "get_live_streams": {
+      const all = [
+        { stream_id: 101, num: 1, name: "Reely News", tv_archive: 1, tv_archive_duration: 3, category_id: "1", epg_channel_id: "news" },
+        { stream_id: 102, num: 2, name: "Reely Sport", category_id: "2" }];
+      return send(q.get("category_id") ? all.filter((c) => c.category_id === q.get("category_id")) : all);
+    }
+    case "get_short_epg": case "get_simple_data_table": {
+      const id = q.get("stream_id");
+      const name = id === "101" ? "News" : "Match";
+      return send({ epg_listings: [
+        { start_timestamp: String(half - 3600), stop_timestamp: String(half), title: b64(`Earlier ${name}`), description: b64("Before.") },
+        { start_timestamp: String(half), stop_timestamp: String(half + 1800), title: b64(`Evening ${name}`), description: b64("What's on now.") },
+        { start_timestamp: String(half + 1800), stop_timestamp: String(half + 3600), title: b64(`Late ${name}`), description: b64("Later.") }] });
+    }
+  }
+  return send([]);
+};
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://x");
   asked.push(url.pathname);
   queries.push(url.pathname + url.search);
   const send = (v) => { res.writeHead(200, { "Content-Type": "application/json" }); res.end(JSON.stringify(v)); };
   const meta = (Metadata) => send({ MediaContainer: { Metadata } });
+  if (url.pathname === "/player_api.php") return panel(url, send);
   switch (url.pathname) {
     case "/api/v2/pins": return send({ id: 1, code: "R0KU" });
     case "/api/v2/pins/1": return send({ authToken: "account-token" });
@@ -110,6 +139,17 @@ const moveTo = async (kind, target, direction) => {
     await wait(250);
   }
   if (lastSaid(kind) !== target) throw new Error(`Couldn't get to ${kind} ${target}; on ${lastSaid(kind)}`);
+};
+// Up until the cursor is on the tabs.
+const toTabs = async () => {
+  const count = () => (output.match(/^TAB /gm) ?? []).length;
+  for (let i = 0; i < 8; i++) {
+    const before = count();
+    await key("Up");
+    await wait(600);
+    if (count() > before) return;
+  }
+  throw new Error("Couldn't get up to the tabs");
 };
 const failures = [];
 const expect = (what, ok) => { if (!ok) failures.push(what); console.log(`${ok ? "PASS" : "FAIL"} ${what}`); };
@@ -221,6 +261,90 @@ try {
   await wait(1500);
   await snap("roku-movies-drama");
   expect("a genre narrows the library", queries.some((q) => q.startsWith("/library/sections/1/all") && q.includes("genre=7")));
+  // Live TV: signed in to the provider with the on-screen keyboard.
+  await toTabs();
+  await moveTo("TAB", "live", "Right");
+  await wait(1200);
+  await key("Down"); await wait(800);
+  const typeInto = async (field, text) => {
+    await key("Select");
+    await until(`the keyboard for ${field}`, () => lastSaid("TRACE typing") === field, 5000);
+    await wait(800);
+    // The dialog opens on its OK button: up into the keys, type, down to OK.
+    await key("Up"); await wait(400);
+    for (const ch of text) { await key(`Lit_${/[a-z0-9.]/i.test(ch) ? ch : ch === ":" ? ":" : encodeURIComponent(ch)}`); await wait(350); }
+    await wait(400);
+    for (let i = 0; i < 4; i++) { await key("Down"); await wait(450); }
+    await snap(`roku-live-typing-${field}`);
+    await key("Select");
+    await wait(900);
+  };
+  await typeInto("host", `127.0.0.1:${port}`);
+  await key("Down"); await wait(500);
+  await typeInto("user", "ann");
+  await key("Down"); await wait(500);
+  await typeInto("password", "pw");
+  await snap("roku-live-sign-in");
+  await key("Down"); await wait(500);
+  await key("Select");
+  await until("signed in to live TV", () => output.includes("TRACE live signed in"), 15000).catch(() => undefined);
+  expect("signs in to the provider", output.includes("TRACE live signed in"));
+  await until("the channels' guide", () => queries.some((q) => q.includes("action=get_short_epg")), 15000).catch(() => undefined);
+  await wait(2500);
+  await snap("roku-live-channels");
+  expect("channels with what's on", queries.some((q) => q.includes("action=get_live_streams")) && queries.some((q) => q.includes("action=get_short_epg")));
+  expect("opens on All channels when there are no favorites", lastSaid("TRACE category") === "all");
+  // A favorite, with ✱ on the channel.
+  await key("Right"); await wait(600);
+  await key("Info");
+  await until("a favorite", () => output.includes("TRACE favorited 101"), 5000).catch(() => undefined);
+  expect("✱ adds a channel to Favorites", output.includes("TRACE favorited 101"));
+  await wait(800);
+  await snap("roku-live-channels-on");
+  // Watching: the banner, right to the next channel, ✱ for its menu, Back to the list.
+  await key("Select");
+  await until("the channel", () => output.includes("TRACE tuned 101"), 8000).catch(() => undefined);
+  expect("OK watches the channel", output.includes("TRACE tuned 101"));
+  await wait(1200);
+  await snap("roku-live-player");
+  await key("Right");
+  await until("the next channel", () => output.includes("TRACE tuned 102"), 5000).catch(() => undefined);
+  expect("right changes channel", output.includes("TRACE tuned 102"));
+  await key("Left"); await wait(800);
+  await key("Info");
+  await until("the channel's menu", () => output.includes("TRACE live menu shown"), 5000).catch(() => undefined);
+  await wait(600);
+  await snap("roku-live-player-menu");
+  expect("✱ in the player: Favorites and Start over", output.includes("TRACE live menu shown"));
+  await key("Back");
+  await until("the menu closed", () => output.includes("TRACE live menu hidden"), 5000).catch(() => undefined);
+  await wait(500);
+  await key("Back");
+  await until("off the channel", () => output.includes("TRACE live stopped"), 5000).catch(() => undefined);
+  expect("Back closes the menu, then leaves the channel", output.includes("TRACE live stopped"));
+  await wait(1200);
+  // The guide: what's to come, a reminder; what's over, from the archive.
+  await key("Up"); await wait(800);
+  await moveTo("PILL", "Guide", "Right");
+  await key("Select");
+  await until("the guide's grid", () => queries.some((q) => q.includes("action=get_simple_data_table")), 10000).catch(() => undefined);
+  await wait(2500);
+  await snap("roku-live-guide");
+  expect("the guide asks for each channel's listing", queries.some((q) => q.includes("action=get_simple_data_table")));
+  // Right to what's to come: a reminder. Left to what's over: from the channel's archive.
+  await moveTo("TRACE guide on", "Late News", "Right");
+  await key("Select");
+  await until("a reminder", () => output.includes("TRACE reminder on Late News"), 5000).catch(() => undefined);
+  expect("OK on what's to come sets a reminder", output.includes("TRACE reminder on Late News"));
+  await wait(600);
+  await snap("roku-live-guide-reminder");
+  await moveTo("TRACE guide on", "Earlier News", "Left");
+  await key("Select");
+  await until("catch-up", () => output.includes("TRACE tuned 101 from the archive"), 5000).catch(() => undefined);
+  expect("OK on what's over plays it from the archive", output.includes("TRACE tuned 101 from the archive"));
+  await wait(1500);
+  expect("from the panel's timeshift address", /^TRACE catch-up from \/timeshift\/ann\/pw\/60\/\d{4}-\d{2}-\d{2}:\d{2}-\d{2}\/101\.ts/m.test(output));
+  await key("Back"); await wait(1200);
   expect("no crash", !/BRIGHTSCRIPT_CRASH|Runtime Error|Syntax Error/i.test(output));
 } catch (error) {
   failures.push(String(error.message ?? error));
@@ -229,5 +353,6 @@ try {
   sim.kill("SIGKILL");
   server.close();
 }
+if (failures.length) console.log("Last traces:\n" + (output.match(/^TRACE .*$/gm) ?? []).slice(-25).join("\n"));
 console.log(failures.length ? `${failures.length} failed` : "all passed");
 process.exit(failures.length ? 1 : 0);

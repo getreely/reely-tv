@@ -12,4 +12,6 @@
   <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
   <script type="text/brightscript" uri="pkg:/source/lib/http.brs" />
   <script type="text/brightscript" uri="pkg:/source/lib/plexapi.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/xtream.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/xtreamapi.brs" />
 </component>

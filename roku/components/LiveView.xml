@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A channel, full screen, as the other apps play it: a banner with what's on, left and
+     right to change channel (or skip, from the archive), ✱ for Favorites, Start over and
+     Go live, Back to the channels. -->
+<component name="LiveView" extends="Group">
+  <interface>
+    <!-- { channels, index, catchUp (a programme or invalid), guide, table } -->
+    <field id="request" type="assocarray" onChange="start" />
+    <field id="go" type="assocarray" alwaysNotify="true" />
+    <field id="done" type="boolean" alwaysNotify="true" />
+    <field id="takeFocus" type="boolean" alwaysNotify="true" onChange="takeFocus" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/LiveView.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/xtream.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
+  <children>
+    <Rectangle width="1920" height="1080" color="0x000000FF" />
+    <Video id="video" width="1920" height="1080" enableUI="false" />
+    <Label id="wait" translation="[0, 500]" width="1920" horizAlign="center" color="0xB9B4B1FF" wrap="true" />
+    <Group id="banner">
+      <Rectangle translation="[0, 760]" width="1920" height="320" color="0x0A0909D9" />
+      <Label id="title" translation="[96, 800]" width="1700" color="0xF5F2F0FF" />
+      <Label id="facts" translation="[96, 870]" width="1700" color="0xB9B4B1FF" />
+      <Rectangle id="track" translation="[96, 920]" width="900" height="4" color="0x332E2FFF" />
+      <Rectangle id="bar" translation="[96, 920]" width="0" height="4" color="0xFF5E69FF" />
+      <Label id="hint" translation="[96, 960]" width="1700" color="0x86807EFF" />
+    </Group>
+    <Group id="menu" visible="false">
+      <Rectangle translation="[1380, 0]" width="540" height="1080" color="0x171415F2" />
+      <Label id="menuTitle" translation="[1420, 60]" width="460" color="0xB9B4B1FF" />
+      <LabelList id="menuList" translation="[1420, 130]" itemSize="[440, 64]" numRows="8" vertFocusAnimationStyle="floatingFocus"
+        focusBitmapUri="pkg:/images/pill.9.png" color="0xF5F2F0FF" focusedColor="0x0A0909FF" />
+    </Group>
+    <Timer id="bannerTimer" duration="5" />
+    <Timer id="ticker" duration="30" repeat="true" />
+  </children>
+</component>

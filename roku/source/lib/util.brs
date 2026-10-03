@@ -32,6 +32,9 @@ function Num_(v as dynamic) as dynamic
     if IsWhole_(t) or IsFraction_(t) then return v
     s = Str_(v).Trim()
     if s = "" then return 0
+    ' A whole number exactly: Val reads into a single-precision float, which can't hold a
+    ' time in seconds (1759523400 comes back as 1759523456).
+    if CreateObject("roRegex", "^-?\d{1,10}$", "").IsMatch(s) then return s.ToInt()
     return Val(s)
 end function
 

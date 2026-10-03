@@ -10,7 +10,7 @@ sub init()
         m.store.Flush()
     end if
     ' The session is {} while signed out: a field made from invalid can't hold one later.
-    m.global.addFields({ clientId: clientId, session: {}, home: {}, watchlist: [], recentSearches: ReadJson_("recentSearches", []), prefs: Prefs_() })
+    m.global.addFields({ clientId: clientId, session: {}, home: {}, watchlist: [], recentSearches: ReadJson_("recentSearches", []), prefs: Prefs_(), live: ReadJson_("live", {}) })
     m.http = {}
     m.signIn = m.top.findNode("signIn")
     m.shell = m.top.findNode("shell")
@@ -27,6 +27,12 @@ sub init()
     m.nav.observeField("chosen", "onTab")
     m.nav.observeField("leave", "intoScreen")
     m.player.observeField("done", "onPlayerDone")
+    m.liveView = m.top.findNode("liveView")
+    m.liveView.observeField("done", "onLiveDone")
+    m.liveView.observeField("go", "onGo")
+    m.notified = {}
+    m.top.findNode("reminderTimer").observeField("fire", "checkReminders")
+    m.top.findNode("reminderTimer").control = "start"
     m.top.findNode("claimTimer").observeField("fire", "claim")
     m.top.findNode("retryTimer").observeField("fire", "retryConnect")
     m.stack = []
@@ -43,7 +49,7 @@ end sub
 ' The settings kept on this Roku, with the Fire TV's defaults.
 function Prefs_() as object
     p = ReadJson_("prefs", {})
-    defaults = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [] }
+    defaults = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], streamFormat: "m3u8" }
     for each k in defaults
         if p[k] = invalid then p[k] = defaults[k]
     end for
@@ -272,7 +278,7 @@ sub openTab(id as string)
         movies: { name: "library", kind: "movie" },
         shows: { name: "library", kind: "show" },
         search: { name: "search" },
-        live: { name: "note", title: "Live TV", text: "Live TV is coming to Reely on Roku." },
+        live: { name: "live" },
         requests: { name: "note", title: "Requests", text: "Requests are coming to Reely on Roku." },
         settings: { name: "settings" }
     }
@@ -293,11 +299,12 @@ sub clearScreens()
 end sub
 
 function screenFor(route as object) as object
-    names = { home: "HomeScreen", library: "LibraryScreen", detail: "DetailScreen", list: "ListScreen", search: "SearchScreen", settings: "SettingsScreen", note: "NoteScreen" }
+    names = { home: "HomeScreen", library: "LibraryScreen", detail: "DetailScreen", list: "ListScreen", search: "SearchScreen", settings: "SettingsScreen", note: "NoteScreen", live: "LiveScreen" }
     node = CreateObject("roSGNode", names[route.name])
     node.observeField("go", "onGo")
     node.observeField("menu", "onMenu")
     if node.hasField("play") then node.observeField("play", "onPlay")
+    if node.hasField("watch") then node.observeField("watch", "onWatch")
     node.route = route
     return node
 end function
@@ -346,6 +353,12 @@ sub onGo(event as object)
     else if route.name = "prefs" then
         m.global.prefs = route.prefs
         WriteJson_("prefs", route.prefs)
+    else if route.name = "tab" then
+        openTab(route.tab)
+        intoScreen()
+    else if route.name = "live" then
+        m.global.live = route.live
+        WriteJson_("live", route.live)
     else if route.name = "signOut" then
         signOut()
     else if route.name = "server" then
@@ -460,6 +473,75 @@ sub onPlayerDone()
         c.focusIn = true
     end if
     loadHome()
+end sub
+
+' ------------------------------------------------------------------ Live TV
+
+sub onWatch(event as object)
+    watchLive(event.getData())
+end sub
+
+sub watchLive(request as object)
+    m.watchingFrom = topScreen()
+    m.liveView.visible = true
+    m.shell.visible = false
+    m.page = "live"
+    m.liveView.request = request
+    m.liveView.takeFocus = true
+end sub
+
+sub onLiveDone()
+    m.liveView.visible = false
+    m.shell.visible = true
+    m.page = "shell"
+    c = topScreen()
+    if c <> invalid then c.focusIn = true
+end sub
+
+' A reminder from the guide comes up as its programme starts: Watch, or Dismiss. Those
+' long over are let go.
+sub checkReminders()
+    s = m.global.live
+    if s = invalid or s.reminders = invalid or m.notice <> invalid then return
+    now = CreateObject("roDateTime").AsSeconds()
+    found = Xtream_Reminders(s.reminders, now, m.notified)
+    kept = found.kept
+    due = found.due
+    if due <> invalid then m.notified[Xtream_ReminderKey(due)] = true
+    if kept.Count() <> s.reminders.Count() then
+        s.reminders = kept
+        m.global.live = s
+        WriteJson_("live", s)
+    end if
+    if due <> invalid then showReminder(due)
+end sub
+
+sub showReminder(r as object)
+    m.notice = CreateObject("roSGNode", "ReminderNotice")
+    m.notice.reminder = r
+    m.notice.observeField("chosen", "onReminderChosen")
+    m.overlays.appendChild(m.notice)
+    m.notice.setFocus(true)
+    Trace_("reminder due " + r.title)
+end sub
+
+sub onReminderChosen()
+    chosen = m.notice.chosen
+    r = m.notice.reminder
+    m.overlays.removeChild(m.notice)
+    m.notice = invalid
+    if chosen = "watch" then
+        ' Whatever was playing stops first, told to Plex as ever.
+        if m.page = "player" then m.player.stopNow = true
+        watchLive({ channels: [r.channel], index: 0, catchUp: invalid, guide: {}, table: {} })
+    else if m.page = "live" then
+        m.liveView.takeFocus = true
+    else if m.page = "player" then
+        m.player.takeFocus = true
+    else
+        c = topScreen()
+        if c <> invalid then c.focusIn = true
+    end if
 end sub
 
 ' ------------------------------------------------------------------ The remote

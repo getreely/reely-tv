@@ -37,12 +37,12 @@ app (Amazon's Vega SDK, React Native), which can reuse the LG app's TypeScript c
 | Choose where sound plays (Bluetooth headphones) | ✅ | ✅ | — | — | ⬜ |
 | Touch: tap, double-tap skip, drag the bar | — | ✅ | — | — | ⬜ |
 | **Live TV** | | | | | |
-| Xtream login and M3U playlists | ✅ | ✅ | ✅ | ⬜ | ⬜ |
-| Categories, favorites, recently watched | ✅ | ✅ | ✅ | ⬜ | ⬜ |
-| Guide (grid on TV, list on phone), now and next | ✅ | ✅ | ✅ (grid) | ⬜ | ⬜ |
-| Catch-up, start over, rewind and Go live | ✅ | ✅ | ✅ (coloured keys) | ⬜ | ⬜ |
-| Reminders | ✅ | ✅ | ✅ | ⬜ | ⬜ |
-| Channel up/down, numbers on the remote | ✅ | ✅ (swipe) | ✅ | ⬜ | ⬜ |
+| Xtream login and M3U playlists | ✅ | ✅ | ✅ | 🟡 (Xtream tested; M3U parsing unit-tested) | ⬜ |
+| Categories, favorites, recently watched | ✅ | ✅ | ✅ | ✅ | ⬜ |
+| Guide (grid on TV, list on phone), now and next | ✅ | ✅ | ✅ (grid) | ✅ (grid; a playlist's own XMLTV guide not yet) | ⬜ |
+| Catch-up, start over, rewind and Go live | ✅ | ✅ | ✅ (coloured keys) | ✅ (catch-up tested; Start over and Go live on ✱) | ⬜ |
+| Reminders | ✅ | ✅ | ✅ | ✅ (set in the guide; when they're due, unit-tested) | ⬜ |
+| Channel up/down, numbers on the remote | ✅ | ✅ (swipe) | ✅ | ✅ (left and right; Roku remotes have no number keys) | ⬜ |
 | Multiview | ✅ | 🟡 (through the player's menus) | — (webOS gives an app one video at a time) | — | ⬜ |
 | **IPTV movies and shows** | | | | | |
 | Switch, tabs' IPTV library, Home rows, search, IPTV badge | ✅ | ✅ | ✅ | ⬜ | ⬜ |
@@ -64,4 +64,4 @@ app (Amazon's Vega SDK, React Native), which can reuse the LG app's TypeScript c
 |---|---|---|
 | Fire TV / Android TV and phone | `app/src/test` | `./gradlew :app:testDebugUnitTest` (Robolectric, Compose UI tests, screenshots with `-Pscreenshots`) |
 | LG | `webos/` | `npm test` (unit, 168) and `npm run e2e` (browser, the built app as the TV opens it); `npm run package` makes `reely-lg.ipk` |
-| Roku | `roku/` | `npm run check` (BrighterScript compile), `npm test` (unit, 83, BrightScript simulator) and `npm run e2e` (the app in the SceneGraph simulator, driven by the remote protocol, against a stand-in Plex); `npm run package` makes `reely-roku.zip` |
+| Roku | `roku/` | `npm run check` (BrighterScript compile), `npm test` (unit, 126, BrightScript simulator) and `npm run e2e` (the app in the SceneGraph simulator, driven by the remote protocol, against a stand-in Plex); `npm run package` makes `reely-roku.zip` |
