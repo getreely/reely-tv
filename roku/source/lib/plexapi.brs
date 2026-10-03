@@ -379,6 +379,14 @@ end function
 
 ' ---------------------------------------------------------------- Profiles
 
+' Who [token] belongs to, as a Home profile: { uuid, title, thumb, admin, restricted, protected },
+' or invalid when plex.tv doesn't say.
+function PlexApi_Account(plexTv as string, token as string, clientId as string) as dynamic
+    r = Http_Ask(plexTv + "/api/v2/user", "GET", PlexApi_Headers(token, clientId), "", 15000)
+    if r.code < 200 or r.code > 299 or r.json = invalid then return invalid
+    return Plex_HomeUser(r.json)
+end function
+
 function PlexApi_HomeUsers(plexTv as string, token as string, clientId as string) as object
     r = Http_Ask(plexTv + "/api/v2/home/users", "GET", PlexApi_Headers(token, clientId), "", 15000)
     out = []
@@ -386,12 +394,8 @@ function PlexApi_HomeUsers(plexTv as string, token as string, clientId as string
     users = r.json.users
     if users = invalid then users = r.json
     for each u in Arr_(users)
-        uuid = Str_(u.uuid)
-        if uuid <> "" then
-            title = Str_(u.title)
-            if title = "" then title = Str_(u.username)
-            out.Push({ uuid: uuid, title: title, thumb: Str_(u.thumb), admin: Bool_(u.admin), restricted: Bool_(u.restricted), protected: Bool_(u.protected) })
-        end if
+        user = Plex_HomeUser(u)
+        if user <> invalid then out.Push(user)
     end for
     return out
 end function

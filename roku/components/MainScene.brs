@@ -10,7 +10,7 @@ sub init()
         m.store.Flush()
     end if
     ' The session is {} while signed out: a field made from invalid can't hold one later.
-    m.global.addFields({ clientId: clientId, session: {}, home: {}, watchlist: [], recentSearches: ReadJson_("recentSearches", []), prefs: Prefs_(), live: ReadJson_("live", {}), reely: ReadJson_("reely", {}) })
+    m.global.addFields({ clientId: clientId, session: {}, home: {}, watchlist: [], recentSearches: ReadJson_("recentSearches", []), prefs: Prefs_(), live: ReadJson_("live", {}), reely: ReadJson_("reely", {}), profile: ReadJson_("plexProfile", {}) })
     m.http = {}
     m.signIn = m.top.findNode("signIn")
     m.shell = m.top.findNode("shell")
@@ -145,6 +145,8 @@ sub onClaim(r as object)
     m.store.Write("plexToken", token)
     m.store.Write("plexAccountToken", token)
     m.store.Flush()
+    ' A Plex Home of several people: "Who's watching?" once, straight after signing in.
+    m.askWho = true
     connect()
 end sub
 
@@ -183,6 +185,14 @@ sub answered(r as object)
     else if r.op = "watched" or r.op = "removeCW" then
         loadHome()
         refreshCurrent()
+    else if r.op = "homeUsers" then
+        profile = { user: r.user, homeUsers: Arr_(r.users) }
+        m.global.profile = profile
+        WriteJson_("plexProfile", profile)
+        if m.askWho = true and profile.homeUsers.Count() > 1 then showProfiles()
+        m.askWho = false
+    else if r.op = "switchUser" then
+        onSwitched(r.answer)
     else if r.op = "nextEpisode" then
         if r.answer.episode <> invalid then playRequest({ item: r.answer.episode, resume: true, queue: r.answer.queue, mediaIndex: 0 })
     end if
@@ -217,6 +227,7 @@ sub onConnected(a as object)
     m.store.Write("server", first.name)
     m.store.Flush()
     m.global.session = { token: m.token, accountToken: m.store.Read("plexAccountToken"), base: first.base, serverToken: first.token, serverName: first.name, servers: a.servers, libraries: a.libraries }
+    loadProfiles()
     if m.stack.Count() = 0 then
         showShell()
         openTab("home")
@@ -356,6 +367,8 @@ sub onGo(event as object)
     else if route.name = "tab" then
         openTab(route.tab)
         intoScreen()
+    else if route.name = "profiles" then
+        showProfiles()
     else if route.name = "reely" then
         m.global.reely = route.reely
         WriteJson_("reely", route.reely)
@@ -402,6 +415,8 @@ sub signOut()
     end for
     m.store.Flush()
     m.global.session = {}
+    m.global.profile = {}
+    m.store.Delete("plexProfile")
     m.global.home = {}
     m.global.watchlist = []
     clearScreens()
@@ -481,6 +496,77 @@ sub onPlayerDone()
         c.focusIn = true
     end if
     loadHome()
+end sub
+
+' ------------------------------------------------------------------ Profiles
+
+' Who's signed in, and who else is in their Plex Home to switch to.
+sub loadProfiles()
+    account = m.store.Read("plexAccountToken")
+    if account = "" then account = m.token
+    Ask_("homeUsers", { token: account, current: m.token })
+end sub
+
+sub showProfiles()
+    profile = m.global.profile
+    if profile = invalid or Arr_(profile.homeUsers).Count() < 2 or m.profiles <> invalid then return
+    m.profiles = CreateObject("roSGNode", "ProfilesView")
+    m.profiles.currentUuid = Iif_(profile.user <> invalid, Str_(profile.user.uuid), "")
+    m.profiles.users = profile.homeUsers
+    m.profiles.observeField("chosen", "onProfileChosen")
+    m.overlays.appendChild(m.profiles)
+    m.profiles.setFocus(true)
+    Trace_("who's watching")
+end sub
+
+sub closeProfiles()
+    if m.profiles = invalid then return
+    m.overlays.removeChild(m.profiles)
+    m.profiles = invalid
+    c = topScreen()
+    if c <> invalid then c.focusIn = true
+end sub
+
+sub onProfileChosen()
+    chosen = m.profiles.chosen
+    if chosen.close = true then
+        closeProfiles()
+        return
+    end if
+    for each u in m.global.profile.homeUsers
+        if u.uuid = chosen.uuid then
+            m.switchingTo = u
+            m.profiles.busy = u.title
+        end if
+    end for
+    account = m.store.Read("plexAccountToken")
+    if account = "" then account = m.token
+    Ask_("switchUser", { token: account, uuid: chosen.uuid, pin: Str_(chosen.pin) })
+end sub
+
+' Another profile: its own token, and everything on screen, the last profile's, read again.
+sub onSwitched(a as object)
+    if m.profiles = invalid then return
+    if a = invalid or a.token = invalid then
+        m.profiles.busy = ""
+        m.profiles.error = Iif_(a = invalid, "Couldn't switch profiles. Try again.", Str_(a.error))
+        return
+    end if
+    Trace_("switched to " + m.switchingTo.title)
+    m.token = a.token
+    m.store.Write("plexToken", a.token)
+    m.store.Flush()
+    profile = m.global.profile
+    profile.user = m.switchingTo
+    m.global.profile = profile
+    WriteJson_("plexProfile", profile)
+    m.overlays.removeChild(m.profiles)
+    m.profiles = invalid
+    clearScreens()
+    m.stack = []
+    m.global.home = {}
+    m.global.watchlist = []
+    connect()
 end sub
 
 ' ------------------------------------------------------------------ Live TV

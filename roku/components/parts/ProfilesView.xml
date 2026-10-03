@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- "Who's watching?", as Plex's own apps and the other Reely apps ask it: the profiles of
+     the Plex Home, and a PIN for those that have one. -->
+<component name="ProfilesView" extends="Group">
+  <interface>
+    <field id="users" type="array" onChange="build" />
+    <field id="currentUuid" type="string" />
+    <!-- { uuid, pin } to switch to, or { close: true }. -->
+    <field id="chosen" type="assocarray" alwaysNotify="true" />
+    <field id="error" type="string" onChange="showError" />
+    <field id="busy" type="string" onChange="showBusy" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/parts/ProfilesView.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
+  <children>
+    <Rectangle width="1920" height="1080" color="0x0A0909F7" />
+    <Label id="title" translation="[0, 220]" width="1920" horizAlign="center" color="0xF5F2F0FF" />
+    <MarkupGrid id="people" translation="[0, 360]" itemComponentName="PosterItem" itemSize="[200, 290]" itemSpacing="[48, 0]"
+      numRows="1" drawFocusFeedback="false" />
+    <PinPad id="pad" translation="[660, 400]" pinLength="4" visible="false" />
+    <Label id="note" translation="[0, 760]" width="1920" horizAlign="center" color="0xB9B4B1FF" wrap="true" />
+  </children>
+</component>

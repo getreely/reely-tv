@@ -93,6 +93,15 @@ const server = http.createServer((req, res) => {
   switch (url.pathname) {
     case "/api/v2/pins": return send({ id: 1, code: "R0KU" });
     case "/api/v2/pins/1": return send({ authToken: "account-token" });
+    // A Plex Home: the owner, and a profile with a PIN.
+    case "/api/v2/user": {
+      const token = req.headers["x-plex-token"];
+      return token === "kid-token" ? send({ uuid: "u2", title: "Kid", restricted: true, protected: true }) : send({ uuid: "u1", title: "Ann", homeAdmin: true });
+    }
+    case "/api/v2/home/users": return send({ users: [{ uuid: "u1", title: "Ann", admin: true }, { uuid: "u2", title: "Kid", restricted: true, protected: true }] });
+    case "/api/v2/home/users/u2/switch":
+      if (url.searchParams.get("pin") !== "1234") { res.writeHead(401); return res.end(); }
+      return send({ authToken: "kid-token" });
     case "/api/v2/resources":
       return send([{ name: "Living Room", provides: "server", owned: true, accessToken: "server-token",
         connections: [{ uri: `http://127.0.0.1:${port}`, address: "127.0.0.1", port, local: true, relay: false }] }]);
@@ -196,6 +205,13 @@ const expect = (what, ok) => { if (!ok) failures.push(what); console.log(`${ok ?
 
 try {
   await until("Home's rows to load", () => asked.includes("/hubs") && asked.filter((p) => p === "/library/sections/2/all").length >= 2);
+  // Signed in to a Plex Home: "Who's watching?", once; the owner, already watching, carries on.
+  await until("Who's watching", () => output.includes("TRACE who's watching"), 10000).catch(() => undefined);
+  expect("a Plex Home asks who's watching after signing in", output.includes("TRACE who's watching"));
+  await wait(1200);
+  await snap("roku-whos-watching");
+  await key("Select");
+  await wait(800);
   await wait(2500);
   await snap("roku-home");
   expect("signed in with the code, found the server", asked.includes("/api/v2/resources") && asked.includes("/identity"));
@@ -420,6 +436,28 @@ try {
   console.log("Reely was asked: " + JSON.stringify(sent));
   expect("asks for the show, the seasons chosen, in the default library",
     !!sent && sent.tmdbId === 1399 && JSON.stringify(sent.seasons) === "[2,3]" && sent.libraryId === 2);
+  // Settings: switch to the profile with a PIN.
+  await key("Back"); await wait(1200);
+  await toTabs();
+  await moveTo("TAB", "settings", "Right");
+  await key("Select"); await wait(1500);
+  await moveTo("PILL", "Switch profile", "Down");
+  await key("Select");
+  await until("the profiles", () => (output.match(/TRACE who's watching/g) ?? []).length >= 2, 5000).catch(() => undefined);
+  await wait(800);
+  await key("Right"); await wait(600);
+  await key("Select");
+  await until("the PIN", () => output.includes("TRACE pin for Kid"), 5000).catch(() => undefined);
+  await wait(800);
+  for (const d of "1234") { await key(`Lit_${d}`); await wait(400); }
+  await until("switched", () => output.includes("TRACE switched to Kid"), 10000).catch(() => undefined);
+  expect("a PIN switches profile", output.includes("TRACE switched to Kid"));
+  const hubsBefore = asked.filter((p) => p === "/hubs").length;
+  await wait(600);
+  await snap("roku-switching-profile");
+  await until("the profile's Home", () => asked.filter((p) => p === "/hubs").length > hubsBefore, 15000).catch(() => undefined);
+  await wait(3000);
+  await snap("roku-switched-profile");
   expect("no crash", !/BRIGHTSCRIPT_CRASH|Runtime Error|Syntax Error/i.test(output));
 } catch (error) {
   failures.push(String(error.message ?? error));

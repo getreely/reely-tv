@@ -604,3 +604,25 @@ function Plex_SubtitlePlan(p as object) as object
     end for
     return { on: invalid, text: false, burn: false }
 end function
+
+' A Plex Home profile as plex.tv lists it, or invalid without its id.
+function Plex_HomeUser(u as dynamic) as dynamic
+    if u = invalid or type(u) <> "roAssociativeArray" then return invalid
+    uuid = Str_(u.uuid)
+    if uuid = "" then return invalid
+    title = Str_(u.title)
+    if title = "" then title = Str_(u.username)
+    if title = "" then title = "Plex user"
+    thumb = Str_(u.thumb)
+    if LCase(Left(thumb, 4)) <> "http" then thumb = ""
+    ' A PIN on the profile; hasPassword is the account's password, not this.
+    return { uuid: uuid, title: title, thumb: thumb, admin: Bool_(u.admin) or Bool_(u.homeAdmin), restricted: Bool_(u.restricted), protected: Bool_(u.protected) }
+end function
+
+' What a profile is, under its name: whose this is, else what kind.
+function Plex_ProfileRole(u as object, currentUuid as string) as string
+    if u.uuid = currentUuid then return "Watching now"
+    if u.admin then return "Owner"
+    if u.restricted then return "Managed"
+    return ""
+end function

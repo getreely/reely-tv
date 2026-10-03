@@ -9,6 +9,7 @@ sub init()
     m.global.observeField("session", "build")
     m.global.observeField("live", "build")
     m.global.observeField("reely", "build")
+    m.global.observeField("profile", "build")
 end sub
 
 function Modes_() as object
@@ -102,7 +103,18 @@ function Settings_() as object
     out.Push({ group: "Home", title: "Rows on Home", note: "Switch a row off to leave it out of Home.", labels: labels, on: on, key: "rows" })
 
     if s <> invalid and s.base <> invalid then
-        out.Push({ group: "Plex", title: "Signed in", note: "Watching from " + Str_(s.serverName), labels: ["Sign out of Plex"], on: [false], key: "signOut" })
+        profile = m.global.profile
+        who = "Signed in"
+        canSwitch = false
+        if profile <> invalid then
+            if profile.user <> invalid then who = Str_(profile.user.title)
+            canSwitch = Arr_(profile.homeUsers).Count() > 1
+        end if
+        if canSwitch then
+            out.Push({ group: "Plex", title: who, note: "Watching from " + Str_(s.serverName), labels: ["Switch profile", "Sign out of Plex"], on: [false, false], key: "plexAccount" })
+        else
+            out.Push({ group: "Plex", title: who, note: "Watching from " + Str_(s.serverName), labels: ["Sign out of Plex"], on: [false], key: "signOut" })
+        end if
         servers = Arr_(s.servers)
         if servers.Count() > 1 then
             labels = []
@@ -318,6 +330,9 @@ sub onPressed(event as object)
         return
     else if key = "goLive" then
         m.top.go = { name: "tab", tab: "live" }
+        return
+    else if key = "plexAccount" then
+        m.top.go = Iif_(i = 0, { name: "profiles" }, { name: "signOut" })
         return
     else if key = "signOut" then
         m.top.go = { name: "signOut" }

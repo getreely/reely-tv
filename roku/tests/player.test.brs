@@ -23,4 +23,12 @@ sub Main()
     q = [{ ratingKey: "e1" }, { ratingKey: "e2" }, { ratingKey: "e3" }]
     Expect("the next episode", Plex_NextInQueue(q, { ratingKey: "e2" }).ratingKey, "e3")
     Expect("none after the last", Plex_NextInQueue(q, { ratingKey: "e3" }), invalid)
+
+    ' Plex Home profiles.
+    owner = Plex_HomeUser({ uuid: "u1", title: "", username: "ann", thumb: "https://plex.tv/users/1/avatar", homeAdmin: true })
+    Expect("named by username when untitled, its picture", [owner.title, owner.thumb, owner.admin], ["ann", "https://plex.tv/users/1/avatar", true])
+    kid = Plex_HomeUser({ uuid: "u2", title: "Kid", restricted: true, protected: true, thumb: "/rel" })
+    Expect("a managed profile with a PIN", [kid.restricted, kid.protected, kid.thumb], [true, true, ""])
+    Expect("no id, no profile", Plex_HomeUser({ title: "x" }), invalid)
+    Expect("whose this is", [Plex_ProfileRole(owner, "u1"), Plex_ProfileRole(owner, "u2"), Plex_ProfileRole(kid, "u1")], ["Watching now", "Owner", "Managed"])
 end sub
