@@ -39,9 +39,12 @@ export interface HomeRows {
   recentMovies: PlexItem[];
   playlists: PlexItem[];
   watchlist: PlexItem[];
+  /** The IPTV provider's newest, while its movies and shows are switched on. */
+  iptvMovies: PlexItem[];
+  iptvShows: PlexItem[];
 }
 
-export const emptyHome = (): HomeRows => ({ continueWatching: [], recentEpisodes: [], recentMovies: [], playlists: [], watchlist: [] });
+export const emptyHome = (): HomeRows => ({ continueWatching: [], recentEpisodes: [], recentMovies: [], playlists: [], watchlist: [], iptvMovies: [], iptvShows: [] });
 
 export const homeIsEmpty = (h: HomeRows) =>
   !h.continueWatching.length && !h.recentEpisodes.length && !h.recentMovies.length && !h.playlists.length && !h.watchlist.length;
@@ -143,6 +146,8 @@ export async function loadHome(sources: LibraryChoice[]): Promise<HomeRows | nul
     recentMovies: stableSort(flatten(movies), (a, b) => b.addedAt - a.addedAt).slice(0, 40),
     playlists: flatten(playlists),
     watchlist: [],
+    iptvMovies: [],
+    iptvShows: [],
   };
 }
 

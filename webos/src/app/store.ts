@@ -8,6 +8,8 @@ import { emptyHome, loadHome, type HomeRows, type LibraryChoice } from "./home";
 import { randomHex } from "../core/storage";
 import * as reely from "../api/reely";
 import * as xtream from "../api/xtream";
+import * as vod from "../api/vod";
+import { IptvLibrary, IptvWatch, IPTV_SOURCE, isIptv } from "../api/vod";
 import type { Programme, XtreamAccount, XtreamCategory, XtreamChannel, XtreamCredentials } from "../api/xtream";
 import type { RequestDetail, RequestPlaces, RequestRecord, RequestRow, RequestTitle, TitleMarks } from "../api/reely";
 
@@ -215,23 +217,52 @@ export interface Prefs {
   upNextSeconds: number;
   /** Home's rows switched off, by id. */
   hiddenRows: HomeRowId[];
+  /** The IPTV provider's movies and shows in the tabs, on Home and in search. */
+  iptvLibrary: boolean;
+  /** A title in both: the provider's copy shown rather than Plex's. */
+  iptvWins: boolean;
 }
 
+export interface IptvState {
+  loading: boolean;
+  error: string | null;
+  /** The catalogue is in hand. */
+  ready: boolean;
+}
+
+/** The provider's movies or shows, as one more library in a tab. */
+export const iptvChoice = (kind: Kind): LibraryChoice => ({
+  serverName: "IPTV", baseUrl: IPTV_SOURCE, token: "", section: { key: `iptv-${kind}`, title: "IPTV", type: kind },
+});
+export const isIptvChoice = (c: LibraryChoice | null) => c?.baseUrl === IPTV_SOURCE;
+const IPTV_SORTS: Record<string, vod.Sort> = { "titleSort:asc": "TITLE", "addedAt:desc": "ADDED", "originallyAvailableAt:desc": "RELEASED", "rating:desc": "RATED" };
+
 /** Home's rows, as Settings lists them. */
-export type HomeRowId = "continueWatching" | "recentEpisodes" | "recentMovies" | "watchlist" | "playlists";
+export type HomeRowId = "continueWatching" | "recentEpisodes" | "recentMovies" | "watchlist" | "playlists" | "iptvMovies" | "iptvShows";
 export const HOME_ROWS: Array<[HomeRowId, string]> = [
   ["continueWatching", "Continue Watching"],
   ["recentEpisodes", "Recently Added Episodes"],
   ["recentMovies", "Recently Added Movies"],
   ["watchlist", "Watchlist"],
   ["playlists", "Playlists"],
+  ["iptvMovies", "New Movies on IPTV"],
+  ["iptvShows", "New Shows on IPTV"],
 ];
 
 export const UP_NEXT_CHOICES = [0, 5, 10, 12, 15, 20, 30];
-const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [] };
+const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], iptvLibrary: false, iptvWins: false };
 
 /** As the Fire TV offers them. */
 export const BITRATE_CHOICES = [0, 20_000, 12_000, 8_000, 4_000, 2_000];
+
+/** A bare item: the film a page is about, when there's nothing more to go on. */
+function emptyItemFor(ratingKey: string, title: string, type: string): PlexItem {
+  return {
+    ratingKey, title, type, thumb: null, art: null, summary: null, year: null, index: null, parentIndex: null, parentRatingKey: null,
+    parentTitle: null, grandparentRatingKey: null, grandparentTitle: null, grandparentThumb: null, durationMs: 0, viewOffsetMs: 0,
+    leafCount: 0, viewedLeafCount: 0, viewCount: 0, addedAt: 0, lastViewedAt: 0, qualities: [], librarySectionId: null, serverBase: IPTV_SOURCE,
+  };
+}
 
 const PEOPLE_RESULTS = 20;
 const WATCHLIST_ROW = 40;
@@ -256,6 +287,7 @@ export interface AppState {
   search: SearchState;
   list: ListPage | null;
   prefs: Prefs;
+  iptv: IptvState;
 }
 
 const emptyBrowse = (): Browse => ({
@@ -283,6 +315,7 @@ export function initialState(): AppState {
     search: emptySearch([]),
     list: null,
     prefs: DEFAULT_PREFS,
+    iptv: { loading: false, error: null, ready: false },
   };
 }
 
@@ -326,12 +359,17 @@ export class App {
   private listRun = 0;
   /** Every live channel, fetched once, for search to match names against. */
   private allChannels: Promise<XtreamChannel[]> | null = null;
+  /** The provider's movies and shows, matched with Plex, with where each was left. */
+  readonly iptv = new IptvLibrary();
+  /** Home's rows as Plex gave them, before the provider's are put in among them. */
+  private plexHome: HomeRows = emptyHome();
 
   constructor(
     readonly store: Store = new Store(),
     private wait: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
   ) {
     plex.identity.clientId = clientId(store);
+    this.iptv.watch = new IptvWatch(store, "iptvWatch");
   }
 
   get state() {
@@ -414,6 +452,8 @@ export class App {
         skipCredits: prefs.skipCredits === true,
         upNextSeconds: typeof prefs.upNextSeconds === "number" ? Math.max(0, Math.min(30, prefs.upNextSeconds)) : DEFAULT_PREFS.upNextSeconds,
         hiddenRows: Array.isArray(prefs.hiddenRows) ? prefs.hiddenRows.filter((r) => HOME_ROWS.some(([id]) => id === r)) : [],
+        iptvLibrary: prefs.iptvLibrary === true,
+        iptvWins: prefs.iptvWins === true,
       },
     }));
     const live = this.store.json<XtreamCredentials | null>("xtream", null);
@@ -523,6 +563,7 @@ export class App {
     this.store.set("server", chosen.server.name);
     this.setPlex({ servers, serverName: chosen.server.name, baseUrl: chosen.base, serverToken: chosen.server.accessToken, libraries, finding: false, error: null });
     await this.refreshHome();
+    void this.loadIptv();
   }
 
   // ---------------------------------------------------------------- Profiles
@@ -560,8 +601,88 @@ export class App {
       this.set((s) => ({ ...s, homeBusy: false, homeError: "Couldn't reach your Plex server. Trying again…" }));
       return;
     }
-    this.set((s) => ({ ...s, home: { ...rows, watchlist: s.home.watchlist }, homeBusy: false, homeError: null }));
+    this.plexHome = rows;
+    this.set((s) => ({ ...s, homeBusy: false, homeError: null }));
+    this.composeHome();
     void this.refreshWatchlist();
+  }
+
+  /**
+   * Home: Plex's rows, with the provider's put in among them while they're switched on —
+   * its newest, and what was being watched from it in Continue Watching — and, where the
+   * provider's copy wins, Plex's copy of the same title left out.
+   */
+  private composeHome() {
+    const on = this.iptvOn();
+    const wins = this.current.prefs.iptvWins;
+    const rows = this.plexHome;
+    const keep = (i: PlexItem) => !on || !this.iptv.hides(i, wins);
+    const continuing = on && this.iptv.watch ? this.iptv.watch.continueWatching() : [];
+    const continueWatching = stableSort([...rows.continueWatching.filter(keep), ...continuing], (a, b) => b.lastViewedAt - a.lastViewedAt).slice(0, 40);
+    this.set((s) => ({
+      ...s,
+      home: {
+        ...rows,
+        continueWatching,
+        recentMovies: rows.recentMovies.filter(keep),
+        watchlist: s.home.watchlist,
+        iptvMovies: on ? this.iptv.newest(true, wins) : [],
+        iptvShows: on ? this.iptv.newest(false, wins) : [],
+      },
+    }));
+  }
+
+  /** The provider's movies and shows are switched on and there to show. */
+  private iptvOn() {
+    const c = this.current.live.credentials;
+    return this.current.prefs.iptvLibrary && !!c && !xtream.isPlaylist(c) && this.current.iptv.ready;
+  }
+
+  /**
+   * The provider's catalogue, once, and what Plex has, for matching the two: a title in
+   * both is shown once, as the Fire TV shows it.
+   */
+  async loadIptv() {
+    const c = this.current.live.credentials;
+    if (!this.current.prefs.iptvLibrary || !c || xtream.isPlaylist(c) || this.current.iptv.loading) return;
+    this.set((s) => ({ ...s, iptv: { ...s.iptv, loading: true, error: null } }));
+    try {
+      if (!this.current.iptv.ready) this.iptv.setCatalog(await vod.catalog(c));
+      const libraries = this.current.plex.libraries;
+      const entries = async (type: Kind) =>
+        (await Promise.all(
+          libraries.filter((l) => l.section.type === type).map((l) =>
+            plex.libraryEntries(l.baseUrl, l.token, l.section.key, type === "movie" ? plex.TYPE_MOVIE : plex.TYPE_SHOW).catch(() => [] as plex.PlexIndexEntry[]),
+          ),
+        )).reduce<plex.PlexIndexEntry[]>((all, e) => all.concat(e), []);
+      const [movies, shows] = await Promise.all([entries("movie"), entries("show")]);
+      this.iptv.setPlex(movies, shows);
+      if (this.current.live.credentials !== c) return;
+      this.set((s) => ({ ...s, iptv: { loading: false, error: null, ready: true } }));
+      this.composeHome();
+    } catch (error) {
+      this.set((s) => ({ ...s, iptv: { ...s.iptv, loading: false, error: readable(error) } }));
+    }
+  }
+
+  setIptvLibrary(on: boolean) {
+    this.setPrefs({ iptvLibrary: on });
+    this.composeHome();
+    if (on) void this.loadIptv();
+    else this.leaveIptvTabs();
+  }
+
+  setIptvWins(wins: boolean) {
+    this.setPrefs({ iptvWins: wins });
+    this.composeHome();
+    for (const kind of ["movie", "show"] as Kind[]) if (isIptvChoice(this.current.browse[kind].choice)) void this.loadMore(kind, true);
+  }
+
+  /** The tabs off the provider's library, once it's switched off. */
+  private leaveIptvTabs() {
+    for (const kind of ["movie", "show"] as Kind[]) {
+      if (isIptvChoice(this.current.browse[kind].choice)) this.setBrowse(kind, { ...emptyBrowse() });
+    }
   }
 
   /** Changes made here, so a list read before one isn't put over it. */
@@ -631,6 +752,18 @@ export class App {
     const page = this.current.detail;
     const d = page?.detail;
     if (!page || !d || !page.serverBase) return;
+    if (page.serverBase === IPTV_SOURCE) {
+      const target = plex.isShow(d) ? page.focused : null;
+      const k = vod.parseKey(d.ratingKey);
+      const title = k?.kind === "movie" ? this.iptv.movie(k.id) : null;
+      const film = { ...(title ? vod.itemOf(title) : emptyItemFor(d.ratingKey, d.title, "movie")), durationMs: d.durationMs };
+      const item = target ?? film;
+      const watched = plex.isWatched(this.iptv.marked(item));
+      this.iptv.watch?.setWatched([item], !watched);
+      void this.openDetail(d.ratingKey, IPTV_SOURCE, target?.ratingKey ?? null);
+      this.composeHome();
+      return;
+    }
     const token = this.tokenFor(page.serverBase);
     if (!token) return;
     const target = plex.isShow(d) ? page.focused : null;
@@ -662,8 +795,12 @@ export class App {
   // ---------------------------------------------------------------- Libraries
 
   librariesOf(kind: Kind): LibraryChoice[] {
-    return this.current.plex.libraries.filter((l) => l.section.type === kind);
+    const plexOnes = this.current.plex.libraries.filter((l) => l.section.type === kind);
+    // The provider's, after Plex's: one choice, the same object each time, so it reads as chosen.
+    return this.iptvOn() ? [...plexOnes, this.iptvChoices[kind]] : plexOnes;
   }
+
+  private readonly iptvChoices: Record<Kind, LibraryChoice> = { movie: iptvChoice("movie"), show: iptvChoice("show") };
 
   async openLibrary(kind: Kind, choice?: LibraryChoice) {
     const target = choice ?? this.current.browse[kind].choice ?? this.librariesOf(kind)[0] ?? null;
@@ -683,6 +820,10 @@ export class App {
       },
     }));
     const type = kind === "movie" ? plex.TYPE_MOVIE : plex.TYPE_SHOW;
+    if (isIptvChoice(target)) {
+      await this.loadMore(kind);
+      return;
+    }
     void Promise.all([
       plex.genres(target.baseUrl, target.token, target.section.key, type).catch(() => []),
       plex.decades(target.baseUrl, target.token, target.section.key, type).catch(() => []),
@@ -712,7 +853,7 @@ export class App {
   private async loadLetters(kind: Kind) {
     const b = this.current.browse[kind];
     const choice = b.choice;
-    if (!choice) return;
+    if (!choice || isIptvChoice(choice)) return;
     const filters = filtersOf(b);
     const letters = await plex
       .firstCharacters(choice.baseUrl, choice.token, choice.section.key, kind === "movie" ? plex.TYPE_MOVIE : plex.TYPE_SHOW, filters)
@@ -742,10 +883,25 @@ export class App {
   }
 
   /** The next page of the grid, in before it's reached. */
-  async loadMore(kind: Kind) {
+  async loadMore(kind: Kind, restart = false) {
     const browse = this.current.browse[kind];
     const choice = browse.choice;
     if (!choice) return;
+    if (isIptvChoice(choice)) {
+      // The provider's library is all in hand: the whole grid at once, its categories as
+      // the genres, the A–Z counts from it.
+      if (!restart && browse.items.length && !browse.busy) return;
+      const grid = this.iptv.browse(
+        kind === "movie",
+        { sort: IPTV_SORTS[browse.sort] ?? "TITLE", categoryId: browse.genre?.id ?? null, unwatchedOnly: browse.unwatched },
+        this.current.prefs.iptvWins,
+      );
+      this.setBrowse(kind, {
+        items: grid.items, total: grid.items.length, busy: false, error: null,
+        genres: grid.categories.map((c) => ({ id: c.id, title: c.name })), decades: [], letters: grid.letters,
+      });
+      return;
+    }
     const offset = browse.items.length;
     const type = kind === "movie" ? plex.TYPE_MOVIE : plex.TYPE_SHOW;
     const filters = filtersOf(browse);
@@ -775,6 +931,10 @@ export class App {
     const token = this.tokenFor(base);
     const key = `${base}|${ratingKey}`;
     this.set((s) => ({ ...s, detail: { key, serverBase: base, detail: null, seasons: [], season: null, episodes: [], focused: null, related: [], trailers: [], versionIndex: 0, busy: true, error: null } }));
+    if (base === IPTV_SOURCE) {
+      await this.openIptvDetail(key, ratingKey, episodeKey);
+      return;
+    }
     if (!base || !token) {
       this.setDetail(key, { busy: false, error: "Couldn't reach the server this title is on." });
       return;
@@ -799,9 +959,54 @@ export class App {
     }
   }
 
+  /** One of the provider's films or series: its page from the panel, its episodes marked from what's kept here. */
+  private async openIptvDetail(key: string, ratingKey: string, episodeKey: string | null) {
+    const c = this.current.live.credentials;
+    const k = vod.parseKey(ratingKey);
+    if (!c || !k || (k.kind !== "movie" && k.kind !== "show")) {
+      this.setDetail(key, { busy: false, error: "Sign in to your IPTV provider in Live TV to watch this." });
+      return;
+    }
+    const wins = this.current.prefs.iptvWins;
+    try {
+      if (k.kind === "movie") {
+        const title = this.iptv.movie(k.id);
+        const info = await vod.movieInfo(c, k.id);
+        const item = this.iptv.marked(title ? vod.itemOf(title) : emptyItemFor(ratingKey, info?.name ?? "Film", "movie"));
+        const detail = { ...vod.detailOf(ratingKey, title, info, false), durationMs: info?.durationMs || item.durationMs, viewOffsetMs: item.viewOffsetMs, viewCount: item.viewCount };
+        this.setDetail(key, { detail, busy: false, related: this.iptv.related(item, wins) });
+        return;
+      }
+      const title = this.iptv.series(k.id);
+      const info = this.iptv.cachedSeries(k.id) ?? (await vod.seriesInfo(c, k.id));
+      if (!info) throw new Error("Your provider doesn't have this series any more.");
+      this.iptv.keepSeries(k.id, info);
+      const detail = vod.detailOf(ratingKey, title, info, true);
+      const seasons = vod.seasonItems(k.id, detail.title, detail.thumb, info).map(this.iptv.marked);
+      const all = info.seasons.reduce<PlexItem[]>((list, s) => list.concat(vod.episodeItems(k.id, detail.title, detail.thumb, detail.art, s)), []).map(this.iptv.marked);
+      // The season it's up to (or the episode it was opened on), else the first proper one.
+      const target = all.find((e) => e.ratingKey === episodeKey) ?? plex.nextEpisode(all);
+      const season = seasons.find((s) => s.ratingKey === target?.parentRatingKey) ?? seasons.find((s) => (s.index ?? 0) > 0) ?? seasons[0] ?? null;
+      const episodes = season ? all.filter((e) => e.parentRatingKey === season.ratingKey) : [];
+      const focused = episodes.find((e) => e.ratingKey === target?.ratingKey) ?? plex.nextEpisode(episodes);
+      this.setDetail(key, { detail, seasons, season, episodes, focused, busy: false, related: this.iptv.related(title ? vod.itemOf(title) : emptyItemFor(ratingKey, detail.title, "show"), wins) });
+    } catch (error) {
+      this.setDetail(key, { busy: false, error: readable(error) });
+    }
+  }
+
   async selectSeason(season: PlexItem) {
     const page = this.current.detail;
     if (!page || !page.serverBase) return;
+    if (page.serverBase === IPTV_SOURCE) {
+      const k = vod.parseKey(season.ratingKey);
+      const show = k?.kind === "season" ? this.iptv.cachedSeries(k.showId) : null;
+      const raw = k?.kind === "season" ? show?.seasons.find((s) => s.number === k.number) : null;
+      if (!k || k.kind !== "season" || !raw || !page.detail) return;
+      const episodes = vod.episodeItems(k.showId, page.detail.title, page.detail.thumb, page.detail.art, raw).map(this.iptv.marked);
+      this.setDetail(page.key, { season, episodes, focused: plex.nextEpisode(episodes) });
+      return;
+    }
     const token = this.tokenFor(page.serverBase);
     if (!token) return;
     await this.loadSeason(page.key, page.serverBase, token, season, page.detail?.onDeckKey ?? null, page.seasons);
@@ -830,6 +1035,10 @@ export class App {
    */
   async play(item: PlexItem, resume: boolean, direct: (p: plex.PlexPlayback) => boolean, queue: PlexItem[] = [], mediaIndex = 0) {
     const base = item.serverBase ?? this.current.plex.baseUrl;
+    if (base === IPTV_SOURCE) {
+      this.playIptv(item, resume, queue);
+      return;
+    }
     const token = this.tokenFor(base);
     if (!base || !token) {
       this.set((s) => ({ ...s, playError: "Couldn't reach the server this is on." }));
@@ -849,10 +1058,29 @@ export class App {
     }
   }
 
+  /** One of the provider's: the file from the panel, as it is; where it's left is kept on the TV. */
+  private playIptv(item: PlexItem, resume: boolean, queue: PlexItem[]) {
+    const c = this.current.live.credentials;
+    const k = vod.parseKey(item.ratingKey);
+    if (!c || !k || (k.kind !== "movie" && k.kind !== "episode")) {
+      this.set((s) => ({ ...s, playError: "Sign in to your IPTV provider in Live TV to watch this." }));
+      return;
+    }
+    const marked = this.iptv.marked(item);
+    const url = k.kind === "movie" ? vod.movieUrl(c, k.id, k.extension) : vod.episodeUrl(c, k.id, k.extension);
+    const startMs = resume && marked.viewOffsetMs > 0 ? marked.viewOffsetMs : 0;
+    const playback: plex.PlexPlayback = {
+      url, subtitles: [], markers: [], audioCodec: null, audioChannels: 0, previewUrl: null, chapters: [], partId: null,
+      audioStreams: [], subtitleStreams: [], container: k.extension, videoCodec: null,
+    };
+    this.set((s) => ({ ...s, playError: null, playing: { item: marked, base: IPTV_SOURCE, token: "", playback, url, direct: true, startMs, sessionId: randomHex(12), queue, mediaIndex: 0 } }));
+  }
+
   /** The file wouldn't play as it is: Plex converts it instead, from where it had got to. */
   convert(positionMs: number) {
     const p = this.current.playing;
-    if (!p || !p.direct) return false;
+    // The provider's files have no Plex to convert them.
+    if (!p || !p.direct || p.base === IPTV_SOURCE) return false;
     const url = this.converted(p.base, p.token, p.item.ratingKey, p.sessionId, p.mediaIndex);
     this.set((s) => ({ ...s, playing: { ...p, url, direct: false, startMs: positionMs } }));
     return true;
@@ -894,6 +1122,11 @@ export class App {
   report(positionMs: number, durationMs: number, state: "playing" | "paused" | "stopped", p: Playing | null = this.current.playing) {
     // A trailer isn't something to pick up again.
     if (!p || p.item.type === "clip") return Promise.resolve();
+    if (p.base === IPTV_SOURCE) {
+      // The provider keeps nothing: where it got to is kept on the TV.
+      this.iptv.watch?.progress(p.item, positionMs, durationMs || p.item.durationMs);
+      return Promise.resolve();
+    }
     return plex.reportTimeline(p.base, p.token, p.item.ratingKey, positionMs, durationMs || p.item.durationMs, state, p.sessionId);
   }
 
@@ -905,6 +1138,7 @@ export class App {
     await this.report(positionMs, durationMs, "stopped", p);
     if (!p.direct) void plex.stopTranscode(p.base, p.token, p.sessionId);
     if (p.item.type === "clip") return;
+    if (p.base === IPTV_SOURCE) this.composeHome();
     // What was watched shows as watched, and where it was left, on the way back.
     void this.refreshHome();
     const page = this.current.detail;
@@ -1120,6 +1354,10 @@ export class App {
       this.allChannels = null;
       this.store.setJson("xtream", credentials);
       this.setLive({ credentials, account, busy: false });
+      // Another provider's catalogue isn't this one's.
+      this.iptv.setCatalog(vod.emptyCatalog());
+      this.set((s) => ({ ...s, iptv: { loading: false, error: null, ready: false } }));
+      void this.loadIptv();
       await this.loadLive();
     } catch (error) {
       this.setLive({ busy: false, error: readable(error) });
@@ -1128,6 +1366,10 @@ export class App {
 
   signOutLive() {
     this.allChannels = null;
+    this.iptv.setCatalog(vod.emptyCatalog());
+    this.set((s) => ({ ...s, iptv: { loading: false, error: null, ready: false } }));
+    this.leaveIptvTabs();
+    this.composeHome();
     this.store.remove("xtream");
     this.set((s) => ({ ...s, live: { ...emptyLive(), favorites: s.live.favorites, recent: s.live.recent } }));
   }
@@ -1347,7 +1589,13 @@ export class App {
     ]);
     if (run !== this.queryRun) return;
     const answered = found.filter((f): f is plex.PlexFound => f !== null);
-    const [matches, others] = split(query, answered.reduce<PlexItem[]>((all, f) => all.concat(f.items), []));
+    // The provider's films and series as well, matched from the list in hand; a title in
+    // both is the winner's copy only.
+    const on = this.iptvOn();
+    const wins = this.current.prefs.iptvWins;
+    const fromIptv = on ? this.iptv.search(query, wins) : [];
+    const plexFound = answered.reduce<PlexItem[]>((all, f) => all.concat(f.items), []).filter((i) => !on || !this.iptv.hides(i, wins));
+    const [matches, others] = split(query, [...plexFound, ...fromIptv]);
     const people = answered
       .reduce<PlexPerson[]>((all, f) => all.concat(f.people), [])
       .filter((x, i, all) => all.findIndex((y) => y.name.toLowerCase() === x.name.toLowerCase()) === i)
@@ -1366,7 +1614,7 @@ export class App {
         people,
         collections,
         channels,
-        unreachable: servers.length > 0 && answered.length === 0,
+        unreachable: servers.length > 0 && answered.length === 0 && fromIptv.length === 0,
       },
     }));
   }
@@ -1461,6 +1709,28 @@ export class App {
 
   /** Watched or not, for any poster: then Home again, and the page it's on if it's open. */
   async setItemWatched(item: PlexItem, watched: boolean) {
+    if (isIptv(item)) {
+      // A series: every episode of it, as far as the panel says.
+      const k = vod.parseKey(item.ratingKey);
+      const c = this.current.live.credentials;
+      let items = [item];
+      if (k?.kind === "show" && c) {
+        const info = this.iptv.cachedSeries(k.id) ?? (await vod.seriesInfo(c, k.id).catch(() => null));
+        if (info) {
+          this.iptv.keepSeries(k.id, info);
+          items = info.seasons.reduce<PlexItem[]>((list, s) => list.concat(vod.episodeItems(k.id, item.title, item.thumb, null, s)), []);
+        }
+      }
+      this.iptv.watch?.setWatched(items, watched);
+      const mark = (i: PlexItem) => (isIptv(i) ? this.iptv.marked(i) : i);
+      this.set((s) => ({
+        ...s,
+        browse: { movie: { ...s.browse.movie, items: s.browse.movie.items.map(mark) }, show: { ...s.browse.show, items: s.browse.show.items.map(mark) } },
+        list: s.list ? { ...s.list, items: s.list.items.map(mark) } : s.list,
+      }));
+      this.composeHome();
+      return;
+    }
     const base = item.serverBase ?? this.current.plex.baseUrl;
     const token = this.tokenFor(base);
     if (!base || !token) return;
@@ -1496,6 +1766,17 @@ export class App {
 
   /** A show's next episode, as its menu offers it: the one it's up to. */
   async nextEpisodeOf(show: PlexItem): Promise<{ episode: PlexItem; queue: PlexItem[] } | null> {
+    if (isIptv(show)) {
+      const k = vod.parseKey(show.ratingKey);
+      const c = this.current.live.credentials;
+      if (k?.kind !== "show" || !c) return null;
+      const info = this.iptv.cachedSeries(k.id) ?? (await vod.seriesInfo(c, k.id).catch(() => null));
+      if (!info) return null;
+      this.iptv.keepSeries(k.id, info);
+      const episodes = info.seasons.reduce<PlexItem[]>((list, s) => list.concat(vod.episodeItems(k.id, show.title, show.thumb, null, s)), []).map(this.iptv.marked);
+      const episode = plex.nextEpisode(episodes);
+      return episode ? { episode, queue: episodes } : null;
+    }
     const base = show.serverBase ?? this.current.plex.baseUrl;
     const token = this.tokenFor(base);
     if (!base || !token) return null;
@@ -1544,6 +1825,8 @@ export class App {
 
   /** A picture from the server a title is on, at the size it's drawn. */
   image(serverBase: string | null, path: string | null | undefined, width: number, height: number): string | null {
+    // The provider's pictures are whole addresses already.
+    if (path && /^https?:\/\//i.test(path)) return path;
     const base = serverBase ?? this.current.plex.baseUrl;
     const token = this.tokenFor(base);
     if (!base || !token || !path) return null;

@@ -298,10 +298,10 @@ describe("playback settings", () => {
     app.setUpNextSeconds(5);
     app.toggleHomeRow("playlists");
     app.toggleHomeRow("playlists");
-    expect(app.state.prefs).toEqual({ playbackMode: "transcode", maxBitrateKbps: 8_000, skipIntros: true, skipCredits: false, upNextSeconds: 5, hiddenRows: [] });
+    expect(app.state.prefs).toEqual({ playbackMode: "transcode", maxBitrateKbps: 8_000, skipIntros: true, skipCredits: false, upNextSeconds: 5, hiddenRows: [], iptvLibrary: false, iptvWins: false });
     const again = new App(app.store, instant);
     await again.start();
-    expect(again.state.prefs).toEqual({ playbackMode: "transcode", maxBitrateKbps: 8_000, skipIntros: true, skipCredits: false, upNextSeconds: 5, hiddenRows: [] });
+    expect(again.state.prefs).toEqual({ playbackMode: "transcode", maxBitrateKbps: 8_000, skipIntros: true, skipCredits: false, upNextSeconds: 5, hiddenRows: [], iptvLibrary: false, iptvWins: false });
   });
 
   it("Always convert converts what the TV could play, at the quality chosen", async () => {
@@ -456,6 +456,83 @@ describe("Live TV's guide, catch-up and reminders", () => {
     await app.watchReminder();
     expect(app.state.live.watching).toBe(1);
     expect(app.state.live.due).toBeNull();
+  });
+});
+
+describe("the provider's movies and shows", () => {
+  /** A panel with two films and a series, and a Plex server that has one of the films. */
+  async function withIptv(wins = false) {
+    const json = (v: unknown) => new Response(JSON.stringify(v), { headers: { "Content-Type": "application/json" } });
+    useFetcher(async (input) => {
+      const url = new URL(String(input));
+      if (url.host === "panel:8080") {
+        switch (url.searchParams.get("action")) {
+          case "get_vod_categories": return json([{ category_id: "7", category_name: "Action" }]);
+          case "get_series_categories": return json([{ category_id: "8", category_name: "Drama" }]);
+          case "get_vod_streams": return json([
+            { stream_id: 1, name: "EN - Low Orbit (2025)", category_id: "7", added: "200", container_extension: "mkv", tmdb: "555" },
+            { stream_id: 2, name: "EN - Dust (2019)", category_id: "7", added: "100", container_extension: "mp4" },
+          ]);
+          case "get_series": return json([{ series_id: 9, name: "Harbor Lights", category_id: "8", last_modified: "300" }]);
+          case "get_series_info": return json({ info: { name: "Harbor Lights" }, episodes: { "1": [
+            { id: 91, episode_num: 1, title: "Arrival", container_extension: "mp4", info: { duration_secs: 1800 } },
+            { id: 92, episode_num: 2, title: "Tide", container_extension: "mp4", info: { duration_secs: 1800 } },
+          ] } });
+        }
+      }
+      if (url.pathname === "/library/sections/1/all") return json({ MediaContainer: { Metadata: [{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025, Guid: [{ id: "tmdb://555" }] }] } });
+      return json({ MediaContainer: {} });
+    });
+    const section = { key: "1", title: "Films", type: "movie" };
+    (app as any).current.plex = { ...app.state.plex, token: "t", baseUrl: SERVER, serverToken: "server-token",
+      libraries: [{ serverName: "Living Room", baseUrl: SERVER, token: "server-token", section }] };
+    (app as unknown as { setLive: (c: object) => void }).setLive({ credentials: { base: "http://panel:8080", username: "me", password: "pw" } });
+    (app as any).plexHome = { ...(app as any).plexHome, recentMovies: [{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025, serverBase: SERVER, addedAt: 1, lastViewedAt: 0 }] };
+    app.setIptvWins(wins);
+    app.setIptvLibrary(true);
+    for (let i = 0; i < 30 && !app.state.iptv.ready; i++) await new Promise((r) => setTimeout(r, 0));
+  }
+
+  it("Plex's copy wins by default: the IPTV library leaves out what Plex has", async () => {
+    await withIptv();
+    expect(app.state.home.iptvMovies.map((i) => i.title)).toEqual(["Dust"]);
+    expect(app.state.home.recentMovies.map((i) => i.title)).toEqual(["Low Orbit"]);
+    expect(app.librariesOf("movie").map((l) => l.section.title)).toEqual(["Films", "IPTV"]);
+    await app.openLibrary("movie", app.librariesOf("movie")[1]);
+    expect(app.state.browse.movie.items.map((i) => i.title)).toEqual(["Dust"]);
+    expect(app.state.browse.movie.genres.map((g) => g.title)).toEqual(["Action"]);
+  });
+
+  it("with the provider's copy winning, Plex's copy of the same film leaves Home", async () => {
+    await withIptv(true);
+    expect(app.state.home.iptvMovies.map((i) => i.title)).toEqual(["Low Orbit", "Dust"]);
+    expect(app.state.home.recentMovies).toEqual([]);
+  });
+
+  it("an IPTV episode plays from the panel, and where it was left is kept on the TV", async () => {
+    await withIptv();
+    app.navigate({ name: "detail", ratingKey: "s9", serverBase: "iptv:" });
+    for (let i = 0; i < 30 && app.state.detail?.busy; i++) await new Promise((r) => setTimeout(r, 0));
+    expect(app.state.detail?.episodes.map((e) => e.title)).toEqual(["Arrival", "Tide"]);
+    const first = app.state.detail!.episodes[0];
+    await app.play(first, true, () => false, app.state.detail!.episodes);
+    expect(app.state.playing?.url).toBe("http://panel:8080/series/me/pw/91.mp4");
+    expect(app.state.playing?.direct).toBe(true);
+    expect(app.nextInQueue()?.title).toBe("Tide");
+    await app.stop(600_000, 1_800_000);
+    for (let i = 0; i < 30 && app.state.detail?.busy !== false; i++) await new Promise((r) => setTimeout(r, 0));
+    expect(app.state.home.continueWatching.map((i) => i.title)).toEqual(["Arrival"]);
+    // The show's page lands on it, part watched.
+    for (let i = 0; i < 30 && app.state.detail?.focused?.viewOffsetMs !== 600_000; i++) await new Promise((r) => setTimeout(r, 0));
+    expect(app.state.detail?.focused?.viewOffsetMs).toBe(600_000);
+  });
+
+  it("marking a series watched marks every episode, kept on the TV", async () => {
+    await withIptv();
+    await app.setItemWatched(app.state.home.iptvShows[0], true);
+    expect(app.state.home.iptvShows[0].viewedLeafCount).toBe(2);
+    const again = new App(app.store, instant);
+    expect(again.iptv.watch?.mark("e92.mp4")?.watched).toBe(true);
   });
 });
 

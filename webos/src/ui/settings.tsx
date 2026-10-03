@@ -112,6 +112,29 @@ export function Settings(props: { app: App; state: AppState; onProfiles: () => v
         )}
       </Group>
 
+      <Group title="Movies and shows">
+        {live.credentials?.playlistUrl ? (
+          <Setting title="Show IPTV movies and shows"
+            note="Your provider's movies and shows need an Xtream login rather than a playlist. Sign out and sign in with your server, username and password to use them." />
+        ) : (
+          <>
+            <Setting title="Show IPTV movies and shows"
+              note={state.iptv.error ?? (state.iptv.loading ? "Loading your provider's movies and shows…"
+                : "Your provider's movies and shows in the Movies and TV Shows tabs, on Home and in search, marked IPTV. Off, only Plex's are shown.")}>
+              <Pill label="On" on={prefs.iptvLibrary} onPress={() => app.setIptvLibrary(true)} />
+              <Pill label="Off" on={!prefs.iptvLibrary} onPress={() => app.setIptvLibrary(false)} />
+            </Setting>
+            {prefs.iptvLibrary ? (
+              <Setting title="When a title is in both"
+                note={prefs.iptvWins ? "The provider's copy, in place of Plex's on Home and in search." : "Plex's copy. The IPTV library only has what Plex doesn't."}>
+                <Pill label="Plex" on={!prefs.iptvWins} onPress={() => app.setIptvWins(false)} />
+                <Pill label="IPTV" on={prefs.iptvWins} onPress={() => app.setIptvWins(true)} />
+              </Setting>
+            ) : null}
+          </>
+        )}
+      </Group>
+
       <Group title="Requests">
         {requests.address ? (
           <Setting title="Reely" note={requests.address}>

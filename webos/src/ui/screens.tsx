@@ -3,6 +3,7 @@ import * as plex from "../api/plex";
 import type { PlexHomeUser, PlexItem } from "../api/plex";
 import { groupKey } from "../app/home";
 import type { App, AppState, Kind } from "../app/store";
+import { isIptvChoice } from "../app/store";
 import { formatDuration } from "../core/quality";
 import { focus, onKeys } from "./focus";
 import { Card, Pill, Qr, Row, Spinner, useRescue, useReturnFocus } from "./parts";
@@ -85,6 +86,8 @@ export function Home(props: { app: App; state: AppState }) {
     recentMovies: hidden.includes("recentMovies") ? [] : state.home.recentMovies,
     watchlist: hidden.includes("watchlist") ? [] : state.home.watchlist,
     playlists: hidden.includes("playlists") ? [] : state.home.playlists,
+    iptvMovies: hidden.includes("iptvMovies") ? [] : state.home.iptvMovies,
+    iptvShows: hidden.includes("iptvShows") ? [] : state.home.iptvShows,
   };
   useRescue([home.continueWatching.length, home.recentMovies.length]);
   const img = (i: PlexItem, w: number, h: number, path = i.thumb) => app.image(i.serverBase, path, w, h);
@@ -146,6 +149,22 @@ export function Home(props: { app: App; state: AppState }) {
           ))}
         </Row>
       ) : null}
+      {home.iptvMovies.length ? (
+        <Row title="New Movies on IPTV">
+          {home.iptvMovies.map((i) => (
+            <Card key={`im:${i.ratingKey}`} item={i} autofocus={auto()} title={i.title} sub={plex.caption(i)} image={img(i, 300, 450)}
+              progress={plex.resumeFraction(i)} watched={plex.isWatched(i)} onPress={() => open(app, i)} />
+          ))}
+        </Row>
+      ) : null}
+      {home.iptvShows.length ? (
+        <Row title="New Shows on IPTV">
+          {home.iptvShows.map((i) => (
+            <Card key={`is:${i.ratingKey}`} item={i} autofocus={auto()} title={i.title} sub={plex.caption(i)} image={img(i, 300, 450)}
+              watched={plex.isWatched(i)} onPress={() => open(app, i)} />
+          ))}
+        </Row>
+      ) : null}
       {home.playlists.length ? (
         <Row title="Playlists">
           {home.playlists.map((i) => (
@@ -184,7 +203,7 @@ export function Library(props: { app: App; state: AppState; kind: Kind }) {
           <Pill key={key} label={label} on={browse.sort === key} onPress={() => void app.setSort(kind, key)} />
         ))}
         <Pill label="Unwatched" on={browse.unwatched} onPress={() => void app.setFilter(kind, { unwatched: !browse.unwatched })} />
-        {browse.genres.length ? <Pill label={browse.genre ? browse.genre.title : "Genre"} on={!!browse.genre} onPress={() => setChoosing("genre")} /> : null}
+        {browse.genres.length ? <Pill label={browse.genre ? browse.genre.title : isIptvChoice(browse.choice) ? "Category" : "Genre"} on={!!browse.genre} onPress={() => setChoosing("genre")} /> : null}
         {browse.decades.length ? <Pill label={browse.decade ? browse.decade.title : "Decade"} on={!!browse.decade} onPress={() => setChoosing("decade")} /> : null}
       </div>
       {browse.sort === "titleSort:asc" && browse.letters.length > 1 ? (
@@ -196,7 +215,7 @@ export function Library(props: { app: App; state: AppState; kind: Kind }) {
       ) : null}
       {choosing ? (
         <Chooser
-          title={choosing === "genre" ? "Genre" : "Decade"}
+          title={choosing === "genre" ? (isIptvChoice(browse.choice) ? "Category" : "Genre") : "Decade"}
           options={choosing === "genre" ? browse.genres : browse.decades}
           chosen={choosing === "genre" ? browse.genre : browse.decade}
           onChoose={(g) => { setChoosing(null); void app.setFilter(kind, choosing === "genre" ? { genre: g } : { decade: g }); }}

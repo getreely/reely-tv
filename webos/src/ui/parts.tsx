@@ -3,6 +3,7 @@ import type { ComponentChildren } from "preact";
 import { createContext } from "preact";
 import { useContext } from "preact/hooks";
 import type { PlexItem } from "../api/plex";
+import { sourceTag } from "../api/vod";
 
 /** What holding OK on a poster does: its menu, which the app puts up. */
 export const HoldContext = createContext<(item: PlexItem) => void>(() => undefined);
@@ -27,6 +28,8 @@ export function Card(props: {
   item?: PlexItem;
 }) {
   const badge = props.badge != null && props.badge > 1 ? badgeText(props.badge) : null;
+  // The provider's titles say so, as on the Fire TV.
+  const tag = props.tag ?? (props.item ? sourceTag(props.item) : null);
   const button = useRef<HTMLButtonElement>(null);
   const menu = useContext(HoldContext);
   const hold = useRef(props.onHold);
@@ -48,7 +51,7 @@ export function Card(props: {
     >
       <div class="art">
         {props.image ? <img src={props.image} alt="" loading="lazy" /> : null}
-        {props.tag ? <span class="tag">{props.tag}</span> : null}
+        {tag ? <span class="tag">{tag}</span> : null}
         {badge ? <span class={"badge" + (badge.length > 2 ? " long" : "")}>{badge}</span> : null}
         {!badge && props.watched ? <span class="check">✓</span> : null}
         {props.progress != null && props.progress > 0 && !props.watched ? (
