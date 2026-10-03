@@ -165,7 +165,16 @@ export interface Prefs {
   playbackMode: PlaybackMode;
   /** The most Plex sends when it converts; 0 for as good as the file. */
   maxBitrateKbps: number;
+  /** Past the intro without asking. */
+  skipIntros: boolean;
+  /** Straight on to the next episode when the credits start, rather than Up Next. */
+  skipCredits: boolean;
+  /** Up Next's count before the next episode plays; 0 waits to be asked. */
+  upNextSeconds: number;
 }
+
+export const UP_NEXT_CHOICES = [0, 5, 10, 12, 15, 20, 30];
+const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12 };
 
 /** As the Fire TV offers them. */
 export const BITRATE_CHOICES = [0, 20_000, 12_000, 8_000, 4_000, 2_000];
@@ -215,7 +224,7 @@ export function initialState(): AppState {
     live: emptyLive(),
     search: emptySearch([]),
     list: null,
-    prefs: { playbackMode: "auto", maxBitrateKbps: 0 },
+    prefs: DEFAULT_PREFS,
   };
 }
 
@@ -337,6 +346,9 @@ export class App {
       prefs: {
         playbackMode: prefs.playbackMode === "direct" || prefs.playbackMode === "transcode" ? prefs.playbackMode : "auto",
         maxBitrateKbps: BITRATE_CHOICES.includes(prefs.maxBitrateKbps ?? 0) ? prefs.maxBitrateKbps ?? 0 : 0,
+        skipIntros: prefs.skipIntros === true,
+        skipCredits: prefs.skipCredits === true,
+        upNextSeconds: typeof prefs.upNextSeconds === "number" ? Math.max(0, Math.min(30, prefs.upNextSeconds)) : DEFAULT_PREFS.upNextSeconds,
       },
     }));
     const live = this.store.json<XtreamCredentials | null>("xtream", null);
@@ -619,6 +631,31 @@ export class App {
     const kbps = this.current.prefs.maxBitrateKbps;
     const resolution = kbps >= 20_000 ? "3840x2160" : kbps === 0 || kbps >= 8_000 ? "1920x1080" : "1280x720";
     return plex.transcodeUrl(base, token, ratingKey, sessionId, kbps, resolution);
+  }
+
+  /**
+   * Another sound track or subtitles, kept with Plex as the Fire TV keeps them, and playing
+   * on from [positionMs]. Subtitles are drawn in by Plex's conversion, and so is a sound
+   * track other than the file's own first; with neither, the file plays as it is again
+   * when the TV can. Undefined leaves that one as it is; subtitles "0" turns them off.
+   */
+  async chooseStreams(audioId: string | undefined, subtitleId: string | undefined, positionMs: number, canDirect: (p: plex.PlexPlayback) => boolean) {
+    const p = this.current.playing;
+    if (!p) return;
+    if (p.playback.partId != null) await plex.selectStream(p.base, p.token, p.playback.partId, audioId ?? null, subtitleId ?? null);
+    const audioStreams = audioId === undefined ? p.playback.audioStreams : p.playback.audioStreams.map((s) => ({ ...s, selected: s.id === audioId }));
+    const subtitleStreams = subtitleId === undefined ? p.playback.subtitleStreams : p.playback.subtitleStreams.map((s) => ({ ...s, selected: s.id === subtitleId }));
+    const playback = { ...p.playback, audioStreams, subtitleStreams };
+    if (this.current.playing !== p) return;
+    const subtitles = subtitleStreams.some((s) => s.selected);
+    const otherSound = audioStreams.length > 1 && !audioStreams[0].selected && audioStreams.some((s) => s.selected);
+    const mode = this.current.prefs.playbackMode;
+    const asIs = mode === "transcode" ? false : !subtitles && !otherSound && (mode === "direct" || canDirect(playback));
+    // A conversion running for the old choice stops; the new one starts afresh.
+    if (!p.direct) void plex.stopTranscode(p.base, p.token, p.sessionId);
+    const sessionId = randomHex(12);
+    const url = asIs ? playback.url : this.converted(p.base, p.token, p.item.ratingKey, sessionId);
+    this.set((s) => ({ ...s, playing: { ...p, playback, url, direct: asIs, startMs: positionMs, sessionId } }));
   }
 
   /** Where playback is, told to the server: what keeps Continue Watching right everywhere. */
@@ -1074,6 +1111,18 @@ export class App {
 
   setMaxBitrate(maxBitrateKbps: number) {
     if (BITRATE_CHOICES.includes(maxBitrateKbps)) this.setPrefs({ maxBitrateKbps });
+  }
+
+  setSkipIntros(skipIntros: boolean) {
+    this.setPrefs({ skipIntros });
+  }
+
+  setSkipCredits(skipCredits: boolean) {
+    this.setPrefs({ skipCredits });
+  }
+
+  setUpNextSeconds(upNextSeconds: number) {
+    if (UP_NEXT_CHOICES.includes(upNextSeconds)) this.setPrefs({ upNextSeconds });
   }
 
   private setPrefs(change: Partial<Prefs>) {

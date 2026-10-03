@@ -58,6 +58,13 @@ async function fakePlex(page: Page) {
     if (path === "/library/metadata/e2") {
       return meta(route, [{ ...episode("e2", 2), Media: [{ container: "mkv", videoCodec: "h264", audioCodec: "dca", Part: [{ id: 5, key: "/library/parts/5/file.mkv", Stream: [] }] }] }]);
     }
+    if (path === "/library/metadata/e3") {
+      return meta(route, [{ ...episode("e3", 3), Media: [{ container: "mp4", videoCodec: "h264", audioCodec: "aac", Part: [{ id: 6, key: "/library/parts/6/file.mp4", Stream: [] }] }] }]);
+    }
+    if (path.startsWith("/library/parts/") && route.request().method() === "PUT") {
+      timeline.push(`choose${url.search.replace(/&?allParts=1/, "")}`);
+      return json(route, {});
+    }
     if (path === "/:/timeline") {
       timeline.push(`${url.searchParams.get("state")}@${url.searchParams.get("ratingKey")}`);
       return json(route, {});
@@ -151,6 +158,89 @@ test("Search finds by name and people; Settings keeps a playback choice", async 
   await page.getByRole("button", { name: "Settings" }).focus();
   await press(page, "Enter");
   await expect(page.getByRole("button", { name: "Always convert" })).toHaveClass(/on/);
+});
+
+/**
+ * A stand-in for the TV's video player: keeps time (twice as fast), fires the events the
+ * real one does, and plays whatever it's told it can. What's tested is the app around it.
+ */
+const scriptedVideo = () => {
+  const proto = HTMLMediaElement.prototype;
+  type S = { t: number; d: number; paused: boolean; src: string; timer?: ReturnType<typeof setInterval> };
+  const all = new WeakMap<HTMLMediaElement, S>();
+  const st = (v: HTMLMediaElement) => { let s = all.get(v); if (!s) { s = { t: 0, d: 12, paused: true, src: "" }; all.set(v, s); } return s; };
+  const fire = (v: HTMLMediaElement, e: string) => v.dispatchEvent(new Event(e));
+  (window as any).__videoSources = [] as string[];
+  Object.defineProperty(proto, "src", { configurable: true, get() { return st(this).src; }, set(v: string) { st(this).src = v; (window as any).__videoSources.push(v); } });
+  Object.defineProperty(proto, "currentTime", { configurable: true, get() { return st(this).t; }, set(v: number) { st(this).t = v; fire(this, "timeupdate"); } });
+  Object.defineProperty(proto, "duration", { configurable: true, get() { return st(this).d; } });
+  Object.defineProperty(proto, "paused", { configurable: true, get() { return st(this).paused; } });
+  proto.canPlayType = () => "probably";
+  proto.load = function () { const s = st(this); clearInterval(s.timer); s.t = 0; s.paused = true; setTimeout(() => { fire(this, "durationchange"); fire(this, "loadedmetadata"); fire(this, "canplay"); }, 20); };
+  proto.play = function () {
+    const s = st(this);
+    s.paused = false;
+    fire(this, "play"); fire(this, "playing");
+    clearInterval(s.timer);
+    s.timer = setInterval(() => {
+      s.t += 0.5;
+      fire(this, "timeupdate");
+      if (s.t >= s.d) { clearInterval(s.timer); s.paused = true; fire(this, "ended"); }
+    }, 250);
+    return Promise.resolve();
+  };
+  proto.pause = function () { const s = st(this); clearInterval(s.timer); s.paused = true; fire(this, "pause"); };
+};
+
+test("the player: Skip Intro, another sound track kept with Plex, Up Next on to the next episode", async ({ page }) => {
+  const plex = await fakePlex(page);
+  await page.addInitScript(scriptedVideo);
+  // This episode as a file the TV plays: an intro, two sound tracks, subtitles, credits.
+  await page.route(`${SERVER}/library/metadata/e2*`, (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", headers: { "Access-Control-Allow-Origin": "*" }, body: JSON.stringify({ MediaContainer: { Metadata: [{
+      ratingKey: "e2", type: "episode", title: "Episode 2", index: 2, parentIndex: 1, grandparentRatingKey: "show1", grandparentTitle: "Northbound", duration: 12_000,
+      Marker: [{ type: "intro", startTimeOffset: 0, endTimeOffset: 4_000 }, { type: "credits", startTimeOffset: 8_000, endTimeOffset: 12_000 }],
+      Media: [{ container: "mp4", videoCodec: "h264", audioCodec: "aac", Part: [{ id: 5, key: "/library/parts/5/file.mp4", Stream: [
+        { id: 11, streamType: 2, displayTitle: "English (AAC Stereo)", selected: 1 }, { id: 12, streamType: 2, displayTitle: "Commentary" },
+        { id: 21, streamType: 3, displayTitle: "English (SRT)", key: "/library/streams/21", codec: "srt" },
+      ] }] }],
+    }] } }) }));
+  await page.goto("/");
+  await press(page, "Enter");
+  await expect(page.getByText("Continue Watching")).toBeVisible({ timeout: 10_000 });
+  await press(page, "Enter");
+  await expect(page.locator(".pill:focus")).toHaveText("Play");
+  await press(page, "Enter");
+  await expect(page.locator(".player")).toBeVisible();
+
+  // Over the intro: Skip Intro, and OK skips it.
+  await expect(page.locator(".skip-prompt")).toHaveText("Skip Intro");
+  await page.screenshot({ path: "shots/lg-player-skip-intro.png" });
+  await press(page, "Enter");
+  await expect(page.locator(".skip-prompt")).toHaveCount(0);
+
+  // Down: sound, subtitles, sleep timer. The commentary, kept with Plex and converted.
+  await press(page, "ArrowDown");
+  await expect(page.locator(".options")).toBeVisible();
+  await expect(page.locator(".option:focus")).toContainText("English (AAC Stereo)");
+  await page.screenshot({ path: "shots/lg-player-options.png" });
+  const sources = () => page.evaluate(() => (window as any).__videoSources as string[]);
+  expect((await sources()).pop()).toContain("/library/parts/5/file.mp4");
+  await press(page, "ArrowDown");
+  await expect(page.locator(".option:focus")).toContainText("Commentary");
+  await press(page, "Enter");
+  await expect.poll(async () => (await sources()).pop()).toContain("/video/:/transcode/universal/start.m3u8");
+  await expect(page.locator(".options")).toHaveCount(0);
+  await expect.poll(() => plex.timeline).toContain("choose?audioStreamID=12");
+
+  // The credits: Up Next, and OK plays it now.
+  await expect(page.locator(".up-next")).toContainText("S1 · E3 · Episode 3", { timeout: 15_000 });
+  await page.screenshot({ path: "shots/lg-player-up-next.png" });
+  const nextFile = page.waitForRequest((r) => r.url().includes("/library/metadata/e3"));
+  await press(page, "Enter");
+  await nextFile;
+  await expect.poll(() => plex.timeline).toContain("stopped@e2");
+  await expect(page.locator(".player-bar .facts").first()).toHaveText("S1 · E3 · Episode 3");
 });
 
 test("arrows move along a row and down to the next; Back from a tab goes Home", async ({ page }) => {

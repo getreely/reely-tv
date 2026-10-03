@@ -210,10 +210,13 @@ describe("playback settings", () => {
     app.setPlaybackMode("transcode");
     app.setMaxBitrate(8_000);
     app.setMaxBitrate(1234);
-    expect(app.state.prefs).toEqual({ playbackMode: "transcode", maxBitrateKbps: 8_000 });
+    app.setSkipIntros(true);
+    app.setUpNextSeconds(7);
+    app.setUpNextSeconds(5);
+    expect(app.state.prefs).toEqual({ playbackMode: "transcode", maxBitrateKbps: 8_000, skipIntros: true, skipCredits: false, upNextSeconds: 5 });
     const again = new App(app.store, instant);
     await again.start();
-    expect(again.state.prefs).toEqual({ playbackMode: "transcode", maxBitrateKbps: 8_000 });
+    expect(again.state.prefs).toEqual({ playbackMode: "transcode", maxBitrateKbps: 8_000, skipIntros: true, skipCredits: false, upNextSeconds: 5 });
   });
 
   it("Always convert converts what the TV could play, at the quality chosen", async () => {
@@ -235,6 +238,40 @@ describe("playback settings", () => {
     app.setPlaybackMode("direct");
     await app.play(item, false, () => false);
     expect(app.state.playing?.direct).toBe(true);
+  });
+
+  it("another sound track or subtitles are kept with Plex and converted; Off plays the file as it is again", async () => {
+    const asked: string[] = [];
+    useFetcher(async (input, init) => {
+      const url = new URL(String(input));
+      asked.push(`${init?.method ?? "GET"} ${url.pathname}${url.search.includes("StreamID") ? url.search.replace(/&?allParts=1/, "") : ""}`);
+      if (url.pathname === "/library/metadata/m1") {
+        return new Response(JSON.stringify({ MediaContainer: { Metadata: [{ ratingKey: "m1", Media: [{ container: "mp4", videoCodec: "h264", audioCodec: "aac", Part: [{ id: 5, key: "/library/parts/5/file.mp4", Stream: [
+          { id: 11, streamType: 2, displayTitle: "English", selected: 1 }, { id: 12, streamType: 2, displayTitle: "Commentary" },
+          { id: 21, streamType: 3, displayTitle: "English (SRT)", key: "/library/streams/21", codec: "srt" },
+        ] }] }] }] } }));
+      }
+      return new Response("{}");
+    });
+    (app as any).current.plex = { ...app.state.plex, baseUrl: SERVER, serverToken: "server-token" };
+    const item = { ratingKey: "m1", type: "movie", title: "Low Orbit", serverBase: SERVER, viewOffsetMs: 0, durationMs: 1000 } as any;
+    await app.play(item, false, () => true);
+    expect(app.state.playing?.direct).toBe(true);
+
+    await app.chooseStreams("12", undefined, 5000, () => true);
+    expect(asked).toContain("PUT /library/parts/5?audioStreamID=12");
+    expect(app.state.playing?.direct).toBe(false);
+    expect(app.state.playing?.startMs).toBe(5000);
+    expect(app.state.playing?.playback.audioStreams.find((s) => s.selected)?.id).toBe("12");
+
+    await app.chooseStreams("11", "21", 6000, () => true);
+    expect(asked).toContain("PUT /library/parts/5?audioStreamID=11&subtitleStreamID=21");
+    expect(app.state.playing?.direct).toBe(false);
+
+    await app.chooseStreams(undefined, "0", 7000, () => true);
+    expect(asked).toContain("PUT /library/parts/5?subtitleStreamID=0");
+    expect(app.state.playing?.direct).toBe(true);
+    expect(app.state.playing?.url).toContain("/library/parts/5/file.mp4");
   });
 });
 

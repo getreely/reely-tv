@@ -1,6 +1,6 @@
 import type { ComponentChildren } from "preact";
 import type { App, AppState, PlaybackMode } from "../app/store";
-import { BITRATE_CHOICES } from "../app/store";
+import { BITRATE_CHOICES, UP_NEXT_CHOICES } from "../app/store";
 import { Pill, useRescue } from "./parts";
 
 /*
@@ -62,6 +62,22 @@ export function Settings(props: { app: App; state: AppState; onProfiles: () => v
         <Setting title="Conversion quality" note={`The highest quality Plex uses when it converts a video. ${bitrateNote(prefs.maxBitrateKbps)}`}>
           {BITRATE_CHOICES.map((kbps) => (
             <Pill key={kbps} label={bitrateLabel(kbps)} on={prefs.maxBitrateKbps === kbps} onPress={() => app.setMaxBitrate(kbps)} />
+          ))}
+        </Setting>
+      </Group>
+
+      <Group title="Episodes">
+        <Setting title="Skip intros" note="Goes straight past an episode's intro when Plex has found it.">
+          <Pill label="On" on={prefs.skipIntros} onPress={() => app.setSkipIntros(true)} />
+          <Pill label="Off" on={!prefs.skipIntros} onPress={() => app.setSkipIntros(false)} />
+        </Setting>
+        <Setting title="Skip credits" note="Goes straight to the next episode when Plex finds the credits.">
+          <Pill label="On" on={prefs.skipCredits} onPress={() => app.setSkipCredits(true)} />
+          <Pill label="Off" on={!prefs.skipCredits} onPress={() => app.setSkipCredits(false)} />
+        </Setting>
+        <Setting title="Up Next" note="How long before the next episode starts by itself.">
+          {UP_NEXT_CHOICES.map((n) => (
+            <Pill key={n} label={n === 0 ? "Don't start by itself" : `${n} seconds`} on={prefs.upNextSeconds === n} onPress={() => app.setUpNextSeconds(n)} />
           ))}
         </Setting>
       </Group>

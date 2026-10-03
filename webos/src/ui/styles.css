@@ -148,3 +148,16 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .setting-title { font-size: 1.1rem; font-weight: 600; }
 .setting .note { margin: 0.3rem 0 0; text-align: left; }
 .toolbar.flush { padding: 0.7rem 0 0; }
+
+/* The player's prompts and its options panel. */
+.skip-prompt { position: absolute; right: 4rem; bottom: 9rem; padding: 0.8rem 1.6rem; border-radius: 999px; background: var(--chalk); color: var(--ink); font-weight: 600; font-size: 1.1rem; }
+.up-next { position: absolute; right: 4rem; bottom: 9rem; max-width: 36rem; padding: 1.4rem 1.8rem; border-radius: 1.2rem; background: rgba(23,20,21,0.94); border: 0.06rem solid var(--line); }
+.up-next .player-title { margin: 0.3rem 0; }
+.options { position: absolute; top: 0; right: 0; bottom: 0; width: 30rem; padding: 2.5rem 1.6rem; overflow-y: auto; background: rgba(23,20,21,0.96); border-left: 0.06rem solid var(--line); }
+.options section { margin-bottom: 1.4rem; }
+.options h3 { margin: 0 0 0.5rem 0.8rem; font-size: 1rem; font-weight: 600; color: var(--muted); }
+.option { display: flex; align-items: center; width: 100%; text-align: left; padding: 0.6rem 0.8rem; border-radius: 0.8rem; font-size: 1.1rem; }
+.option .tick { display: inline-block; width: 1.6rem; color: var(--accent); }
+.option .facts { margin-left: auto; }
+.option:focus { background: var(--chalk); color: var(--ink); }
+.option:focus .tick { color: var(--ink); }
