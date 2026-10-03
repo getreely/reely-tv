@@ -18,13 +18,13 @@ android {
         // Fire OS 6 and later (API 25+). Fire OS 5 sticks are excluded because the
         // Keystore-backed credential store needs API 23 and Compose is painful below it.
         minSdk = 23
-        // What Google Play asks of a new app. Edge-to-edge drawing comes with it (see
-        // MainActivity); Back stays a key press (enableOnBackInvokedCallback in the manifest).
-        targetSdk = 36
+        targetSdk = 34
         versionCode = 1150
         versionName = "0.51.0"
         // The build from GitHub keeps itself up to date; a store's build leaves that to the store.
         buildConfigField("boolean", "SELF_UPDATE", "true")
+        // Only the store build draws behind the system bars (see androidComponents below).
+        buildConfigField("boolean", "EDGE_TO_EDGE", "false")
     }
 
     signingConfigs {
@@ -49,6 +49,7 @@ android {
         create("store") {
             initWith(getByName("release"))
             buildConfigField("boolean", "SELF_UPDATE", "false")
+            buildConfigField("boolean", "EDGE_TO_EDGE", "true")
             matchingFallbacks += "release"
         }
     }
@@ -110,6 +111,15 @@ android {
                 )
             }
         }
+    }
+}
+
+// Google Play wants a recent target SDK; the GitHub build keeps the one it has always had,
+// so the app people already run doesn't change. Targeting 35+ means drawing edge to edge,
+// which only the store build does (BuildConfig.EDGE_TO_EDGE).
+androidComponents {
+    beforeVariants(selector().withBuildType("store")) { variant ->
+        (variant as com.android.build.api.variant.GeneratesApkBuilder).targetSdk = 36
     }
 }
 

@@ -17,12 +17,14 @@ import tv.reely.ui.theme.ReelyTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Drawn behind transparent bars, as Android 15 and later insist; the bars' icons
-        // light, on a dark app, whatever the phone's own theme. A television has no bars.
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-        )
+        // The store build targets Android 15+, which draws behind transparent bars: their
+        // icons light, on a dark app, whatever the phone's own theme. A television has no bars.
+        if (BuildConfig.EDGE_TO_EDGE) {
+            enableEdgeToEdge(
+                statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+                navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            )
+        }
         super.onCreate(savedInstanceState)
         tv.reely.core.CrashLog.install(this)
         // A television gets the app it has always had; a phone or tablet the touch one,

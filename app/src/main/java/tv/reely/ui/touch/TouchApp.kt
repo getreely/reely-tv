@@ -24,6 +24,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -46,6 +47,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
+import tv.reely.BuildConfig
 import tv.reely.plex.PlexItem
 import tv.reely.ui.BROWSE_REFRESH_MS
 import tv.reely.ui.LibraryKind
@@ -195,12 +197,15 @@ fun TouchApp(
         val sideways = configuration.screenWidthDp > configuration.screenHeightDp && configuration.screenHeightDp < 560
         Scaffold(
             containerColor = Ink,
-            // The app draws edge to edge: clear of the bars and of a camera in the screen's
-            // edge, and above the keyboard while one is up.
-            contentWindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout),
+            // The store build draws edge to edge: clear of the bars and of a camera in the
+            // screen's edge, and above the keyboard while one is up. The GitHub build lays out
+            // as it always has.
+            contentWindowInsets = if (BuildConfig.EDGE_TO_EDGE) WindowInsets.systemBars.union(WindowInsets.displayCutout)
+            else ScaffoldDefaults.contentWindowInsets,
             bottomBar = { if (!sideways) TouchNavBar(state, onSelect = { viewModel.navigate(it.route) }) },
         ) { padding ->
-            Row(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
+            val edgeToEdge = if (BuildConfig.EDGE_TO_EDGE) Modifier.consumeWindowInsets(padding).imePadding() else Modifier
+            Row(Modifier.fillMaxSize().padding(padding).then(edgeToEdge)) {
                 if (sideways) TouchNavRail(state, onSelect = { viewModel.navigate(it.route) })
                 Box(Modifier.weight(1f).fillMaxSize()) {
                     TouchContent(viewModel, state, actions)
