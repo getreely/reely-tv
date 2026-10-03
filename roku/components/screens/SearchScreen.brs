@@ -19,6 +19,12 @@ sub init()
     m.note.text = "Search movies, shows, people and collections."
 end sub
 
+'' Opened with words already in the box: a request that's arrived, looked for by name.
+sub open()
+    q = Str_(m.top.route.query)
+    if q <> "" then m.keyboard.text = q
+end sub
+
 sub showRecent()
     list = Arr_(m.global.recentSearches)
     content = CreateObject("roSGNode", "ContentNode")

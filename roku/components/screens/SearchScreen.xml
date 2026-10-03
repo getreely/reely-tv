@@ -3,7 +3,7 @@
      and Plex's other guesses; recent searches while the box is empty. -->
 <component name="SearchScreen" extends="Group">
   <interface>
-    <field id="route" type="assocarray" />
+    <field id="route" type="assocarray" onChange="open" />
     <field id="go" type="assocarray" alwaysNotify="true" />
     <field id="menu" type="assocarray" alwaysNotify="true" />
     <field id="focusIn" type="boolean" alwaysNotify="true" onChange="focusIn" />

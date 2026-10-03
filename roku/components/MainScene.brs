@@ -10,7 +10,7 @@ sub init()
         m.store.Flush()
     end if
     ' The session is {} while signed out: a field made from invalid can't hold one later.
-    m.global.addFields({ clientId: clientId, session: {}, home: {}, watchlist: [], recentSearches: ReadJson_("recentSearches", []), prefs: Prefs_(), live: ReadJson_("live", {}), reely: ReadJson_("reely", {}), profile: ReadJson_("plexProfile", {}) })
+    m.global.addFields({ clientId: clientId, session: {}, home: {}, watchlist: [], recentSearches: ReadJson_("recentSearches", []), prefs: Prefs_(), live: ReadJson_("live", {}), reely: ReadJson_("reely", {}), profile: ReadJson_("plexProfile", {}), ready: [] })
     m.http = {}
     m.signIn = m.top.findNode("signIn")
     m.shell = m.top.findNode("shell")
@@ -193,6 +193,19 @@ sub answered(r as object)
         m.askWho = false
     else if r.op = "switchUser" then
         onSwitched(r.answer)
+    else if r.op = "reelyReady" then
+        onReady(r.answer)
+    else if r.op = "search" and r.id = "ready" then
+        found = invalid
+        if r.answer <> invalid then found = Reely_FindInPlex(m.readyTitle, Arr_(r.answer.results))
+        if found <> invalid then
+            push(RouteFor_(found))
+        else
+            ' Not found by name in the libraries: the search, with it typed in.
+            openTab("search")
+            topScreen().route = { name: "search", tab: "search", query: m.readyTitle.title }
+            intoScreen()
+        end if
     else if r.op = "nextEpisode" then
         if r.answer.episode <> invalid then playRequest({ item: r.answer.episode, resume: true, queue: r.answer.queue, mediaIndex: 0 })
     end if
@@ -263,6 +276,7 @@ sub onHome(a as object)
     a.watchlist = Arr_(old.watchlist)
     a.error = ""
     m.global.home = a
+    checkReady()
 end sub
 
 ' ------------------------------------------------------------------ Pages
@@ -367,6 +381,12 @@ sub onGo(event as object)
     else if route.name = "tab" then
         openTab(route.tab)
         intoScreen()
+    else if route.name = "watchReady" then
+        dismissReady(route.title)
+        m.readyTitle = route.title
+        Ask_("search", { libraries: m.global.session.libraries, query: route.title.title, id: "ready" })
+    else if route.name = "dismissReady" then
+        dismissReady(route.title)
     else if route.name = "profiles" then
         showProfiles()
     else if route.name = "reely" then
@@ -496,6 +516,60 @@ sub onPlayerDone()
         c.focusIn = true
     end if
     loadHome()
+end sub
+
+' ------------------------------------------------------------------ Requests that have arrived
+
+' Whether anything asked for has arrived, as the other apps look, each time Home is read.
+sub checkReady()
+    r = m.global.reely
+    s = m.global.session
+    if r = invalid or Str_(r.base) = "" or not signedIn() then return
+    Ask_("reelyReady", { reely: { base: Str_(r.base), cookie: Str_(r.cookie), token: Str_(s.token), accountToken: Str_(s.accountToken) } })
+end sub
+
+' The first look takes in what was ready already without saying so: that isn't news.
+sub onReady(a as object)
+    if a = invalid or a.problem <> "" then return
+    r = m.global.reely
+    if a.cookie <> "" and a.cookie <> Str_(r.cookie) then
+        r.cookie = a.cookie
+        m.global.reely = r
+        WriteJson_("reely", r)
+    end if
+    kept = ReadJson_("readySeen", invalid)
+    seen = {}
+    for each key in Arr_(kept)
+        seen[key] = true
+    end for
+    arrived = Reely_ReadyRequests(a.mine, a.marks, seen)
+    if kept = invalid then
+        keys = []
+        for each t in arrived
+            keys.Push(Reely_Key(t))
+        end for
+        WriteJson_("readySeen", keys)
+        return
+    end if
+    m.global.ready = arrived
+    if arrived.Count() > 0 then Trace_("ready " + arrived[0].title)
+end sub
+
+' Put away, watched or not: not said again.
+sub dismissReady(t as object)
+    key = Reely_Key(t)
+    seen = Arr_(ReadJson_("readySeen", []))
+    found = false
+    for each k in seen
+        if k = key then found = true
+    end for
+    if not found then seen.Push(key)
+    WriteJson_("readySeen", seen)
+    rest = []
+    for each x in Arr_(m.global.ready)
+        if Reely_Key(x) <> key then rest.Push(x)
+    end for
+    m.global.ready = rest
 end sub
 
 ' ------------------------------------------------------------------ Profiles

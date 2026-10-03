@@ -6,6 +6,7 @@
   <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
   <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
   <script type="text/brightscript" uri="pkg:/source/lib/xtream.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/reely.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/ScreenKit.brs" />
   <children>

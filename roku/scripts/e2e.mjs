@@ -101,6 +101,7 @@ const server = http.createServer((req, res) => {
       return token === "kid-token" ? send({ uuid: "u2", title: "Kid", restricted: true, protected: true }) : send({ uuid: "u1", title: "Ann", homeAdmin: true });
     }
     case "/api/v2/home/users": return send({ users: [{ uuid: "u1", title: "Ann", admin: true }, { uuid: "u2", title: "Kid", restricted: true, protected: true }] });
+    case "/api/v2/home/users/u1/switch": return send({ authToken: "account-token" });
     case "/api/v2/home/users/u2/switch":
       if (url.searchParams.get("pin") !== "1234") { res.writeHead(401); return res.end(); }
       return send({ authToken: "kid-token" });

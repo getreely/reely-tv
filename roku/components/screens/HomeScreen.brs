@@ -6,6 +6,13 @@ sub init()
     m.rows.observeField("rowItemSelected", "onSelected")
     m.global.observeField("home", "render")
     m.global.observeField("prefs", "render")
+    m.global.observeField("ready", "paintReady")
+    m.readyGroup = m.top.findNode("ready")
+    m.readyActions = m.top.findNode("readyActions")
+    m.readyActions.labels = ["Watch", "Dismiss"]
+    m.readyActions.observeField("pressed", "onReady")
+    m.top.findNode("readyName").font = Bold_(36)
+    m.top.findNode("readyFacts").font = Regular_(26)
     render()
 end sub
 
@@ -34,12 +41,42 @@ sub render()
         m.note.text = "Loading your library…"
         m.note.color = "0xB3BAC4FF"
     end if
-    m.rows.translation = Iif_(m.note.text <> "", [96, 90], [96, 30])
+    top = 30
+    if m.readyGroup.visible then top = 190
+    if m.note.text <> "" then top = top + 60
+    m.note.translation = [96, top - 50]
+    m.rows.translation = [96, top]
     if not had and m.top.isInFocusChain() then m.rows.setFocus(true)
 end sub
 
 sub focusIn()
     m.rows.setFocus(true)
+end sub
+
+' "Ready to watch": the first of what's arrived, and how many after it.
+sub paintReady()
+    list = Arr_(m.global.ready)
+    had = m.readyGroup.visible
+    m.readyGroup.visible = list.Count() > 0
+    if list.Count() > 0 then
+        t = list[0]
+        m.top.findNode("readyName").text = t.title + " is ready to watch"
+        more = list.Count() - 1
+        facts = "You asked for it, and it's here."
+        if more = 1 then facts = "You asked for it. And 1 more after this."
+        if more > 1 then facts = "You asked for it. And " + more.ToStr() + " more after this."
+        m.top.findNode("readyFacts").text = facts
+        m.top.findNode("readyArt").uri = Str_(t.poster)
+    else if had and m.readyActions.hasFocus() then
+        m.rows.setFocus(true)
+    end if
+    render()
+end sub
+
+sub onReady()
+    list = Arr_(m.global.ready)
+    if list.Count() = 0 then return
+    m.top.go = { name: Iif_(m.readyActions.pressed = 0, "watchReady", "dismissReady"), title: list[0] }
 end sub
 
 sub onSelected()
@@ -53,6 +90,13 @@ end sub
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press then return false
     ' The Options key: the poster's menu, as holding OK is on the Fire TV.
+    if key = "up" and m.rows.hasFocus() and m.readyGroup.visible and m.rows.rowItemFocused[0] = 0 then
+        m.readyActions.setFocus(true)
+        return true
+    else if key = "down" and m.readyActions.hasFocus() then
+        m.rows.setFocus(true)
+        return true
+    end if
     if key = "options" then
         item = FocusedRowItem_(m.rows)
         if item <> invalid then m.top.menu = { item: item }

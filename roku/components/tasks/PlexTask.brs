@@ -77,6 +77,8 @@ function answerFor(op as string, a as object) as object
         out.table = XtreamApi_Table(a.credentials, a.streamIds)
     else if op = "reelySignIn" then
         out.answer = ReelyApi_SignInAny(a.reely)
+    else if op = "reelyReady" then
+        out.answer = ReelyApi_Ready(a.reely)
     else if op = "reelyHome" then
         out.answer = ReelyApi_Home(a.reely)
     else if op = "reelySearch" then
