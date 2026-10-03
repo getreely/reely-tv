@@ -151,6 +151,11 @@ sealed interface RequestOutcome {
 class ReelyRequests(
     baseUrl: String,
     private val plexToken: () -> String?,
+    /**
+     * The Plex account's own sign-in, tried when plex.tv won't take [plexToken] from
+     * Reely: a Home profile's sign-in is good only on the device that switched to it.
+     */
+    private val accountToken: () -> String? = { null },
 ) {
     val base: String = normalize(baseUrl)
 
@@ -173,18 +178,27 @@ class ReelyRequests(
 
     private fun signInNow(): String? {
         val token = plexToken() ?: return "Sign in to Plex first."
+        val problem = signInWith(token)
+        if (problem != PLEX_REJECTED) return problem
+        val account = accountToken()?.takeIf { it != token } ?: return problem
+        return signInWith(account)
+    }
+
+    private fun signInWith(token: String): String? {
         cookies.clear()
         val body = JSONObject().put("token", token).toString()
         return runCatching {
             client.newCall(post("/api/v1/auth/plex/token", body)).execute().use { response ->
                 signedIn = response.isSuccessful
-                when (response.code) {
-                    in 200..299 -> null
-                    403 -> "Your Plex account doesn't have access to this server's requests."
-                    404 -> "That server doesn't sign in from the TV yet. Update Reely."
-                    412 -> "Signing in with Plex isn't set up on this Reely server yet."
-                    429 -> "Too many tries. Wait a minute and try again."
-                    else -> errorOf(response.body?.string()) ?: "Reely couldn't do that. Try again."
+                val error = if (response.isSuccessful) null else errorOf(response.body?.string())
+                when {
+                    response.isSuccessful -> null
+                    plexRejected(error) -> PLEX_REJECTED
+                    response.code == 403 -> "Your Plex account doesn't have access to this server's requests."
+                    response.code == 404 -> "That server doesn't sign in from the TV yet. Update Reely."
+                    response.code == 412 -> "Signing in with Plex isn't set up on this Reely server yet."
+                    response.code == 429 -> "Too many tries. Wait a minute and try again."
+                    else -> readable(error) ?: "Reely couldn't do that. Try again."
                 }
             }
         }.getOrElse { "Couldn't reach Reely at ${hostOf(base)}." }
@@ -425,8 +439,26 @@ class ReelyRequests(
             array?.let { a -> (0 until a.length()).mapNotNull { a.optString(it).takeIf(String::isNotBlank) } }.orEmpty()
 
         /** Reely's errors are {"error": "…"}, written to be shown as they are. */
+        /**
+         * What Reely says when plex.tv turned down the Plex sign-in it was given: the sign-in
+         * on this device has been ended by Plex (a password change, or signed out of all
+         * devices), though the server it plays from may still let it in.
+         */
+        const val PLEX_REJECTED = "Plex didn't accept this device's sign-in, so Reely can't sign you in. " +
+            "Sign out of Plex in Settings and sign in again, then connect."
+
         private fun errorOf(text: String?): String? =
             text?.let { runCatching { JSONObject(it).optString("error").takeIf(String::isNotBlank) }.getOrNull() }
+
+        /** Reely passing on plex.tv's refusal of the token, in whatever words it uses. */
+        internal fun plexRejected(error: String?): Boolean {
+            val e = error?.lowercase() ?: return false
+            return "invalid authentication token" in e || (e.startsWith("plex.tv") && "unauthorized" in e)
+        }
+
+        /** Reely's own words, but never a page of markup passed on from somewhere else. */
+        internal fun readable(error: String?): String? =
+            error?.takeUnless { '<' in it && '>' in it }
     }
 }
 

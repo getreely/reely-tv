@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { useFetcher } from "../../src/core/http";
 import {
-  badge, isValid, librariesFor, noMarks, normalize, plexHas, preferredLibrary, readyRequests, ReelyRequests, requestKey,
+  badge, isValid, PLEX_REJECTED, librariesFor, noMarks, normalize, plexHas, preferredLibrary, readyRequests, ReelyRequests, requestKey,
   type RequestRecord, type RequestTitle,
 } from "../../src/api/reely";
 
@@ -9,6 +9,7 @@ import {
 class FakeReely {
   signIns = 0;
   signInStatus = 200;
+  signInError = "this server isn't shared with your Plex account";
   session = false;
   requested: any[] = [];
   alreadyRequested = false;
@@ -25,7 +26,7 @@ class FakeReely {
     if (path === "/api/v1/auth/plex/token") {
       this.signIns++;
       expect(JSON.parse(body).token).toBe("plex-account-token");
-      if (this.signInStatus !== 200) return reply(this.signInStatus, { error: "this server isn't shared with your Plex account" });
+      if (this.signInStatus !== 200) return reply(this.signInStatus, { error: this.signInError });
       this.session = true;
       return reply(200, { status: "ok" });
     }
@@ -109,6 +110,14 @@ describe("Reely requests", () => {
     server.signInStatus = 403;
     expect(await reely().signIn()).toBe("Your Plex account doesn't have access to this server's requests.");
     await expect(reely().explore()).rejects.toThrow("Your Plex account doesn't have access to this server's requests.");
+  });
+  it("plex.tv turning the sign-in down is said in words, not passed on as markup", async () => {
+    server.signInStatus = 401;
+    server.signInError = 'plex.tv: Unauthorized: <?xml version="1.0" encoding="UTF-8"?>\n<errors>\n  <error>Invalid authentication token.</error>\n</errors>';
+    expect(await reely().signIn()).toBe(PLEX_REJECTED);
+    server.signInStatus = 502;
+    server.signInError = "<html><body>Bad gateway</body></html>";
+    expect(await reely().signIn()).toBe("Reely couldn't do that. Try again.");
   });
   it("no Plex account, no Reely", async () => {
     expect(await new ReelyRequests("x", () => undefined).signIn()).toBe("Sign in to Plex first.");

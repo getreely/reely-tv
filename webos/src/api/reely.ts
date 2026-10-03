@@ -299,6 +299,22 @@ export function parseRecords(root: any): RequestRecord[] {
 }
 
 /** Reely's errors are {"error": "…"}, written to be shown as they are. */
+/**
+ * Reely passing on plex.tv's refusal of the Plex sign-in it was given: the sign-in here
+ * was ended by Plex (a password change, or signed out of all devices).
+ */
+export const PLEX_REJECTED =
+  "Plex didn't accept this device's sign-in, so Reely can't sign you in. Sign out of Plex in Settings and sign in again, then connect.";
+
+export function plexRejected(error: string | undefined): boolean {
+  const e = error?.toLowerCase();
+  if (!e) return false;
+  return e.includes("invalid authentication token") || (e.startsWith("plex.tv") && e.includes("unauthorized"));
+}
+
+/** Reely's own words, but never a page of markup passed on from somewhere else. */
+export const readable = (error: string | undefined) => (error && !(error.includes("<") && error.includes(">")) ? error : undefined);
+
 function errorOf(text: string | undefined): string | undefined {
   if (!text) return undefined;
   try {
@@ -342,12 +358,14 @@ export class ReelyRequests {
       const { code, text } = await this.send("/api/v1/auth/plex/token", { method: "POST", body: JSON.stringify({ token }) });
       this.signedIn = code >= 200 && code < 300;
       if (this.signedIn) return undefined;
+      const error = errorOf(text);
+      if (plexRejected(error)) return PLEX_REJECTED;
       switch (code) {
         case 403: return "Your Plex account doesn't have access to this server's requests.";
         case 404: return "That server doesn't sign in from the TV yet. Update Reely.";
         case 412: return "Signing in with Plex isn't set up on this Reely server yet.";
         case 429: return "Too many tries. Wait a minute and try again.";
-        default: return errorOf(text) ?? "Reely couldn't do that. Try again.";
+        default: return readable(error) ?? "Reely couldn't do that. Try again.";
       }
     } catch {
       this.signedIn = false;

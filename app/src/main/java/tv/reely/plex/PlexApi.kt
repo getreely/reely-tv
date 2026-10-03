@@ -432,6 +432,27 @@ object PlexApi {
         }
     }
 
+    /**
+     * Whether plex.tv still takes [token]: false when it turns it down (the sign-in was
+     * ended there), null when plex.tv couldn't be asked.
+     */
+    suspend fun tokenAccepted(clientId: String, token: String): Boolean? = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url("$PLEX_TV/api/v2/user")
+            .plexHeaders(clientId, token)
+            .get()
+            .build()
+        runCatching {
+            Http.client.newCall(request).execute().use { response ->
+                when {
+                    response.isSuccessful -> true
+                    response.code == 401 || response.code == 403 -> false
+                    else -> null
+                }
+            }
+        }.getOrNull()
+    }
+
     /** Who the token belongs to: its name and picture, and its place in a Home. */
     suspend fun account(clientId: String, token: String): PlexHomeUser? = withContext(Dispatchers.IO) {
         val request = Request.Builder()

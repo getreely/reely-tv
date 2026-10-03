@@ -1077,7 +1077,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     private var requestSearchJob: Job? = null
 
     private fun reelyFor(address: String) =
-        tv.reely.requests.ReelyRequests(address) { _state.value.plex.token }
+        tv.reely.requests.ReelyRequests(address, { _state.value.plex.token }, { store.get(SecureStore.PLEX_ACCOUNT_TOKEN) })
 
     private suspend fun restoreRequests() {
         val address = store.get(SecureStore.REELY_URL) ?: return
@@ -1094,7 +1094,16 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val client = reelyFor(address)
         _state.update { it.copy(requests = it.requests.copy(connecting = true, error = null)) }
         viewModelScope.launch {
-            val problem = client.signIn()
+            var problem = client.signIn()
+            if (problem == tv.reely.requests.ReelyRequests.PLEX_REJECTED) {
+                // plex.tv itself is asked: if it takes this sign-in, the fault is between
+                // Reely and plex.tv, and signing in again here wouldn't help.
+                val token = _state.value.plex.token
+                if (token != null && PlexApi.tokenAccepted(clientId, token) == true) {
+                    problem = "Plex accepts this device's sign-in, but not from Reely. Sign out of Plex in Settings " +
+                        "and sign in again, then connect. If that doesn't help, the Reely server needs a look."
+                }
+            }
             if (problem != null) {
                 _state.update { it.copy(requests = it.requests.copy(connecting = false, error = problem)) }
                 return@launch
@@ -1642,6 +1651,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 if (token != null) {
                     store.put(SecureStore.PLEX_TOKEN, token)
+                    store.put(SecureStore.PLEX_ACCOUNT_TOKEN, token)
                     updatePlex { it.copy(token = token, linkCode = null, linkUrl = null) }
                     connectServer(token)
                     loadProfiles(token, ask = true)
@@ -1779,6 +1789,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         connectRetry?.cancel()
         store.remove(
             SecureStore.PLEX_TOKEN,
+            SecureStore.PLEX_ACCOUNT_TOKEN,
             SecureStore.PLEX_SERVER_URI,
             SecureStore.PLEX_SERVER_TOKEN,
             SecureStore.PLEX_SERVER_NAME,

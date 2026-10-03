@@ -28,6 +28,7 @@ class ReelyRequestsTest {
     private lateinit var server: HttpServer
     private var signIns = 0
     private var signInStatus = 200
+    private var signInError = "this server isn't shared with your Plex account"
     private var sessionValid = true
     private val requested = mutableListOf<JSONObject>()
     private var alreadyRequested = false
@@ -53,12 +54,17 @@ class ReelyRequestsTest {
             when {
                 path == "/api/v1/auth/plex/token" -> {
                     signIns++
+                    if (JSONObject(body).getString("token") == "profile-token") {
+                        // A Home profile's sign-in, which plex.tv takes only from the device that switched.
+                        ex.reply(401, """{"error":"plex.tv: Unauthorized: <errors><error>Invalid authentication token.</error></errors>"}""")
+                        return@createContext
+                    }
                     assertEquals("plex-account-token", JSONObject(body).getString("token"))
                     sessionValid = true
                     if (signInStatus == 200) {
                         ex.reply(200, """{"status":"ok","user":{"role":"user"}}""", "reely_session=abc; Path=/; HttpOnly")
                     } else {
-                        ex.reply(signInStatus, """{"error":"this server isn't shared with your Plex account"}""")
+                        ex.reply(signInStatus, JSONObject().put("error", signInError).toString())
                     }
                 }
                 !ex.signedIn() -> ex.reply(401, """{"error":"login required"}""")
@@ -122,7 +128,7 @@ class ReelyRequestsTest {
 
     @After fun stop() = server.stop(0)
 
-    private fun reely() = ReelyRequests("127.0.0.1:${server.address.port}") { "plex-account-token" }
+    private fun reely() = ReelyRequests("127.0.0.1:${server.address.port}", { "plex-account-token" })
 
     @Test fun `signs in with the Plex account, then keeps the session`() = runBlocking {
         val reely = reely()
@@ -143,6 +149,22 @@ class ReelyRequestsTest {
     @Test fun `an account the server isn't shared with is told so`() = runBlocking {
         signInStatus = 403
         assertEquals("Your Plex account doesn't have access to this server's requests.", reely().signIn())
+    }
+
+    @Test fun `plex_tv turning the sign-in down is said in words, not passed on as markup`() = runBlocking {
+        signInStatus = 401
+        signInError = "plex.tv: Unauthorized: <?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<errors>\n  <error>Invalid authentication token.</error>\n</errors>"
+        assertEquals(ReelyRequests.PLEX_REJECTED, reely().signIn())
+        signInStatus = 502
+        signInError = "<html><body>Bad gateway</body></html>"
+        assertEquals("Reely couldn't do that. Try again.", reely().signIn())
+    }
+
+    @Test fun `a Home profile's sign-in plex_tv won't take from Reely falls back to the account's`() = runBlocking {
+        val base = "127.0.0.1:${server.address.port}"
+        assertNull(ReelyRequests(base, { "profile-token" }, { "plex-account-token" }).signIn())
+        assertEquals(2, signIns)
+        assertEquals(ReelyRequests.PLEX_REJECTED, ReelyRequests(base, { "profile-token" }).signIn())
     }
 
     @Test fun `explore rows, with posters from either TMDB or TheTVDB`() = runBlocking {

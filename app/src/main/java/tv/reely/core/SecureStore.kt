@@ -85,6 +85,8 @@ class SecureStore(context: Context) {
 
         const val PLEX_CLIENT_ID = "plex.client_id"
         const val PLEX_TOKEN = "plex.token"
+        /** The account's own sign-in, kept when a Home profile's replaces PLEX_TOKEN. */
+        const val PLEX_ACCOUNT_TOKEN = "plex.account_token"
         const val PLEX_SERVER_NAME = "plex.server_name"
         const val PLEX_SERVER_URI = "plex.server_uri"
         const val PLEX_SERVER_TOKEN = "plex.server_token"
