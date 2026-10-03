@@ -194,3 +194,57 @@ test("Requests: connect, rows without what's in the library, and ask for a show"
   await expect(page.getByText("Requested for TV. You'll see it here once it's approved.")).toBeVisible();
   expect(asked).toEqual([expect.objectContaining({ kind: "show", tmdbId: 1399, seasons: [1], libraryId: 3 })]);
 });
+
+test("Live TV: sign in to a provider, pick a category, watch, change channel, favorite", async ({ page }) => {
+  await fakePlex(page);
+  const PANEL = "http://panel.example:8080";
+  const cors = { "Access-Control-Allow-Origin": "*" };
+  const now = Math.floor(Date.now() / 1000);
+  await page.route(`${PANEL}/**`, async (route) => {
+    const url = new URL(route.request().url());
+    const send = (v: unknown) => route.fulfill({ status: 200, contentType: "application/json", headers: cors, body: JSON.stringify(v) });
+    if (url.pathname === "/player_api.php") {
+      const action = url.searchParams.get("action");
+      if (!action) return send({ user_info: { auth: 1, status: "Active", max_connections: "2", active_cons: "0" }, server_info: { timezone: "UTC" } });
+      if (action === "get_live_categories") return send([{ category_id: "1", category_name: "News" }, { category_id: "2", category_name: "Sport" }]);
+      if (action === "get_live_streams") {
+        return send([
+          { stream_id: 101, num: 101, name: "News 24", stream_icon: "", epg_channel_id: "news" },
+          { stream_id: 102, num: 102, name: "World Report", stream_icon: "", epg_channel_id: "world" },
+        ]);
+      }
+      if (action === "get_short_epg") {
+        return send({ epg_listings: [{ title: btoa("The Evening Report"), description: "", start_timestamp: String(now - 600), stop_timestamp: String(now + 1200) }] });
+      }
+    }
+    return route.fulfill({ status: 404, headers: cors });
+  });
+  await page.goto("/");
+  await press(page, "Enter");
+  await expect(page.getByText("Recently Added Movies")).toBeVisible({ timeout: 10_000 });
+  await page.getByRole("button", { name: "Live TV" }).click();
+  await page.getByPlaceholder("Server address").fill("panel.example:8080");
+  await page.getByPlaceholder("Username").fill("me");
+  await page.getByPlaceholder("Password").fill("secret");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("button", { name: "News", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "News", exact: true }).click();
+  await expect(page.locator(".channel").first()).toContainText("The Evening Report");
+  await page.screenshot({ path: "shots/lg-live.png" });
+  // Watching: the stream is the provider's HLS; down goes to the next channel.
+  const stream = page.waitForRequest((r) => r.url().includes("/live/me/secret/101.m3u8"));
+  await page.locator(".channel").first().click();
+  await stream;
+  await expect(page.locator(".player-title")).toContainText("News 24");
+  const next = page.waitForRequest((r) => r.url().includes("/live/me/secret/102.m3u8"));
+  await press(page, "ArrowDown");
+  await next;
+  await expect(page.locator(".player-title")).toContainText("World Report");
+  // The green key (404) favorites it; Back goes to the list, and Favorites is offered.
+  await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { keyCode: 404, bubbles: true } as KeyboardEventInit)));
+  await expect(page.locator(".player-title")).toContainText("♥");
+  await press(page, "Escape");
+  await expect(page.locator(".channel").first()).toBeVisible();
+  await press(page, "Escape");
+  await expect(page.getByRole("button", { name: "Favorites" })).toBeVisible();
+});

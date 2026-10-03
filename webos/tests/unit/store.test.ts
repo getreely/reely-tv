@@ -175,3 +175,22 @@ describe("telling Plex where playback got to", () => {
     expect(told).toContain("stopped@42000");
   });
 });
+
+describe("Back in Live TV", () => {
+  it("leaves the channel, then the category, then goes Home", () => {
+    app.navigate({ name: "live" });
+    (app as unknown as { setLive: (c: object) => void }).setLive({
+      category: { id: "1", name: "News" },
+      channels: [{ streamId: 1, number: 1, name: "One", icon: null, epgChannelId: null, archiveDays: 0 }],
+      watching: 0,
+    });
+    expect(app.goBack()).toBe(true);
+    expect(app.state.live.watching).toBeNull();
+    expect(app.state.live.category?.name).toBe("News");
+    expect(app.goBack()).toBe(true);
+    expect(app.state.live.category).toBeNull();
+    expect(app.state.route.name).toBe("live");
+    expect(app.goBack()).toBe(true);
+    expect(app.state.route.name).toBe("home");
+  });
+});

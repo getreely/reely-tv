@@ -5,11 +5,13 @@ import { arrived, focus, rescue } from "./focus";
 import { playDirect, Player } from "./player";
 import { Detail, Home, Library, Profiles, SignIn } from "./screens";
 import { Requests, RequestTitlePage } from "./requests";
+import { Live, LivePlayer } from "./live";
 
 const TABS: Array<[string, Route]> = [
   ["Home", { name: "home" }],
   ["Movies", { name: "library", kind: "movie" }],
   ["TV Shows", { name: "library", kind: "show" }],
+  ["Live TV", { name: "live" }],
   ["Requests", { name: "requests" }],
 ];
 
@@ -52,6 +54,8 @@ export function Root(props: { app: App }) {
   };
 
   if (state.playing) return <Player app={app} playing={state.playing} />;
+  const watching = state.live.watching != null ? state.live.channels[state.live.watching] : null;
+  if (watching) return <LivePlayer app={app} state={state} channel={watching} />;
 
   const connected = isConnected(state);
   const route = state.route;
@@ -89,6 +93,8 @@ export function Root(props: { app: App }) {
           <Library app={app} state={state} kind={route.kind} />
         ) : route.name === "detail" ? (
           <Detail app={app} state={state} onPlay={onPlay} />
+        ) : route.name === "live" ? (
+          <Live app={app} state={state} />
         ) : route.name === "requests" ? (
           <Requests app={app} state={state} />
         ) : route.name === "requestTitle" ? (

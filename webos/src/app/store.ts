@@ -5,6 +5,8 @@ import { Store, clientId } from "../core/storage";
 import { emptyHome, loadHome, type HomeRows, type LibraryChoice } from "./home";
 import { randomHex } from "../core/storage";
 import * as reely from "../api/reely";
+import * as xtream from "../api/xtream";
+import type { Programme, XtreamAccount, XtreamCategory, XtreamChannel, XtreamCredentials } from "../api/xtream";
 import type { RequestDetail, RequestPlaces, RequestRecord, RequestRow, RequestTitle, TitleMarks } from "../api/reely";
 
 /*
@@ -84,6 +86,24 @@ export interface Playing {
   queue: PlexItem[];
 }
 
+export interface LiveState {
+  credentials: XtreamCredentials | null;
+  account: XtreamAccount | null;
+  categories: XtreamCategory[];
+  category: XtreamCategory | null;
+  channels: XtreamChannel[];
+  /** Now and next, by stream id, from the provider's short guide. */
+  guide: Record<number, Programme[]>;
+  favorites: number[];
+  busy: boolean;
+  error: string | null;
+  /** The channel on screen, by its place in [channels]. */
+  watching: number | null;
+}
+
+/** Not one of the provider's: the channels marked as favorites, from all of them. */
+export const FAVORITES: XtreamCategory = { id: "reely:favorites", name: "Favorites" };
+
 export interface RequestsState {
   address: string | null;
   connecting: boolean;
@@ -126,6 +146,7 @@ export interface AppState {
   playError: string | null;
   requests: RequestsState;
   requestPage: RequestPage | null;
+  live: LiveState;
 }
 
 const emptyBrowse = (): Browse => ({ choice: null, items: [], total: 0, busy: false, sort: "titleSort:asc", error: null });
@@ -146,8 +167,13 @@ export function initialState(): AppState {
     playError: null,
     requests: emptyRequests(),
     requestPage: null,
+    live: emptyLive(),
   };
 }
+
+const emptyLive = (): LiveState => ({
+  credentials: null, account: null, categories: [], category: null, channels: [], guide: {}, favorites: [], busy: false, error: null, watching: null,
+});
 
 const emptyRequests = (): RequestsState => ({
   address: null, connecting: false, loading: false, error: null, rows: [], mine: [], marks: reely.noMarks(),
@@ -213,12 +239,22 @@ export class App {
     if (route.name === "library") void this.openLibrary(route.kind);
     if (route.name === "detail") void this.openDetail(route.ratingKey, route.serverBase, route.episodeKey ?? null);
     if (route.name === "requests") void this.loadRequests();
+    if (route.name === "live") void this.loadLive();
     if (route.name === "requestTitle") void this.openRequestTitle(route.title);
   }
 
   /** Back one page; false when there's nowhere back to go (Home's Back leaves the app). */
   goBack(): boolean {
     const s = this.current;
+    // Live TV's own steps first: off the channel, then out of the category.
+    if (s.live.watching != null) {
+      this.stopLive();
+      return true;
+    }
+    if (s.route.name === "live" && s.live.category) {
+      this.closeCategory();
+      return true;
+    }
     if (s.stack.length > 1) {
       const stack = s.stack.slice(0, -1);
       this.set((x) => ({ ...x, stack, route: stack[stack.length - 1] }));
@@ -235,6 +271,8 @@ export class App {
 
   /** Back where it was left: the account kept, its server found again. */
   async start() {
+    const live = this.store.json<XtreamCredentials | null>("xtream", null);
+    if (live) this.setLive({ credentials: live, favorites: this.store.json<number[]>("favorites", []) });
     const reelyUrl = this.store.get("reelyUrl");
     if (reelyUrl) this.setRequests({ address: reelyUrl });
     const token = this.store.get("plexToken");
@@ -699,6 +737,136 @@ export class App {
     } catch (error) {
       this.setRequestPage(key, { sending: false, outcome: readable(error) });
     }
+  }
+
+  // ---------------------------------------------------------------- Live TV
+
+  private setLive(change: Partial<LiveState>) {
+    this.set((s) => ({ ...s, live: { ...s.live, ...change } }));
+  }
+
+  /** An Xtream login: the panel's address, a username and a password. */
+  async signInXtream(base: string, username: string, password: string) {
+    if (!base.trim() || !username.trim() || !password) {
+      this.setLive({ error: "Enter the server address, username and password your provider gave you." });
+      return;
+    }
+    const panel = xtream.panelLoginIn(base.trim());
+    await this.signInLive(panel ?? { base: xtream.normalizeBase(base), username: username.trim(), password });
+  }
+
+  /** An M3U playlist; a panel's own playlist address signs in to the panel instead. */
+  async signInPlaylist(url: string, guideUrl: string) {
+    if (!/^https?:\/\//i.test(url.trim())) {
+      this.setLive({ error: "Enter the playlist's full address, starting http:// or https://." });
+      return;
+    }
+    const panel = xtream.panelLoginIn(url.trim());
+    await this.signInLive(panel ?? { base: "", username: "", password: "", playlistUrl: url.trim(), guideUrl: guideUrl.trim() || null });
+  }
+
+  private async signInLive(credentials: XtreamCredentials) {
+    this.setLive({ busy: true, error: null });
+    try {
+      const account = await xtream.login(credentials);
+      this.store.setJson("xtream", credentials);
+      this.setLive({ credentials, account, busy: false });
+      await this.loadLive();
+    } catch (error) {
+      this.setLive({ busy: false, error: readable(error) });
+    }
+  }
+
+  signOutLive() {
+    this.store.remove("xtream");
+    this.set((s) => ({ ...s, live: { ...emptyLive(), favorites: s.live.favorites } }));
+  }
+
+  async loadLive() {
+    const c = this.current.live.credentials;
+    if (!c || this.current.live.categories.length) return;
+    this.setLive({ busy: true, error: null });
+    try {
+      const categories = await xtream.liveCategories(c);
+      this.setLive({ categories, busy: false });
+    } catch (error) {
+      this.setLive({ busy: false, error: readable(error) });
+    }
+  }
+
+  shownCategories(): XtreamCategory[] {
+    const live = this.current.live;
+    return live.favorites.length ? [FAVORITES, ...live.categories] : live.categories;
+  }
+
+  async openCategory(category: XtreamCategory) {
+    const c = this.current.live.credentials;
+    if (!c) return;
+    this.setLive({ category, channels: [], busy: true, error: null });
+    try {
+      const channels = category.id === FAVORITES.id
+        ? (await xtream.liveChannels(c)).filter((ch) => this.current.live.favorites.includes(ch.streamId))
+        : await xtream.liveChannels(c, category.id);
+      if (this.current.live.category !== category) return;
+      this.setLive({ channels, busy: false });
+      void this.loadGuide(channels.slice(0, 40));
+    } catch (error) {
+      this.setLive({ busy: false, error: readable(error) });
+    }
+  }
+
+  closeCategory() {
+    this.setLive({ category: null, channels: [], watching: null });
+  }
+
+  /** Now and next for what's on screen, a few at a time so the panel isn't flooded. */
+  async loadGuide(channels: XtreamChannel[]) {
+    const c = this.current.live.credentials;
+    if (!c) return;
+    for (let i = 0; i < channels.length; i += 6) {
+      const batch = channels.slice(i, i + 6);
+      const found = await Promise.all(batch.map((ch) => xtream.shortEpg(c, ch.streamId, 2).catch(() => [] as Programme[])));
+      const guide = { ...this.current.live.guide };
+      batch.forEach((ch, n) => { guide[ch.streamId] = found[n]; });
+      this.setLive({ guide });
+    }
+  }
+
+  toggleFavorite(channel: XtreamChannel) {
+    const now = this.current.live.favorites;
+    const favorites = now.includes(channel.streamId) ? now.filter((id) => id !== channel.streamId) : [...now, channel.streamId];
+    this.store.setJson("favorites", favorites);
+    this.setLive({ favorites });
+  }
+
+  watchChannel(index: number) {
+    if (index < 0 || index >= this.current.live.channels.length) return;
+    this.setLive({ watching: index });
+  }
+
+  /** Channel up and down, round the list's ends. */
+  stepChannel(by: number) {
+    const live = this.current.live;
+    if (live.watching == null || !live.channels.length) return;
+    this.setLive({ watching: (live.watching + by + live.channels.length) % live.channels.length });
+  }
+
+  /** A channel by the number on it, as typed on the remote. */
+  tuneNumber(number: number): boolean {
+    const at = this.current.live.channels.findIndex((ch) => ch.number === number);
+    if (at < 0) return false;
+    this.setLive({ watching: at });
+    return true;
+  }
+
+  stopLive() {
+    this.setLive({ watching: null });
+  }
+
+  /** Where the channel plays from: the provider's HLS, which the TV plays itself. */
+  channelUrl(channel: XtreamChannel): string | null {
+    const c = this.current.live.credentials;
+    return c ? xtream.streamUrl(c, channel, "m3u8") : null;
   }
 
   /** A picture from the server a title is on, at the size it's drawn. */
