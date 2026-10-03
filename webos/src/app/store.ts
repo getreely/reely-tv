@@ -26,6 +26,7 @@ export type Route =
   | { name: "search" }
   | { name: "person"; person: PlexPerson }
   | { name: "collection"; item: PlexItem }
+  | { name: "playlist"; item: PlexItem }
   | { name: "live" }
   | { name: "requests" }
   | { name: "requestTitle"; title: RequestTitle }
@@ -190,10 +191,22 @@ export interface Prefs {
   skipCredits: boolean;
   /** Up Next's count before the next episode plays; 0 waits to be asked. */
   upNextSeconds: number;
+  /** Home's rows switched off, by id. */
+  hiddenRows: HomeRowId[];
 }
 
+/** Home's rows, as Settings lists them. */
+export type HomeRowId = "continueWatching" | "recentEpisodes" | "recentMovies" | "watchlist" | "playlists";
+export const HOME_ROWS: Array<[HomeRowId, string]> = [
+  ["continueWatching", "Continue Watching"],
+  ["recentEpisodes", "Recently Added Episodes"],
+  ["recentMovies", "Recently Added Movies"],
+  ["watchlist", "Watchlist"],
+  ["playlists", "Playlists"],
+];
+
 export const UP_NEXT_CHOICES = [0, 5, 10, 12, 15, 20, 30];
-const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12 };
+const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [] };
 
 /** As the Fire TV offers them. */
 export const BITRATE_CHOICES = [0, 20_000, 12_000, 8_000, 4_000, 2_000];
@@ -331,6 +344,7 @@ export class App {
     if (route.name === "requestTitle") void this.openRequestTitle(route.title);
     if (route.name === "person") void this.openPerson(route.person);
     if (route.name === "collection") void this.openCollection(route.item);
+    if (route.name === "playlist") void this.openPlaylist(route.item);
   }
 
   /** Back one page; false when there's nowhere back to go (Home's Back leaves the app). */
@@ -372,6 +386,7 @@ export class App {
         skipIntros: prefs.skipIntros === true,
         skipCredits: prefs.skipCredits === true,
         upNextSeconds: typeof prefs.upNextSeconds === "number" ? Math.max(0, Math.min(30, prefs.upNextSeconds)) : DEFAULT_PREFS.upNextSeconds,
+        hiddenRows: Array.isArray(prefs.hiddenRows) ? prefs.hiddenRows.filter((r) => HOME_ROWS.some(([id]) => id === r)) : [],
       },
     }));
     const live = this.store.json<XtreamCredentials | null>("xtream", null);
@@ -1288,6 +1303,73 @@ export class App {
     }
   }
 
+  async openPlaylist(item: PlexItem) {
+    const key = `playlist:${plex.listKey(item)}`;
+    const run = ++this.listRun;
+    this.set((s) => ({ ...s, list: { key, items: [], busy: true, error: null } }));
+    const base = item.serverBase ?? this.current.plex.baseUrl;
+    const token = this.tokenFor(base);
+    try {
+      if (!base || !token) throw new Error("Couldn't reach the server this playlist is on.");
+      const items = (await plex.playlistItems(base, token, item.ratingKey)).filter((i) => i.type === "movie" || i.type === "episode");
+      if (run === this.listRun) this.set((s) => ({ ...s, list: { key, items, busy: false, error: null } }));
+    } catch (error) {
+      if (run === this.listRun) this.set((s) => ({ ...s, list: { key, items: [], busy: false, error: readable(error) } }));
+    }
+  }
+
+  // ---------------------------------------------------------------- A poster's menu
+
+  /** Watched or not, for any poster: then Home again, and the page it's on if it's open. */
+  async setItemWatched(item: PlexItem, watched: boolean) {
+    const base = item.serverBase ?? this.current.plex.baseUrl;
+    const token = this.tokenFor(base);
+    if (!base || !token) return;
+    try {
+      await plex.setWatched(base, token, item.ratingKey, watched);
+    } catch (error) {
+      this.set((s) => ({ ...s, playError: readable(error) }));
+      return;
+    }
+    const mark = (i: PlexItem) =>
+      plex.listKey(i) === plex.listKey(item) ? { ...i, viewCount: watched ? 1 : 0, viewOffsetMs: 0, viewedLeafCount: watched ? i.leafCount : 0 } : i;
+    this.set((s) => ({
+      ...s,
+      browse: { movie: { ...s.browse.movie, items: s.browse.movie.items.map(mark) }, show: { ...s.browse.show, items: s.browse.show.items.map(mark) } },
+      list: s.list ? { ...s.list, items: s.list.items.map(mark) } : s.list,
+    }));
+    void this.refreshHome();
+  }
+
+  async removeFromContinueWatching(item: PlexItem) {
+    const base = item.serverBase ?? this.current.plex.baseUrl;
+    const token = this.tokenFor(base);
+    if (!base || !token) return;
+    // Gone at once; Home asked again behind it.
+    this.set((s) => ({ ...s, home: { ...s.home, continueWatching: s.home.continueWatching.filter((i) => plex.listKey(i) !== plex.listKey(item)) } }));
+    try {
+      await plex.removeFromContinueWatching(base, token, item.ratingKey);
+    } catch (error) {
+      this.set((s) => ({ ...s, playError: readable(error) }));
+    }
+    void this.refreshHome();
+  }
+
+  /** A show's next episode, as its menu offers it: the one it's up to. */
+  async nextEpisodeOf(show: PlexItem): Promise<{ episode: PlexItem; queue: PlexItem[] } | null> {
+    const base = show.serverBase ?? this.current.plex.baseUrl;
+    const token = this.tokenFor(base);
+    if (!base || !token) return null;
+    try {
+      const episodes = (await plex.episodesOf(base, token, show.ratingKey)).map((e) => ({ ...e, serverBase: base }));
+      const episode = plex.nextEpisode(episodes);
+      return episode ? { episode, queue: episodes } : null;
+    } catch (error) {
+      this.set((s) => ({ ...s, playError: readable(error) }));
+      return null;
+    }
+  }
+
   // ---------------------------------------------------------------- Settings
 
   setPlaybackMode(playbackMode: PlaybackMode) {
@@ -1304,6 +1386,11 @@ export class App {
 
   setSkipCredits(skipCredits: boolean) {
     this.setPrefs({ skipCredits });
+  }
+
+  toggleHomeRow(id: HomeRowId) {
+    const hidden = this.current.prefs.hiddenRows;
+    this.setPrefs({ hiddenRows: hidden.includes(id) ? hidden.filter((r) => r !== id) : [...hidden, id] });
   }
 
   setUpNextSeconds(upNextSeconds: number) {

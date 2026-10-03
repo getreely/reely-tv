@@ -5,7 +5,7 @@ import { groupKey } from "../app/home";
 import type { App, AppState, Kind } from "../app/store";
 import { formatDuration } from "../core/quality";
 import { focus, onKeys } from "./focus";
-import { Card, Pill, Qr, Row, Spinner, useRescue } from "./parts";
+import { Card, Pill, Qr, Row, Spinner, useRescue, useReturnFocus } from "./parts";
 import { PersonButton } from "./search";
 
 const episodeLine = (i: PlexItem) =>
@@ -15,6 +15,8 @@ const episodeLine = (i: PlexItem) =>
 export function open(app: App, item: PlexItem) {
   if (item.type === "collection") {
     app.navigate({ name: "collection", item });
+  } else if (item.type === "playlist") {
+    app.navigate({ name: "playlist", item });
   } else if (item.type === "episode" && item.grandparentRatingKey) {
     app.navigate({ name: "detail", ratingKey: item.grandparentRatingKey, serverBase: item.serverBase, episodeKey: item.ratingKey });
   } else {
@@ -76,7 +78,14 @@ export function SignIn(props: { app: App; state: AppState }) {
 
 export function Home(props: { app: App; state: AppState }) {
   const { app, state } = props;
-  const home = state.home;
+  const hidden = state.prefs.hiddenRows;
+  const home = {
+    continueWatching: hidden.includes("continueWatching") ? [] : state.home.continueWatching,
+    recentEpisodes: hidden.includes("recentEpisodes") ? [] : state.home.recentEpisodes,
+    recentMovies: hidden.includes("recentMovies") ? [] : state.home.recentMovies,
+    watchlist: hidden.includes("watchlist") ? [] : state.home.watchlist,
+    playlists: hidden.includes("playlists") ? [] : state.home.playlists,
+  };
   useRescue([home.continueWatching.length, home.recentMovies.length]);
   const img = (i: PlexItem, w: number, h: number, path = i.thumb) => app.image(i.serverBase, path, w, h);
   let first = true;
@@ -93,6 +102,7 @@ export function Home(props: { app: App; state: AppState }) {
           {home.continueWatching.map((i) => (
             <Card
               key={plex.listKey(i)}
+              item={i}
               wide
               autofocus={auto()}
               title={plex.rowTitle(i)}
@@ -115,6 +125,7 @@ export function Home(props: { app: App; state: AppState }) {
               image={app.image(g.serverBase, g.thumb, 300, 450)}
               badge={g.count}
               onPress={() => open(app, g.newest)}
+              item={g.newest}
             />
           ))}
         </Row>
@@ -122,7 +133,7 @@ export function Home(props: { app: App; state: AppState }) {
       {home.recentMovies.length ? (
         <Row title="Recently Added Movies">
           {home.recentMovies.map((i) => (
-            <Card key={plex.listKey(i)} autofocus={auto()} title={i.title} sub={plex.caption(i)} image={img(i, 300, 450)}
+            <Card key={plex.listKey(i)} item={i} autofocus={auto()} title={i.title} sub={plex.caption(i)} image={img(i, 300, 450)}
               progress={plex.resumeFraction(i)} watched={plex.isWatched(i)} onPress={() => open(app, i)} />
           ))}
         </Row>
@@ -130,7 +141,7 @@ export function Home(props: { app: App; state: AppState }) {
       {home.watchlist.length ? (
         <Row title="Watchlist">
           {home.watchlist.map((i) => (
-            <Card key={`w:${plex.listKey(i)}`} autofocus={auto()} title={i.title} sub={plex.caption(i)} image={img(i, 300, 450)}
+            <Card key={`w:${plex.listKey(i)}`} item={i} autofocus={auto()} title={i.title} sub={plex.caption(i)} image={img(i, 300, 450)}
               watched={plex.isWatched(i)} onPress={() => open(app, i)} />
           ))}
         </Row>
@@ -198,6 +209,7 @@ export function Library(props: { app: App; state: AppState; kind: Kind }) {
         {browse.items.map((i, index) => (
           <Card
             key={plex.listKey(i)}
+            item={i}
             autofocus={index === 0}
             title={i.title}
             sub={plex.caption(i)}
@@ -218,6 +230,7 @@ export function Library(props: { app: App; state: AppState; kind: Kind }) {
 function Chooser(props: { title: string; options: plex.PlexGenre[]; chosen: plex.PlexGenre | null; onChoose: (g: plex.PlexGenre | null) => void; onClose: () => void }) {
   useEffect(() => onKeys((a) => { if (a === "back") { props.onClose(); return true; } return false; }), []);
   useRescue([]);
+  useReturnFocus();
   return (
     <div class="layer" data-layer>
       <div class="panel chooser">
@@ -335,7 +348,7 @@ export function Detail(props: { app: App; state: AppState; onPlay: (item: PlexIt
       {page.related.length ? (
         <Row title="More like this">
           {page.related.map((i) => (
-            <Card key={plex.listKey(i)} title={i.title} sub={plex.caption(i)} image={app.image(i.serverBase, i.thumb, 300, 450)} onPress={() => open(app, i)} />
+            <Card key={plex.listKey(i)} item={i} title={i.title} sub={plex.caption(i)} image={app.image(i.serverBase, i.thumb, 300, 450)} onPress={() => open(app, i)} />
           ))}
         </Row>
       ) : null}
@@ -359,6 +372,7 @@ export function Profiles(props: { app: App; state: AppState; onClose: () => void
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<PlexHomeUser | null>(null);
   useRescue([asking, busy]);
+  useReturnFocus();
   useEffect(
     () =>
       onKeys((a) => {

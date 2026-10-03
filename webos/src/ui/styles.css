@@ -168,3 +168,9 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .letter:focus { background: var(--chalk); color: var(--ink); }
 .chooser { max-width: 70rem; max-height: 80vh; overflow-y: auto; }
 .toolbar.centered { justify-content: center; }
+
+/* A poster's menu: the shade, and the panel down the right with the title's picture. */
+.menu-shade { background: rgba(10, 9, 9, 0.6); }
+.item-menu { z-index: 1; background: var(--raised); }
+.menu-art { height: 13rem; margin: -2.5rem -1.6rem 1.2rem; background-size: cover; background-position: center; }
+.menu-list { margin-top: 1rem; }

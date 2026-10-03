@@ -65,6 +65,10 @@ async function fakePlex(page: Page) {
       timeline.push(`choose${url.search.replace(/&?allParts=1/, "")}`);
       return json(route, {});
     }
+    if (path === "/:/scrobble" || path === "/actions/removeFromContinueWatching") {
+      timeline.push(`${path}?${url.searchParams.get("key") ?? url.searchParams.get("ratingKey")}`);
+      return json(route, {});
+    }
     if (path === "/:/timeline") {
       timeline.push(`${url.searchParams.get("state")}@${url.searchParams.get("ratingKey")}`);
       return json(route, {});
@@ -241,6 +245,40 @@ test("the player: Skip Intro, another sound track kept with Plex, Up Next on to 
   await nextFile;
   await expect.poll(() => plex.timeline).toContain("stopped@e2");
   await expect(page.locator(".player-bar .facts").first()).toHaveText("S1 · E3 · Episode 3");
+});
+
+test("holding OK on a poster opens its menu; a Home row can be switched off", async ({ page }) => {
+  const plex = await fakePlex(page);
+  await page.goto("/");
+  await press(page, "Enter");
+  await expect(page.getByText("Recently Added Movies")).toBeVisible({ timeout: 10_000 });
+  await press(page, "ArrowDown", 2);
+  await expect(page.locator(".card:focus .title")).toHaveText("Low Orbit");
+  // Held: the remote repeats OK while it's down.
+  await page.keyboard.down("Enter");
+  await page.waitForTimeout(500);
+  await page.keyboard.down("Enter");
+  await page.keyboard.up("Enter");
+  await expect(page.locator(".item-menu")).toBeVisible();
+  await expect(page.locator(".item-menu .option")).toHaveText(["Play", "Mark as watched", "Details"]);
+  await expect(page.locator(".option:focus")).toHaveText("Play");
+  await page.screenshot({ path: "shots/lg-menu.png" });
+  await press(page, "ArrowDown");
+  await press(page, "Enter");
+  await expect(page.locator(".item-menu")).toHaveCount(0);
+  await expect.poll(() => plex.timeline).toContain("/:/scrobble?m1");
+  // A press that isn't held is still a press: the film's page.
+  await expect(page.locator(".card:focus .title")).toHaveText("Low Orbit");
+
+  // Settings, Home: Continue Watching off, and it's gone from Home.
+  await page.getByRole("button", { name: "Settings" }).focus();
+  await press(page, "Enter");
+  await page.getByRole("button", { name: "Continue Watching" }).focus();
+  await press(page, "Enter");
+  await page.getByRole("button", { name: "Home" }).first().focus();
+  await press(page, "Enter");
+  await expect(page.getByText("Recently Added Movies")).toBeVisible();
+  await expect(page.getByText("Continue Watching")).toHaveCount(0);
 });
 
 test("arrows move along a row and down to the next; Back from a tab goes Home", async ({ page }) => {

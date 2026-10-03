@@ -17,14 +17,14 @@ app (Amazon's Vega SDK, React Native), which can reuse the LG app's TypeScript c
 | Plex Home profiles, PINs, "Who's watching?" after sign-in | ✅ | ✅ | ✅ | ⬜ | ⬜ |
 | Several servers, libraries from all of them | ✅ | ✅ | ✅ | ⬜ | ⬜ |
 | Home: Continue Watching, recent episodes and movies, Watchlist, playlists | ✅ | ✅ | ✅ | 🟡 (Continue Watching, recent episodes and movies) | ⬜ |
-| Home rows switched on and off | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
+| Home rows switched on and off | ✅ | ✅ | ✅ | ⬜ | ⬜ |
 | Movies / TV Shows: tab home, library grid, collections | ✅ | ✅ | 🟡 (grid) | ⬜ | ⬜ |
 | Library sort, unwatched, genre, decade, A–Z | ✅ | ✅ (A–Z by sort) | ✅ | ⬜ | ⬜ |
 | Title page: play/resume/restart, watched, Watchlist, trailer, version | ✅ | ✅ | ✅ | 🟡 (play/resume/restart) | ⬜ |
 | Seasons and episodes; show opens where it's up to | ✅ | ✅ | ✅ | ✅ | ⬜ |
 | Cast and actor pages, More like this, collections' pages | ✅ | ✅ | ✅ | ⬜ | ⬜ |
-| Playlists: play, shuffle | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
-| Hold a poster for its menu | ✅ | ✅ (long press) | ⬜ | ⬜ | ⬜ |
+| Playlists: play, shuffle | ✅ | ✅ | ✅ | ⬜ | ⬜ |
+| Hold a poster for its menu | ✅ | ✅ (long press) | ✅ | ⬜ | ⬜ |
 | Search: titles, people, collections, channels, recent searches | ✅ | ✅ | ✅ | ⬜ | ⬜ |
 | **Player** | | | | | |
 | Direct play, conversion when needed, quality limit | ✅ | ✅ | ✅ | 🟡 (no quality limit yet) | ⬜ |

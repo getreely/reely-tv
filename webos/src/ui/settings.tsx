@@ -1,6 +1,6 @@
 import type { ComponentChildren } from "preact";
 import type { App, AppState, PlaybackMode } from "../app/store";
-import { BITRATE_CHOICES, UP_NEXT_CHOICES } from "../app/store";
+import { BITRATE_CHOICES, HOME_ROWS, UP_NEXT_CHOICES } from "../app/store";
 import { Pill, useRescue } from "./parts";
 
 /*
@@ -78,6 +78,14 @@ export function Settings(props: { app: App; state: AppState; onProfiles: () => v
         <Setting title="Up Next" note="How long before the next episode starts by itself.">
           {UP_NEXT_CHOICES.map((n) => (
             <Pill key={n} label={n === 0 ? "Don't start by itself" : `${n} seconds`} on={prefs.upNextSeconds === n} onPress={() => app.setUpNextSeconds(n)} />
+          ))}
+        </Setting>
+      </Group>
+
+      <Group title="Home">
+        <Setting title="Rows on Home" note="Switch a row off to leave it out of Home.">
+          {HOME_ROWS.map(([id, label]) => (
+            <Pill key={id} label={label} on={!prefs.hiddenRows.includes(id)} onPress={() => app.toggleHomeRow(id)} />
           ))}
         </Setting>
       </Group>

@@ -75,13 +75,42 @@ export function move(direction: "up" | "down" | "left" | "right"): boolean {
   return true;
 }
 
+/** How long OK is held before it's a hold rather than a press, as on the Fire TV. */
+export const HOLD_MS = 450;
+
+/** OK going down on something: pressed when it comes up, unless it was held. */
+let okDown: { el: HTMLElement; at: number; held: boolean } | null = null;
+
 export function installKeys(onUnhandledBack: () => void) {
+  document.addEventListener(
+    "keyup",
+    (event) => {
+      if (actionOf(event) !== "ok" || !okDown) return;
+      const { el, held } = okDown;
+      okDown = null;
+      if (!held && document.activeElement === el && el.isConnected) {
+        event.preventDefault();
+        el.click();
+      }
+    },
+    true,
+  );
   document.addEventListener(
     "keydown",
     (event) => {
       const action = actionOf(event);
       if (!action) return;
       pressedAt = Date.now();
+      // OK held down: the remote repeats it. Past HOLD_MS it's a hold, once, for whatever
+      // takes one (a poster's menu); nothing else hears the repeats.
+      if (action === "ok" && event.repeat) {
+        event.preventDefault();
+        if (okDown && !okDown.held && Date.now() - okDown.at >= HOLD_MS) {
+          okDown.held = true;
+          okDown.el.dispatchEvent(new CustomEvent("hold", { bubbles: true }));
+        }
+        return;
+      }
       for (const handler of handlers.slice()) {
         if (handler(action)) {
           event.preventDefault();
@@ -101,7 +130,8 @@ export function installKeys(onUnhandledBack: () => void) {
         const active = document.activeElement as HTMLElement | null;
         if (active && active.hasAttribute("data-focus") && !(active instanceof HTMLInputElement)) {
           event.preventDefault();
-          active.click();
+          // Pressed when OK comes up; held long enough, it's a hold instead.
+          okDown = { el: active, at: Date.now(), held: false };
         }
       } else if (action === "back") {
         event.preventDefault();

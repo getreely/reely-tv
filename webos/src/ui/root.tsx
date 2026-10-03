@@ -8,6 +8,11 @@ import { Requests, RequestTitlePage } from "./requests";
 import { Live, LivePlayer } from "./live";
 import { collectionKey, ListPageView, personKey, Search } from "./search";
 import { Settings } from "./settings";
+import { ItemMenu } from "./menu";
+import { HoldContext, Pill } from "./parts";
+import type { PlexItem } from "../api/plex";
+import { listKey } from "../api/plex";
+import { open } from "./screens";
 
 const TABS: Array<[string, Route]> = [
   ["Home", { name: "home" }],
@@ -30,6 +35,7 @@ export function Root(props: { app: App }) {
   const { app } = props;
   const [state, setState] = useState<AppState>(app.state);
   const [choosingProfile, setChoosingProfile] = useState(false);
+  const [menuFor, setMenuFor] = useState<PlexItem | null>(null);
   const video = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => app.subscribe(setState), [app]);
@@ -50,10 +56,24 @@ export function Root(props: { app: App }) {
     return () => clearTimeout(t);
   }, [state.route, state.playing == null, isConnected(state)]);
 
+  const direct = (p: Parameters<typeof playDirect>[1]) => playDirect(video.current ?? document.createElement("video"), p);
   const onPlay = (item: Parameters<App["play"]>[0], resume: boolean) => {
-    const probe = video.current ?? document.createElement("video");
     const version = item.type === "movie" ? state.detail?.versionIndex ?? 0 : 0;
-    void app.play(item, resume, (p) => playDirect(probe, p), item.type === "episode" ? state.detail?.episodes ?? [] : [], version);
+    void app.play(item, resume, direct, item.type === "episode" ? state.detail?.episodes ?? [] : [], version);
+  };
+  /** A list played in order (or shuffled), each on to the next. */
+  const playAll = (items: PlexItem[], shuffle: boolean) => {
+    const queue = shuffle ? shuffled(items) : items;
+    if (queue.length) void app.play(queue[0], false, direct, queue);
+  };
+  const menuActions = {
+    play: (item: PlexItem, resume: boolean) => void app.play(item, resume, direct),
+    playNext: (show: PlexItem) => void app.nextEpisodeOf(show).then((n) => { if (n) void app.play(n.episode, true, direct, n.queue); }),
+    setWatched: (item: PlexItem, watched: boolean) => void app.setItemWatched(item, watched),
+    details: (item: PlexItem) => open(app, item),
+    removeFromContinueWatching: menuFor && state.home.continueWatching.some((i) => listKey(i) === listKey(menuFor))
+      ? (item: PlexItem) => void app.removeFromContinueWatching(item)
+      : null,
   };
 
   if (state.playing) return <Player app={app} playing={state.playing} />;
@@ -63,6 +83,7 @@ export function Root(props: { app: App }) {
   const connected = isConnected(state);
   const route = state.route;
   return (
+    <HoldContext.Provider value={setMenuFor}>
     <div class="app">
       <nav class="tabs">
         <img class="brand" src="mark.svg" alt="Reely" />
@@ -113,6 +134,12 @@ export function Root(props: { app: App }) {
           <ListPageView app={app} state={state} title={route.person.name} listKey={personKey(route.person)} empty="Nothing they're in is in your libraries." />
         ) : route.name === "collection" ? (
           <ListPageView app={app} state={state} title={route.item.title} listKey={collectionKey(route.item)} empty="This collection is empty." />
+        ) : route.name === "playlist" ? (
+          <ListPageView app={app} state={state} title={route.item.title} listKey={`playlist:${listKey(route.item)}`} empty="This playlist is empty."
+            actions={<>
+              <Pill label="Play" primary autofocus onPress={() => playAll(state.list?.items ?? [], false)} />
+              <Pill label="Shuffle" onPress={() => playAll(state.list?.items ?? [], true)} />
+            </>} />
         ) : route.name === "settings" ? (
           <Settings app={app} state={state} onProfiles={() => setChoosingProfile(true)} />
         ) : (
@@ -130,6 +157,20 @@ export function Root(props: { app: App }) {
         </div>
       ) : null}
       {choosingProfile ? <Profiles app={app} state={state} onClose={() => setChoosingProfile(false)} /> : null}
+      {menuFor ? (
+        <ItemMenu item={menuFor} image={app.image(menuFor.serverBase, menuFor.art ?? menuFor.thumb, 960, 540)} actions={menuActions} onClose={() => setMenuFor(null)} />
+      ) : null}
     </div>
+    </HoldContext.Provider>
   );
+}
+
+/** A shuffled copy: each order as likely as any other. */
+function shuffled<T>(items: T[]): T[] {
+  const out = items.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }

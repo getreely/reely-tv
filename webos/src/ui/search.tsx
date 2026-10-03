@@ -1,3 +1,4 @@
+import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import * as plex from "../api/plex";
 import type { PlexItem, PlexPerson } from "../api/plex";
@@ -37,7 +38,7 @@ export function Search(props: { app: App; state: AppState }) {
     app.navigate({ name: "person", person: p });
   };
   const poster = (i: PlexItem, key: string) => (
-    <Card key={key} title={plex.rowTitle(i)} sub={episodeLine(i)} image={app.image(i.serverBase, posterOf(i), 300, 450)}
+    <Card key={key} item={i} title={plex.rowTitle(i)} sub={episodeLine(i)} image={app.image(i.serverBase, posterOf(i), 300, 450)}
       progress={plex.resumeFraction(i)} watched={plex.isWatched(i)} onPress={() => pick(i)} />
   );
   const nothing = !s.results.length && !s.more.length && !s.people.length && !s.collections.length && !s.channels.length;
@@ -135,7 +136,7 @@ export function PersonButton(props: { app: App; person: Pick<PlexPerson, "name" 
 }
 
 /** Everything someone's in, or everything in a collection: a grid of titles. */
-export function ListPageView(props: { app: App; state: AppState; title: string; listKey: string; empty: string }) {
+export function ListPageView(props: { app: App; state: AppState; title: string; listKey: string; empty: string; actions?: ComponentChildren }) {
   const { app, state } = props;
   const page = state.list && state.list.key === props.listKey ? state.list : null;
   useRescue([page?.busy, page?.items.length]);
@@ -144,13 +145,14 @@ export function ListPageView(props: { app: App; state: AppState; title: string; 
       <div class="hero short">
         <h1>{props.title}</h1>
         {page && !page.busy ? <div class="facts">{page.items.length === 1 ? "1 title" : `${page.items.length} titles`}</div> : null}
+        {page && !page.busy && page.items.length && props.actions ? <div class="actions">{props.actions}</div> : null}
       </div>
       {!page || page.busy ? <div class="center" style={{ height: "12rem" }}><Spinner /></div> : null}
       {page?.error ? <p class="note error" style={{ margin: "0 3rem" }}>{page.error}</p> : null}
       {page && !page.busy && !page.error && !page.items.length ? <p class="note" style={{ margin: "0 3rem" }}>{props.empty}</p> : null}
       <div class="grid">
         {(page?.items ?? []).map((i, index) => (
-          <Card key={plex.listKey(i)} autofocus={index === 0} title={i.title} sub={plex.caption(i)} image={app.image(i.serverBase, i.thumb, 300, 450)}
+          <Card key={plex.listKey(i)} item={i} autofocus={index === 0 && !props.actions} title={i.title} sub={plex.caption(i)} image={app.image(i.serverBase, i.thumb, 300, 450)}
             progress={plex.resumeFraction(i)} watched={plex.isWatched(i)} onPress={() => open(app, i)} />
         ))}
       </div>
