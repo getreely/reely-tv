@@ -296,10 +296,12 @@ describe("playback settings", () => {
     app.setSkipIntros(true);
     app.setUpNextSeconds(7);
     app.setUpNextSeconds(5);
-    expect(app.state.prefs).toEqual({ playbackMode: "transcode", maxBitrateKbps: 8_000, skipIntros: true, skipCredits: false, upNextSeconds: 5 });
+    app.toggleHomeRow("playlists");
+    app.toggleHomeRow("playlists");
+    expect(app.state.prefs).toEqual({ playbackMode: "transcode", maxBitrateKbps: 8_000, skipIntros: true, skipCredits: false, upNextSeconds: 5, hiddenRows: [] });
     const again = new App(app.store, instant);
     await again.start();
-    expect(again.state.prefs).toEqual({ playbackMode: "transcode", maxBitrateKbps: 8_000, skipIntros: true, skipCredits: false, upNextSeconds: 5 });
+    expect(again.state.prefs).toEqual({ playbackMode: "transcode", maxBitrateKbps: 8_000, skipIntros: true, skipCredits: false, upNextSeconds: 5, hiddenRows: [] });
   });
 
   it("Always convert converts what the TV could play, at the quality chosen", async () => {
