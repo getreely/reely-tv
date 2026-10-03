@@ -47,7 +47,7 @@ class AudioOutputMenuTest {
                     player = player,
                     prefs = PlayerPrefs(),
                     tracksVersion = 0,
-                    focusRequester = FocusRequester(),
+                    focusRequester = androidx.compose.runtime.remember { FocusRequester() },
                     onClose = {},
                     onNudgeScale = {},
                     onToggleBackground = {},

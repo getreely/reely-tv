@@ -95,7 +95,8 @@ fun RequestsScreen(
         }
 
         if (requests.mine.isNotEmpty()) {
-            item { TitleRow("Your requests", requests.mine.map { it.title }, requests, sideways, onOpen) }
+            // Once each: a show asked for a season at a time is one show, and one key in the row.
+            item { TitleRow("Your requests", requests.mine.map { it.title }.distinctBy { it.key }, requests, sideways, onOpen) }
         }
         items(requests.rows, key = { it.id }) { row ->
             TitleRow(row.title, row.titles, requests, sideways, onOpen)

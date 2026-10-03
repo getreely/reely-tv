@@ -208,7 +208,7 @@ fun Artwork(
         }
         if (badge != null && badge > 1) {
             Text(
-                text = badge.toString(),
+                text = tv.reely.ui.components.badgeText(badge),
                 color = Ink,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,

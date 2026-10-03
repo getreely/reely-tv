@@ -216,7 +216,9 @@ private fun Schedule(viewModel: ReelyViewModel, state: ReelyState, channel: Xtre
                 }
             }
             if (listing.isEmpty()) item { TouchNote("No guide for this channel.") }
-            items(listing.filter { it.stop > now - channel.archiveDays * 86_400L }, key = { "${it.start}" }) { programme ->
+            // Keyed by place as well as time: guides do list the same programme twice, and
+            // a key used twice takes the whole list down.
+            itemsIndexed(listing.filter { it.stop > now - channel.archiveDays * 86_400L }, key = { index, it -> "$index:${it.start}" }) { _, programme ->
                 val past = programme.stop <= now
                 val onNow = programme.isOnAt(now)
                 val again = catchUpProgramme(channel, listing, programme.start, now) != null
@@ -267,7 +269,8 @@ private fun LiveSignIn(viewModel: ReelyViewModel, live: LiveState) {
     var playlist by rememberSaveable { mutableStateOf(false) }
     var host by rememberSaveable { mutableStateOf("") }
     var username by rememberSaveable { mutableStateOf("") }
-    var password by rememberSaveable { mutableStateOf("") }
+    // Not saved with the screen's state, which the system keeps outside the app.
+    var password by remember { mutableStateOf("") }
     var url by rememberSaveable { mutableStateOf("") }
     var guide by rememberSaveable { mutableStateOf("") }
     Column(

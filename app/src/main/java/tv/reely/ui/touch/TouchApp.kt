@@ -148,15 +148,17 @@ fun TouchApp(
     }
 
     if (pickingProfile) {
-        tv.reely.ui.screens.ProfilePicker(
-            users = state.plex.homeUsers,
-            current = state.plex.user,
-            switchingTo = state.plex.switchingTo,
-            error = state.plex.switchError,
-            onPick = viewModel::switchUser,
-            onDismissError = viewModel::dismissSwitchError,
-            onClose = { pickingProfile = false },
-        )
+        TouchTheme {
+            TouchProfilePicker(
+                users = state.plex.homeUsers,
+                current = state.plex.user,
+                switchingTo = state.plex.switchingTo,
+                error = state.plex.switchError,
+                onPick = viewModel::switchUser,
+                onDismissError = viewModel::dismissSwitchError,
+                onClose = { pickingProfile = false },
+            )
+        }
         return
     }
 
@@ -193,6 +195,15 @@ fun TouchApp(
                 if (sideways) TouchNavRail(state, onSelect = { viewModel.navigate(it.route) })
                 Box(Modifier.weight(1f).fillMaxSize()) {
                     TouchContent(viewModel, state, actions)
+                    // Inside the bar's padding, so it sits above the tabs rather than on them.
+                    state.dueReminder?.let { due ->
+                        TouchReminder(
+                            reminder = due,
+                            onWatch = viewModel::watchReminder,
+                            onDismiss = viewModel::dismissReminder,
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp),
+                        )
+                    }
                 }
             }
         }
@@ -215,23 +226,12 @@ fun TouchApp(
         }
 
         if (state.updatePrompt) {
-            tv.reely.ui.screens.UpdatePrompt(
+            TouchUpdatePrompt(
                 status = state.update,
                 onUpdate = viewModel::installUpdate,
                 onInstall = viewModel::openInstaller,
                 onLater = viewModel::dismissUpdatePrompt,
             )
-        }
-
-        state.dueReminder?.let { due ->
-            Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.BottomCenter) {
-                tv.reely.ui.screens.ReminderCard(
-                    reminder = due,
-                    focusRequester = remember { androidx.compose.ui.focus.FocusRequester() },
-                    onWatch = viewModel::watchReminder,
-                    onDismiss = viewModel::dismissReminder,
-                )
-            }
         }
     }
 }

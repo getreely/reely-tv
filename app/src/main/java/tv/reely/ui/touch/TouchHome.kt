@@ -216,7 +216,7 @@ internal fun TouchSignIn(viewModel: ReelyViewModel, state: ReelyState) {
     val plex = state.plex
     val context = LocalContext.current
     // Opened once per code: coming back to the app mustn't send you back to the browser.
-    var openedFor by remember { mutableStateOf<String?>(null) }
+    var openedFor by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(plex.linkUrl) {
         val url = plex.linkUrl ?: return@LaunchedEffect
         if (openedFor == url) return@LaunchedEffect

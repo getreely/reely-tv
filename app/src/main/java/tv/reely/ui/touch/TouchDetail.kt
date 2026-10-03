@@ -199,22 +199,50 @@ internal fun TouchDetail(viewModel: ReelyViewModel, state: ReelyState, actions: 
 @Composable
 private fun Actions(viewModel: ReelyViewModel, page: DetailState, watchlisted: Boolean?) {
     val detail = page.detail ?: return
-    // What Play would resume: for a show, the part-watched episode.
-    val resumeFrom = if (detail.isShow) page.episodes.firstOrNull { it.resumeFraction != null }?.viewOffsetMs ?: 0L
-    else detail.viewOffsetMs
+    /*
+     * As on the television: a show's page is about one episode — the one it was opened
+     * on, else the one you're up to — and Play, Restart and Watched are about that one.
+     * Without it, Play went to the season's first episode however far through you were.
+     */
+    val target = page.focusedEpisode?.takeIf { detail.isShow }
+    val resumeFrom = when {
+        target != null -> target.viewOffsetMs
+        detail.isShow -> page.episodes.firstOrNull { it.resumeFraction != null }?.viewOffsetMs ?: 0L
+        else -> detail.viewOffsetMs
+    }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        target?.let { episode ->
+            Text(
+                listOfNotNull(
+                    if (resumeFrom > 0) "Continue" else "Up next",
+                    listOfNotNull(episode.parentIndex?.let { "S$it" }, episode.index?.let { "E$it" }).joinToString(" · ").ifEmpty { null },
+                    episode.title,
+                ).joinToString("  ·  "),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Chalk,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         TouchPrimaryButton(
             label = if (resumeFrom > 0) "Resume" else "Play",
-            onClick = { viewModel.playFromDetail() },
+            onClick = { if (target != null) viewModel.play(target, queue = page.episodes) else viewModel.playFromDetail() },
             // A finger's width on a phone; not a bar across a tablet.
             modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth(),
             icon = { PlayGlyph(it, 18.dp) },
         )
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             if (resumeFrom > 0) {
-                TouchIconAction("Restart", { viewModel.playFromDetail(resume = false) }, { RestartGlyph(it, 20.dp) })
+                TouchIconAction("Restart", {
+                    if (target != null) viewModel.play(target, queue = page.episodes, resume = false)
+                    else viewModel.playFromDetail(resume = false)
+                }, { RestartGlyph(it, 20.dp) })
             }
-            TouchIconAction(if (detail.isWatched) "Unwatch" else "Watched", viewModel::toggleWatchedDetail, { CheckGlyph(it, 20.dp) })
+            // The show as a whole is marked from its menu; here, as on the television, the episode.
+            val watched = target?.isWatched ?: detail.isWatched
+            TouchIconAction(if (watched) "Unwatch" else "Watched", {
+                if (target != null) viewModel.toggleWatched(target) else viewModel.toggleWatchedDetail()
+            }, { CheckGlyph(it, 20.dp) })
             if (watchlisted != null) {
                 TouchIconAction("Watchlist", viewModel::toggleWatchlist, { BookmarkGlyph(it, filled = watchlisted, size = 20.dp) })
             }

@@ -2,6 +2,7 @@ package tv.reely.touch
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
@@ -127,6 +128,47 @@ class TouchAppTest {
         // Nowhere to play it from here; what matters is that it's asked to play, not opened.
         compose.onAllNodesWithText("Northbound").onFirst().performClick()
         compose.runOnIdle { assertTrue(model.state.value.route is Route.Home) }
+    }
+
+    @Test fun `every profile in a big household can be reached, and a PIN asks on a keypad`() {
+        val people = listOf("Taylor", "Sam", "Kids", "Grandma", "Jordan", "Alex").mapIndexed { i, name ->
+            tv.reely.plex.PlexHomeUser("u$i", name, null, protected = name == "Grandma", admin = i == 0, restricted = name == "Kids")
+        }
+        signedIn()
+        model.setStateForTest { it.copy(plex = it.plex.copy(homeUsers = people, user = people[1], askWho = true)) }
+        show()
+        compose.onNodeWithText("Who's watching?").assertIsDisplayed()
+        compose.onNodeWithText("Grandma").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Enter the PIN for this profile").assertIsDisplayed()
+        compose.onNodeWithText("Cancel").performClick()
+        compose.onNodeWithText("Alex").performScrollTo().assertIsDisplayed()
+        // The profile already in use just closes it.
+        compose.onNodeWithText("Sam").performScrollTo().performClick()
+        compose.onNodeWithText("Recently Added Movies").assertIsDisplayed()
+    }
+
+    @Test fun `a show's Play starts the episode it's up to, not the season's first`() {
+        val episodes = (1..4).map { i ->
+            Shots.item("north").copy(ratingKey = "ep$i", title = "Episode $i", index = i, parentIndex = 1, serverBase = SERVER, viewCount = if (i < 3) 1 else 0, viewOffsetMs = 0)
+        }
+        signedIn()
+        model.setStateForTest {
+            it.copy(
+                stack = listOf(Route.Home, Route.Detail("show", serverBase = SERVER)),
+                detail = tv.reely.ui.DetailState(
+                    ratingKey = "show", serverBase = SERVER, busy = false,
+                    detail = tv.reely.plex.PlexDetail(
+                        ratingKey = "show", type = "show", title = "Northbound", summary = null, tagline = null, year = 2024,
+                        durationMs = 0, viewOffsetMs = 0, contentRating = null, rating = null, audienceRating = null, airDate = null,
+                        viewCount = 0, studio = null, thumb = null, art = null, theme = null, genres = emptyList(), directors = emptyList(),
+                        roles = emptyList(), childCount = 1, leafCount = 4, grandparentTitle = null, index = null, parentIndex = null,
+                    ),
+                    episodes = episodes, focusedEpisode = episodes[2],
+                ),
+            )
+        }
+        show()
+        compose.onNodeWithText("Up next  ·  S1 · E3  ·  Episode 3").assertIsDisplayed()
     }
 
     companion object {

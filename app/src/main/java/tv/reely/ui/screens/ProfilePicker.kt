@@ -276,7 +276,7 @@ internal fun Avatar(user: PlexHomeUser, size: Dp, modifier: Modifier = Modifier)
 
 /** A small padlock on a disc: this profile has a PIN. */
 @Composable
-private fun LockBadge(modifier: Modifier = Modifier) {
+internal fun LockBadge(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .size(30.dp)

@@ -133,7 +133,7 @@ class TouchShots {
                         childCount = 3, leafCount = 24, grandparentTitle = null, index = null, parentIndex = null,
                         qualities = listOf("4K", "5.1"),
                     ),
-                    seasons = seasons, selectedSeason = seasons[0], episodes = episodes,
+                    seasons = seasons, selectedSeason = seasons[0], episodes = episodes, focusedEpisode = episodes[2],
                     related = listOf("harbor", "shift", "quiet").map(::show),
                 ),
             )
@@ -175,5 +175,39 @@ class TouchShots {
         Shots.save(compose, "phone-settings")
         compose.onNodeWithText("Playback").performClick()
         Shots.save(compose, "phone-settings-playback")
+    }
+
+    private val household = listOf(
+        tv.reely.plex.PlexHomeUser("a", "Taylor", null, protected = true, admin = true, restricted = false),
+        tv.reely.plex.PlexHomeUser("b", "Sam", null, protected = false, admin = false, restricted = false),
+        tv.reely.plex.PlexHomeUser("c", "Kids", null, protected = false, admin = false, restricted = true),
+        tv.reely.plex.PlexHomeUser("d", "Grandma", null, protected = true, admin = false, restricted = false),
+    )
+
+    @Test fun profilePicker() {
+        signedIn { it.copy(plex = it.plex.copy(homeUsers = household, user = household[1], askWho = true)) }
+        draw()
+        Shots.save(compose, "phone-profiles")
+        compose.onNodeWithText("Grandma").performClick()
+        Shots.save(compose, "phone-profiles-pin")
+    }
+
+    @Test fun updatePrompt() {
+        signedIn {
+            it.copy(
+                update = tv.reely.ui.UpdateStatus.Available(
+                    tv.reely.core.UpdateInfo("https://example.invalid/reely-tv.apk", 1200, "0.51.0", "Faster Home.\nFixes for live TV.", 30_000_000, null),
+                ),
+                updatePrompt = true,
+            )
+        }
+        draw()
+        Shots.save(compose, "phone-update")
+    }
+
+    @Test fun reminder() {
+        signedIn { it.copy(dueReminder = tv.reely.core.Reminder(1, "News 24", "The Evening Report", System.currentTimeMillis() / 1000 + 60)) }
+        draw()
+        Shots.save(compose, "phone-reminder")
     }
 }

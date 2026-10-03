@@ -283,13 +283,18 @@ fun PosterCard(
                         .background(Accent),
                     contentAlignment = Alignment.Center,
                 ) {
+                    // The circle stays the same size whatever the count: the number is
+                    // made smaller to fit it, on one line, rather than wrapping.
+                    val text = badgeText(badge)
                     Text(
-                        text = badge.toString(),
+                        text = text,
                         color = Ink,
-                        fontSize = 14.sp,
+                        fontSize = badgeFontSize(text),
                         lineHeight = 18.sp,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        softWrap = false,
                     )
                 }
             }
@@ -659,3 +664,9 @@ fun ChannelCard(
         }
     }
 }
+
+/** A count for the round badge: as it is up to 999, then "1K", "12K". */
+internal fun badgeText(count: Int): String = if (count < 1000) count.toString() else "${count / 1000}K"
+
+/** Two characters fit the badge at full size; three need it smaller. */
+internal fun badgeFontSize(text: String) = if (text.length <= 2) 14.sp else 11.sp

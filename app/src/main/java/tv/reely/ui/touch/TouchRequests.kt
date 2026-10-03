@@ -69,7 +69,7 @@ internal fun TouchRequests(viewModel: ReelyViewModel, state: ReelyState, actions
             if (requests.results.isNotEmpty()) item { TitleRow("Results", requests.results, requests, viewModel) }
             return@LazyColumn
         }
-        if (requests.mine.isNotEmpty()) item { TitleRow("Your requests", requests.mine.map { it.title }, requests, viewModel) }
+        if (requests.mine.isNotEmpty()) item { TitleRow("Your requests", requests.mine.map { it.title }.distinctBy { it.key }, requests, viewModel) }
         items(requests.rows, key = { it.id }) { row -> TitleRow(row.title, row.titles, requests, viewModel) }
     }
 }
