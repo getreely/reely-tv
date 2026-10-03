@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The provider's films and series, held for the whole time the app is open: the catalogue
+     is read once, and every page, search and Home row is worked out from it here, off the
+     render thread. Asked through request { op, args, reply }; the answer is put in the
+     reply node's result, as PlexTask's comes back in its own. -->
+<component name="IptvTask" extends="Task">
+  <interface>
+    <field id="request" type="assocarray" alwaysNotify="true" />
+    <!-- { loading, ready, error, movies, shows }: what Settings and the tabs show. -->
+    <field id="catalogState" type="assocarray" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/tasks/IptvTask.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/http.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/plexapi.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/xtream.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/vod.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/vodapi.brs" />
+</component>

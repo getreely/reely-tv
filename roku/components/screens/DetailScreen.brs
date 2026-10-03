@@ -50,17 +50,25 @@ end sub
 
 sub load()
     m.note.text = ""
-    Ask_("detail", { base: m.base, token: m.token, ratingKey: m.key, episodeKey: m.episodeKey, id: m.key })
+    if m.base = "iptv:" then
+        Ask_("iptvDetail", { ratingKey: m.key, episodeKey: m.episodeKey, id: m.key })
+    else
+        Ask_("detail", { base: m.base, token: m.token, ratingKey: m.key, episodeKey: m.episodeKey, id: m.key })
+    end if
 end sub
 
 sub answered(r as object)
-    if r.op = "detail" then
+    if r.op = "detail" or r.op = "iptvDetail" then
         a = r.answer
-        if a = invalid or a.error <> invalid then
+        if a = invalid then
+            m.note.text = "Couldn't load that title. Try again."
+            return
+        else if a.error <> invalid then
             m.note.text = Str_(a.error)
             return
         end if
         hadFocus = m.top.isInFocusChain()
+        if r.op = "iptvDetail" then Trace_("iptv page " + a.detail.title + " " + Arr_(a.episodes).Count().ToStr())
         m.detail = a.detail
         m.seasonList = a.seasons
         m.episodeList = a.episodes
@@ -69,12 +77,13 @@ sub answered(r as object)
         m.trailer = a.trailer
         paint()
         if hadFocus and not m.rows.isInFocusChain() and not m.episodes.isInFocusChain() and not m.seasons.isInFocusChain() then m.actions.setFocus(true)
-    else if r.op = "season" then
+    else if r.op = "season" or r.op = "iptvSeason" then
+        if r.answer = invalid then return
         m.episodeList = r.answer.episodes
         m.target = r.answer.focused
         paintEpisodes()
         paintActions()
-    else if r.op = "watched" then
+    else if r.op = "watched" or r.op = "iptvWatched" then
         if r.ok = true then
             m.episodeKey = ""
             if m.target <> invalid then m.episodeKey = m.target.ratingKey
@@ -216,7 +225,11 @@ sub onAction()
         if t.type = "episode" then queue = m.episodeList
         m.top.play = { item: t, resume: id = "play", queue: queue, mediaIndex: m.versionIndex }
     else if id = "watched" then
-        Ask_("watched", { base: m.base, token: m.token, ratingKey: t.ratingKey, watched: not Plex_IsWatched(t) })
+        if m.base = "iptv:" then
+            Ask_("iptvWatched", { item: t, watched: not Plex_IsWatched(t) })
+        else
+            Ask_("watched", { base: m.base, token: m.token, ratingKey: t.ratingKey, watched: not Plex_IsWatched(t) })
+        end if
     else if id = "watchlist" then
         m.top.go = { name: "watchlist", guid: m.detail.guid, on: not Watchlisted_(m.detail.guid) }
     else if id = "trailer" then
@@ -235,7 +248,11 @@ sub onSeasonFocused()
     s = m.seasonList[i]
     if s.ratingKey = m.seasonKey then return
     m.seasonKey = s.ratingKey
-    Ask_("season", { base: m.base, token: m.token, seasonKey: s.ratingKey, focusKey: "" })
+    if m.base = "iptv:" then
+        Ask_("iptvSeason", { seasonKey: s.ratingKey })
+    else
+        Ask_("season", { base: m.base, token: m.token, seasonKey: s.ratingKey, focusKey: "" })
+    end if
 end sub
 
 sub onEpisodeFocused()

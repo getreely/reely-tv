@@ -34,6 +34,21 @@ const panel = (url, send) => {
         { stream_id: 102, num: 2, name: "Reely Sport", category_id: "2" }];
       return send(q.get("category_id") ? all.filter((c) => c.category_id === q.get("category_id")) : all);
     }
+    // The provider's films and series: one Plex has too (Low Orbit), and ones it hasn't.
+    case "get_vod_categories": return send([{ category_id: "10", category_name: "Films" }]);
+    case "get_series_categories": return send([{ category_id: "20", category_name: "Series" }]);
+    case "get_vod_streams": return send([
+      { stream_id: 501, name: "EN - Harbour Lights (2023)", added: "200", category_id: "10", container_extension: "mp4", rating: "7.1" },
+      { stream_id: 502, name: "Low Orbit", year: "2025", added: "100", category_id: "10", container_extension: "mkv" }]);
+    case "get_series": return send([{ series_id: 601, name: "Tidewater", last_modified: "300", category_id: "20", year: "2022" }]);
+    case "get_vod_info": return send(q.get("vod_id") === "501"
+      ? { info: { name: "Harbour Lights", plot: "A lighthouse keeper's last summer.", duration_secs: "5400", genre: "Drama", cast: "Ines Varga, Tom Hale" }, movie_data: { stream_id: 501, container_extension: "mp4" } }
+      : {});
+    case "get_series_info": return send(q.get("series_id") === "601"
+      ? { info: { name: "Tidewater", plot: "A fishing town's long winter." }, episodes: { "1": [
+        { id: "7001", episode_num: 1, title: "Low Tide", container_extension: "mp4", info: { duration_secs: 2700 } },
+        { id: "7002", episode_num: 2, title: "High Water", container_extension: "mp4" }] } }
+      : {});
     case "get_short_epg": case "get_simple_data_table": {
       const id = q.get("stream_id");
       const name = id === "101" ? "News" : "Match";
@@ -483,6 +498,71 @@ try {
   expect("Watch looks for it in the libraries", queries.some((q) => q.startsWith("/hubs/search") && q.includes("Game")));
   await wait(2000);
   await snap("roku-ready-watch");
+  // The provider's films and series: switched on in Settings, matched with Plex, in the
+  // Movies tab, on a title's page, played, and found by search.
+  await key("Back"); await wait(1500);
+  await toTabs();
+  await moveTo("TAB", "settings", "Right");
+  await key("Select"); await wait(1500);
+  await moveTo("TRACE setting", "iptvLibrary", "Down");
+  await key("Left"); await wait(500);
+  await key("Select");
+  await until("the provider's catalogue", () => output.includes("TRACE iptv ready"), 20000).catch(() => undefined);
+  expect("switched on, the provider's films and series are read", queries.some((q) => q.includes("action=get_vod_streams")) && queries.some((q) => /action=get_series(&|$)/.test(q)) && lastSaid("TRACE iptv ready") === "2 1");
+  expect("and matched with what Plex has", queries.some((q) => q.startsWith("/library/sections/1/all") && q.includes("includeGuids=1")));
+  await wait(1500);
+  await snap("roku-settings-iptv");
+  await until("Home with the provider's newest", () => output.includes("TRACE iptv home"), 10000).catch(() => undefined);
+  expect("Home's IPTV row leaves out what Plex has", lastSaid("TRACE iptv home") === "Harbour Lights");
+  await key("Back"); await wait(1500);
+  await toTabs();
+  await moveTo("TAB", "movies", "Right");
+  await wait(1500);
+  await key("Down"); await wait(700);
+  await moveTo("PILL", "IPTV", "Right");
+  await key("Select");
+  await until("the IPTV grid", () => output.includes("TRACE iptv grid"), 10000).catch(() => undefined);
+  await wait(1500);
+  await snap("roku-movies-iptv");
+  expect("the Movies tab has the provider's library, less what Plex has", lastSaid("TRACE iptv grid") === "Harbour Lights");
+  await key("Down"); await wait(700);
+  await key("Down"); await wait(700);
+  await key("Select");
+  await until("the film's page", () => output.includes("TRACE iptv page"), 10000).catch(() => undefined);
+  expect("an IPTV film's page, from the panel", queries.some((q) => q.includes("action=get_vod_info") && q.includes("vod_id=501")) && lastSaid("TRACE iptv page") === "Harbour Lights 0");
+  await wait(1500);
+  await snap("roku-iptv-film");
+  await key("Select");
+  await until("the film playing", () => output.includes("TRACE iptv file"), 8000).catch(() => undefined);
+  expect("plays the provider's file as it is", (lastSaid("TRACE iptv file") ?? "").endsWith("/movie/ann/pw/501.mp4"));
+  await wait(1000);
+  await key("Back"); await wait(1500);
+  await toTabs();
+  await moveTo("TAB", "search", "Left");
+  await key("Select");
+  await wait(1200);
+  for (const c of "tide") { await key(`Lit_${c}`); await wait(250); }
+  await until("the provider's found titles", () => output.includes("TRACE iptv search"), 10000).catch(() => undefined);
+  expect("search finds the provider's series", lastSaid("TRACE iptv search") === "Tidewater");
+  await wait(1500);
+  await snap("roku-search-iptv");
+  // The series from the TV Shows tab's IPTV library.
+  await toTabs();
+  await moveTo("TAB", "shows", "Right");
+  await wait(1500);
+  await key("Down"); await wait(700);
+  await moveTo("PILL", "IPTV", "Right");
+  await key("Select");
+  await until("the shows' IPTV grid", () => lastSaid("TRACE iptv grid") === "Tidewater", 10000).catch(() => undefined);
+  await wait(1500);
+  await key("Down"); await wait(700);
+  await key("Down"); await wait(700);
+  await key("Select");
+  await until("the series' page", () => queries.some((q) => q.includes("action=get_series_info")), 10000).catch(() => undefined);
+  await until("its episodes", () => (lastSaid("TRACE iptv page") ?? "").startsWith("Tidewater"), 10000).catch(() => undefined);
+  expect("an IPTV series' page with its episodes", lastSaid("TRACE iptv page") === "Tidewater 2");
+  await wait(1500);
+  await snap("roku-iptv-series");
   expect("no crash", !/BRIGHTSCRIPT_CRASH|Runtime Error|Syntax Error/i.test(output));
 } catch (error) {
   failures.push(String(error.message ?? error));

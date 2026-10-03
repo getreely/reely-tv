@@ -10,6 +10,9 @@ sub init()
     m.progress = m.top.findNode("progress")
     m.badge = m.top.findNode("badge")
     m.countLabel = m.top.findNode("count")
+    m.tag = m.top.findNode("tag")
+    m.tagBack = m.top.findNode("tagBack")
+    m.tag.font = PosterFont_("pkg:/fonts/geist_bold.ttf", 17)
     m.title = m.top.findNode("title")
     m.sub = m.top.findNode("sub")
     m.title.font = PosterFont_("pkg:/fonts/geist_semibold.ttf", 24)
@@ -40,6 +43,8 @@ sub layout()
     m.frame.height = pic
     m.art.width = w
     m.art.height = pic
+    m.tagBack.translation = [8, 8]
+    m.tag.translation = [8, 8]
     m.tick.translation = [w - 48, 8]
     m.tickMark.translation = [w - 48, 8]
     m.track.translation = [0, pic - 6]
@@ -66,6 +71,11 @@ sub show()
     m.sub.text = c.description
     watched = c.watched = true and (c.badgeCount = invalid or c.badgeCount <= 1)
     m.tick.visible = watched
+    tag = ""
+    if c.tag <> invalid then tag = c.tag
+    m.tag.text = tag
+    m.tag.visible = tag <> ""
+    m.tagBack.visible = tag <> ""
     m.tickMark.visible = watched
     count = c.badgeCount
     if count <> invalid and count > 1 then

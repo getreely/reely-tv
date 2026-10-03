@@ -39,6 +39,8 @@ sub open()
     for each l in Session_().libraries
         if l.type = m.kind then m.libraries.Push(l)
     end for
+    ' The provider's, after Plex's, while its films and series are on.
+    if IptvReady_() then m.libraries.Push({ base: "iptv:", key: "iptv-" + m.kind, title: "IPTV", type: m.kind, token: "" })
     if m.libraries.Count() = 0 then
         m.note.text = "No " + Iif_(m.kind = "movie", "movie", "TV") + " library on your server."
         m.views.visible = false
@@ -48,7 +50,13 @@ sub open()
     loadLibrary()
 end sub
 
+function isIptv() as boolean
+    return m.library <> invalid and m.library.base = "iptv:"
+end function
+
 sub loadLibrary()
+    ' The provider's library is a grid only, as on the other apps.
+    if isIptv() then m.view = "grid"
     m.items = []
     m.total = 0
     m.meta = { genres: [], decades: [], letters: [], released: [], collections: invalid }
@@ -56,9 +64,22 @@ sub loadLibrary()
     m.decade = invalid
     paintViews()
     paint()
-    Ask_("libraryMeta", { library: m.library, filters: filters() })
+    askMeta()
     loadPage()
 end sub
+
+sub askMeta()
+    if isIptv() then
+        Ask_("iptvMeta", { kind: m.kind, categoryId: genreId(), unwatched: m.unwatched })
+    else
+        Ask_("libraryMeta", { library: m.library, filters: filters() })
+    end if
+end sub
+
+function genreId() as string
+    if m.genre = invalid then return ""
+    return Str_(m.genre.id)
+end function
 
 function filters() as string
     g = ""
@@ -71,20 +92,33 @@ end function
 sub loadPage()
     if m.loading then return
     m.loading = true
-    Ask_("libraryPage", { library: m.library, sort: m.sort, filters: filters(), start: m.items.Count(), size: PageSize_(), id: m.sort + filters() })
+    if isIptv() then
+        Ask_("iptvPage", { kind: m.kind, sort: m.sort, categoryId: genreId(), unwatched: m.unwatched, start: m.items.Count(), size: PageSize_(), id: m.sort + filters() })
+    else
+        Ask_("libraryPage", { library: m.library, sort: m.sort, filters: filters(), start: m.items.Count(), size: PageSize_(), id: m.sort + filters() })
+    end if
 end sub
 
 sub answered(r as object)
-    if r.op = "libraryMeta" then
+    if r.op = "libraryMeta" or r.op = "iptvMeta" then
         if r.answer <> invalid then m.meta = r.answer
         paintTools()
         paint()
-    else if r.op = "libraryPage" then
+    else if r.op = "libraryPage" or r.op = "iptvPage" then
         m.loading = false
         ' Not over a different order or narrowing chosen meanwhile.
         if r.id <> m.sort + filters() then return
         page = Arr_(r.items)
-        if r.items = invalid then m.note.text = "Couldn't reach your Plex server. Try again in a moment."
+        #if DEBUG
+            if r.op = "iptvPage" then
+                names = []
+                for each i in page
+                    names.Push(i.title)
+                end for
+                Trace_("iptv grid " + Join_(names, ", "))
+            end if
+        #end if
+        if r.items = invalid then m.note.text = Iif_(isIptv(), "Couldn't read your provider's library. Try again in a moment.", "Couldn't reach your Plex server. Try again in a moment.")
         if m.grid.content = invalid or m.items.Count() = 0 then m.grid.content = CreateObject("roSGNode", "ContentNode")
         for each it in page
             m.items.Push(it)
@@ -97,8 +131,14 @@ sub answered(r as object)
 end sub
 
 sub paintViews()
-    labels = ["Home", "All", "Collections"]
-    on = [m.view = "home", m.view = "grid", m.view = "collections"]
+    labels = []
+    on = []
+    m.viewIds = []
+    if not isIptv() then
+        labels = ["Home", "All", "Collections"]
+        on = [m.view = "home", m.view = "grid", m.view = "collections"]
+        m.viewIds = ["home", "grid", "collections"]
+    end if
     if m.libraries.Count() > 1 then
         for each l in m.libraries
             labels.Push(l.title)
@@ -107,6 +147,7 @@ sub paintViews()
     end if
     m.views.labels = labels
     m.views.on = on
+    m.views.visible = labels.Count() > 0
 end sub
 
 sub paintTools()
@@ -120,7 +161,7 @@ sub paintTools()
     on.Push(m.unwatched)
     m.toolIds = ["sort0", "sort1", "sort2", "sort3", "unwatched"]
     if m.meta.genres.Count() > 0 then
-        if m.genre <> invalid then labels.Push(Str_(m.genre.title)) else labels.Push("Genre")
+        if m.genre <> invalid then labels.Push(Str_(m.genre.title)) else labels.Push(Iif_(isIptv(), "Category", "Genre"))
         on.Push(m.genre <> invalid)
         m.toolIds.Push("genre")
     end if
@@ -194,10 +235,10 @@ end sub
 
 sub onView()
     i = m.views.pressed
-    if i <= 2 then
-        m.view = ["home", "grid", "collections"][i]
+    if i < m.viewIds.Count() then
+        m.view = m.viewIds[i]
     else
-        m.library = m.libraries[i - 3]
+        m.library = m.libraries[i - m.viewIds.Count()]
         loadLibrary()
         return
     end if
@@ -227,7 +268,7 @@ sub restart()
     m.grid.content = CreateObject("roSGNode", "ContentNode")
     paintTools()
     paint()
-    Ask_("libraryMeta", { library: m.library, filters: filters() })
+    askMeta()
     loadPage()
 end sub
 
@@ -247,7 +288,7 @@ sub choose(what as string)
     m.chooser.translation = [0, -130]
     m.chooser.current = current
     m.chooser.options = names
-    m.chooser.title = Iif_(what = "genre", "Genre", "Decade")
+    m.chooser.title = Iif_(what = "genre", Iif_(isIptv(), "Category", "Genre"), "Decade")
     m.chooser.observeField("picked", "onChosen")
     m.top.appendChild(m.chooser)
     m.chooser.setFocus(true)
@@ -308,10 +349,10 @@ sub onRowPicked()
 end sub
 
 sub focusIn()
-    if m.views.visible then
-        m.views.setFocus(true)
-        m.at = "views"
-    end if
+    controls = controlsInOrder()
+    if controls.Count() = 0 then return
+    m.at = controls[0]
+    nodeOf(m.at).setFocus(true)
 end sub
 
 ' The controls down the screen, in order, for up and down between them.

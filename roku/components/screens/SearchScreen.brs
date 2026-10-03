@@ -64,12 +64,30 @@ end sub
 sub answered(r as object)
     if r.id <> m.run or m.query.Trim() = "" then return
     a = r.answer
+    if a = invalid then
+        m.note.text = "Couldn't search just now. Try again in a moment."
+        return
+    end if
+    ' The provider's films and series put in among Plex's, while they're on.
+    if r.op = "search" and IptvReady_() then
+        Ask_("iptvSearch", { query: m.query.Trim(), answer: a, id: r.id })
+        return
+    end if
     rows = [
         { title: "People", items: a.people, people: true },
         { title: "Movies and shows", items: a.results },
         { title: "Collections", items: a.collections },
         { title: "Other results", items: a.more }
     ]
+    #if DEBUG
+        if r.op = "iptvSearch" then
+            names = []
+            for each i in Arr_(a.results)
+                names.Push(i.title)
+            end for
+            Trace_("iptv search " + Join_(names, ", "))
+        end if
+    #end if
     ShowRows_(m.rows, rows)
     m.rows.itemSize = [1140, 500]
     parts = []

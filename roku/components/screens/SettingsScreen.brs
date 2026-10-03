@@ -10,6 +10,7 @@ sub init()
     m.global.observeField("live", "build")
     m.global.observeField("reely", "build")
     m.global.observeField("profile", "build")
+    m.global.observeField("iptvState", "build")
 end sub
 
 function Modes_() as object
@@ -21,13 +22,19 @@ function Modes_() as object
 end function
 
 function HomeRows_() as object
-    return [
+    rows = [
         { id: "continueWatching", label: "Continue Watching" },
         { id: "recentEpisodes", label: "Recently Added Episodes" },
         { id: "recentMovies", label: "Recently Added Movies" },
         { id: "watchlist", label: "Watchlist" },
         { id: "playlists", label: "Playlists" }
     ]
+    ' The provider's rows while its films and series are on.
+    if Bool_(m.global.prefs.iptvLibrary) then
+        rows.Push({ id: "iptvMovies", label: "New Movies on IPTV" })
+        rows.Push({ id: "iptvShows", label: "New Shows on IPTV" })
+    end if
+    return rows
 end function
 
 function BitrateNote_(kbps as integer) as string
@@ -144,6 +151,7 @@ function Settings_() as object
         end if
         format = Str_(p.streamFormat)
         out.Push({ group: "", title: "Stream type", note: "Try the other if channels stutter or won't start.", labels: ["HLS", "MPEG-TS"], on: [format <> "ts", format = "ts"], key: "streamFormat" })
+        MoviesAndShows_(out, p, playlist)
     else
         out.Push({ group: "Live TV", title: "Not set up", note: "Sign in to your provider from the Live TV tab.", labels: ["Go to Live TV"], on: [false], key: "goLive" })
     end if
@@ -160,6 +168,34 @@ function Settings_() as object
     out.Push({ group: "", title: "Licenses", note: "Geist, the typeface (SIL Open Font License 1.1)", labels: [], on: [], key: "" })
     return out
 end function
+
+' The provider's films and series: on or off, refreshed, and which copy wins when Plex has
+' the same title. A playlist has none to offer.
+sub MoviesAndShows_(out as object, p as object, playlist as boolean)
+    if playlist then
+        out.Push({ group: "Movies and shows", title: "Show IPTV movies and shows", note: "Your provider's movies and shows need an Xtream login rather than a playlist. Sign out and sign in with your server, username and password to use them.", labels: [], on: [], key: "" })
+        return
+    end if
+    on = Bool_(p.iptvLibrary)
+    s = m.global.iptvState
+    note = "Your provider's movies and shows in the Movies and TV Shows tabs, on Home and in search, marked IPTV. Off, only Plex's are shown."
+    if on and Str_(s.error) <> "" then
+        note = s.error
+    else if on and Bool_(s.loading) then
+        note = "Loading your provider's movies and shows…"
+    end if
+    out.Push({ group: "Movies and shows", title: "Show IPTV movies and shows", note: note, labels: ["On", "Off"], on: [on, not on], key: "iptvLibrary" })
+    if not on then return
+    counts = "Not loaded"
+    if Bool_(s.loading) then
+        counts = "Refreshing…"
+    else if Bool_(s.ready) then
+        counts = Int(Num_(s.movies)).ToStr() + " movies · " + Int(Num_(s.shows)).ToStr() + " shows"
+    end if
+    out.Push({ group: "", title: "Refresh movies and shows", note: counts, labels: ["Refresh"], on: [false], key: "iptvRefresh" })
+    wins = Bool_(p.iptvWins)
+    out.Push({ group: "", title: "When a title is in both", note: Iif_(wins, "The provider's copy, in place of Plex's on Home and in search.", "Plex's copy. The IPTV library only has what Plex doesn't."), labels: ["Plex", "IPTV"], on: [not wins, wins], key: "iptvWins" })
+end sub
 
 ' Where from, without the login an address may carry.
 function HostOf_(address as string) as string
@@ -272,6 +308,7 @@ end sub
 
 sub move(i as integer)
     m.at = i
+    Trace_("setting " + m.rows[i].key)
     row = m.rows[i].pills
     ' Onto what's chosen there, as the other apps land.
     on = row.on
@@ -317,6 +354,13 @@ sub onPressed(event as object)
         p.hiddenRows = list
     else if key = "streamFormat" then
         p.streamFormat = Iif_(i = 0, "m3u8", "ts")
+    else if key = "iptvLibrary" then
+        p.iptvLibrary = i = 0
+    else if key = "iptvWins" then
+        p.iptvWins = i = 1
+    else if key = "iptvRefresh" then
+        m.top.go = { name: "iptvRefresh" }
+        return
     else if key = "liveSignOut" then
         live = m.global.live
         ' The login goes; Favorites and the rest are kept for when it comes back.

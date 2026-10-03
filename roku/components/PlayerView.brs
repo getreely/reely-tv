@@ -57,14 +57,20 @@ sub start()
     m.wait.text = "Loading…"
     m.video.control = "stop"
     m.video.setFocus(true)
-    Ask_("playback", { base: m.base, token: m.token, ratingKey: m.item.ratingKey, mediaIndex: m.mediaIndex })
+    m.p = invalid
+    if m.base = "iptv:" then
+        Ask_("iptvPlayback", { ratingKey: m.item.ratingKey, durationMs: m.item.durationMs })
+    else
+        Ask_("playback", { base: m.base, token: m.token, ratingKey: m.item.ratingKey, mediaIndex: m.mediaIndex })
+    end if
 end sub
 
 sub answered(r as object)
-    if r.op = "playback" then
+    if r.op = "playback" or r.op = "iptvPlayback" then
         p = r.answer
         if p = invalid then
             m.wait.text = "That file isn't on the server any more."
+            if r.op = "iptvPlayback" then m.wait.text = Iif_(Str_(r.error) <> "", Str_(r.error), "Your provider couldn't send this. Try again in a moment.")
             return
         end if
         m.p = p
@@ -93,6 +99,10 @@ end function
 ' conversion; otherwise converted, at the quality chosen in Settings.
 sub begin(fromMs as dynamic)
     p = m.p
+    if p.iptv = true then
+        beginIptv(fromMs)
+        return
+    end if
     prefs = m.global.prefs
     mode = "auto"
     kbps = 0
@@ -138,6 +148,27 @@ sub begin(fromMs as dynamic)
     m.ticker.control = "start"
 end sub
 
+' The provider's file, as it is: there's no Plex to convert it.
+sub beginIptv(fromMs as dynamic)
+    p = m.p
+    formats = { mp4: "mp4", m4v: "mp4", mov: "mp4", mkv: "mkv", ts: "ts", m3u8: "hls" }
+    format = formats[p.container]
+    if format = invalid then format = "mp4"
+    m.plan = { direct: true, format: format, reason: "" }
+    m.session = ""
+    content = CreateObject("roSGNode", "ContentNode")
+    content.title = Plex_RowTitle(m.item)
+    content.url = p.url
+    content.streamFormat = format
+    Trace_("iptv file " + p.url)
+    m.direct = true
+    m.durationMs = p.durationMs
+    m.video.content = content
+    m.video.seek = fromMs / 1000
+    m.video.control = "play"
+    m.ticker.control = "start"
+end sub
+
 sub onState()
     s = m.video.state
     Trace_("video " + s)
@@ -149,7 +180,10 @@ sub onState()
         ended()
     else if s = "error" then
         ' The file wouldn't play as it is: Plex converts it, from where it got to.
-        if m.direct and m.p <> invalid then
+        if m.p <> invalid and m.p.iptv = true then
+            m.wait.text = "Your provider couldn't play this. Try again in a moment."
+            report("stopped")
+        else if m.direct and m.p <> invalid then
             m.forceConvert = true
             begin(Int(m.video.position * 1000))
         else
@@ -253,6 +287,13 @@ end sub
 sub report(state as string)
     if m.item = invalid or m.trailer then return
     ms = Int(m.video.position * 1000)
+    if m.base = "iptv:" then
+        ' Kept on the Roku: the provider keeps nothing.
+        duration = Int(m.durationMs)
+        if duration <= 0 and m.video.duration <> invalid then duration = Int(m.video.duration * 1000)
+        Ask_("iptvProgress", { item: m.item, ms: ms, durationMs: duration, state: state })
+        return
+    end if
     Ask_("timeline", { base: m.base, token: m.token, ratingKey: m.item.ratingKey, state: state, ms: ms, durationMs: Int(m.durationMs), session: Str_(m.session) })
 end sub
 

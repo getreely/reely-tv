@@ -32,6 +32,8 @@ sub render()
     if not hidden.DoesExist("recentMovies") then rows.Push({ title: "Recently Added Movies", items: Arr_(h.recentMovies) })
     if not hidden.DoesExist("watchlist") then rows.Push({ title: "Watchlist", items: Arr_(h.watchlist) })
     if not hidden.DoesExist("playlists") then rows.Push({ title: "Playlists", items: Arr_(h.playlists) })
+    if not hidden.DoesExist("iptvMovies") then rows.Push({ title: "New Movies on IPTV", items: Arr_(h.iptvMovies) })
+    if not hidden.DoesExist("iptvShows") then rows.Push({ title: "New Shows on IPTV", items: Arr_(h.iptvShows) })
     had = m.rows.content <> invalid and m.rows.content.getChildCount() > 0
     ShowRows_(m.rows, rows)
     m.note.text = Str_(h.error)

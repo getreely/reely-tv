@@ -10,7 +10,12 @@ sub init()
         m.store.Flush()
     end if
     ' The session is {} while signed out: a field made from invalid can't hold one later.
-    m.global.addFields({ clientId: clientId, session: {}, home: {}, watchlist: [], recentSearches: ReadJson_("recentSearches", []), prefs: Prefs_(), live: ReadJson_("live", {}), reely: ReadJson_("reely", {}), profile: ReadJson_("plexProfile", {}), ready: [] })
+    m.global.addFields({ clientId: clientId, session: {}, home: {}, watchlist: [], recentSearches: ReadJson_("recentSearches", []), prefs: Prefs_(), live: ReadJson_("live", {}), reely: ReadJson_("reely", {}), profile: ReadJson_("plexProfile", {}), ready: [], iptvState: {} })
+    ' The provider's films and series, held for as long as the app is open.
+    m.iptv = CreateObject("roSGNode", "IptvTask")
+    m.iptv.observeField("catalogState", "onIptvState")
+    m.iptv.control = "run"
+    m.global.addFields({ iptv: m.iptv })
     m.http = {}
     m.signIn = m.top.findNode("signIn")
     m.shell = m.top.findNode("shell")
@@ -49,7 +54,7 @@ end sub
 ' The settings kept on this Roku, with the Fire TV's defaults.
 function Prefs_() as object
     p = ReadJson_("prefs", {})
-    defaults = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], streamFormat: "m3u8" }
+    defaults = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], streamFormat: "m3u8", iptvLibrary: false, iptvWins: false }
     for each k in defaults
         if p[k] = invalid then p[k] = defaults[k]
     end for
@@ -179,12 +184,32 @@ sub answered(r as object)
             h = m.global.home
             h.watchlist = r.answer.items
             m.global.home = h
+            if m.plexHome <> invalid then m.plexHome.watchlist = r.answer.items
         end if
     else if r.op = "setWatchlisted" then
         loadWatchlist()
     else if r.op = "watched" or r.op = "removeCW" then
         loadHome()
         refreshCurrent()
+    else if r.op = "iptvWatched" or r.op = "iptvForget" then
+        ' Kept on the Roku: Home put together again, without asking Plex.
+        showHome()
+        refreshCurrent()
+    else if r.op = "iptvHome" then
+        if r.answer <> invalid then
+            h = r.answer
+            #if DEBUG
+                names = []
+                for each i in Arr_(h.iptvMovies)
+                    names.Push(i.title)
+                end for
+                Trace_("iptv home " + Join_(names, ", "))
+            #end if
+            h.watchlist = Arr_(m.global.home.watchlist)
+            m.global.home = h
+        else if m.plexHome <> invalid then
+            m.global.home = m.plexHome
+        end if
     else if r.op = "homeUsers" then
         profile = { user: r.user, homeUsers: Arr_(r.users) }
         m.global.profile = profile
@@ -206,8 +231,8 @@ sub answered(r as object)
             topScreen().route = { name: "search", tab: "search", query: m.readyTitle.title }
             intoScreen()
         end if
-    else if r.op = "nextEpisode" then
-        if r.answer.episode <> invalid then playRequest({ item: r.answer.episode, resume: true, queue: r.answer.queue, mediaIndex: 0 })
+    else if r.op = "nextEpisode" or r.op = "iptvNext" then
+        if r.answer <> invalid and r.answer.episode <> invalid then playRequest({ item: r.answer.episode, resume: true, queue: r.answer.queue, mediaIndex: 0 })
     end if
 end sub
 
@@ -248,6 +273,7 @@ sub onConnected(a as object)
         intoScreen()
     end if
     loadHome()
+    loadIptv(false)
 end sub
 
 sub loadHome()
@@ -275,8 +301,40 @@ sub onHome(a as object)
     end if
     a.watchlist = Arr_(old.watchlist)
     a.error = ""
-    m.global.home = a
+    m.plexHome = a
+    showHome()
     checkReady()
+end sub
+
+' Plex's Home, with the provider's put in among it while its films and series are on.
+sub showHome()
+    a = m.plexHome
+    if a = invalid then return
+    if IptvReady_() then
+        Ask_("iptvHome", { home: a })
+    else
+        m.global.home = a
+    end if
+end sub
+
+' ------------------------------------------------------------------ The provider's films and series
+
+' Read when they're switched on, there's an Xtream login, and Plex's libraries are known
+' (to leave out what Plex has).
+sub loadIptv(refresh as boolean)
+    p = m.global.prefs
+    creds = m.global.live.credentials
+    if not Bool_(p.iptvLibrary) or not signedIn() or creds = invalid or Str_(creds.base) = "" or Str_(creds.playlistUrl) <> "" then return
+    Ask_("iptvLoad", { libraries: m.global.session.libraries, refresh: refresh })
+end sub
+
+sub onIptvState()
+    s = m.iptv.catalogState
+    was = m.global.iptvState
+    m.global.iptvState = s
+    if Bool_(s.ready) and not Bool_(s.loading) then Trace_("iptv ready " + Str_(s.movies) + " " + Str_(s.shows))
+    ' Ready now, or gone: Home put together again.
+    if Bool_(s.ready) <> Bool_(was.ready) or (Bool_(was.loading) and not Bool_(s.loading)) then showHome()
 end sub
 
 ' ------------------------------------------------------------------ Pages
@@ -376,8 +434,18 @@ sub onGo(event as object)
         m.global.recentSearches = route.list
         WriteJson_("recentSearches", route.list)
     else if route.name = "prefs" then
+        before = m.global.prefs
         m.global.prefs = route.prefs
         WriteJson_("prefs", route.prefs)
+        on = Bool_(route.prefs.iptvLibrary)
+        if on <> Bool_(before.iptvLibrary) then
+            if on then loadIptv(false) else Ask_("iptvOff", {})
+            showHome()
+        else if Bool_(route.prefs.iptvWins) <> Bool_(before.iptvWins) then
+            showHome()
+        end if
+    else if route.name = "iptvRefresh" then
+        loadIptv(true)
     else if route.name = "tab" then
         openTab(route.tab)
         intoScreen()
@@ -398,8 +466,15 @@ sub onGo(event as object)
             if entry.node.subtype() = "RequestsScreen" then entry.node.refresh = {}
         end for
     else if route.name = "live" then
+        before = m.global.live.credentials
         m.global.live = route.live
         WriteJson_("live", route.live)
+        ' Another login, or none: the provider's films and series go with the old one.
+        if FormatJson(before) <> FormatJson(route.live.credentials) then
+            Ask_("iptvOff", {})
+            loadIptv(true)
+            showHome()
+        end if
     else if route.name = "signOut" then
         signOut()
     else if route.name = "server" then
@@ -473,6 +548,17 @@ sub onMenuChosen()
     token = TokenFor_(base)
     if chosen = "play" or chosen = "restart" then
         playRequest({ item: item, resume: chosen = "play", queue: [], mediaIndex: 0 })
+    else if base = "iptv:" then
+        ' The provider's: kept on the Roku rather than told to Plex.
+        if chosen = "next" then
+            Ask_("iptvNext", { showKey: item.ratingKey })
+        else if chosen = "watched" or chosen = "unwatched" then
+            Ask_("iptvWatched", { item: item, watched: chosen = "watched" })
+        else if chosen = "details" then
+            push(RouteFor_(item))
+        else if chosen = "remove" then
+            Ask_("iptvForget", { ratingKey: item.ratingKey })
+        end if
     else if chosen = "next" then
         Ask_("nextEpisode", { base: base, token: token, showKey: item.ratingKey })
     else if chosen = "watched" or chosen = "unwatched" then

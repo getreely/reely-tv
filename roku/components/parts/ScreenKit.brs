@@ -26,19 +26,39 @@ function Image_(base as dynamic, path as string, w as integer, h as integer) as 
 end function
 
 ' Something asked of Plex; its answer comes to answered(result) with the same op and id.
+' The provider's films and series ("iptv…") are asked of the IPTV task that holds them.
 sub Ask_(op as string, args as object)
-    task = CreateObject("roSGNode", "PlexTask")
-    task.op = op
-    task.args = args
-    task.observeField("result", "onAnswer_")
     if m.tasks_ = invalid then m.tasks_ = {}
     if m.askSeq_ = invalid then m.askSeq_ = 0
     m.askSeq_ = m.askSeq_ + 1
     key = op + ":" + m.askSeq_.ToStr()
+    if Left(op, 4) = "iptv" then
+        server = m.global.iptv
+        if server = invalid then return
+        ' The answer comes back in a node of this page's own, so only this page hears it.
+        reply = CreateObject("roSGNode", "Node")
+        reply.addFields({ key_: key, result: {} })
+        reply.observeField("result", "onAnswer_")
+        m.tasks_[key] = reply
+        server.request = { op: op, args: args, reply: reply }
+        return
+    end if
+    task = CreateObject("roSGNode", "PlexTask")
+    task.op = op
+    task.args = args
+    task.observeField("result", "onAnswer_")
     m.tasks_[key] = task
     task.addFields({ key_: key })
     task.control = "run"
 end sub
+
+' The provider's films and series are switched on and there to show.
+function IptvReady_() as boolean
+    p = m.global.prefs
+    s = m.global.iptvState
+    if p = invalid or not Bool_(p.iptvLibrary) or s = invalid then return false
+    return Bool_(s.ready)
+end function
 
 sub onAnswer_(event as object)
     task = event.getRoSGNode()
@@ -76,6 +96,7 @@ function ItemContent_(parent as object, i as object, wide as boolean) as object
     if not Plex_IsWatched(i) then progress = Plex_ResumeFraction(i)
     c = PosterContent_(parent, Plex_RowTitle(i), caption, image, invalid, progress)
     if Plex_IsWatched(i) then c.addFields({ watched: true })
+    if Str_(i.serverBase) = "iptv:" then c.addFields({ tag: "IPTV" })
     return c
 end function
 
