@@ -113,6 +113,8 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.tv:tv-material:1.1.0")
+    // The phone and tablet screens: touch components, which the television ones are not.
+    implementation("androidx.compose.material3:material3")
 
     implementation("androidx.media3:media3-exoplayer:1.11.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.11.1")

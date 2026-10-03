@@ -147,6 +147,11 @@ fun SettingsScreen(
     onSetIptvLibrary: (Boolean) -> Unit = {},
     onSetIptvWins: (Boolean) -> Unit = {},
     onRefreshIptv: () -> Unit = {},
+    /**
+     * A phone: one column, the sections as a list and each opening full width, rather
+     * than the television's two side by side. The same rows either way.
+     */
+    compact: Boolean = false,
 ) {
     var section by remember { mutableStateOf(Section.PLAYBACK) }
     val sectionFocus = remember { Section.entries.associateWith { FocusRequester() } }
@@ -172,53 +177,7 @@ fun SettingsScreen(
 
     var choosing by remember { mutableStateOf<ChoiceRequest?>(null) }
 
-    Box(modifier = modifier.fillMaxSize()) {
-    CompositionLocalProvider(LocalChoices provides { choosing = it }) {
-    Row(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 36.dp, vertical = 14.dp)
-            .then(toSection)
-            .focusGroup(),
-    ) {
-        Column(
-            modifier = Modifier.width(180.dp).fillMaxHeight().then(toSection).focusGroup(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = "Settings",
-                color = Chalk,
-                style = ReelyType.Headline,
-                modifier = Modifier.padding(bottom = 8.dp),
-            )
-            Section.entries.forEach { entry ->
-                TvChip(
-                    label = entry.title,
-                    selected = section == entry,
-                    onClick = { section = entry },
-                    // Moving down the sections shows each one, as a television's own
-                    // settings do; right then goes into what is on screen.
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(sectionFocus.getValue(entry))
-                        .onFocusChanged { if (it.isFocused) section = entry },
-                )
-            }
-        }
-
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .padding(start = 26.dp)
-                .verticalScroll(rememberScrollState())
-                .onFocusChanged { inOptions = it.hasFocus }
-                .focusProperties {
-                    onEnter = { if (!FocusReturn.active) runCatching { firstOption.requestFocus() } }
-                }
-                .focusGroup(),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
-        ) {
+    val sectionContent: @Composable () -> Unit = {
             CompositionLocalProvider(LocalFirstOption provides firstOption) {
             when (section) {
                 Section.PLAYBACK -> PlaybackSection(
@@ -278,6 +237,58 @@ fun SettingsScreen(
                 Section.ABOUT -> AboutSection(onTakeTour = onTakeTour)
             }
             }
+    }
+
+    Box(modifier = modifier.fillMaxSize()) {
+    CompositionLocalProvider(LocalChoices provides { choosing = it }) {
+    if (compact) {
+        CompactSettings(section = section, onSection = { section = it }, content = sectionContent)
+    } else Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 36.dp, vertical = 14.dp)
+            .then(toSection)
+            .focusGroup(),
+    ) {
+        Column(
+            modifier = Modifier.width(180.dp).fillMaxHeight().then(toSection).focusGroup(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "Settings",
+                color = Chalk,
+                style = ReelyType.Headline,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+            Section.entries.forEach { entry ->
+                TvChip(
+                    label = entry.title,
+                    selected = section == entry,
+                    onClick = { section = entry },
+                    // Moving down the sections shows each one, as a television's own
+                    // settings do; right then goes into what is on screen.
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(sectionFocus.getValue(entry))
+                        .onFocusChanged { if (it.isFocused) section = entry },
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .padding(start = 26.dp)
+                .verticalScroll(rememberScrollState())
+                .onFocusChanged { inOptions = it.hasFocus }
+                .focusProperties {
+                    onEnter = { if (!FocusReturn.active) runCatching { firstOption.requestFocus() } }
+                }
+                .focusGroup(),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            sectionContent()
         }
     }
     }
@@ -648,7 +659,8 @@ private fun HomeSection(
             )
         }
     }
-    SettingGroup("Screensaver") {
+    // The phone has its own; this one is the television's.
+    if (!LocalCompactSettings.current) SettingGroup("Screensaver") {
         ChoiceRow(
             title = "Screensaver",
             description = "Your library's artwork and the time, when the remote's been put down.",
@@ -882,7 +894,8 @@ private fun AboutSection(onTakeTour: () -> Unit = {}) {
         )
     }
 
-    SettingGroup("Help") {
+    // The tour is of the remote: nothing to show on a phone.
+    if (!LocalCompactSettings.current) SettingGroup("Help") {
         SettingRow(
             title = "Take the tour",
             description = "How to get around with the remote.",
@@ -1169,3 +1182,46 @@ private fun relativeTime(epochSeconds: Long): String {
 }
 
 private fun plural(count: Long, unit: String) = if (count == 1L) "1 $unit" else "$count ${unit}s"
+
+/** True on a phone's Settings: what only a television has (the screensaver, the remote's tour) is left out. */
+internal val LocalCompactSettings = androidx.compose.runtime.staticCompositionLocalOf { false }
+
+/**
+ * Settings in one column, for a phone: the sections listed, and the one opened taking
+ * the whole width. Back, or the arrow, goes back to the list.
+ */
+@Composable
+private fun CompactSettings(section: Section, onSection: (Section) -> Unit, content: @Composable () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    androidx.activity.compose.BackHandler(enabled = open) { open = false }
+    CompositionLocalProvider(LocalCompactSettings provides true) {
+        Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+            if (!open) {
+                Text(text = "Settings", color = Chalk, style = ReelyType.Headline, modifier = Modifier.padding(vertical = 12.dp))
+                Column(
+                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Section.entries.forEach { entry ->
+                        SettingRow(title = entry.title, opens = true, onClick = {
+                            onSection(entry)
+                            open = true
+                        })
+                    }
+                }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
+                    Box(
+                        modifier = Modifier.size(44.dp).clip(CircleShape).clickable { open = false },
+                        contentAlignment = Alignment.Center,
+                    ) { tv.reely.ui.components.ArrowGlyph(Chalk, left = true, size = 22.dp) }
+                    Text(text = section.title, color = Chalk, style = ReelyType.Headline, modifier = Modifier.padding(start = 4.dp))
+                }
+                Column(
+                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp),
+                ) { content() }
+            }
+        }
+    }
+}

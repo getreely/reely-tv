@@ -1,5 +1,10 @@
 package tv.reely.ui.screens
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import tv.reely.core.AudioOutputs
 import tv.reely.ui.components.FollowAudioOutput
@@ -273,6 +278,12 @@ fun PlayerScreen(
     imageUrl: (String?, String?, Int, Int) -> String?,
     logoUrl: (String?, String?) -> String?,
     modifier: Modifier = Modifier,
+    /**
+     * On a phone or tablet: a tap shows or hides the controls, a double tap either side
+     * skips ten seconds, a swipe up or down changes channel, and the bar takes a drag.
+     * A television never sends a touch, so there this changes nothing.
+     */
+    touch: Boolean = false,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -1009,6 +1020,39 @@ fun PlayerScreen(
             .then(trackFocus)
             .focusRequester(rootFocus)
             .focusable()
+            .then(
+                if (!touch) Modifier
+                else Modifier
+                    .pointerInput(playback.url) {
+                        detectTapGestures(
+                            onTap = {
+                                if (controlsVisible) controlsVisible = false else interaction++
+                            },
+                            onDoubleTap = { at ->
+                                // Not live: there, the bar is the programme and the archive's.
+                                if (playback.isLive) return@detectTapGestures
+                                val forward = at.x > size.width / 2
+                                val to = (exoPlayer.currentPosition + if (forward) TOUCH_SKIP_MS else -TOUCH_SKIP_MS)
+                                    .coerceIn(0, exoPlayer.duration.takeIf { it > 0 } ?: Long.MAX_VALUE)
+                                exoPlayer.seekTo(to)
+                                interaction++
+                            },
+                        )
+                    }
+                    .pointerInput(playback.isLive) {
+                        if (!playback.isLive) return@pointerInput
+                        var travelled = 0f
+                        detectVerticalDragGestures(
+                            onDragStart = { travelled = 0f },
+                            onDragEnd = {
+                                // Up for the next channel, as on a remote's Channel Up.
+                                if (kotlin.math.abs(travelled) > TOUCH_SWIPE_DP.toPx()) {
+                                    onStepChannel(if (travelled < 0) 1 else -1)
+                                }
+                            },
+                        ) { _, dy -> travelled += dy }
+                    },
+            )
             .onPreviewKeyEvent { event ->
                 // A reminder up has the cursor on its buttons; the keys are its.
                 if (reminder != null) return@onPreviewKeyEvent false
@@ -1440,6 +1484,13 @@ fun PlayerScreen(
         val skip = {
             if (prompt == SkipPrompt.INTRO && intro != null) exoPlayer.seekTo(intro.endMs)
             else onStepEpisode(1)
+        }
+        if (controlsShowing && touch) {
+            // No remote to press Back on: the way out is on the screen too.
+            TouchBack(
+                onClick = { onExit(exoPlayer.currentPosition.coerceAtLeast(0)) },
+                modifier = Modifier.align(Alignment.TopStart).padding(16.dp),
+            )
         }
         if (controlsShowing) {
             PlayerClock(
@@ -2050,6 +2101,30 @@ private fun Scrubber(
                     if (left) target?.let { to -> commit?.cancel(); onSeekTo(to); target = null }
                 }
                 .focusable()
+                .then(
+                    if (!LocalTouchPlayer.current) Modifier
+                    else Modifier
+                        // A tap on the bar goes there; a drag goes where it's let go.
+                        .pointerInput(total, furthest) {
+                            detectTapGestures { at ->
+                                onScrub()
+                                commit?.cancel()
+                                target = null
+                                onSeekTo((at.x / size.width * total).toLong().coerceIn(0, furthest))
+                            }
+                        }
+                        .pointerInput(total, furthest) {
+                            detectHorizontalDragGestures(
+                                onDragEnd = {
+                                    target?.let { to -> commit?.cancel(); onSeekTo(to); target = null }
+                                },
+                                onDragCancel = { target = null },
+                            ) { change, _ ->
+                                onScrub()
+                                target = (change.position.x / size.width * total).toLong().coerceIn(0, furthest)
+                            }
+                        },
+                )
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     val direction = when (event.key) {
@@ -2953,4 +3028,29 @@ internal fun playbackBufferBytes(maxHeapBytes: Long): Int {
     val mb = 1024L * 1024
     if (maxHeapBytes < 320 * mb) return C.LENGTH_UNSET
     return (maxHeapBytes * 4 / 10).coerceIn(128 * mb, 384 * mb).toInt()
+}
+
+
+/** Whether the player is on a touch screen; see PlayerScreen's `touch`. */
+internal val LocalTouchPlayer = androidx.compose.runtime.staticCompositionLocalOf { false }
+
+/** How far a double tap skips, either way. */
+private const val TOUCH_SKIP_MS = 10_000L
+
+/** How far a swipe has to travel to change channel. */
+private val TOUCH_SWIPE_DP = 72.dp
+
+/** The way out of the player on a touch screen, where there's no remote to press Back on. */
+@Composable
+private fun TouchBack(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .background(Ink.copy(alpha = 0.6f))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        tv.reely.ui.components.ArrowGlyph(Chalk, left = true, size = 22.dp)
+    }
 }

@@ -220,78 +220,8 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
     val livePlayers = remember { listOf(viewModel.livePlayer.player) }
     tv.reely.ui.components.FollowAudioOutput(livePlayers, state.prefs.audioOutput)
 
-    /*
-     * The programme the live bar spans, asked again every little while as well as when
-     * anything changes: programmes end with nothing else changing, and a bar left on the
-     * last one pointed a rewind at the wrong programme.
-     */
-    val liveWindow by produceState(viewModel.liveWindow(), state.playback, state.guide.programmes, state.live) {
-        while (true) {
-            value = viewModel.liveWindow()
-            delay(LIVE_WINDOW_REFRESH_MS)
-        }
-    }
-
-    val playback = state.playback
-    if (playback != null) {
-        PlayerScreen(
-            playback = playback,
-            onSetAudioOutput = viewModel::setAudioOutput,
-            liveWindow = liveWindow,
-            onTimeshift = viewModel::timeshiftTo,
-            onGoLive = viewModel::goLive,
-            prefs = state.prefs,
-            live = state.live,
-            guide = state.guide,
-            upNext = state.upNext,
-            onExit = viewModel::stopPlayback,
-            onEnded = viewModel::onPlaybackEnded,
-            onCredits = viewModel::onCreditsReached,
-            onPlayUpNext = viewModel::playUpNext,
-            onDismissUpNext = viewModel::dismissUpNext,
-            onToggleFavoriteChannel = viewModel::toggleFavoriteChannel,
-            livePlayer = viewModel.livePlayer,
-            onStepChannel = viewModel::stepChannel,
-            onSelectChannel = viewModel::playChannel,
-            onOpenCategory = viewModel::openCategory,
-            multiview = state.multiview,
-            onAddToMultiview = viewModel::addToMultiview,
-            onRemoveTile = viewModel::removeFromMultiview,
-            onClearTiles = viewModel::clearMultiview,
-            onReplaceTile = viewModel::replaceInMultiview,
-            onCollapseToChannel = viewModel::collapseToChannel,
-            onSaveMultiview = viewModel::saveMultiview,
-            savedMultiview = remember(state.savedMultiview, state.multiview, state.playback, state.live.recent) {
-                viewModel.savedMultiviewLabel()
-            },
-            onOpenSavedMultiview = viewModel::openSavedMultiview,
-            onStepEpisode = viewModel::stepEpisode,
-            onDecodeFailure = viewModel::retryWithTranscode,
-            onConvertAudio = viewModel::convertAudio,
-            onToggleFormat = viewModel::toggleFormat,
-            onReportProgress = viewModel::reportProgress,
-            onNudgeSubtitleScale = viewModel::nudgeSubtitleScale,
-            onToggleSubtitleBackground = viewModel::toggleSubtitleBackground,
-            onSaveStreamChoice = { audio, subtitle -> viewModel.saveStreamChoice(audio, subtitle) },
-            findChannel = viewModel::channelNumbered,
-            onCatchUp = viewModel::playCatchUp,
-            sleep = state.sleep,
-            onSetSleep = viewModel::setSleepTimer,
-            reminders = state.reminders,
-            onToggleReminder = viewModel::toggleReminder,
-            subtitleSearch = state.subtitleSearch,
-            onFindSubtitles = viewModel::searchSubtitles,
-            onAddSubtitle = viewModel::addSubtitle,
-            onCloseSubtitleSearch = viewModel::closeSubtitleSearch,
-            reminder = state.dueReminder,
-            onWatchReminder = viewModel::watchReminder,
-            onDismissReminder = viewModel::dismissReminder,
-            onStartOver = viewModel.startOverProgramme()?.let { { viewModel.startOver() } },
-            onTuneChannel = viewModel::tuneChannel,
-            imageUrl = viewModel::plexImageUrl,
-            logoUrl = viewModel::plexLogoUrl,
-            modifier = Modifier.fillMaxSize(),
-        )
+    if (state.playback != null) {
+        PlayerHost(viewModel, state)
         return
     }
 
@@ -1001,7 +931,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
  * with nowhere to go but the player leaves no way to mark it watched, look at what it
  * is, or start it over. An episode's page is a place inside its show's page.
  */
-private fun detailRouteFor(item: PlexItem): Route.Detail {
+internal fun detailRouteFor(item: PlexItem): Route.Detail {
     val show = item.grandparentRatingKey
     // The server travels with it: a row can hold things from several, and a rating key
     // means nothing anywhere but the server that issued it.
@@ -1359,7 +1289,7 @@ internal fun Modifier.pageArea(upTo: FocusRequester): Modifier = this
     .focusGroup()
 
 /** How often the live bar's programme is looked at again. */
-private const val LIVE_WINDOW_REFRESH_MS = 15_000L
+internal const val LIVE_WINDOW_REFRESH_MS = 15_000L
 
 /** How long nothing may have the cursor before it is put back. See the net in ReelyApp. */
 private const val FOCUS_RESCUE_DELAY_MS = 120L

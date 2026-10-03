@@ -17,12 +17,16 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         tv.reely.core.CrashLog.install(this)
+        // A television gets the app it has always had; a phone or tablet the touch one,
+        // which turns with the device rather than staying sideways.
+        val television = tv.reely.core.FormFactor.isTelevision(this)
+        if (!television) requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_USER
         setContent {
             ReelyTheme {
                 androidx.compose.foundation.layout.Box(
                     modifier = Modifier.fillMaxSize().background(Ink)
                 ) {
-                    ReelyApp()
+                    if (television) ReelyApp() else tv.reely.ui.touch.TouchApp()
                 }
             }
         }
