@@ -100,6 +100,24 @@ jobs:
             ./gradlew :app:testDebugUnitTest :app:assembleRelease --no-daemon
           fi
 
+      # The LG app, at the same version, tested as CI tests it, packaged by LG's tool.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: webos/package-lock.json
+
+      - name: Build the LG app
+        working-directory: webos
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          npm ci
+          node scripts/set-version.mjs "$VERSION"
+          npx tsc --noEmit -p . && npm test
+          npx playwright install --with-deps chromium && npm run e2e
+          npm run package
+
       # The asset has to be named for what the app asks for: the update check derives the
       # manifest's address from the APK's by swapping the extension, so the two must sit
       # together under the same name.
@@ -108,6 +126,7 @@ jobs:
           mkdir -p out
           cp app/build/outputs/apk/release/app-release.apk out/reely-tv.apk
           cp app/build/outputs/apk/release/reely-tv.json out/reely-tv.json
+          cp webos/out/reely-lg.ipk out/reely-lg.ipk
 
       # What changed, from the commits since the last release. Two audiences: the release
       # page gets all of it, and the manifest gets a sentence, because the update check
@@ -125,7 +144,7 @@ jobs:
             git log --no-merges --pretty='- %s' -25 >> notes.md
           fi
           echo >> notes.md
-          echo "Built from \`${GITHUB_SHA}\`. Install \`reely-tv.apk\`; \`reely-tv.json\` is what the app's update check reads." >> notes.md
+          echo "Built from \`${GITHUB_SHA}\`. Install \`reely-tv.apk\` on Fire TV, Android TV and Android phones; \`reely-tv.json\` is what the app's update check reads. \`reely-lg.ipk\` is the LG app, installed on a TV in Developer Mode." >> notes.md
           python3 - <<'PY'
           import json, re
           lines = [l[2:].strip() for l in open("notes.md") if l.startswith("- ")]
@@ -152,4 +171,4 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "Reely TV $VERSION" \
             --notes-file notes.md \
-            out/reely-tv.apk out/reely-tv.json
+            out/reely-tv.apk out/reely-tv.json out/reely-lg.ipk
