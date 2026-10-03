@@ -4,6 +4,8 @@ import { readable } from "../core/http";
 import { Store, clientId } from "../core/storage";
 import { emptyHome, loadHome, type HomeRows, type LibraryChoice } from "./home";
 import { randomHex } from "../core/storage";
+import * as reely from "../api/reely";
+import type { RequestDetail, RequestPlaces, RequestRecord, RequestRow, RequestTitle, TitleMarks } from "../api/reely";
 
 /*
  * The LG app's state and what can be done to it: the Fire TV's view model, for the
@@ -20,6 +22,7 @@ export type Route =
   | { name: "search" }
   | { name: "live" }
   | { name: "requests" }
+  | { name: "requestTitle"; title: RequestTitle }
   | { name: "settings" };
 
 export interface SignIn {
@@ -81,6 +84,33 @@ export interface Playing {
   queue: PlexItem[];
 }
 
+export interface RequestsState {
+  address: string | null;
+  connecting: boolean;
+  loading: boolean;
+  error: string | null;
+  rows: RequestRow[];
+  mine: RequestRecord[];
+  marks: TitleMarks;
+  plexMovies: Set<string>;
+  plexShows: Set<string>;
+  query: string;
+  results: RequestTitle[];
+  searching: boolean;
+}
+
+export interface RequestPage {
+  title: RequestTitle;
+  detail: RequestDetail | null;
+  places: RequestPlaces | null;
+  chosen: number[];
+  libraryId: number | null;
+  busy: boolean;
+  sending: boolean;
+  outcome: string | null;
+  error: string | null;
+}
+
 export interface AppState {
   route: Route;
   stack: Route[];
@@ -94,6 +124,8 @@ export interface AppState {
   askWho: boolean;
   playing: Playing | null;
   playError: string | null;
+  requests: RequestsState;
+  requestPage: RequestPage | null;
 }
 
 const emptyBrowse = (): Browse => ({ choice: null, items: [], total: 0, busy: false, sort: "titleSort:asc", error: null });
@@ -112,8 +144,23 @@ export function initialState(): AppState {
     askWho: false,
     playing: null,
     playError: null,
+    requests: emptyRequests(),
+    requestPage: null,
   };
 }
+
+const emptyRequests = (): RequestsState => ({
+  address: null, connecting: false, loading: false, error: null, rows: [], mine: [], marks: reely.noMarks(),
+  plexMovies: new Set(), plexShows: new Set(), query: "", results: [], searching: false,
+});
+
+/** A poster's word in Requests: In library, Downloading, Approved and the rest. */
+export function requestBadge(r: RequestsState, title: RequestTitle) {
+  return reely.badgeFor(title, r.marks, r.mine, r.plexMovies, r.plexShows);
+}
+
+/** The browsing rows less what's in the library already. */
+export const shownRequestRows = (r: RequestsState) => reely.shownRows(r.rows, (t) => requestBadge(r, t));
 
 export const isConnected = (s: AppState) => !!s.plex.baseUrl && !!s.plex.serverToken;
 
@@ -126,6 +173,8 @@ export class App {
   private current: AppState = initialState();
   private listeners = new Set<(s: AppState) => void>();
   private signInRun = 0;
+  private reelyClient: reely.ReelyRequests | null = null;
+  private searchRun = 0;
   private homeRun = 0;
 
   constructor(
@@ -163,6 +212,8 @@ export class App {
     });
     if (route.name === "library") void this.openLibrary(route.kind);
     if (route.name === "detail") void this.openDetail(route.ratingKey, route.serverBase, route.episodeKey ?? null);
+    if (route.name === "requests") void this.loadRequests();
+    if (route.name === "requestTitle") void this.openRequestTitle(route.title);
   }
 
   /** Back one page; false when there's nowhere back to go (Home's Back leaves the app). */
@@ -184,6 +235,8 @@ export class App {
 
   /** Back where it was left: the account kept, its server found again. */
   async start() {
+    const reelyUrl = this.store.get("reelyUrl");
+    if (reelyUrl) this.setRequests({ address: reelyUrl });
     const token = this.store.get("plexToken");
     if (!token) return;
     const user = this.store.json<PlexHomeUser | null>("plexUser", null);
@@ -482,6 +535,170 @@ export class App {
 
   dismissPlayError() {
     this.set((s) => ({ ...s, playError: null }));
+  }
+
+  // ---------------------------------------------------------------- Requests (Reely)
+
+  private setRequests(change: Partial<RequestsState>) {
+    this.set((s) => ({ ...s, requests: { ...s.requests, ...change } }));
+  }
+
+  private client(): reely.ReelyRequests | null {
+    const address = this.current.requests.address ?? this.store.get("reelyUrl");
+    if (!address) return null;
+    if (!this.reelyClient || this.reelyClient.base !== reely.normalize(address)) {
+      this.reelyClient = new reely.ReelyRequests(address, () => this.store.get("plexAccountToken") ?? this.current.plex.token ?? undefined);
+    }
+    return this.reelyClient;
+  }
+
+  /** Reely at [address], signed in with the Plex account in use. */
+  async connectReely(address: string) {
+    if (!reely.isValid(address)) {
+      this.setRequests({ error: "That doesn't look like an address. Try reely.example.com or 192.168.1.5:8788." });
+      return;
+    }
+    this.setRequests({ connecting: true, error: null });
+    const client = new reely.ReelyRequests(address, () => this.store.get("plexAccountToken") ?? this.current.plex.token ?? undefined);
+    const problem = await client.signIn();
+    if (problem) {
+      this.setRequests({ connecting: false, error: problem });
+      return;
+    }
+    this.reelyClient = client;
+    this.store.set("reelyUrl", client.base);
+    this.setRequests({ connecting: false, address: client.base });
+    await this.loadRequests();
+  }
+
+  disconnectReely() {
+    this.store.remove("reelyUrl");
+    this.reelyClient = null;
+    this.set((s) => ({ ...s, requests: emptyRequests(), requestPage: null }));
+  }
+
+  /**
+   * Reely's rows, this account's requests and Reely's marks, with what the Plex libraries
+   * hold read first: titles already there are left out of the rows, and mustn't vanish
+   * from under the cursor once they're up.
+   */
+  async loadRequests() {
+    const client = this.client();
+    if (!client) return;
+    if (!this.current.requests.address) this.setRequests({ address: client.base });
+    this.setRequests({ loading: this.current.requests.rows.length === 0, error: null });
+    const holdings = this.plexHoldings();
+    const [rows, mine, marks] = await Promise.all([
+      client.explore().then((r) => ({ ok: true as const, r }), (e) => ({ ok: false as const, e })),
+      client.myRequests().catch(() => null),
+      client.marks().catch(() => null),
+    ]);
+    const held = await holdings;
+    const now = this.current.requests;
+    this.setRequests({
+      loading: false,
+      rows: rows.ok ? rows.r : now.rows,
+      mine: mine ?? now.mine,
+      marks: marks ?? now.marks,
+      plexMovies: held?.movies ?? now.plexMovies,
+      plexShows: held?.shows ?? now.plexShows,
+      error: rows.ok ? null : readable(rows.e),
+    });
+  }
+
+  private async plexHoldings(): Promise<{ movies: Set<string>; shows: Set<string> } | null> {
+    const libraries = this.current.plex.libraries;
+    if (!libraries.length) return null;
+    const of = async (type: "movie" | "show") => {
+      const sets = await Promise.all(
+        libraries.filter((l) => l.section.type === type).map((l) =>
+          plex.libraryGuids(l.baseUrl, l.token, l.section.key, type === "movie" ? plex.TYPE_MOVIE : plex.TYPE_SHOW).catch(() => new Set<string>()),
+        ),
+      );
+      const all = new Set<string>();
+      sets.forEach((set) => set.forEach((g) => all.add(g)));
+      return all;
+    };
+    const [movies, shows] = await Promise.all([of("movie"), of("show")]);
+    return { movies, shows };
+  }
+
+  async searchRequests(query: string) {
+    const run = ++this.searchRun;
+    this.setRequests({ query, searching: !!query.trim(), results: query.trim() ? this.current.requests.results : [] });
+    const client = this.client();
+    if (!client || !query.trim()) return;
+    try {
+      const results = await client.search(query);
+      if (run === this.searchRun) this.setRequests({ results, searching: false });
+    } catch (error) {
+      if (run === this.searchRun) this.setRequests({ searching: false, error: readable(error) });
+    }
+  }
+
+  private setRequestPage(key: string, change: Partial<RequestPage>) {
+    this.set((s) => (s.requestPage && reely.requestKey(s.requestPage.title) === key ? { ...s, requestPage: { ...s.requestPage, ...change } } : s));
+  }
+
+  async openRequestTitle(title: RequestTitle) {
+    const key = reely.requestKey(title);
+    this.set((s) => ({ ...s, requestPage: { title, detail: null, places: null, chosen: [], libraryId: null, busy: true, sending: false, outcome: null, error: null } }));
+    const client = this.client();
+    if (!client) return;
+    try {
+      const [detail, places] = await Promise.all([client.detail(title), client.places().catch(() => null)]);
+      const addable = places ? reely.librariesFor(places, detail.title, detail.inLibraries) : [];
+      const preferred = places ? reely.preferredLibrary(places, addable) : undefined;
+      this.setRequestPage(key, {
+        detail, places, busy: false,
+        chosen: detail.seasons.map((x) => x.number),
+        libraryId: preferred?.id ?? null,
+      });
+    } catch (error) {
+      this.setRequestPage(key, { busy: false, error: readable(error) });
+    }
+  }
+
+  toggleRequestSeason(number: number) {
+    const page = this.current.requestPage;
+    if (!page) return;
+    const chosen = page.chosen.includes(number) ? page.chosen.filter((n) => n !== number) : [...page.chosen, number].sort((a, b) => a - b);
+    this.setRequestPage(reely.requestKey(page.title), { chosen });
+  }
+
+  chooseRequestLibrary(id: number) {
+    const page = this.current.requestPage;
+    if (page) this.setRequestPage(reely.requestKey(page.title), { libraryId: id });
+  }
+
+  async submitRequest() {
+    const page = this.current.requestPage;
+    const client = this.client();
+    if (!page || !page.detail || !client || page.sending) return;
+    const key = reely.requestKey(page.title);
+    const show = page.title.kind === "show" && page.detail.seasons.length > 0;
+    if (show && page.chosen.length === 0) {
+      this.setRequestPage(key, { outcome: "Pick at least one season." });
+      return;
+    }
+    const all = show && page.chosen.length === page.detail.seasons.length;
+    this.setRequestPage(key, { sending: true, outcome: null });
+    try {
+      const outcome = await client.request(page.detail.title, show && !all ? page.chosen : null, page.libraryId ?? undefined);
+      // As the Fire TV words it.
+      const library = page.places?.libraries.find((l) => l.id === page.libraryId);
+      const said =
+        outcome.kind === "sent"
+          ? outcome.approved
+            ? `Adding it${library ? ` to ${library.name}` : ""} now.`
+            : `Requested${library ? ` for ${library.name}` : ""}. You'll see it here once it's approved.`
+          : outcome.kind === "already" ? "This has already been requested."
+          : outcome.message;
+      this.setRequestPage(key, { sending: false, outcome: said });
+      void this.loadRequests();
+    } catch (error) {
+      this.setRequestPage(key, { sending: false, outcome: readable(error) });
+    }
   }
 
   /** A picture from the server a title is on, at the size it's drawn. */

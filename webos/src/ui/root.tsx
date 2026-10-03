@@ -4,11 +4,13 @@ import { isConnected } from "../app/store";
 import { arrived, focus, rescue } from "./focus";
 import { playDirect, Player } from "./player";
 import { Detail, Home, Library, Profiles, SignIn } from "./screens";
+import { Requests, RequestTitlePage } from "./requests";
 
 const TABS: Array<[string, Route]> = [
   ["Home", { name: "home" }],
   ["Movies", { name: "library", kind: "movie" }],
   ["TV Shows", { name: "library", kind: "show" }],
+  ["Requests", { name: "requests" }],
 ];
 
 const sameTab = (a: Route, b: Route) => a.name === b.name && (a.name !== "library" || (b.name === "library" && a.kind === b.kind));
@@ -87,6 +89,10 @@ export function Root(props: { app: App }) {
           <Library app={app} state={state} kind={route.kind} />
         ) : route.name === "detail" ? (
           <Detail app={app} state={state} onPlay={onPlay} />
+        ) : route.name === "requests" ? (
+          <Requests app={app} state={state} />
+        ) : route.name === "requestTitle" ? (
+          <RequestTitlePage app={app} state={state} title={route.title} />
         ) : (
           <Home app={app} state={state} />
         )}

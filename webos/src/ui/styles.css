@@ -116,3 +116,6 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .scrub { height: 0.35rem; border-radius: 999px; background: rgba(245,242,240,0.25); overflow: hidden; margin-top: 0.6rem; }
 .scrub > i { display: block; height: 100%; background: var(--accent); }
 .player-times { display: flex; justify-content: space-between; color: var(--muted); font-size: 1rem; }
+.field { width: 36rem; max-width: 100%; padding: 0.8rem 1.2rem; border-radius: 999px; border: 0.1rem solid var(--line); background: var(--raised);
+  color: var(--chalk); font: inherit; font-size: 1.1rem; }
+.field:focus { border-color: var(--chalk); }

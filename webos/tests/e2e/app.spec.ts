@@ -136,3 +136,61 @@ test("opened from file://, as an installed webOS app is, it starts and draws in 
   expect(font).toBe(true);
   expect(errors).toEqual([]);
 });
+
+test("Requests: connect, rows without what's in the library, and ask for a show", async ({ page }) => {
+  await fakePlex(page);
+  const REELY = "http://192.168.1.5:8788";
+  const asked: unknown[] = [];
+  const cors = { "Access-Control-Allow-Origin": "http://127.0.0.1:4173", "Access-Control-Allow-Credentials": "true", "Access-Control-Allow-Headers": "*", "Access-Control-Allow-Methods": "*" };
+  const send = (route: Route, value: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", headers: cors, body: JSON.stringify(value) });
+  await page.route(`${REELY}/**`, async (route) => {
+    const req = route.request();
+    if (req.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
+    const path = new URL(req.url()).pathname;
+    if (path === "/api/v1/auth/plex/token") return send(route, { status: "ok" });
+    if (path === "/api/v1/explore") {
+      return send(route, {
+        movies: [
+          { tmdbId: 603, kind: "movie", title: "The Matrix", year: 1999 },
+          { tmdbId: 27205, kind: "movie", title: "Inception", year: 2010 },
+        ],
+        shows: [{ tmdbId: 1399, kind: "show", title: "Game of Thrones", year: 2011 }],
+        providers: [{ key: "max", name: "Max", kind: "movie", results: [{ tmdbId: 603, kind: "movie", title: "The Matrix", year: 1999 }] }],
+      });
+    }
+    if (path === "/api/v1/movies") return send(route, { movies: [{ tmdbId: 603, filePath: "/m.mkv" }] });
+    if (path === "/api/v1/shows") return send(route, { shows: [{ tmdbId: 1399, onDisk: 10, aired: 73, wanted: 63 }] });
+    if (path === "/api/v1/requests" && req.method() === "GET") return send(route, { requests: [] });
+    if (path === "/api/v1/auth/me") return send(route, { user: { role: "user", defaultLibraryId: 3 } });
+    if (path === "/api/v1/libraries") return send(route, { libraries: [{ id: 3, name: "TV", kind: "shows" }] });
+    if (path === "/api/v1/preview/show/1399") {
+      return send(route, { inLibraries: [], preview: { tmdbId: 1399, kind: "show", title: "Game of Thrones", year: 2011, seasons: [{ number: 1, name: "Season 1", episodes: [{}] }, { number: 2, name: "Season 2", episodes: [{}] }] } });
+    }
+    if (path === "/api/v1/requests" && req.method() === "POST") {
+      asked.push(JSON.parse(req.postData() ?? "{}"));
+      return send(route, { id: 1, status: "pending" }, 201);
+    }
+    return send(route, { error: "no" }, 404);
+  });
+  await page.goto("/");
+  await press(page, "Enter");
+  await expect(page.getByText("Recently Added Movies")).toBeVisible({ timeout: 10_000 });
+  await page.getByRole("button", { name: "Requests" }).click();
+  await page.getByPlaceholder("Reely address, like 192.168.1.5:8788").fill("192.168.1.5:8788");
+  await page.getByRole("button", { name: "Connect" }).click();
+  await expect(page.getByText("Trending Movies")).toBeVisible();
+  // The Matrix is in the library: gone from Trending, and Max's row, left empty, isn't shown.
+  await expect(page.getByText("Inception")).toBeVisible();
+  await expect(page.locator(".card", { hasText: "The Matrix" })).toHaveCount(0);
+  await expect(page.getByText("Movies on Max")).toHaveCount(0);
+  // Partly there: still offered, and marked so.
+  const got = page.locator(".card", { hasText: "Game of Thrones" });
+  await expect(got.locator(".tag")).toHaveText("Partial");
+  await page.screenshot({ path: "shots/lg-requests.png" });
+  await got.click();
+  await expect(page.getByRole("button", { name: "Request all seasons" })).toBeVisible();
+  await page.getByRole("button", { name: "Season 2" }).click();
+  await page.getByRole("button", { name: "Request 1 season" }).click();
+  await expect(page.getByText("Requested for TV. You'll see it here once it's approved.")).toBeVisible();
+  expect(asked).toEqual([expect.objectContaining({ kind: "show", tmdbId: 1399, seasons: [1], libraryId: 3 })]);
+});
