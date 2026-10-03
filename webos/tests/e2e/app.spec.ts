@@ -206,6 +206,8 @@ test("the player: Skip Intro, another sound track kept with Plex, Up Next on to 
   const plex = await fakePlex(page);
   await page.addInitScript(scriptedVideo);
   // This episode as a file the TV plays: an intro, two sound tracks, subtitles, credits.
+  await page.route(`${SERVER}/library/streams/21*`, (route) =>
+    route.fulfill({ status: 200, contentType: "text/plain", headers: { "Access-Control-Allow-Origin": "*" }, body: "1\n00:00:00,000 --> 00:01:00,000\nHello from the subtitles\n" }));
   await page.route(`${SERVER}/library/metadata/e2*`, (route) =>
     route.fulfill({ status: 200, contentType: "application/json", headers: { "Access-Control-Allow-Origin": "*" }, body: JSON.stringify({ MediaContainer: { Metadata: [{
       ratingKey: "e2", type: "episode", title: "Episode 2", index: 2, parentIndex: 1, grandparentRatingKey: "show1", grandparentTitle: "Northbound", duration: 12_000,
@@ -245,6 +247,14 @@ test("the player: Skip Intro, another sound track kept with Plex, Up Next on to 
   await expect.poll(async () => (await sources()).pop()).toContain("/video/:/transcode/universal/start.m3u8");
   await expect(page.locator(".options")).toHaveCount(0);
   await expect.poll(() => plex.timeline).toContain("choose?audioStreamID=12");
+
+  // Its own SRT subtitles: drawn by the app over the picture, Plex asked not to burn them in.
+  await press(page, "ArrowDown");
+  await page.locator(".option", { hasText: "English (SRT)" }).focus();
+  await press(page, "Enter");
+  await expect(page.locator(".subtitle-line")).toHaveText("Hello from the subtitles");
+  expect((await sources()).pop()).toContain("subtitles=none");
+  await page.screenshot({ path: "shots/lg-player-subtitles.png" });
 
   // The credits: Up Next, and OK plays it now.
   await expect(page.locator(".up-next")).toContainText("S1 · E3 · Episode 3", { timeout: 15_000 });

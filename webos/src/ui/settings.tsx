@@ -1,7 +1,7 @@
 import type { ComponentChildren } from "preact";
 import type { App, AppState, PlaybackMode } from "../app/store";
 import { useState } from "preact/hooks";
-import { BITRATE_CHOICES, HOME_ROWS, SCREENSAVER_CHOICES, UP_NEXT_CHOICES } from "../app/store";
+import { BITRATE_CHOICES, HOME_ROWS, SCREENSAVER_CHOICES, SUBTITLE_SIZES, UP_NEXT_CHOICES } from "../app/store";
 import { clearProblem, lastProblem } from "../core/crash";
 import { Pill, useRescue } from "./parts";
 
@@ -67,6 +67,18 @@ export function Settings(props: { app: App; state: AppState; onProfiles: () => v
           {BITRATE_CHOICES.map((kbps) => (
             <Pill key={kbps} label={bitrateLabel(kbps)} on={prefs.maxBitrateKbps === kbps} onPress={() => app.setMaxBitrate(kbps)} />
           ))}
+        </Setting>
+      </Group>
+
+      <Group title="Subtitles">
+        <Setting title="Size" note={prefs.subtitleScale === 0.9 ? "Standard" : null}>
+          {SUBTITLE_SIZES.map((size) => (
+            <Pill key={size} label={`${Math.round(size * 100)}%`} on={prefs.subtitleScale === size} onPress={() => app.setSubtitleScale(size)} />
+          ))}
+        </Setting>
+        <Setting title="Background" note="A dark box behind the text, instead of an outline.">
+          <Pill label="On" on={prefs.subtitleBackground} onPress={() => app.setSubtitleBackground(true)} />
+          <Pill label="Off" on={!prefs.subtitleBackground} onPress={() => app.setSubtitleBackground(false)} />
         </Setting>
       </Group>
 

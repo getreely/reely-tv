@@ -3,6 +3,9 @@ import type { PlexItem } from "../api/plex";
 import type { App, Playing, Prefs } from "../app/store";
 import { browserCanPlay, plan, REPORT_EVERY_MS, SKIP_MS } from "../app/playback";
 import { focus, onKeys } from "./focus";
+import { ask } from "../core/http";
+import { cueAt, parseSubtitles, type Cue } from "../core/subtitles";
+import type { PlexOnlineSubtitle } from "../api/plex";
 import { Spinner } from "./parts";
 
 const clock = (ms: number) => {
@@ -49,6 +52,21 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
   // Skipping: held (pressed again and again), it goes further each time; a picture of where it lands.
   const skips = useRef({ at: 0, count: 0 });
   const [preview, setPreview] = useState<{ ms: number; until: number } | null>(null);
+  // Text subtitles, read once and drawn over the picture at the size and background chosen.
+  const [cues, setCues] = useState<Cue[]>([]);
+  const textSub = playing.textSubtitle;
+  useEffect(() => {
+    setCues([]);
+    if (!textSub) return;
+    let live = true;
+    void ask(textSub.url, { timeoutMs: 30_000 })
+      .then((r) => r.text())
+      .then((text) => { if (live) setCues(parseSubtitles(text, textSub.codec)); })
+      .catch(() => undefined);
+    return () => { live = false; };
+  }, [textSub?.url]);
+  // Finding subtitles online: what was found, and which is being added.
+  const [finding, setFinding] = useState<{ language: string; results: PlexOnlineSubtitle[] | null; error: string | null; adding: string | null } | null>(null);
   // The sleep timer, read by the video's handlers without restarting them.
   const sleepRef = useRef<Sleep>(null);
   sleepRef.current = sleep;
@@ -163,6 +181,10 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
         const v = video.current;
         if (!v) return true;
         nudge();
+        if (finding) {
+          if (a === "back") { setFinding(null); return true; }
+          return !(a === "up" || a === "down" || a === "left" || a === "right" || a === "ok");
+        }
         if (panel) {
           // The panel's own cursor moves and presses; Back closes it.
           if (a === "back") { setPanel(false); return true; }
@@ -212,12 +234,25 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
         }
         return true;
       }),
-    [playing.url, panel, upNext, inIntro],
+    [playing.url, panel, upNext, inIntro, !!finding],
   );
 
   const choose = (audio: string | undefined, subtitle: string | undefined) => {
     setPanel(false);
     void app.chooseStreams(audio, subtitle, now(), (p) => playDirect(video.current ?? document.createElement("video"), p));
+  };
+  const find = async () => {
+    setPanel(false);
+    setFinding({ language: "", results: null, error: null, adding: null });
+    const found = await app.findSubtitles();
+    setFinding((f) => f && { ...f, language: found.language, results: found.results, error: found.error });
+  };
+  const add = async (s: PlexOnlineSubtitle) => {
+    if (!finding) return;
+    setFinding({ ...finding, adding: s.key, error: null });
+    const problem = await app.addFoundSubtitle(s, finding.language, now(), (p) => playDirect(video.current ?? document.createElement("video"), p));
+    if (problem) setFinding((f) => f && { ...f, adding: null, error: problem });
+    else setFinding(null);
   };
   const setSleepFor = (minutes: number) => {
     setPanel(false);
@@ -234,12 +269,18 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
     return () => clearTimeout(t);
   }, [preview]);
   const previewUrl = preview && playing.playback.previewUrl ? playing.playback.previewUrl.replace("{ms}", String(preview.ms)) : null;
+  const words = textSub ? cueAt(cues, position) : null;
   const seconds = upNext?.endsAt ? Math.max(0, Math.ceil((upNext.endsAt - Date.now()) / 1000)) : null;
   return (
     <div class="player" data-layer>
       <video ref={video} class="video" playsInline />
       {waiting && !error ? <div class="player-wait"><Spinner /></div> : null}
       {error ? <div class="player-wait"><p class="note error">{error}</p></div> : null}
+      {words ? (
+        <div class={"subtitle-line" + (prefs.subtitleBackground ? " boxed" : "")} style={{ fontSize: `${2.2 * prefs.subtitleScale}rem` }}>
+          {words.split("\n").map((l, i) => <span key={i}>{l}</span>)}
+        </div>
+      ) : null}
       {inIntro && !upNext && !panel ? <div class="skip-prompt">Skip Intro</div> : null}
       {upNext ? (
         <div class="up-next">
@@ -271,8 +312,10 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
           onSubtitles={(id) => choose(undefined, id)}
           onChapter={(ms) => { setPanel(false); if (video.current) video.current.currentTime = ms / 1000; }}
           onSleep={setSleepFor}
+          onFind={playing.base !== "iptv:" ? () => void find() : null}
         />
       ) : null}
+      {finding ? <FindSubtitles finding={finding} onAdd={(s) => void add(s)} onClose={() => setFinding(null)} /> : null}
     </div>
   );
 }
@@ -285,6 +328,7 @@ function Options(props: {
   onSubtitles: (id: string) => void;
   onChapter: (ms: number) => void;
   onSleep: (minutes: number) => void;
+  onFind: (() => void) | null;
 }) {
   const p = props.playing.playback;
   const panel = useRef<HTMLDivElement>(null);
@@ -314,6 +358,12 @@ function Options(props: {
           <h3>Subtitles</h3>
           {chosen("s-off", !subtitlesOn, "Off", () => props.onSubtitles("0"), p.audioStreams.length <= 1)}
           {p.subtitleStreams.map((s) => chosen(`s${s.id}`, s.selected, s.label, () => props.onSubtitles(s.id)))}
+          {props.onFind ? chosen("s-find", false, "Find subtitles online", props.onFind) : null}
+        </section>
+      ) : props.onFind ? (
+        <section>
+          <h3>Subtitles</h3>
+          {chosen("s-find", false, "Find subtitles online", props.onFind, p.audioStreams.length <= 1)}
         </section>
       ) : null}
       {p.chapters.length ? (
@@ -332,6 +382,53 @@ function Options(props: {
         {SLEEP_CHOICES.filter((m) => m !== END_OF_EPISODE || props.playing.item.type === "episode").map((m) =>
           chosen(`z${m}`, sleepOn(m), sleepLabel(m), () => props.onSleep(m), !p.audioStreams.length && !p.subtitleStreams.length && m === 0),
         )}
+      </section>
+    </div>
+  );
+}
+
+/** "English" for "en", where the TV's browser can say so (Chromium 81 on); else the code. */
+function languageName(code: string): string {
+  const names = (Intl as unknown as { DisplayNames?: new (l: string[], o: { type: string }) => { of(c: string): string | undefined } }).DisplayNames;
+  if (!code) return "";
+  try {
+    return names ? new names([navigator.language || "en"], { type: "language" }).of(code) ?? code : code.toUpperCase();
+  } catch {
+    return code.toUpperCase();
+  }
+}
+
+/** Subtitles found online by the Plex server, in the TV's language: one press adds them. */
+function FindSubtitles(props: {
+  finding: { language: string; results: PlexOnlineSubtitle[] | null; error: string | null; adding: string | null };
+  onAdd: (s: PlexOnlineSubtitle) => void;
+  onClose: () => void;
+}) {
+  const f = props.finding;
+  const panel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    focus(panel.current?.querySelector<HTMLElement>("[data-focus]"));
+  }, [f.results != null]);
+  const language = languageName(f.language);
+  return (
+    <div class="options" data-layer ref={panel}>
+      <section>
+        <h3>Find subtitles</h3>
+        <p class="note">
+          {f.error ?? (f.results == null ? `Looking for subtitles…` : f.adding ? "Adding them…" : f.results.length ? `${language}, found by your Plex server.` : `No ${language} subtitles were found for this.`)}
+        </p>
+        {(f.results ?? []).map((s) => (
+          <button key={s.key} class="option" data-focus onClick={() => props.onAdd(s)}>
+            <span class="tick">{f.adding === s.key ? "…" : ""}</span>
+            <span>
+              {s.title}
+              <span class="facts" style={{ display: "block" }}>
+                {[s.provider, s.hearingImpaired ? "For the hard of hearing" : null, s.forced ? "Forced" : null].filter(Boolean).join("  ·  ")}
+              </span>
+            </span>
+          </button>
+        ))}
+        <button class="option" data-focus onClick={props.onClose}><span class="tick" />Close</button>
       </section>
     </div>
   );

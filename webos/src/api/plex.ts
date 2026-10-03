@@ -751,11 +751,17 @@ export async function reportTimeline(
 }
 
 /** The server converting the file to HLS, from the start; the player seeks. */
-export function transcodeUrl(base: string, token: string, ratingKey: string, sessionId: string, maxBitrateKbps: number, resolution: string, mediaIndex = 0): string {
+export function transcodeUrl(
+  base: string, token: string, ratingKey: string, sessionId: string, maxBitrateKbps: number, resolution: string, mediaIndex = 0,
+  /** "burn" draws the chosen subtitles into the picture; "none" leaves them to the app. */
+  subtitles: "burn" | "none" = "burn",
+  /** The size burned subtitles are drawn at, in percent. */
+  subtitleSize = 100,
+): string {
   const bitrate = maxBitrateKbps > 0 ? `&maxVideoBitrate=${maxBitrateKbps}` : "";
   return (
     `${base}/video/:/transcode/universal/start.m3u8?path=${enc(`/library/metadata/${ratingKey}`)}&mediaIndex=${mediaIndex}&partIndex=0` +
-    `&protocol=hls&fastSeek=1&directPlay=0&directStream=1&subtitles=burn&audioBoost=100&videoQuality=100` +
+    `&protocol=hls&fastSeek=1&directPlay=0&directStream=1&subtitles=${subtitles}&subtitleSize=${subtitleSize}&audioBoost=100&videoQuality=100` +
     `&videoResolution=${resolution}${bitrate}&session=${sessionId}` +
     `&X-Plex-Client-Identifier=${enc(identity.clientId)}&X-Plex-Platform=${enc(identity.platform)}&X-Plex-Product=${enc(PRODUCT)}&X-Plex-Token=${token}`
   );

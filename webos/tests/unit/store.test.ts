@@ -226,6 +226,36 @@ describe("search, as the Fire TV searches", () => {
   });
 });
 
+describe("subtitles found online", () => {
+  it("found by the server in the TV's language; added, then on, drawn by the app", async () => {
+    let added = false;
+    const asked: string[] = [];
+    useFetcher(async (input, init) => {
+      const url = new URL(String(input));
+      asked.push(`${init?.method ?? "GET"} ${url.pathname}`);
+      const json = (v: unknown) => new Response(JSON.stringify(v));
+      if (url.pathname === "/library/metadata/m1/subtitles" && (init?.method ?? "GET") === "GET") {
+        return json({ MediaContainer: { Stream: [{ key: "/sub/9", title: "Low.Orbit.en.srt", providerTitle: "OpenSubtitles", languageCode: "en", codec: "srt" }] } });
+      }
+      if (url.pathname === "/library/metadata/m1/subtitles") { added = true; return json({}); }
+      if (url.pathname === "/library/metadata/m1") {
+        const streams = [{ id: 11, streamType: 2, displayTitle: "English", selected: 1 }];
+        if (added) streams.push({ id: 31, streamType: 3, displayTitle: "English (SRT)", key: "/library/streams/31", codec: "srt" } as any);
+        return json({ MediaContainer: { Metadata: [{ ratingKey: "m1", Media: [{ container: "mp4", videoCodec: "h264", audioCodec: "aac", Part: [{ id: 5, key: "/library/parts/5/file.mp4", Stream: streams }] }] }] } });
+      }
+      return json({});
+    });
+    (app as any).current.plex = { ...app.state.plex, baseUrl: SERVER, serverToken: "server-token" };
+    await app.play({ ratingKey: "m1", type: "movie", title: "Low Orbit", serverBase: SERVER, viewOffsetMs: 0, durationMs: 1000 } as any, false, () => true);
+    const found = await app.findSubtitles("en");
+    expect(found.results.map((r) => r.provider)).toEqual(["OpenSubtitles"]);
+    expect(await app.addFoundSubtitle(found.results[0], "en", 3000, () => true)).toBeNull();
+    expect(asked).toContain("PUT /library/metadata/m1/subtitles");
+    expect(app.state.playing?.textSubtitle?.id).toBe("31");
+    expect(app.state.playing?.direct).toBe(true);
+  });
+});
+
 describe("a title's page and a library's filters", () => {
   /** A server with 300 films, A–Z, and plex.tv's Watchlist; everything asked is kept. */
   function library() {
@@ -372,7 +402,18 @@ describe("playback settings", () => {
 
     await app.chooseStreams("11", "21", 6000, () => true);
     expect(asked).toContain("PUT /library/parts/5?audioStreamID=11&subtitleStreamID=21");
-    expect(app.state.playing?.direct).toBe(false);
+    // Converted for the commentary before; English sound and SRT subtitles now: the file as it is again.
+    expect(app.state.playing?.direct).toBe(true);
+    expect(app.state.playing?.textSubtitle?.id).toBe("21");
+
+    // Its own SRT file: drawn by the app, so the file plays as it is.
+    await app.chooseStreams("11", "0", 6500, () => true);
+    expect(app.state.playing?.direct).toBe(true);
+    const before = app.state.playing?.url;
+    await app.chooseStreams(undefined, "21", 6600, () => true);
+    expect(app.state.playing?.textSubtitle?.id).toBe("21");
+    expect(app.state.playing?.direct).toBe(true);
+    expect(app.state.playing?.url).toBe(before);
 
     await app.chooseStreams(undefined, "0", 7000, () => true);
     expect(asked).toContain("PUT /library/parts/5?subtitleStreamID=0");

@@ -29,8 +29,8 @@ app (Amazon's Vega SDK, React Native), which can reuse the LG app's TypeScript c
 | **Player** | | | | | |
 | Direct play, conversion when needed, quality limit | ✅ | ✅ | ✅ | 🟡 (no quality limit yet) | ⬜ |
 | Resume, progress and watched kept with Plex | ✅ | ✅ | ✅ | ✅ | ⬜ |
-| Sound and subtitle tracks, kept with Plex; subtitle size and style | ✅ | ✅ | 🟡 (tracks kept with Plex; no subtitle size or style) | ⬜ | ⬜ |
-| Find subtitles online | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
+| Sound and subtitle tracks, kept with Plex; subtitle size and style | ✅ | ✅ | ✅ | ⬜ | ⬜ |
+| Find subtitles online | ✅ | ✅ | ✅ | ⬜ | ⬜ |
 | Skip intro and credits; Up Next; next season | ✅ | ✅ | ✅ | ⬜ | ⬜ |
 | Chapters, preview pictures while scrubbing | ✅ | ✅ | ✅ | ⬜ | ⬜ |
 | Sleep timer | ✅ | ✅ | ✅ | ⬜ | ⬜ |
@@ -63,5 +63,5 @@ app (Amazon's Vega SDK, React Native), which can reuse the LG app's TypeScript c
 | App | Where | How |
 |---|---|---|
 | Fire TV / Android TV and phone | `app/src/test` | `./gradlew :app:testDebugUnitTest` (Robolectric, Compose UI tests, screenshots with `-Pscreenshots`) |
-| LG | `webos/` | `npm test` (unit, 161) and `npm run e2e` (browser, the built app as the TV opens it); `npm run package` makes `reely-lg.ipk` |
+| LG | `webos/` | `npm test` (unit, 167) and `npm run e2e` (browser, the built app as the TV opens it); `npm run package` makes `reely-lg.ipk` |
 | Roku | `roku/` | `npm run check` (BrighterScript compile), `npm test` (unit, BrightScript simulator) and `npm run e2e` (the app in the SceneGraph simulator, driven by the remote protocol, against a stand-in Plex); `npm run package` makes `reely-roku.zip` |

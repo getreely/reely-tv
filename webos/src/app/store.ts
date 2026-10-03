@@ -2,6 +2,7 @@ import * as plex from "../api/plex";
 import type { PlexDetail, PlexHomeUser, PlexItem, PlexPerson, PlexServer } from "../api/plex";
 import { rememberedSearches, split } from "../core/searchMatch";
 import { stableSort } from "../core/sort";
+import { isTextCodec } from "../core/subtitles";
 import { readable } from "../core/http";
 import { Store, clientId } from "../core/storage";
 import { emptyHome, loadHome, type HomeRows, type LibraryChoice } from "./home";
@@ -118,7 +119,12 @@ export interface Playing {
   queue: PlexItem[];
   /** Which copy of the title. */
   mediaIndex: number;
+  /** Text subtitles the app draws itself, with the size and background from Settings. */
+  textSubtitle: plex.PlexSubtitle | null;
 }
+
+/** As the Fire TV offers them; 0.9 is its standard. */
+export const SUBTITLE_SIZES = [0.7, 0.8, 0.9, 1.0, 1.2, 1.4];
 
 export interface LiveState {
   credentials: XtreamCredentials | null;
@@ -235,6 +241,9 @@ export interface Prefs {
   screensaverMinutes: number;
   /** The remote's tour has been seen (or skipped). */
   tourSeen: boolean;
+  subtitleScale: number;
+  /** A dark box behind subtitles rather than an outline. */
+  subtitleBackground: boolean;
 }
 
 export const SCREENSAVER_CHOICES = [0, 3, 5, 10];
@@ -266,10 +275,21 @@ export const HOME_ROWS: Array<[HomeRowId, string]> = [
 ];
 
 export const UP_NEXT_CHOICES = [0, 5, 10, 12, 15, 20, 30];
-const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], iptvLibrary: false, iptvWins: false, screensaverMinutes: 3, tourSeen: false };
+const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], iptvLibrary: false, iptvWins: false, screensaverMinutes: 3, tourSeen: false, subtitleScale: 0.9, subtitleBackground: false };
 
 /** As the Fire TV offers them. */
 export const BITRATE_CHOICES = [0, 20_000, 12_000, 8_000, 4_000, 2_000];
+
+/**
+ * The subtitles Plex has on: text ones the app can draw (their own file, SRT and the
+ * like), or ones only Plex's conversion can put in the picture.
+ */
+export function subtitlePlan(playback: Pick<plex.PlexPlayback, "subtitleStreams" | "subtitles">): { text: plex.PlexSubtitle | null; burn: boolean } {
+  const on = playback.subtitleStreams.find((s) => s.selected);
+  if (!on) return { text: null, burn: false };
+  const text = playback.subtitles.find((s) => s.id === on.id && isTextCodec(s.codec)) ?? null;
+  return { text, burn: !text };
+}
 
 /** A bare item: the film a page is about, when there's nothing more to go on. */
 function emptyItemFor(ratingKey: string, title: string, type: string): PlexItem {
@@ -475,6 +495,8 @@ export class App {
         iptvWins: prefs.iptvWins === true,
         screensaverMinutes: SCREENSAVER_CHOICES.includes(prefs.screensaverMinutes ?? -1) ? prefs.screensaverMinutes! : DEFAULT_PREFS.screensaverMinutes,
         tourSeen: prefs.tourSeen === true,
+        subtitleScale: SUBTITLE_SIZES.includes(prefs.subtitleScale ?? -1) ? prefs.subtitleScale! : DEFAULT_PREFS.subtitleScale,
+        subtitleBackground: prefs.subtitleBackground === true,
       },
     }));
     const live = this.store.json<XtreamCredentials | null>("xtream", null);
@@ -1163,10 +1185,13 @@ export class App {
       if (!playback) throw new Error("That file isn't on the server any more.");
       const sessionId = randomHex(12);
       const mode = this.current.prefs.playbackMode;
-      const asIs = mode === "direct" ? true : mode === "transcode" ? false : direct(playback);
-      const url = asIs ? playback.url : this.converted(base, token, item.ratingKey, sessionId, mediaIndex);
+      // The subtitles Plex has on for this file: text ones the app draws over the file as it
+      // is; picture ones (PGS) only Plex's conversion can put in.
+      const { text, burn } = subtitlePlan(playback);
+      const asIs = mode === "direct" ? true : mode === "transcode" || burn ? false : direct(playback);
+      const url = asIs ? playback.url : this.converted(base, token, item.ratingKey, sessionId, mediaIndex, text ? "none" : "burn");
       const startMs = resume && item.viewOffsetMs > 0 && !(item.durationMs > 0 && item.viewOffsetMs >= item.durationMs * 0.95) ? item.viewOffsetMs : 0;
-      this.set((s) => ({ ...s, playError: null, playing: { item, base, token, playback, url, direct: asIs, startMs, sessionId, queue, mediaIndex } }));
+      this.set((s) => ({ ...s, playError: null, playing: { item, base, token, playback, url, direct: asIs, startMs, sessionId, queue, mediaIndex, textSubtitle: text } }));
     } catch (error) {
       this.set((s) => ({ ...s, playError: readable(error) }));
     }
@@ -1187,7 +1212,7 @@ export class App {
       url, subtitles: [], markers: [], audioCodec: null, audioChannels: 0, previewUrl: null, chapters: [], partId: null,
       audioStreams: [], subtitleStreams: [], container: k.extension, videoCodec: null,
     };
-    this.set((s) => ({ ...s, playError: null, playing: { item: marked, base: IPTV_SOURCE, token: "", playback, url, direct: true, startMs, sessionId: randomHex(12), queue, mediaIndex: 0 } }));
+    this.set((s) => ({ ...s, playError: null, playing: { item: marked, base: IPTV_SOURCE, token: "", playback, url, direct: true, startMs, sessionId: randomHex(12), queue, mediaIndex: 0, textSubtitle: null } }));
   }
 
   /** The file wouldn't play as it is: Plex converts it instead, from where it had got to. */
@@ -1195,16 +1220,16 @@ export class App {
     const p = this.current.playing;
     // The provider's files have no Plex to convert them.
     if (!p || !p.direct || p.base === IPTV_SOURCE) return false;
-    const url = this.converted(p.base, p.token, p.item.ratingKey, p.sessionId, p.mediaIndex);
+    const url = this.converted(p.base, p.token, p.item.ratingKey, p.sessionId, p.mediaIndex, p.textSubtitle ? "none" : "burn");
     this.set((s) => ({ ...s, playing: { ...p, url, direct: false, startMs: positionMs } }));
     return true;
   }
 
   /** Plex's conversion, at the quality chosen in Settings. */
-  private converted(base: string, token: string, ratingKey: string, sessionId: string, mediaIndex = 0) {
+  private converted(base: string, token: string, ratingKey: string, sessionId: string, mediaIndex = 0, subtitles: "burn" | "none" = "burn") {
     const kbps = this.current.prefs.maxBitrateKbps;
     const resolution = kbps >= 20_000 ? "3840x2160" : kbps === 0 || kbps >= 8_000 ? "1920x1080" : "1280x720";
-    return plex.transcodeUrl(base, token, ratingKey, sessionId, kbps, resolution, mediaIndex);
+    return plex.transcodeUrl(base, token, ratingKey, sessionId, kbps, resolution, mediaIndex, subtitles, Math.round(this.current.prefs.subtitleScale * 100));
   }
 
   /**
@@ -1221,15 +1246,49 @@ export class App {
     const subtitleStreams = subtitleId === undefined ? p.playback.subtitleStreams : p.playback.subtitleStreams.map((s) => ({ ...s, selected: s.id === subtitleId }));
     const playback = { ...p.playback, audioStreams, subtitleStreams };
     if (this.current.playing !== p) return;
-    const subtitles = subtitleStreams.some((s) => s.selected);
+    const { text, burn } = subtitlePlan(playback);
     const otherSound = audioStreams.length > 1 && !audioStreams[0].selected && audioStreams.some((s) => s.selected);
     const mode = this.current.prefs.playbackMode;
-    const asIs = mode === "transcode" ? false : !subtitles && !otherSound && (mode === "direct" || canDirect(playback));
+    const asIs = mode === "transcode" ? false : !burn && !otherSound && (mode === "direct" || canDirect(playback));
     // A conversion running for the old choice stops; the new one starts afresh.
     if (!p.direct) void plex.stopTranscode(p.base, p.token, p.sessionId);
     const sessionId = randomHex(12);
-    const url = asIs ? playback.url : this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex);
-    this.set((s) => ({ ...s, playing: { ...p, playback, url, direct: asIs, startMs: positionMs, sessionId } }));
+    // Only text subtitles changed, and the file plays as it is either way: the picture
+    // carries on where it is, and the words change over it.
+    if (asIs && p.direct && playback.url === p.url) {
+      this.set((s) => ({ ...s, playing: { ...p, playback, textSubtitle: text } }));
+      return;
+    }
+    const url = asIs ? playback.url : this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, text ? "none" : "burn");
+    this.set((s) => ({ ...s, playing: { ...p, playback, url, direct: asIs, startMs: positionMs, sessionId, textSubtitle: text } }));
+  }
+
+  /** Subtitles online for what's playing, in the TV's language, found by the Plex server. */
+  async findSubtitles(language = (navigator.language || "en").slice(0, 2)): Promise<{ language: string; results: plex.PlexOnlineSubtitle[]; error: string | null }> {
+    const p = this.current.playing;
+    if (!p || p.base === IPTV_SOURCE) return { language, results: [], error: "Subtitles can only be found for what's on your Plex server." };
+    try {
+      return { language, results: await plex.searchSubtitles(p.base, p.token, p.item.ratingKey, language), error: null };
+    } catch {
+      return { language, results: [], error: "Couldn't look for subtitles. Try again." };
+    }
+  }
+
+  /**
+   * Has the server fetch [subtitle] and add it to the file, then plays on with it: the
+   * file's subtitles are read again and the new one is picked, and kept with Plex.
+   */
+  async addFoundSubtitle(subtitle: plex.PlexOnlineSubtitle, language: string, positionMs: number, canDirect: (p: plex.PlexPlayback) => boolean): Promise<string | null> {
+    const p = this.current.playing;
+    if (!p) return null;
+    const added = await plex.addSubtitle(p.base, p.token, p.item.ratingKey, subtitle, language);
+    const fresh = added ? await plex.playback(p.base, p.token, p.item.ratingKey, p.mediaIndex).catch(() => null) : null;
+    const before = new Set(p.playback.subtitleStreams.map((s) => s.id));
+    const newOne = fresh?.subtitleStreams.find((s) => !before.has(s.id));
+    if (!fresh || !newOne || this.current.playing?.sessionId !== p.sessionId) return "Plex couldn't add those subtitles. Try another.";
+    this.set((s) => ({ ...s, playing: s.playing && { ...s.playing, playback: { ...s.playing.playback, subtitles: fresh.subtitles, subtitleStreams: fresh.subtitleStreams } } }));
+    await this.chooseStreams(undefined, newOne.id, positionMs, canDirect);
+    return null;
   }
 
   /** Where playback is, told to the server: what keeps Continue Watching right everywhere. */
@@ -1934,6 +1993,14 @@ export class App {
 
   takeTour() {
     this.setPrefs({ tourSeen: false });
+  }
+
+  setSubtitleScale(scale: number) {
+    if (SUBTITLE_SIZES.includes(scale)) this.setPrefs({ subtitleScale: scale });
+  }
+
+  setSubtitleBackground(on: boolean) {
+    this.setPrefs({ subtitleBackground: on });
   }
 
   setScreensaver(minutes: number) {
