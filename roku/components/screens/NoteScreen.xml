@@ -10,7 +10,7 @@
   <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
   <script type="text/brightscript" uri="pkg:/components/screens/NoteScreen.brs" />
   <children>
-    <Label id="title" translation="[0, 300]" width="1920" horizAlign="center" color="0xF5F2F0FF" />
-    <Label id="text" translation="[0, 390]" width="1920" horizAlign="center" color="0xB9B4B1FF" />
+    <Label id="title" translation="[0, 300]" width="1920" horizAlign="center" color="0xF2F4F7FF" />
+    <Label id="text" translation="[0, 390]" width="1920" horizAlign="center" color="0xB3BAC4FF" />
   </children>
 </component>

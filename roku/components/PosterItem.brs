@@ -96,9 +96,9 @@ sub focusChanged()
     focused = m.top.focusPercent > 0.5
     m.ring.visible = focused
     if focused then
-        m.title.color = "0xF5F2F0FF"
+        m.title.color = "0xF2F4F7FF"
     else
-        m.title.color = "0xB9B4B1FF"
+        m.title.color = "0xB3BAC4FF"
     end if
 end sub
 

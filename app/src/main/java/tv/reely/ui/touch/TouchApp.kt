@@ -371,7 +371,7 @@ internal fun TouchHeader(title: String, actions: TouchActions, modifier: Modifie
             actions.profile?.let { onProfile ->
                 HeaderButton(onClick = onProfile) { color ->
                     Box(Modifier.size(22.dp).clip(CircleShape).background(Accent), contentAlignment = Alignment.Center) {
-                        Text("☺", color = Ink, style = MaterialTheme.typography.labelMedium)
+                        Text("☺", color = tv.reely.ui.theme.OnAccent, style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }

@@ -28,11 +28,11 @@ sub render()
     had = m.rows.content <> invalid and m.rows.content.getChildCount() > 0
     ShowRows_(m.rows, rows)
     m.note.text = Str_(h.error)
-    m.note.color = "0xFF5E69FF"
+    m.note.color = "0xFF6B6BFF"
     if m.note.text = "" and h.continueWatching = invalid then
         ' Not asked yet, or not answered: said, rather than an empty page.
         m.note.text = "Loading your library…"
-        m.note.color = "0xB9B4B1FF"
+        m.note.color = "0xB3BAC4FF"
     end if
     m.rows.translation = Iif_(m.note.text <> "", [96, 90], [96, 30])
     if not had and m.top.isInFocusChain() then m.rows.setFocus(true)

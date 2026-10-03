@@ -204,7 +204,7 @@ sub build()
             if y > 20 then y = y + 30
             h = CreateObject("roSGNode", "Label")
             h.font = Bold_(36)
-            h.color = "0xF5F2F0FF"
+            h.color = "0xF2F4F7FF"
             h.text = st.group
             h.translation = [0, y]
             m.body.appendChild(h)
@@ -212,13 +212,13 @@ sub build()
         end if
         t = CreateObject("roSGNode", "Label")
         t.font = Semibold_(30)
-        t.color = "0xF5F2F0FF"
+        t.color = "0xF2F4F7FF"
         t.text = st.title
         t.translation = [0, y]
         m.body.appendChild(t)
         n = CreateObject("roSGNode", "Label")
         n.font = Regular_(24)
-        n.color = "0xB9B4B1FF"
+        n.color = "0xB3BAC4FF"
         n.text = st.note
         n.width = 1600
         n.wrap = true

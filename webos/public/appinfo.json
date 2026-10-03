@@ -7,8 +7,8 @@
   "title": "Reely",
   "icon": "icon.png",
   "largeIcon": "largeIcon.png",
-  "bgColor": "#0a0909",
-  "iconColor": "#0a0909",
+  "bgColor": "#08090b",
+  "iconColor": "#08090b",
   "resolution": "1920x1080",
   "disableBackHistoryAPI": true,
   "requiredACG": []

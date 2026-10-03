@@ -54,16 +54,16 @@ sub paint()
                 print "PILL "; m.top.labels[i]
             #end if
             m.pills[i].uri = "pkg:/images/pill.9.png"
-            m.pills[i].blendColor = "0xF5F2F0FF"
-            m.texts[i].color = "0x0A0909FF"
+            m.pills[i].blendColor = "0xF2F4F7FF"
+            m.texts[i].color = "0x08090BFF"
         else if isOn then
             m.pills[i].uri = "pkg:/images/pillring.9.png"
-            m.pills[i].blendColor = "0xF5F2F0FF"
-            m.texts[i].color = "0xF5F2F0FF"
+            m.pills[i].blendColor = "0xF2F4F7FF"
+            m.texts[i].color = "0xF2F4F7FF"
         else
             m.pills[i].uri = "pkg:/images/pill.9.png"
-            m.pills[i].blendColor = "0x221E1FFF"
-            m.texts[i].color = "0xF5F2F0FF"
+            m.pills[i].blendColor = "0x1F2329FF"
+            m.texts[i].color = "0xF2F4F7FF"
         end if
     end for
 end sub

@@ -174,7 +174,7 @@ private fun Chooser(
         }
         Text(
             text = error ?: "Each profile has its own libraries, watch history and Continue Watching.",
-            color = if (error != null) Accent else Faint,
+            color = if (error != null) tv.reely.ui.theme.Danger else Faint,
             style = ReelyType.Label,
         )
     }

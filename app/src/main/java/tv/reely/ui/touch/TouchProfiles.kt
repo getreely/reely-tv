@@ -129,7 +129,7 @@ internal fun TouchProfilePicker(
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     Text(
                         error ?: "Each profile has its own libraries, watch history and Continue Watching.",
-                        color = if (error != null) Accent else Faint,
+                        color = if (error != null) tv.reely.ui.theme.Danger else Faint,
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
@@ -196,7 +196,7 @@ private fun PinEntry(
                 Box(Modifier.size(14.dp).clip(CircleShape).background(if (index < pin.length) Chalk else Chalk.copy(alpha = 0.18f)))
             }
         }
-        Text(error ?: " ", color = Accent, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+        Text(error ?: " ", color = tv.reely.ui.theme.Danger, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             listOf("123", "456", "789").forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

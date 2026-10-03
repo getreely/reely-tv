@@ -173,7 +173,7 @@ fun WideCard(
 /** A poster's tag in the colour of what it says: here is green, on its way warm, asked quiet. */
 internal fun tagColors(tag: String): Pair<Color, Color> = when (tag) {
     "In library" -> tv.reely.ui.theme.Good to Ink
-    "Downloading", "Partial" -> Accent to Ink
+    "Downloading", "Partial" -> Accent to tv.reely.ui.theme.OnAccent
     "Declined" -> Ink.copy(alpha = 0.85f) to Faint
     else -> Ink.copy(alpha = 0.85f) to Chalk
 }
@@ -288,7 +288,7 @@ fun PosterCard(
                     val text = badgeText(badge)
                     Text(
                         text = text,
-                        color = Ink,
+                        color = tv.reely.ui.theme.OnAccent,
                         fontSize = badgeFontSize(text),
                         lineHeight = 18.sp,
                         fontWeight = FontWeight.Bold,

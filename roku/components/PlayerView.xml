@@ -20,23 +20,23 @@
   <children>
     <Rectangle width="1920" height="1080" color="0x000000FF" />
     <Video id="video" width="1920" height="1080" />
-    <Label id="wait" translation="[0, 500]" width="1920" horizAlign="center" color="0xB9B4B1FF" />
+    <Label id="wait" translation="[0, 500]" width="1920" horizAlign="center" color="0xB3BAC4FF" />
     <Group id="skip" visible="false" translation="[1500, 860]">
-      <Poster uri="pkg:/images/pill.9.png" blendColor="0xF5F2F0FF" width="300" height="72" />
-      <Label id="skipLabel" text="Skip Intro" width="300" height="72" horizAlign="center" vertAlign="center" color="0x0A0909FF" />
+      <Poster uri="pkg:/images/pill.9.png" blendColor="0xF2F4F7FF" width="300" height="72" />
+      <Label id="skipLabel" text="Skip Intro" width="300" height="72" horizAlign="center" vertAlign="center" color="0x08090BFF" />
     </Group>
     <Group id="upNext" visible="false" translation="[1180, 780]">
-      <Poster uri="pkg:/images/card.9.png" blendColor="0x171415F0" width="660" height="190" />
-      <Label id="upNextLabel" text="Up next" translation="[30, 24]" color="0xB9B4B1FF" />
-      <Label id="upNextTitle" translation="[30, 64]" width="600" color="0xF5F2F0FF" />
-      <Label id="upNextHint" translation="[30, 124]" width="600" color="0xB9B4B1FF" />
+      <Poster uri="pkg:/images/card.9.png" blendColor="0x15171BF0" width="660" height="190" />
+      <Label id="upNextLabel" text="Up next" translation="[30, 24]" color="0xB3BAC4FF" />
+      <Label id="upNextTitle" translation="[30, 64]" width="600" color="0xF2F4F7FF" />
+      <Label id="upNextHint" translation="[30, 124]" width="600" color="0xB3BAC4FF" />
     </Group>
-    <Label id="sleepNote" translation="[96, 40]" width="1700" color="0xF5F2F0FF" />
+    <Label id="sleepNote" translation="[96, 40]" width="1700" color="0xF2F4F7FF" />
     <Group id="options" visible="false">
-      <Rectangle translation="[1380, 0]" width="540" height="1080" color="0x171415F5" />
-      <Label id="optionsTitle" text="Sound, subtitles and more" translation="[1420, 50]" width="480" color="0xB9B4B1FF" />
+      <Rectangle translation="[1380, 0]" width="540" height="1080" color="0x15171BF5" />
+      <Label id="optionsTitle" text="Sound, subtitles and more" translation="[1420, 50]" width="480" color="0xB3BAC4FF" />
       <LabelList id="optionList" translation="[1410, 110]" itemSize="[440, 58]" numRows="15" vertFocusAnimationStyle="floatingFocus"
-        focusBitmapUri="pkg:/images/pill.9.png" color="0xF5F2F0FF" focusedColor="0x0A0909FF" />
+        focusBitmapUri="pkg:/images/pill.9.png" color="0xF2F4F7FF" focusedColor="0x08090BFF" />
     </Group>
     <Timer id="ticker" duration="0.5" repeat="true" />
     <Timer id="sleepTimer" repeat="false" />

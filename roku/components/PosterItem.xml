@@ -13,20 +13,20 @@
   <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
   <children>
     <!-- The cursor: an outline round the picture alone, so the name below stays readable. -->
-    <Rectangle id="ring" color="0xF5F2F0FF" visible="false" />
-    <Rectangle id="frame" color="0x221E1FFF" />
+    <Rectangle id="ring" color="0xF2F4F7FF" visible="false" />
+    <Rectangle id="frame" color="0x1F2329FF" />
     <!-- A person's photo is round; a title's picture square-cornered. -->
     <MaskGroup id="mask">
       <Poster id="art" loadDisplayMode="scaleToZoom" />
     </MaskGroup>
-    <Poster id="tick" uri="pkg:/images/badge.png" width="40" height="40" blendColor="0x0A0909CC" visible="false" />
-    <Label id="tickMark" text="✓" width="40" height="40" horizAlign="center" vertAlign="center" color="0xF5F2F0FF" visible="false" />
-    <Label id="tag" color="0xF5F2F0FF" visible="false" />
-    <Rectangle id="track" color="0x0A090999" visible="false" />
-    <Rectangle id="progress" color="0xFF5E69FF" visible="false" />
+    <Poster id="tick" uri="pkg:/images/badge.png" width="40" height="40" blendColor="0x08090BCC" visible="false" />
+    <Label id="tickMark" text="✓" width="40" height="40" horizAlign="center" vertAlign="center" color="0xF2F4F7FF" visible="false" />
+    <Label id="tag" color="0xF2F4F7FF" visible="false" />
+    <Rectangle id="track" color="0x08090B99" visible="false" />
+    <Rectangle id="progress" color="0x2E6BFFFF" visible="false" />
     <Poster id="badge" uri="pkg:/images/badge.png" width="44" height="44" visible="false" />
-    <Label id="count" width="44" height="44" horizAlign="center" vertAlign="center" color="0x0A0909FF" visible="false" />
-    <Label id="title" color="0xB9B4B1FF" />
-    <Label id="sub" color="0x86807EFF" />
+    <Label id="count" width="44" height="44" horizAlign="center" vertAlign="center" color="0xFFFFFFFF" visible="false" />
+    <Label id="title" color="0xB3BAC4FF" />
+    <Label id="sub" color="0x7F8792FF" />
   </children>
 </component>

@@ -80,7 +80,7 @@ private val TouchColors = darkColorScheme(
     secondaryContainer = SurfaceHigh,
     onSecondaryContainer = Chalk,
     outline = Line,
-    error = Accent,
+    error = tv.reely.ui.theme.Danger,
     onError = Ink,
 )
 
@@ -209,7 +209,7 @@ fun Artwork(
         if (badge != null && badge > 1) {
             Text(
                 text = tv.reely.ui.components.badgeText(badge),
-                color = Ink,
+                color = tv.reely.ui.theme.OnAccent,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
@@ -230,7 +230,7 @@ fun Artwork(
                     .background(Accent),
                 contentAlignment = Alignment.Center,
             ) {
-                tv.reely.ui.components.CheckGlyph(Ink, size = 14.dp)
+                tv.reely.ui.components.CheckGlyph(tv.reely.ui.theme.OnAccent, size = 14.dp)
             }
         }
         if (progress != null && progress > 0f && !watched) {
@@ -411,8 +411,8 @@ fun TouchError(message: String, onDismiss: (() -> Unit)? = null, modifier: Modif
             .fillMaxWidth()
             .padding(horizontal = TouchMargin, vertical = 6.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(Accent.copy(alpha = 0.14f))
-            .border(1.dp, Accent.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+            .background(tv.reely.ui.theme.Danger.copy(alpha = 0.14f))
+            .border(1.dp, tv.reely.ui.theme.Danger.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),

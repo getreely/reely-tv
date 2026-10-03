@@ -91,15 +91,15 @@ sub paint()
         m.pills[i].visible = here or open
         if here then
             m.pills[i].uri = "pkg:/images/pill.9.png"
-            m.pills[i].blendColor = "0xF5F2F0FF"
-            Tint_(m.labels[i], "0x0A0909FF")
+            m.pills[i].blendColor = "0xF2F4F7FF"
+            Tint_(m.labels[i], "0x08090BFF")
         else if open then
             ' The open tab, while the cursor is elsewhere: outlined.
             m.pills[i].uri = "pkg:/images/pillring.9.png"
-            m.pills[i].blendColor = "0xF5F2F066"
-            Tint_(m.labels[i], "0xF5F2F0FF")
+            m.pills[i].blendColor = "0xF2F4F766"
+            Tint_(m.labels[i], "0xF2F4F7FF")
         else
-            Tint_(m.labels[i], "0xB9B4B1FF")
+            Tint_(m.labels[i], "0xB3BAC4FF")
         end if
     end for
 end sub

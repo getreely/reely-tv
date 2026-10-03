@@ -180,7 +180,7 @@ private fun Step(number: Int, content: @Composable () -> Unit) {
             modifier = Modifier.size(28.dp).clip(CircleShape).background(Accent),
             contentAlignment = Alignment.Center,
         ) {
-            Text(text = number.toString(), color = Ink, style = ReelyType.Label, fontWeight = FontWeight.Bold)
+            Text(text = number.toString(), color = tv.reely.ui.theme.OnAccent, style = ReelyType.Label, fontWeight = FontWeight.Bold)
         }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { content() }
     }

@@ -18,27 +18,27 @@
   <script type="text/brightscript" uri="pkg:/components/parts/ScreenKit.brs" />
   <children>
     <Group id="signIn" visible="false">
-      <Label id="signInTitle" translation="[0, 40]" width="1920" horizAlign="center" color="0xF5F2F0FF" text="Watch live TV from your provider" />
-      <Label id="signInNote" translation="[0, 120]" width="1920" horizAlign="center" color="0xB9B4B1FF"
+      <Label id="signInTitle" translation="[0, 40]" width="1920" horizAlign="center" color="0xF2F4F7FF" text="Watch live TV from your provider" />
+      <Label id="signInNote" translation="[0, 120]" width="1920" horizAlign="center" color="0xB3BAC4FF"
         text="Sign in with the details your IPTV provider gave you. Reely doesn't provide channels." />
       <PillRow id="modes" translation="[660, 190]" fontSize="26" />
-      <Label id="signInError" translation="[0, 280]" width="1920" horizAlign="center" color="0xFF5E69FF" wrap="true" />
+      <Label id="signInError" translation="[0, 280]" width="1920" horizAlign="center" color="0xFF6B6BFF" wrap="true" />
       <LabelList id="form" translation="[560, 340]" itemSize="[800, 76]" numRows="6" vertFocusAnimationStyle="floatingFocus"
-        focusBitmapUri="pkg:/images/pill.9.png" color="0xF5F2F0FF" focusedColor="0x0A0909FF" />
+        focusBitmapUri="pkg:/images/pill.9.png" color="0xF2F4F7FF" focusedColor="0x08090BFF" />
     </Group>
 
     <Group id="live" visible="false">
       <PillRow id="views" translation="[96, 0]" fontSize="26" />
-      <Label id="note" translation="[540, 110]" width="1280" color="0xB9B4B1FF" wrap="true" />
+      <Label id="note" translation="[540, 110]" width="1280" color="0xB3BAC4FF" wrap="true" />
       <LabelList id="categories" translation="[96, 90]" itemSize="[400, 60]" numRows="13" vertFocusAnimationStyle="floatingFocus"
-        focusBitmapUri="pkg:/images/pill.9.png" color="0xF5F2F0FF" focusedColor="0x0A0909FF" />
+        focusBitmapUri="pkg:/images/pill.9.png" color="0xF2F4F7FF" focusedColor="0x08090BFF" />
       <MarkupList id="channels" translation="[540, 90]" itemComponentName="ChannelItem" itemSize="[1284, 104]" itemSpacing="[0, 12]"
         numRows="7" drawFocusFeedback="false" vertFocusAnimationStyle="floatingFocus" />
       <Group id="guide" visible="false">
-        <Label id="about" translation="[96, 80]" width="1700" color="0xF5F2F0FF" />
-        <Label id="aboutFacts" translation="[96, 130]" width="1700" color="0xB9B4B1FF" />
+        <Label id="about" translation="[96, 80]" width="1700" color="0xF2F4F7FF" />
+        <Label id="aboutFacts" translation="[96, 130]" width="1700" color="0xB3BAC4FF" />
         <TimeGrid id="grid" translation="[96, 190]" numRows="6" duration="10800" channelInfoWidth="300"
-          programTitleColor="0xF5F2F0FF" programTitleFocusedColor="0x0A0909FF" channelInfoColor="0xF5F2F0FF" />
+          programTitleColor="0xF2F4F7FF" programTitleFocusedColor="0x08090BFF" channelInfoColor="0xF2F4F7FF" />
       </Group>
     </Group>
   </children>

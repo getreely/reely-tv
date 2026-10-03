@@ -11,15 +11,15 @@
   <script type="text/brightscript" uri="pkg:/components/parts/ChannelItem.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
   <children>
-    <Poster id="back" uri="pkg:/images/card.9.png" blendColor="0x171415FF" />
-    <Poster id="ring" uri="pkg:/images/ring.9.png" blendColor="0xF5F2F0FF" visible="false" />
-    <Rectangle id="logoBack" translation="[16, 14]" width="136" height="76" color="0x221E1FFF" />
+    <Poster id="back" uri="pkg:/images/card.9.png" blendColor="0x15171BFF" />
+    <Poster id="ring" uri="pkg:/images/ring.9.png" blendColor="0xF2F4F7FF" visible="false" />
+    <Rectangle id="logoBack" translation="[16, 14]" width="136" height="76" color="0x1F2329FF" />
     <Poster id="logo" translation="[20, 18]" width="128" height="68" loadDisplayMode="scaleToFit" />
-    <Label id="initials" translation="[16, 14]" width="136" height="76" horizAlign="center" vertAlign="center" color="0xB9B4B1FF" />
-    <Label id="name" translation="[176, 10]" color="0xF5F2F0FF" />
-    <Label id="now" translation="[176, 50]" color="0xB9B4B1FF" />
-    <Rectangle id="track" translation="[176, 88]" height="4" color="0x332E2FFF" visible="false" />
-    <Rectangle id="bar" translation="[176, 88]" height="4" color="0xFF5E69FF" visible="false" />
-    <Label id="next" color="0x86807EFF" />
+    <Label id="initials" translation="[16, 14]" width="136" height="76" horizAlign="center" vertAlign="center" color="0xB3BAC4FF" />
+    <Label id="name" translation="[176, 10]" color="0xF2F4F7FF" />
+    <Label id="now" translation="[176, 50]" color="0xB3BAC4FF" />
+    <Rectangle id="track" translation="[176, 88]" height="4" color="0x2B3038FF" visible="false" />
+    <Rectangle id="bar" translation="[176, 88]" height="4" color="0x2E6BFFFF" visible="false" />
+    <Label id="next" color="0x7F8792FF" />
   </children>
 </component>

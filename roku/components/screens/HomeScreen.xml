@@ -13,9 +13,9 @@
   <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/ScreenKit.brs" />
   <children>
-    <Label id="note" translation="[96, 40]" width="1700" color="0xFF5E69FF" />
+    <Label id="note" translation="[96, 40]" width="1700" color="0xFF6B6BFF" />
     <RowList id="rows" translation="[96, 30]" itemComponentName="PosterItem" numRows="3"
-      rowItemSpacing="[[24, 0]]" itemSpacing="[0, 44]" showRowLabel="[true]" rowLabelColor="0xF5F2F0FF"
+      rowItemSpacing="[[24, 0]]" itemSpacing="[0, 44]" showRowLabel="[true]" rowLabelColor="0xF2F4F7FF"
       rowLabelOffset="[[0, 14]]" rowFocusAnimationStyle="floatingFocus" drawFocusFeedback="false" />
   </children>
 </component>

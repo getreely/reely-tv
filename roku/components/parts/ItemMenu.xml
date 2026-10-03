@@ -14,12 +14,12 @@
   <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/ScreenKit.brs" />
   <children>
-    <Rectangle width="1920" height="1080" color="0x0A090999" />
-    <Rectangle translation="[1340, 0]" width="580" height="1080" color="0x171415FF" />
+    <Rectangle width="1920" height="1080" color="0x08090B99" />
+    <Rectangle translation="[1340, 0]" width="580" height="1080" color="0x15171BFF" />
     <Poster id="art" translation="[1340, 0]" width="580" height="326" loadDisplayMode="scaleToZoom" />
-    <Label id="title" translation="[1380, 350]" width="500" color="0xF5F2F0FF" wrap="true" maxLines="2" />
-    <Label id="sub" translation="[1380, 450]" width="500" color="0xB9B4B1FF" />
+    <Label id="title" translation="[1380, 350]" width="500" color="0xF2F4F7FF" wrap="true" maxLines="2" />
+    <Label id="sub" translation="[1380, 450]" width="500" color="0xB3BAC4FF" />
     <LabelList id="list" translation="[1380, 510]" itemSize="[480, 64]" numRows="8" vertFocusAnimationStyle="floatingFocus"
-      focusBitmapUri="pkg:/images/pill.9.png" color="0xF5F2F0FF" focusedColor="0x0A0909FF" />
+      focusBitmapUri="pkg:/images/pill.9.png" color="0xF2F4F7FF" focusedColor="0x08090BFF" />
   </children>
 </component>

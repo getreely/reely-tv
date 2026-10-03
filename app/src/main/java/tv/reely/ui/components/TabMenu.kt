@@ -50,7 +50,7 @@ fun TabMenu(
         modifier = modifier
             .width(TAB_MENU_WIDTH)
             .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xF7121011))
+            .background(Color(0xF7101216))
             .border(1.dp, tv.reely.ui.theme.GlassEdge, RoundedCornerShape(16.dp))
             .padding(10.dp)
             .focusGroup()

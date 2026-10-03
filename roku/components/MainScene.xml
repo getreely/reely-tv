@@ -9,15 +9,15 @@
   <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/ScreenKit.brs" />
   <children>
-    <Rectangle id="ground" width="1920" height="1080" color="0x0A0909FF" />
+    <Rectangle id="ground" width="1920" height="1080" color="0x08090BFF" />
 
     <Group id="signIn" visible="false">
       <!-- The mark, as on Fire TV: the "r" and the bar under it. -->
       <Poster uri="pkg:/images/mark.png" width="29" height="60" translation="[96, 40]" />
-      <Label id="signInTitle" width="1920" translation="[0, 330]" horizAlign="center" color="0xF5F2F0FF" text="Sign in to watch your library" />
-      <Label id="signInHint" width="1920" translation="[0, 420]" horizAlign="center" color="0xB9B4B1FF" wrap="true" />
-      <Label id="code" width="1920" translation="[0, 500]" horizAlign="center" color="0xF5F2F0FF" />
-      <Label id="signInNote" width="1920" translation="[0, 640]" horizAlign="center" color="0x86807EFF" />
+      <Label id="signInTitle" width="1920" translation="[0, 330]" horizAlign="center" color="0xF2F4F7FF" text="Sign in to watch your library" />
+      <Label id="signInHint" width="1920" translation="[0, 420]" horizAlign="center" color="0xB3BAC4FF" wrap="true" />
+      <Label id="code" width="1920" translation="[0, 500]" horizAlign="center" color="0xF2F4F7FF" />
+      <Label id="signInNote" width="1920" translation="[0, 640]" horizAlign="center" color="0x7F8792FF" />
     </Group>
 
     <Group id="shell" visible="false">
@@ -28,7 +28,7 @@
     <PlayerView id="player" visible="false" />
     <LiveView id="liveView" visible="false" />
     <Group id="overlays" />
-    <Label id="status" translation="[96, 1010]" width="1700" color="0xFF5E69FF" />
+    <Label id="status" translation="[96, 1010]" width="1700" color="0xFF6B6BFF" />
     <Timer id="claimTimer" duration="2" repeat="true" />
     <Timer id="retryTimer" duration="30" repeat="false" />
     <Timer id="reminderTimer" duration="30" repeat="true" />

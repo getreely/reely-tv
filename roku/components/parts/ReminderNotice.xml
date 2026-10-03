@@ -10,10 +10,10 @@
   <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
   <children>
-    <Poster uri="pkg:/images/card.9.png" blendColor="0x171415F2" translation="[1280, 700]" width="560" height="300" />
-    <Label id="kicker" translation="[1320, 730]" width="480" color="0xFF5E69FF" text="Starting now" />
-    <Label id="title" translation="[1320, 775]" width="480" color="0xF5F2F0FF" />
-    <Label id="channel" translation="[1320, 835]" width="480" color="0xB9B4B1FF" />
+    <Poster uri="pkg:/images/card.9.png" blendColor="0x15171BF2" translation="[1280, 700]" width="560" height="300" />
+    <Label id="kicker" translation="[1320, 730]" width="480" color="0x2E6BFFFF" text="Starting now" />
+    <Label id="title" translation="[1320, 775]" width="480" color="0xF2F4F7FF" />
+    <Label id="channel" translation="[1320, 835]" width="480" color="0xB3BAC4FF" />
     <PillRow id="actions" translation="[1320, 900]" fontSize="26" />
   </children>
 </component>

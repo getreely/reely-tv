@@ -17,20 +17,20 @@
   <children>
     <Rectangle width="1920" height="1080" color="0x000000FF" />
     <Video id="video" width="1920" height="1080" enableUI="false" />
-    <Label id="wait" translation="[0, 500]" width="1920" horizAlign="center" color="0xB9B4B1FF" wrap="true" />
+    <Label id="wait" translation="[0, 500]" width="1920" horizAlign="center" color="0xB3BAC4FF" wrap="true" />
     <Group id="banner">
-      <Rectangle translation="[0, 760]" width="1920" height="320" color="0x0A0909D9" />
-      <Label id="title" translation="[96, 800]" width="1700" color="0xF5F2F0FF" />
-      <Label id="facts" translation="[96, 870]" width="1700" color="0xB9B4B1FF" />
-      <Rectangle id="track" translation="[96, 920]" width="900" height="4" color="0x332E2FFF" />
-      <Rectangle id="bar" translation="[96, 920]" width="0" height="4" color="0xFF5E69FF" />
-      <Label id="hint" translation="[96, 960]" width="1700" color="0x86807EFF" />
+      <Rectangle translation="[0, 760]" width="1920" height="320" color="0x08090BD9" />
+      <Label id="title" translation="[96, 800]" width="1700" color="0xF2F4F7FF" />
+      <Label id="facts" translation="[96, 870]" width="1700" color="0xB3BAC4FF" />
+      <Rectangle id="track" translation="[96, 920]" width="900" height="4" color="0x2B3038FF" />
+      <Rectangle id="bar" translation="[96, 920]" width="0" height="4" color="0x2E6BFFFF" />
+      <Label id="hint" translation="[96, 960]" width="1700" color="0x7F8792FF" />
     </Group>
     <Group id="menu" visible="false">
-      <Rectangle translation="[1380, 0]" width="540" height="1080" color="0x171415F2" />
-      <Label id="menuTitle" translation="[1420, 60]" width="460" color="0xB9B4B1FF" />
+      <Rectangle translation="[1380, 0]" width="540" height="1080" color="0x15171BF2" />
+      <Label id="menuTitle" translation="[1420, 60]" width="460" color="0xB3BAC4FF" />
       <LabelList id="menuList" translation="[1420, 130]" itemSize="[440, 64]" numRows="8" vertFocusAnimationStyle="floatingFocus"
-        focusBitmapUri="pkg:/images/pill.9.png" color="0xF5F2F0FF" focusedColor="0x0A0909FF" />
+        focusBitmapUri="pkg:/images/pill.9.png" color="0xF2F4F7FF" focusedColor="0x08090BFF" />
     </Group>
     <Timer id="bannerTimer" duration="5" />
     <Timer id="ticker" duration="30" repeat="true" />

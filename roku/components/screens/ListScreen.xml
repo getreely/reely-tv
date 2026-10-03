@@ -14,8 +14,8 @@
   <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/ScreenKit.brs" />
   <children>
-    <Label id="title" translation="[96, 10]" width="1600" color="0xF5F2F0FF" />
-    <Label id="count" translation="[96, 90]" width="1600" color="0xB9B4B1FF" />
+    <Label id="title" translation="[96, 10]" width="1600" color="0xF2F4F7FF" />
+    <Label id="count" translation="[96, 90]" width="1600" color="0xB3BAC4FF" />
     <PillRow id="actions" translation="[96, 140]" fontSize="26" visible="false" />
     <MarkupGrid id="grid" translation="[96, 160]" itemComponentName="PosterItem" itemSize="[240, 424]"
       itemSpacing="[24, 36]" numColumns="6" numRows="2" drawFocusFeedback="false" vertFocusAnimationStyle="floatingFocus" />

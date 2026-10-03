@@ -15,11 +15,11 @@
   <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
   <children>
-    <Rectangle width="1920" height="1080" color="0x0A0909F7" />
-    <Label id="title" translation="[0, 220]" width="1920" horizAlign="center" color="0xF5F2F0FF" />
+    <Rectangle width="1920" height="1080" color="0x08090BF7" />
+    <Label id="title" translation="[0, 220]" width="1920" horizAlign="center" color="0xF2F4F7FF" />
     <MarkupGrid id="people" translation="[0, 360]" itemComponentName="PosterItem" itemSize="[200, 290]" itemSpacing="[48, 0]"
       numRows="1" drawFocusFeedback="false" />
     <PinPad id="pad" translation="[660, 400]" pinLength="4" visible="false" />
-    <Label id="note" translation="[0, 760]" width="1920" horizAlign="center" color="0xB9B4B1FF" wrap="true" />
+    <Label id="note" translation="[0, 760]" width="1920" horizAlign="center" color="0xB3BAC4FF" wrap="true" />
   </children>
 </component>

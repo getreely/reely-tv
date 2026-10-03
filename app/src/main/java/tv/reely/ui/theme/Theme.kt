@@ -16,26 +16,28 @@ import androidx.tv.material3.darkColorScheme
 import tv.reely.R
 
 /*
- * Reely's palette. A deep, very slightly warm black, and a clean near-white for text
- * rather than the cream it used to be: cream on a warm black read as vintage, and made
- * everything around it look softer than it is. Coral stays the brand colour, brighter,
- * and used sparingly — the wordmark, progress, and anything that needs to be found.
+ * Reely's palette: black, cool greys, and an electric royal blue, used sparingly — the
+ * mark, progress, and anything that needs to be found. Errors have a red of their own,
+ * so a problem never looks like a highlight.
  */
-val Ink = Color(0xFF0A0909)
-val SurfaceRaised = Color(0xFF171415)
-val SurfaceHigh = Color(0xFF221E1F)
-val Line = Color(0xFF2E292A)
-val Chalk = Color(0xFFF5F2F0)
-val Muted = Color(0xFFB9B4B1)
-val Faint = Color(0xFF86807E)
-val Accent = Color(0xFFFF5E69)
+val Ink = Color(0xFF08090B)
+val SurfaceRaised = Color(0xFF15171B)
+val SurfaceHigh = Color(0xFF1F2329)
+val Line = Color(0xFF2B3038)
+val Chalk = Color(0xFFF2F4F7)
+val Muted = Color(0xFFB3BAC4)
+val Faint = Color(0xFF7F8792)
+val Accent = Color(0xFF2E6BFF)
+/** What's written on the blue: white reads on it, black doesn't quite. */
+val OnAccent = Color(0xFFFFFFFF)
+val Danger = Color(0xFFFF6B6B)
 val Good = Color(0xFF8CBE6E)
 val Warn = Color(0xFFE9A343)
 
 // Frosted surfaces. Real blur is impossible on this hardware, so "glass" here means a
 // translucent fill with a hairline edge, sitting over a stretched low-resolution backdrop.
-val Glass = Color(0x8C1E1A1B)
-val GlassEdge = Color(0x24F5F2F0)
+val Glass = Color(0x8C1A1D22)
+val GlassEdge = Color(0x24F2F4F7)
 
 /**
  * Geist, bundled as four static weights. Static files rather than one variable font,
@@ -81,7 +83,7 @@ private val ReelyColors = darkColorScheme(
     onSurface = Chalk,
     surfaceVariant = SurfaceHigh,
     onSurfaceVariant = Muted,
-    error = Accent,
+    error = Danger,
     onError = Ink,
 )
 

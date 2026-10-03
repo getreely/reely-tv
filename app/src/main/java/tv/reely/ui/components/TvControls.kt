@@ -373,8 +373,8 @@ fun ErrorNote(message: String, onDismiss: (() -> Unit)? = null, modifier: Modifi
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .background(Accent.copy(alpha = 0.14f))
-            .border(1.dp, Accent.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
+            .background(tv.reely.ui.theme.Danger.copy(alpha = 0.14f))
+            .border(1.dp, tv.reely.ui.theme.Danger.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),

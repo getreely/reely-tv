@@ -73,7 +73,7 @@ import tv.reely.ui.theme.ReelyType
  */
 
 /** The panel's fill: the app's own near-black, just short of opaque. */
-private val PanelFill = Color(0xF7121011)
+private val PanelFill = Color(0xF7101216)
 
 /** How wide a menu panel is unless it says otherwise. */
 val MENU_WIDTH = 460.dp
