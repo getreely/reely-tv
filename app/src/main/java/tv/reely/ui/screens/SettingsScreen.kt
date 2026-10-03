@@ -95,6 +95,12 @@ private enum class Section(val title: String) {
     PLEX("Plex"),
     UPDATES("Updates"),
     ABOUT("About"),
+    ;
+
+    companion object {
+        /** The sections this build has: a store's build updates through the store. */
+        val shown = entries.filter { it != UPDATES || BuildConfig.SELF_UPDATE }
+    }
 }
 
 /**
@@ -260,7 +266,7 @@ fun SettingsScreen(
                 style = ReelyType.Headline,
                 modifier = Modifier.padding(bottom = 8.dp),
             )
-            Section.entries.forEach { entry ->
+            Section.shown.forEach { entry ->
                 TvChip(
                     label = entry.title,
                     selected = section == entry,
@@ -1204,7 +1210,7 @@ private fun CompactSettings(section: Section, onSection: (Section) -> Unit, cont
                     modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Section.entries.forEach { entry ->
+                    Section.shown.forEach { entry ->
                         SettingRow(title = entry.title, opens = true, onClick = {
                             onSection(entry)
                             open = true

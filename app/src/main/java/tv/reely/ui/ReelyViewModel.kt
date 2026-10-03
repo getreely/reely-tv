@@ -971,6 +971,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
      * Updates is where a failed check is worth reporting.
      */
     private fun checkForUpdateAtStart() {
+        if (!BuildConfig.SELF_UPDATE) return
         viewModelScope.launch {
             delay(UPDATE_CHECK_DELAY_MS)
             if (_state.value.update !is UpdateStatus.Idle) return@launch
@@ -4762,7 +4763,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
      * update exists — it reports what it found and leaves the decision alone.
      */
     fun checkForUpdate() {
-        if (_state.value.update is UpdateStatus.Checking) return
+        if (!BuildConfig.SELF_UPDATE || _state.value.update is UpdateStatus.Checking) return
         updateJob?.cancel()
         updateJob = viewModelScope.launch {
             _state.update { it.copy(update = UpdateStatus.Checking) }

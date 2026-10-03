@@ -62,7 +62,7 @@ export function Root(props: { app: App }) {
   return (
     <div class="app">
       <nav class="tabs">
-        <span class="brand">reely</span>
+        <img class="brand" src="mark.svg" alt="Reely" />
         {TABS.map(([label, target]) => (
           <button
             key={label}

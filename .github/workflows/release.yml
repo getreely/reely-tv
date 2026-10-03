@@ -91,13 +91,13 @@ jobs:
           KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
           if [ -f "$RUNNER_TEMP/release.jks" ]; then
-            ./gradlew :app:testDebugUnitTest :app:assembleRelease --no-daemon \
+            ./gradlew :app:testDebugUnitTest :app:assembleRelease :app:assembleStore :app:bundleStore --no-daemon \
               -PRELEASE_STORE_FILE="$RUNNER_TEMP/release.jks" \
               -PRELEASE_STORE_PASSWORD="$STORE_PASSWORD" \
               -PRELEASE_KEY_ALIAS="$KEY_ALIAS" \
               -PRELEASE_KEY_PASSWORD="$KEY_PASSWORD"
           else
-            ./gradlew :app:testDebugUnitTest :app:assembleRelease --no-daemon
+            ./gradlew :app:testDebugUnitTest :app:assembleRelease :app:assembleStore :app:bundleStore --no-daemon
           fi
 
       # The LG app, at the same version, tested as CI tests it, packaged by LG's tool.
@@ -142,6 +142,8 @@ jobs:
           cp app/build/outputs/apk/release/reely-tv.json out/reely-tv.json
           cp webos/out/reely-lg.ipk out/reely-lg.ipk
           cp roku/out/reely-roku.zip out/reely-roku.zip
+          cp app/build/outputs/apk/store/app-store.apk out/reely-tv-store.apk
+          cp app/build/outputs/bundle/store/app-store.aab out/reely-tv-store.aab
 
       # What changed, from the commits since the last release. Two audiences: the release
       # page gets all of it, and the manifest gets a sentence, because the update check
@@ -159,7 +161,7 @@ jobs:
             git log --no-merges --pretty='- %s' -25 >> notes.md
           fi
           echo >> notes.md
-          echo "Built from \`${GITHUB_SHA}\`. Install \`reely-tv.apk\` on Fire TV, Android TV and Android phones; \`reely-tv.json\` is what the app's update check reads. \`reely-lg.ipk\` is the LG app, installed on a TV in Developer Mode. \`reely-roku.zip\` is the Roku app, sideloaded on a Roku in developer mode." >> notes.md
+          echo "Built from \`${GITHUB_SHA}\`. Install \`reely-tv.apk\` on Fire TV, Android TV and Android phones; \`reely-tv.json\` is what the app's update check reads. \`reely-lg.ipk\` is the LG app, installed on a TV in Developer Mode. \`reely-roku.zip\` is the Roku app, sideloaded on a Roku in developer mode. \`reely-tv-store.apk\` (Amazon Appstore) and \`reely-tv-store.aab\` (Google Play) are the store builds, which leave updates to the store." >> notes.md
           python3 - <<'PY'
           import json, re
           lines = [l[2:].strip() for l in open("notes.md") if l.startswith("- ")]
@@ -186,4 +188,4 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "Reely TV $VERSION" \
             --notes-file notes.md \
-            out/reely-tv.apk out/reely-tv.json out/reely-lg.ipk out/reely-roku.zip
+            out/reely-tv.apk out/reely-tv.json out/reely-lg.ipk out/reely-roku.zip out/reely-tv-store.apk out/reely-tv-store.aab

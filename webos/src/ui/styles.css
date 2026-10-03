@@ -28,7 +28,8 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .tab { padding: 0.55rem 1.1rem; border-radius: 999px; color: var(--muted); font-size: 1.1rem; font-weight: 500; }
 .tab.on { color: var(--chalk); font-weight: 600; }
 .tab:focus { background: var(--chalk); color: var(--ink); }
-.brand { color: var(--accent); font-weight: 700; font-size: 1.6rem; margin-right: 1.5rem; }
+/* The mark, as on Fire TV: the "r" and the bar under it, not the name. */
+.brand { display: block; height: 2rem; width: auto; margin-right: 1.5rem; }
 .content { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 0.5rem 0 3rem; scroll-behavior: smooth; }
 
 .row { margin: 1.4rem 0 0; }

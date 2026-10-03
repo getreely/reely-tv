@@ -6,7 +6,8 @@
   <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
   <children>
     <Rectangle id="ground" width="1920" height="1080" color="0x0A0909FF" />
-    <Label id="brand" text="reely" translation="[96, 48]" color="0xFF5E69FF" />
+    <!-- The mark, as on Fire TV: the "r" and the bar under it, not the name. -->
+    <Poster id="brand" uri="pkg:/images/mark.png" width="29" height="60" translation="[96, 40]" />
 
     <Group id="signIn" visible="false">
       <Label id="signInTitle" width="1920" translation="[0, 330]" horizAlign="center" color="0xF5F2F0FF" text="Sign in to watch your library" />

@@ -21,6 +21,8 @@ android {
         targetSdk = 34
         versionCode = 1150
         versionName = "0.51.0"
+        // The build from GitHub keeps itself up to date; a store's build leaves that to the store.
+        buildConfigField("boolean", "SELF_UPDATE", "true")
     }
 
     signingConfigs {
@@ -38,6 +40,14 @@ android {
         release {
             isMinifyEnabled = false
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+        }
+        // The Amazon Appstore and Google Play build (assembleStore for the APK, bundleStore
+        // for Play's .aab): the release, without the updater or the permission to install
+        // packages, which stores refuse in an app they deliver themselves.
+        create("store") {
+            initWith(getByName("release"))
+            buildConfigField("boolean", "SELF_UPDATE", "false")
+            matchingFallbacks += "release"
         }
     }
 
