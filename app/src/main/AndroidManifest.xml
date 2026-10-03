@@ -48,6 +48,7 @@
     -->
     <application
         android:allowBackup="false"
+        android:enableOnBackInvokedCallback="false"
         android:largeHeap="true"
         android:banner="@drawable/reely_banner_wordmark"
         android:icon="@mipmap/reely_icon"

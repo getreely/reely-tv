@@ -18,7 +18,9 @@ android {
         // Fire OS 6 and later (API 25+). Fire OS 5 sticks are excluded because the
         // Keystore-backed credential store needs API 23 and Compose is painful below it.
         minSdk = 23
-        targetSdk = 34
+        // What Google Play asks of a new app. Edge-to-edge drawing comes with it (see
+        // MainActivity); Back stays a key press (enableOnBackInvokedCallback in the manifest).
+        targetSdk = 36
         versionCode = 1150
         versionName = "0.51.0"
         // The build from GitHub keeps itself up to date; a store's build leaves that to the store.

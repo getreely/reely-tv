@@ -8,10 +8,16 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -189,9 +195,12 @@ fun TouchApp(
         val sideways = configuration.screenWidthDp > configuration.screenHeightDp && configuration.screenHeightDp < 560
         Scaffold(
             containerColor = Ink,
+            // The app draws edge to edge: clear of the bars and of a camera in the screen's
+            // edge, and above the keyboard while one is up.
+            contentWindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout),
             bottomBar = { if (!sideways) TouchNavBar(state, onSelect = { viewModel.navigate(it.route) }) },
         ) { padding ->
-            Row(Modifier.fillMaxSize().padding(padding)) {
+            Row(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
                 if (sideways) TouchNavRail(state, onSelect = { viewModel.navigate(it.route) })
                 Box(Modifier.weight(1f).fillMaxSize()) {
                     TouchContent(viewModel, state, actions)
