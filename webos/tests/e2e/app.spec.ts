@@ -486,6 +486,8 @@ test("Live TV: sign in to a provider, pick a category, watch, change channel, fa
   await expect(page.locator(".programme", { hasText: "Morning Briefing" }).first()).toBeVisible();
   await page.locator(".programme", { hasText: "Late Edition" }).first().focus();
   await expect(page.locator(".guide-about")).toContainText("OK to be reminded when it starts");
+  // The highlighted channel plays beside the grid, a moment after the cursor stops.
+  await expect(page.locator(".guide-preview")).toHaveAttribute("src", /\/live\/me\/secret\/101\.m3u8$/);
   await press(page, "Enter");
   await expect(page.locator(".programme.reminded")).toContainText("Late Edition");
   await page.screenshot({ path: "shots/lg-guide.png" });

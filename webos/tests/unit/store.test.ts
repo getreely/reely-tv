@@ -349,6 +349,9 @@ describe("playback settings", () => {
     app.setUpNextSeconds(5);
     app.toggleHomeRow("playlists");
     app.toggleHomeRow("playlists");
+    app.setThemeLevel(1);
+    app.setThemeLevel(7);
+    expect(app.state.prefs.themeLevel).toBe(1);
     expect(app.state.prefs).toMatchObject({ playbackMode: "transcode", maxBitrateKbps: 8_000, skipIntros: true, skipCredits: false, upNextSeconds: 5, hiddenRows: [], iptvLibrary: false, iptvWins: false });
     const again = new App(app.store, instant);
     await again.start();
@@ -491,6 +494,13 @@ describe("Live TV's guide, catch-up and reminders", () => {
     app.goLive();
     expect(app.state.live.catchUp).toBeNull();
     expect(app.playCatchUp(1, on)).toBe(false);
+  });
+
+  it("stream type: HLS, or MPEG-TS, as chosen in Settings", () => {
+    signedIn();
+    expect(app.channelUrl(news)).toBe("http://panel:8080/live/me/pw/1.m3u8");
+    app.setStreamFormat("ts");
+    expect(app.channelUrl(news)).toBe("http://panel:8080/live/me/pw/1.ts");
   });
 
   it("a reminder comes due a minute before, once, and is kept until then", () => {

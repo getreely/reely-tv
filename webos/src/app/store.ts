@@ -244,7 +244,16 @@ export interface Prefs {
   subtitleScale: number;
   /** A dark box behind subtitles rather than an outline. */
   subtitleBackground: boolean;
+  /** A show's theme on its page: -1 off, else an index into THEME_LEVELS. */
+  themeLevel: number;
+  /** The highlighted channel plays in the guide. */
+  guidePreview: boolean;
+  /** How live channels are asked for: HLS, or a continuous MPEG-TS connection. */
+  streamFormat: xtream.StreamFormat;
 }
+
+/** Theme music's volumes, as the Fire TV's. */
+export const THEME_LEVELS: Array<[string, number]> = [["Quiet", 0.05], ["Medium", 0.1], ["Loud", 0.2]];
 
 export const SCREENSAVER_CHOICES = [0, 3, 5, 10];
 
@@ -275,7 +284,7 @@ export const HOME_ROWS: Array<[HomeRowId, string]> = [
 ];
 
 export const UP_NEXT_CHOICES = [0, 5, 10, 12, 15, 20, 30];
-const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], iptvLibrary: false, iptvWins: false, screensaverMinutes: 3, tourSeen: false, subtitleScale: 0.9, subtitleBackground: false };
+const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], iptvLibrary: false, iptvWins: false, screensaverMinutes: 3, tourSeen: false, subtitleScale: 0.9, subtitleBackground: false, themeLevel: -1, guidePreview: true, streamFormat: "m3u8" };
 
 /** As the Fire TV offers them. */
 export const BITRATE_CHOICES = [0, 20_000, 12_000, 8_000, 4_000, 2_000];
@@ -497,6 +506,9 @@ export class App {
         tourSeen: prefs.tourSeen === true,
         subtitleScale: SUBTITLE_SIZES.includes(prefs.subtitleScale ?? -1) ? prefs.subtitleScale! : DEFAULT_PREFS.subtitleScale,
         subtitleBackground: prefs.subtitleBackground === true,
+        themeLevel: typeof prefs.themeLevel === "number" && prefs.themeLevel >= -1 && prefs.themeLevel < THEME_LEVELS.length ? prefs.themeLevel : -1,
+        guidePreview: prefs.guidePreview !== false,
+        streamFormat: prefs.streamFormat === "ts" ? "ts" : "m3u8",
       },
     }));
     const live = this.store.json<XtreamCredentials | null>("xtream", null);
@@ -1735,7 +1747,7 @@ export class App {
   /** Where the channel plays from: the provider's HLS, which the TV plays itself. */
   channelUrl(channel: XtreamChannel): string | null {
     const c = this.current.live.credentials;
-    return c ? xtream.streamUrl(c, channel, "m3u8") : null;
+    return c ? xtream.streamUrl(c, channel, this.current.prefs.streamFormat) : null;
   }
 
   // ---------------------------------------------------------------- Search
@@ -1993,6 +2005,55 @@ export class App {
 
   takeTour() {
     this.setPrefs({ tourSeen: false });
+  }
+
+  setThemeLevel(level: number) {
+    if (level >= -1 && level < THEME_LEVELS.length) this.setPrefs({ themeLevel: level });
+  }
+
+  setGuidePreview(on: boolean) {
+    this.setPrefs({ guidePreview: on });
+  }
+
+  setStreamFormat(format: xtream.StreamFormat) {
+    this.setPrefs({ streamFormat: format });
+  }
+
+  /** The provider's channels asked for afresh. */
+  async refreshChannels() {
+    this.allChannels = null;
+    this.setLive({ categories: [], category: null, channels: [] });
+    await this.loadLive();
+  }
+
+  /** The guide asked for afresh, for the channels on screen. */
+  async refreshGuide() {
+    const channels = this.current.live.channels;
+    this.setLive({ guide: {}, table: {} });
+    await this.loadGuide(channels.slice(0, 40));
+  }
+
+  /** The provider's movies and shows asked for afresh. */
+  async refreshIptv() {
+    this.iptv.setCatalog(vod.emptyCatalog());
+    this.set((s) => ({ ...s, iptv: { loading: false, error: null, ready: false } }));
+    await this.loadIptv();
+  }
+
+  /** Another of the account's servers first: its libraries and Home, from now on. */
+  async chooseServer(name: string) {
+    const token = this.current.plex.token;
+    if (!token) return;
+    this.store.set("server", name);
+    await this.connect(token);
+  }
+
+  /** A file of the server's (a show's theme), with the token it needs. */
+  mediaUrl(serverBase: string | null, path: string | null | undefined): string | null {
+    const base = serverBase ?? this.current.plex.baseUrl;
+    const token = this.tokenFor(base);
+    if (!base || !token || !path) return null;
+    return `${base}${path}${path.includes("?") ? "&" : "?"}X-Plex-Token=${token}`;
   }
 
   setSubtitleScale(scale: number) {

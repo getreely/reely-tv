@@ -139,8 +139,17 @@ function GuideGrid(props: { app: App; state: AppState; now: number }) {
     !p || isOnAt(p, now) ? "OK to watch" : p.stop <= now ? (app.canCatchUp(channel, p, now) ? "OK to watch it again" : "Over, and not in this channel's archive")
       : app.hasReminder(channel, p) ? "Reminder set  ·  OK to cancel it" : "OK to be reminded when it starts";
   const slots = [0, 1, 2, 3, 4, 5, 6].map((i) => start + i * 1800);
+  // The highlighted channel, playing beside what's on it, a moment after the cursor stops on it.
+  const [previewing, setPreviewing] = useState<XtreamChannel | null>(null);
+  useEffect(() => {
+    if (!state.prefs.guidePreview || !focused) return;
+    const t = setTimeout(() => setPreviewing(focused.channel), 800);
+    return () => clearTimeout(t);
+  }, [focused?.channel.streamId, state.prefs.guidePreview]);
+  const previewUrl = state.prefs.guidePreview && previewing ? app.channelUrl(previewing) : null;
   return (
     <div class="guide">
+      {previewUrl ? <video class="guide-preview" src={previewUrl} autoPlay playsInline /> : null}
       <div class="guide-about">
         {focused ? (
           <>

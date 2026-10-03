@@ -1,9 +1,9 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import * as plex from "../api/plex";
 import type { PlexHomeUser, PlexItem } from "../api/plex";
 import { groupKey } from "../app/home";
 import type { App, AppState, Kind } from "../app/store";
-import { isIptvChoice } from "../app/store";
+import { isIptvChoice, THEME_LEVELS } from "../app/store";
 import { formatDuration } from "../core/quality";
 import { focus, onKeys } from "./focus";
 import { Card, Pill, Qr, Row, Spinner, useRescue, useReturnFocus } from "./parts";
@@ -366,8 +366,11 @@ export function Detail(props: { app: App; state: AppState; onPlay: (item: PlexIt
   const playItem = (): PlexItem | null =>
     target ?? (show ? null : { ...emptyItem(d.ratingKey, d.title, d.type), serverBase: page.serverBase, durationMs: d.durationMs, viewOffsetMs: d.viewOffsetMs });
   const backdrop = app.image(page.serverBase, d.art ?? d.thumb, 1920, 1080);
+  const level = state.prefs.themeLevel;
+  const theme = show && level >= 0 ? app.mediaUrl(page.serverBase, d.theme) : null;
   return (
     <div>
+      {theme ? <ThemeMusic url={theme} volume={THEME_LEVELS[level][1]} /> : null}
       <div class="hero">
         <div class="backdrop" style={backdrop ? { backgroundImage: `url("${backdrop}")` } : undefined} />
         <h1>{d.title}</h1>
@@ -446,6 +449,20 @@ export function Detail(props: { app: App; state: AppState; onPlay: (item: PlexIt
       ) : null}
     </div>
   );
+}
+
+/** A show's theme, quietly, while its page is up; it stops when the page goes. */
+function ThemeMusic(props: { url: string; volume: number }) {
+  const audio = useRef<HTMLAudioElement>(null);
+  useEffect(() => {
+    const a = audio.current;
+    if (!a) return;
+    a.volume = props.volume;
+    void a.play().catch(() => undefined);
+    return () => a.pause();
+  }, [props.url]);
+  useEffect(() => { if (audio.current) audio.current.volume = props.volume; }, [props.volume]);
+  return <audio ref={audio} src={props.url} />;
 }
 
 function emptyItem(ratingKey: string, title: string, type: string): PlexItem {

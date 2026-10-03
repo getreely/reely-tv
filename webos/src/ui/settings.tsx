@@ -1,7 +1,7 @@
 import type { ComponentChildren } from "preact";
 import type { App, AppState, PlaybackMode } from "../app/store";
 import { useState } from "preact/hooks";
-import { BITRATE_CHOICES, HOME_ROWS, SCREENSAVER_CHOICES, SUBTITLE_SIZES, UP_NEXT_CHOICES } from "../app/store";
+import { BITRATE_CHOICES, HOME_ROWS, SCREENSAVER_CHOICES, SUBTITLE_SIZES, THEME_LEVELS, UP_NEXT_CHOICES } from "../app/store";
 import { clearProblem, lastProblem } from "../core/crash";
 import { Pill, useRescue } from "./parts";
 
@@ -24,6 +24,13 @@ const hostOf = (address: string) => {
     return null;
   }
 };
+
+/** Whether the server is reached at home or over the internet, as the Fire TV says it. */
+export function connectionKind(base: string | null): string {
+  const host = base ? hostOf(base) : null;
+  if (!host) return "—";
+  return /^(10|127|192\.168|172\.(1[6-9]|2\d|3[01]))[.-]/.test(host.replace(/-/g, ".")) ? "Home network" : "Internet";
+}
 
 const bitrateLabel = (kbps: number) => (kbps <= 0 ? "Original" : `Up to ${kbps / 1000} Mbps`);
 const bitrateNote = (kbps: number) =>
@@ -82,6 +89,13 @@ export function Settings(props: { app: App; state: AppState; onProfiles: () => v
         </Setting>
       </Group>
 
+      <Group title="Show pages">
+        <Setting title="Theme music" note="Plays a show's theme song on its page.">
+          <Pill label="Off" on={prefs.themeLevel === -1} onPress={() => app.setThemeLevel(-1)} />
+          {THEME_LEVELS.map(([label], i) => <Pill key={label} label={label} on={prefs.themeLevel === i} onPress={() => app.setThemeLevel(i)} />)}
+        </Setting>
+      </Group>
+
       <Group title="Episodes">
         <Setting title="Skip intros" note="Goes straight past an episode's intro when Plex has found it.">
           <Pill label="On" on={prefs.skipIntros} onPress={() => app.setSkipIntros(true)} />
@@ -109,18 +123,48 @@ export function Settings(props: { app: App; state: AppState; onProfiles: () => v
       <Group title="Plex">
         <Setting title={plex.user?.title ?? "Signed in"} note={plex.serverName ? `Watching from ${plex.serverName}` : null}>
           {plex.homeUsers.length > 1 ? <Pill label="Switch profile" onPress={props.onProfiles} /> : null}
-          <Pill label="Sign out" onPress={() => app.signOut()} />
+          <Pill label="Sign out of Plex" onPress={() => app.signOut()} />
         </Setting>
+        {plex.servers.length > 1 ? (
+          <Setting title="Server" note="Which of your servers Reely uses first. Libraries from all of them are on Home.">
+            {plex.servers.map((s) => <Pill key={s.name} label={s.name} on={plex.serverName === s.name} onPress={() => void app.chooseServer(s.name)} />)}
+          </Setting>
+        ) : null}
+        <Setting title="Connection" note={connectionKind(plex.baseUrl)} />
       </Group>
 
       <Group title="Live TV">
         {live.credentials ? (
-          <Setting
-            title={live.credentials.playlistUrl ? "M3U playlist" : live.credentials.username}
-            note={hostOf(live.credentials.playlistUrl || live.credentials.base)}
-          >
-            <Pill label="Sign out of Live TV" onPress={() => app.signOutLive()} />
-          </Setting>
+          <>
+            <Setting
+              title={live.credentials.playlistUrl ? "Playlist" : "Server"}
+              note={hostOf(live.credentials.playlistUrl || live.credentials.base)}
+            >
+              <Pill label="Sign out of live TV" onPress={() => app.signOutLive()} />
+            </Setting>
+            {!live.credentials.playlistUrl ? (
+              <>
+                <Setting title="Account" note={[live.account?.status ? live.account.status.charAt(0).toUpperCase() + live.account.status.slice(1) : null,
+                  live.account?.expiresAt ? `until ${new Date(Number(live.account.expiresAt) * 1000).toLocaleDateString()}` : null].filter(Boolean).join(" · ") || "—"} />
+                <Setting title="Connections"
+                  note={`${live.account?.activeConnections ?? "?"} of ${live.account?.maxConnections ?? "?"} in use. Each channel on screen uses one, including the guide preview.`} />
+              </>
+            ) : null}
+            <Setting title="Refresh channels" note={live.busy ? "Refreshing…" : `${live.categories.length} categories`}>
+              <Pill label="Refresh" onPress={() => void app.refreshChannels()} />
+            </Setting>
+            <Setting title="Refresh TV guide" note="What's on, asked for again.">
+              <Pill label="Refresh" onPress={() => void app.refreshGuide()} />
+            </Setting>
+            <Setting title="Stream type" note="Try the other if channels stutter or won't start.">
+              <Pill label="HLS" on={prefs.streamFormat === "m3u8"} onPress={() => app.setStreamFormat("m3u8")} />
+              <Pill label="MPEG-TS" on={prefs.streamFormat === "ts"} onPress={() => app.setStreamFormat("ts")} />
+            </Setting>
+            <Setting title="Guide preview" note="Plays the highlighted channel in the guide.">
+              <Pill label="On" on={prefs.guidePreview} onPress={() => app.setGuidePreview(true)} />
+              <Pill label="Off" on={!prefs.guidePreview} onPress={() => app.setGuidePreview(false)} />
+            </Setting>
+          </>
         ) : (
           <Setting title="Not set up" note="Sign in to your provider from the Live TV tab.">
             <Pill label="Go to Live TV" onPress={() => app.navigate({ name: "live" })} />
@@ -140,6 +184,12 @@ export function Settings(props: { app: App; state: AppState; onProfiles: () => v
               <Pill label="On" on={prefs.iptvLibrary} onPress={() => app.setIptvLibrary(true)} />
               <Pill label="Off" on={!prefs.iptvLibrary} onPress={() => app.setIptvLibrary(false)} />
             </Setting>
+            {prefs.iptvLibrary ? (
+              <Setting title="Refresh movies and shows"
+                note={state.iptv.loading ? "Refreshing…" : state.iptv.ready ? `${app.iptv.catalog.movies.length} movies · ${app.iptv.catalog.series.length} shows` : "Not loaded"}>
+                <Pill label="Refresh" onPress={() => void app.refreshIptv()} />
+              </Setting>
+            ) : null}
             {prefs.iptvLibrary ? (
               <Setting title="When a title is in both"
                 note={prefs.iptvWins ? "The provider's copy, in place of Plex's on Home and in search." : "Plex's copy. The IPTV library only has what Plex doesn't."}>
@@ -177,6 +227,7 @@ export function Settings(props: { app: App; state: AppState; onProfiles: () => v
         <Setting title="Take the tour" note="How to get around with the remote.">
           <Pill label="Take the tour" onPress={() => app.takeTour()} />
         </Setting>
+        <Setting title="Licenses" note="Preact (MIT) · qrcode-generator (MIT) · Geist, the typeface (SIL Open Font License 1.1)" />
       </Group>
 
       {problem ? (

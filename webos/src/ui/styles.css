@@ -227,3 +227,8 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
   text-shadow: 0 0 0.12em #000, 0 0 0.12em #000, 0.06em 0.06em 0.1em #000; pointer-events: none; }
 .subtitle-line.boxed { text-shadow: none; }
 .subtitle-line.boxed span { background: rgba(0, 0, 0, 0.78); padding: 0.05em 0.4em; border-radius: 0.2em; }
+
+/* The guide's preview of the highlighted channel, top right, above the grid. */
+.guide { position: relative; }
+.guide-preview { position: absolute; top: 0; right: 3rem; width: 16rem; height: 9rem; background: #000; border-radius: 0.6rem; object-fit: cover; }
+.guide-about { padding-right: 20rem; }
