@@ -3,6 +3,7 @@ import type { PlexDetail, PlexHomeUser, PlexItem, PlexServer } from "../api/plex
 import { readable } from "../core/http";
 import { Store, clientId } from "../core/storage";
 import { emptyHome, loadHome, type HomeRows, type LibraryChoice } from "./home";
+import { randomHex } from "../core/storage";
 
 /*
  * The LG app's state and what can be done to it: the Fire TV's view model, for the
@@ -65,6 +66,21 @@ export interface DetailPage {
   error: string | null;
 }
 
+/** Something playing: what, from where, and how. */
+export interface Playing {
+  item: PlexItem;
+  base: string;
+  token: string;
+  playback: plex.PlexPlayback;
+  /** Plex's address for the file itself, or its converted stream. */
+  url: string;
+  direct: boolean;
+  startMs: number;
+  sessionId: string;
+  /** The rest of the season, for the next episode. */
+  queue: PlexItem[];
+}
+
 export interface AppState {
   route: Route;
   stack: Route[];
@@ -76,6 +92,8 @@ export interface AppState {
   browse: Record<Kind, Browse>;
   detail: DetailPage | null;
   askWho: boolean;
+  playing: Playing | null;
+  playError: string | null;
 }
 
 const emptyBrowse = (): Browse => ({ choice: null, items: [], total: 0, busy: false, sort: "titleSort:asc", error: null });
@@ -92,6 +110,8 @@ export function initialState(): AppState {
     browse: { movie: emptyBrowse(), show: emptyBrowse() },
     detail: null,
     askWho: false,
+    playing: null,
+    playError: null,
   };
 }
 
@@ -396,6 +416,72 @@ export class App {
 
   private setDetail(key: string, change: Partial<DetailPage>) {
     this.set((s) => (s.detail?.key === key ? { ...s, detail: { ...s.detail, ...change } } : s));
+  }
+
+  // ---------------------------------------------------------------- Playing
+
+  /**
+   * Plays [item] from where it was left, or the top. [direct] is asked of the TV's own
+   * player: the file as it is when it can, else Plex's conversion.
+   */
+  async play(item: PlexItem, resume: boolean, direct: (p: plex.PlexPlayback) => boolean, queue: PlexItem[] = []) {
+    const base = item.serverBase ?? this.current.plex.baseUrl;
+    const token = this.tokenFor(base);
+    if (!base || !token) {
+      this.set((s) => ({ ...s, playError: "Couldn't reach the server this is on." }));
+      return;
+    }
+    try {
+      const playback = await plex.playback(base, token, item.ratingKey);
+      if (!playback) throw new Error("That file isn't on the server any more.");
+      const sessionId = randomHex(12);
+      const asIs = direct(playback);
+      const url = asIs ? playback.url : plex.transcodeUrl(base, token, item.ratingKey, sessionId, 0, "1920x1080");
+      const startMs = resume && item.viewOffsetMs > 0 && !(item.durationMs > 0 && item.viewOffsetMs >= item.durationMs * 0.95) ? item.viewOffsetMs : 0;
+      this.set((s) => ({ ...s, playError: null, playing: { item, base, token, playback, url, direct: asIs, startMs, sessionId, queue } }));
+    } catch (error) {
+      this.set((s) => ({ ...s, playError: readable(error) }));
+    }
+  }
+
+  /** The file wouldn't play as it is: Plex converts it instead, from where it had got to. */
+  convert(positionMs: number) {
+    const p = this.current.playing;
+    if (!p || !p.direct) return false;
+    const url = plex.transcodeUrl(p.base, p.token, p.item.ratingKey, p.sessionId, 0, "1920x1080");
+    this.set((s) => ({ ...s, playing: { ...p, url, direct: false, startMs: positionMs } }));
+    return true;
+  }
+
+  /** Where playback is, told to the server: what keeps Continue Watching right everywhere. */
+  report(positionMs: number, durationMs: number, state: "playing" | "paused" | "stopped", p: Playing | null = this.current.playing) {
+    if (!p) return Promise.resolve();
+    return plex.reportTimeline(p.base, p.token, p.item.ratingKey, positionMs, durationMs || p.item.durationMs, state, p.sessionId);
+  }
+
+  async stop(positionMs: number, durationMs: number) {
+    const p = this.current.playing;
+    if (!p) return;
+    this.set((s) => ({ ...s, playing: null }));
+    // Told about the sitting just ended, which is no longer the one in the state.
+    await this.report(positionMs, durationMs, "stopped", p);
+    if (!p.direct) void plex.stopTranscode(p.base, p.token, p.sessionId);
+    // What was watched shows as watched, and where it was left, on the way back.
+    void this.refreshHome();
+    const page = this.current.detail;
+    if (page?.detail) void this.openDetail(page.detail.ratingKey, page.serverBase, p.item.type === "episode" ? p.item.ratingKey : null);
+  }
+
+  /** The episode after this one in its season, if there is one. */
+  nextInQueue(): PlexItem | null {
+    const p = this.current.playing;
+    if (!p) return null;
+    const at = p.queue.findIndex((e) => e.ratingKey === p.item.ratingKey);
+    return at >= 0 ? p.queue[at + 1] ?? null : null;
+  }
+
+  dismissPlayError() {
+    this.set((s) => ({ ...s, playError: null }));
   }
 
   /** A picture from the server a title is on, at the size it's drawn. */

@@ -1,0 +1,107 @@
+import { useEffect, useRef, useState } from "preact/hooks";
+import type { App, AppState, Route } from "../app/store";
+import { isConnected } from "../app/store";
+import { arrived, focus, rescue } from "./focus";
+import { playDirect, Player } from "./player";
+import { Detail, Home, Library, Profiles, SignIn } from "./screens";
+
+const TABS: Array<[string, Route]> = [
+  ["Home", { name: "home" }],
+  ["Movies", { name: "library", kind: "movie" }],
+  ["TV Shows", { name: "library", kind: "show" }],
+];
+
+const sameTab = (a: Route, b: Route) => a.name === b.name && (a.name !== "library" || (b.name === "library" && a.kind === b.kind));
+
+/** Leaving the app, as webOS wants it done: its own way back to the launcher, else closing. */
+export function leave() {
+  const webOS = (window as unknown as { webOS?: { platformBack?: () => void } }).webOS;
+  if (webOS?.platformBack) webOS.platformBack();
+  else window.close();
+}
+
+export function Root(props: { app: App }) {
+  const { app } = props;
+  const [state, setState] = useState<AppState>(app.state);
+  const [choosingProfile, setChoosingProfile] = useState(false);
+  const video = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => app.subscribe(setState), [app]);
+  useEffect(() => {
+    void app.start();
+  }, [app]);
+  // "Who's watching?" once, straight after signing in to a Plex Home.
+  useEffect(() => {
+    if (state.askWho) {
+      setChoosingProfile(true);
+      app.askedWho();
+    }
+  }, [state.askWho]);
+  // Back from a page or the player: the cursor onto something on the screen arrived at.
+  useEffect(() => {
+    arrived();
+    const t = setTimeout(rescue, 0);
+    return () => clearTimeout(t);
+  }, [state.route, state.playing == null, isConnected(state)]);
+
+  const onPlay = (item: Parameters<App["play"]>[0], resume: boolean) => {
+    const probe = video.current ?? document.createElement("video");
+    void app.play(item, resume, (p) => playDirect(probe, p), state.detail?.episodes ?? []);
+  };
+
+  if (state.playing) return <Player app={app} playing={state.playing} />;
+
+  const connected = isConnected(state);
+  const route = state.route;
+  return (
+    <div class="app">
+      <nav class="tabs">
+        <span class="brand">reely</span>
+        {TABS.map(([label, target]) => (
+          <button
+            key={label}
+            class={"tab" + (sameTab(route, target) ? " on" : "")}
+            data-focus
+            onClick={() => app.navigate(target)}
+          >
+            {label}
+          </button>
+        ))}
+        {connected && state.plex.homeUsers.length > 1 ? (
+          <button class="tab" data-focus onClick={() => setChoosingProfile(true)}>
+            {state.plex.user?.title ?? "Profiles"}
+          </button>
+        ) : null}
+        {connected ? (
+          <button class="tab" data-focus onClick={() => app.signOut()}>
+            Sign out
+          </button>
+        ) : null}
+      </nav>
+      <main class="content" data-content>
+        {!connected ? (
+          <SignIn app={app} state={state} />
+        ) : route.name === "home" ? (
+          <Home app={app} state={state} />
+        ) : route.name === "library" ? (
+          <Library app={app} state={state} kind={route.kind} />
+        ) : route.name === "detail" ? (
+          <Detail app={app} state={state} onPlay={onPlay} />
+        ) : (
+          <Home app={app} state={state} />
+        )}
+      </main>
+      {state.playError ? (
+        <div class="layer" data-layer>
+          <div class="panel">
+            <p class="note error">{state.playError}</p>
+            <button class="pill" data-focus data-autofocus ref={(el) => { if (el) focus(el); }} onClick={() => app.dismissPlayError()}>
+              OK
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {choosingProfile ? <Profiles app={app} state={state} onClose={() => setChoosingProfile(false)} /> : null}
+    </div>
+  );
+}

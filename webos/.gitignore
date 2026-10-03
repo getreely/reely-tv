@@ -3,3 +3,5 @@ dist/
 *.ipk
 test-results/
 playwright-report/
+shots/
+out/

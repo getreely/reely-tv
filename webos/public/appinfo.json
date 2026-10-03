@@ -1,0 +1,15 @@
+{
+  "id": "tv.reely.lg",
+  "version": "0.51.0",
+  "vendor": "Reely",
+  "type": "web",
+  "main": "index.html",
+  "title": "Reely",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "bgColor": "#0a0909",
+  "iconColor": "#0a0909",
+  "resolution": "1920x1080",
+  "disableBackHistoryAPI": true,
+  "requiredACG": []
+}

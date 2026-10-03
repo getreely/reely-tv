@@ -133,3 +133,45 @@ describe("the LG app's state", () => {
     expect(app.store.get("plexToken")).toBeNull();
   });
 });
+
+import { plan } from "../../src/app/playback";
+
+describe("playing a file as it is, or converted", () => {
+  const tv = (mime: string) => !mime.includes("dts") && !mime.includes("av01");
+  it("H.264 and AAC in an MP4 or MKV plays as it is", () => {
+    expect(plan({ container: "mp4", videoCodec: "h264", audioCodec: "aac" }, tv).direct).toBe(true);
+    expect(plan({ container: "mkv", videoCodec: "hevc", audioCodec: "eac3" }, tv).direct).toBe(true);
+  });
+  it("DTS sound, or a container the TV doesn't know, is converted, and says why", () => {
+    expect(plan({ container: "mkv", videoCodec: "h264", audioCodec: "dca" }, tv)).toEqual({ direct: false, reason: "The TV can't play DCA sound" });
+    expect(plan({ container: "avi", videoCodec: "mpeg4", audioCodec: "mp3" }, tv).reason).toBe("The TV can't open AVI files");
+  });
+  it("what the TV says no to is converted", () => {
+    expect(plan({ container: "mp4", videoCodec: "av1", audioCodec: "aac" }, tv).direct).toBe(false);
+  });
+});
+
+describe("telling Plex where playback got to", () => {
+  it("stopping tells the server where, for the sitting just ended", async () => {
+    const told: string[] = [];
+    const base = fakePlex();
+    useFetcher(async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/:/timeline") {
+        told.push(`${url.searchParams.get("state")}@${url.searchParams.get("time")}`);
+        return new Response("{}", { status: 200 });
+      }
+      if (url.pathname === "/library/metadata/e3") {
+        return new Response(JSON.stringify({ MediaContainer: { Metadata: [{ ratingKey: "e3", type: "episode", Media: [{ container: "mp4", Part: [{ key: "/p/1.mp4" }] }] }] } }), { status: 200 });
+      }
+      return base.fetch(input, init);
+    });
+    await app.startSignIn();
+    const episode = { ...app.state.home.recentEpisodes[0].newest };
+    await app.play(episode, false, () => true);
+    expect(app.state.playing?.direct).toBe(true);
+    await app.stop(42_000, 60_000);
+    expect(app.state.playing).toBeNull();
+    expect(told).toContain("stopped@42000");
+  });
+});
