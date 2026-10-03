@@ -105,7 +105,9 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: webos/package-lock.json
+          cache-dependency-path: |
+            webos/package-lock.json
+            roku/package-lock.json
 
       - name: Build the LG app
         working-directory: webos
@@ -118,6 +120,18 @@ jobs:
           npx playwright install --with-deps chromium && npm run e2e
           npm run package
 
+      # The Roku app, the same way: compiled, tested in the simulator, zipped for sideloading.
+      - name: Build the Roku app
+        working-directory: roku
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          npm ci
+          node scripts/set-version.mjs "$VERSION"
+          npm run check && npm test
+          npm run e2e
+          npm run package
+
       # The asset has to be named for what the app asks for: the update check derives the
       # manifest's address from the APK's by swapping the extension, so the two must sit
       # together under the same name.
@@ -127,6 +141,7 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk out/reely-tv.apk
           cp app/build/outputs/apk/release/reely-tv.json out/reely-tv.json
           cp webos/out/reely-lg.ipk out/reely-lg.ipk
+          cp roku/out/reely-roku.zip out/reely-roku.zip
 
       # What changed, from the commits since the last release. Two audiences: the release
       # page gets all of it, and the manifest gets a sentence, because the update check
@@ -144,7 +159,7 @@ jobs:
             git log --no-merges --pretty='- %s' -25 >> notes.md
           fi
           echo >> notes.md
-          echo "Built from \`${GITHUB_SHA}\`. Install \`reely-tv.apk\` on Fire TV, Android TV and Android phones; \`reely-tv.json\` is what the app's update check reads. \`reely-lg.ipk\` is the LG app, installed on a TV in Developer Mode." >> notes.md
+          echo "Built from \`${GITHUB_SHA}\`. Install \`reely-tv.apk\` on Fire TV, Android TV and Android phones; \`reely-tv.json\` is what the app's update check reads. \`reely-lg.ipk\` is the LG app, installed on a TV in Developer Mode. \`reely-roku.zip\` is the Roku app, sideloaded on a Roku in developer mode." >> notes.md
           python3 - <<'PY'
           import json, re
           lines = [l[2:].strip() for l in open("notes.md") if l.startswith("- ")]
@@ -171,4 +186,4 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "Reely TV $VERSION" \
             --notes-file notes.md \
-            out/reely-tv.apk out/reely-tv.json out/reely-lg.ipk
+            out/reely-tv.apk out/reely-tv.json out/reely-lg.ipk out/reely-roku.zip

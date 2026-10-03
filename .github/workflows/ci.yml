@@ -104,3 +104,28 @@ jobs:
           name: reely-lg
           path: webos/out/reely-lg.ipk
           retention-days: 14
+
+  roku:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: roku
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: roku/package-lock.json
+      - run: npm ci
+      - name: Compile check and unit tests
+        run: npm run check && npm test
+      - name: Simulator tests
+        run: npm run e2e
+      - name: Package
+        run: npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reely-roku
+          path: roku/out/reely-roku.zip
+          retention-days: 14

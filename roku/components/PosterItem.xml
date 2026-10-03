@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A poster in a row: its picture, the new-episodes count in a circle that stays one
+     size, how far through it is, and its name. -->
+<component name="PosterItem" extends="Group">
+  <interface>
+    <field id="itemContent" type="node" onChange="show" />
+    <field id="width" type="float" onChange="layout" />
+    <field id="height" type="float" onChange="layout" />
+    <field id="focusPercent" type="float" onChange="focusChanged" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/PosterItem.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
+  <children>
+    <!-- The cursor: an outline round the picture alone, so the name below stays readable. -->
+    <Rectangle id="ring" color="0xF5F2F0FF" visible="false" />
+    <Rectangle id="frame" color="0x221E1FFF" />
+    <Poster id="art" loadDisplayMode="scaleToZoom" />
+    <Rectangle id="track" color="0x0A090999" visible="false" />
+    <Rectangle id="progress" color="0xFF5E69FF" visible="false" />
+    <Poster id="badge" uri="pkg:/images/badge.png" width="44" height="44" visible="false" />
+    <Label id="count" width="44" height="44" horizAlign="center" vertAlign="center" color="0x0A0909FF" visible="false" />
+    <Label id="title" color="0xB9B4B1FF" />
+    <Label id="sub" color="0x86807EFF" />
+  </children>
+</component>
