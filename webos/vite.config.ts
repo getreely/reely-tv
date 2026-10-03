@@ -1,5 +1,9 @@
 import { defineConfig, type Plugin } from "vite";
 import preact from "@preact/preset-vite";
+import { readFileSync } from "node:fs";
+
+// The version Settings shows: package.json's, which the release sets.
+const version = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")).version as string;
 
 /*
  * An installed webOS app is opened from file://, where Chromium won't load a module
@@ -18,6 +22,7 @@ const classicScript = (): Plugin => ({
 export default defineConfig({
   plugins: [preact(), classicScript()],
   base: "./",
+  define: { __APP_VERSION__: JSON.stringify(version) },
   build: {
     target: "chrome68",
     outDir: "dist",

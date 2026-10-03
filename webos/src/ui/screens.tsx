@@ -6,13 +6,16 @@ import type { App, AppState, Kind } from "../app/store";
 import { formatDuration } from "../core/quality";
 import { onKeys } from "./focus";
 import { Card, Pill, Qr, Row, Spinner, useRescue } from "./parts";
+import { PersonButton } from "./search";
 
 const episodeLine = (i: PlexItem) =>
   i.type === "episode" ? [i.parentIndex != null ? `S${i.parentIndex}` : null, i.index != null ? `E${i.index}` : null, i.title].filter(Boolean).join(" · ") : plex.caption(i);
 
 /** Opening a title: a show's page for an episode, landing on that episode. */
 export function open(app: App, item: PlexItem) {
-  if (item.type === "episode" && item.grandparentRatingKey) {
+  if (item.type === "collection") {
+    app.navigate({ name: "collection", item });
+  } else if (item.type === "episode" && item.grandparentRatingKey) {
     app.navigate({ name: "detail", ratingKey: item.grandparentRatingKey, serverBase: item.serverBase, episodeKey: item.ratingKey });
   } else {
     app.navigate({ name: "detail", ratingKey: item.ratingKey, serverBase: item.serverBase });
@@ -251,6 +254,17 @@ export function Detail(props: { app: App; state: AppState; onPlay: (item: PlexIt
             </button>
           ))}
         </div>
+      ) : null}
+      {d.roles.length ? (
+        <section class="row">
+          <h2>Cast</h2>
+          <div class="strip">
+            {d.roles.slice(0, 30).map((r, i) => (
+              <PersonButton key={`${r.id ?? r.name}:${i}`} app={app} person={{ name: r.name, thumb: r.thumb, serverBase: page.serverBase }} role={r.role}
+                onPress={() => { if (r.id) app.navigate({ name: "person", person: { id: r.id, name: r.name, thumb: r.thumb, serverBase: page.serverBase } }); }} />
+            ))}
+          </div>
+        </section>
       ) : null}
       {page.related.length ? (
         <Row title="More like this">

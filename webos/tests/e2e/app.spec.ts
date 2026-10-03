@@ -34,6 +34,9 @@ async function fakePlex(page: Page) {
     if (path === "/library/sections") return json(route, { MediaContainer: { Directory: [{ key: "1", title: "Movies", type: "movie" }, { key: "2", title: "TV Shows", type: "show" }] } });
     if (path === "/hubs") return json(route, { MediaContainer: { Hub: [{ Metadata: [episode("e2", 2)].map((e) => ({ ...e, viewOffset: 20_000, lastViewedAt: 5 })) }] } });
     if (path === "/playlists") return meta(route, []);
+    if (url.searchParams.get("actor") === "77") {
+      return meta(route, path === "/library/sections/1/all" ? [{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025 }] : []);
+    }
     if (path === "/library/sections/1/all") return meta(route, [{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025, addedAt: 9 }, { ratingKey: "m2", type: "movie", title: "Glasshouse", year: 2024, addedAt: 8 }]);
     if (path === "/library/sections/2/all") {
       // 333 new episodes of one show: the count must sit on one line in its circle.
@@ -46,6 +49,12 @@ async function fakePlex(page: Page) {
     if (path === "/library/metadata/show1/children") return meta(route, [{ ratingKey: "s1", type: "season", title: "Season 1", index: 1 }]);
     if (path === "/library/metadata/s1/children") return meta(route, [episode("e1", 1, true), episode("e2", 2), episode("e3", 3)]);
     if (path === "/library/metadata/show1/related") return json(route, { MediaContainer: {} });
+    if (path === "/hubs/search") {
+      return json(route, { MediaContainer: { Hub: [
+        { type: "movie", Metadata: [{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025 }] },
+        { type: "actor", Directory: [{ id: "77", tag: "Ana Orbit" }] },
+      ] } });
+    }
     if (path === "/library/metadata/e2") {
       return meta(route, [{ ...episode("e2", 2), Media: [{ container: "mkv", videoCodec: "h264", audioCodec: "dca", Part: [{ id: 5, key: "/library/parts/5/file.mkv", Stream: [] }] }] }]);
     }
@@ -101,6 +110,47 @@ test("signs in with a code, browses with the remote, plays and comes back", asyn
   await press(page, "Escape");
   await expect(page.getByRole("heading", { name: "Northbound" })).toBeVisible();
   await expect.poll(() => plex.timeline).toContain("stopped@e2");
+});
+
+test("Search finds by name and people; Settings keeps a playback choice", async ({ page }) => {
+  await fakePlex(page);
+  await page.goto("/");
+  await press(page, "Enter");
+  await expect(page.getByText("Recently Added Movies")).toBeVisible({ timeout: 10_000 });
+  await page.getByRole("button", { name: "Search" }).focus();
+  await press(page, "Enter");
+  // The cursor arrives in the box, ready to type.
+  await expect(page.locator("input.field:focus")).toBeVisible();
+  await page.keyboard.type("orbit");
+  await expect(page.getByText("Movies and shows")).toBeVisible();
+  await expect(page.locator(".grid .card .title")).toHaveText(["Low Orbit"]);
+  await expect(page.getByText("1 in your library  ·  1 person")).toBeVisible();
+  await page.screenshot({ path: "shots/lg-search.png" });
+  // Down to the person, and in: what they're in.
+  await press(page, "ArrowDown");
+  await expect(page.locator(".person:focus .name")).toHaveText("Ana Orbit");
+  await press(page, "Enter");
+  await expect(page.getByRole("heading", { name: "Ana Orbit" })).toBeVisible();
+  await expect(page.locator(".grid .card .title")).toHaveText(["Low Orbit"]);
+  // Back to the search, as it was, and it's remembered.
+  await press(page, "Escape");
+  await expect(page.locator("input.field")).toHaveValue("orbit");
+  await page.locator("input.field").fill("");
+  await page.locator("input.field").dispatchEvent("input");
+  await expect(page.getByText("Recent searches")).toBeVisible();
+
+  await page.getByRole("button", { name: "Settings" }).focus();
+  await press(page, "Enter");
+  await expect(page.getByText("Playback mode")).toBeVisible();
+  await page.getByRole("button", { name: "Always convert" }).focus();
+  await press(page, "Enter");
+  await expect(page.getByRole("button", { name: "Always convert" })).toHaveClass(/on/);
+  await page.screenshot({ path: "shots/lg-settings.png" });
+  await page.reload();
+  await expect(page.getByText("Recently Added Movies")).toBeVisible({ timeout: 10_000 });
+  await page.getByRole("button", { name: "Settings" }).focus();
+  await press(page, "Enter");
+  await expect(page.getByRole("button", { name: "Always convert" })).toHaveClass(/on/);
 });
 
 test("arrows move along a row and down to the next; Back from a tab goes Home", async ({ page }) => {

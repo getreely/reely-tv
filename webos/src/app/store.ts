@@ -1,5 +1,7 @@
 import * as plex from "../api/plex";
-import type { PlexDetail, PlexHomeUser, PlexItem, PlexServer } from "../api/plex";
+import type { PlexDetail, PlexHomeUser, PlexItem, PlexPerson, PlexServer } from "../api/plex";
+import { rememberedSearches, split } from "../core/searchMatch";
+import { stableSort } from "../core/sort";
 import { readable } from "../core/http";
 import { Store, clientId } from "../core/storage";
 import { emptyHome, loadHome, type HomeRows, type LibraryChoice } from "./home";
@@ -22,6 +24,8 @@ export type Route =
   | { name: "library"; kind: Kind }
   | { name: "detail"; ratingKey: string; serverBase: string | null; episodeKey?: string | null }
   | { name: "search" }
+  | { name: "person"; person: PlexPerson }
+  | { name: "collection"; item: PlexItem }
   | { name: "live" }
   | { name: "requests" }
   | { name: "requestTitle"; title: RequestTitle }
@@ -131,6 +135,44 @@ export interface RequestPage {
   error: string | null;
 }
 
+export interface SearchState {
+  query: string;
+  busy: boolean;
+  /** What matched by name, best first; else Plex's own guesses. */
+  results: PlexItem[];
+  /** Plex's other guesses, after the matches. */
+  more: PlexItem[];
+  people: PlexPerson[];
+  collections: PlexItem[];
+  channels: XtreamChannel[];
+  recent: string[];
+  /** No server answered. */
+  unreachable: boolean;
+}
+
+/** A person's page, or a collection's: the titles in it. */
+export interface ListPage {
+  key: string;
+  items: PlexItem[];
+  busy: boolean;
+  error: string | null;
+}
+
+export type PlaybackMode = "auto" | "direct" | "transcode";
+
+export interface Prefs {
+  /** Automatic: the file as it is when the TV can play it. */
+  playbackMode: PlaybackMode;
+  /** The most Plex sends when it converts; 0 for as good as the file. */
+  maxBitrateKbps: number;
+}
+
+/** As the Fire TV offers them. */
+export const BITRATE_CHOICES = [0, 20_000, 12_000, 8_000, 4_000, 2_000];
+
+const PEOPLE_RESULTS = 20;
+const CHANNEL_RESULTS = 30;
+
 export interface AppState {
   route: Route;
   stack: Route[];
@@ -147,6 +189,9 @@ export interface AppState {
   requests: RequestsState;
   requestPage: RequestPage | null;
   live: LiveState;
+  search: SearchState;
+  list: ListPage | null;
+  prefs: Prefs;
 }
 
 const emptyBrowse = (): Browse => ({ choice: null, items: [], total: 0, busy: false, sort: "titleSort:asc", error: null });
@@ -168,8 +213,15 @@ export function initialState(): AppState {
     requests: emptyRequests(),
     requestPage: null,
     live: emptyLive(),
+    search: emptySearch([]),
+    list: null,
+    prefs: { playbackMode: "auto", maxBitrateKbps: 0 },
   };
 }
+
+const emptySearch = (recent: string[]): SearchState => ({
+  query: "", busy: false, results: [], more: [], people: [], collections: [], channels: [], recent, unreachable: false,
+});
 
 const emptyLive = (): LiveState => ({
   credentials: null, account: null, categories: [], category: null, channels: [], guide: {}, favorites: [], busy: false, error: null, watching: null,
@@ -202,6 +254,10 @@ export class App {
   private reelyClient: reely.ReelyRequests | null = null;
   private searchRun = 0;
   private homeRun = 0;
+  private queryRun = 0;
+  private listRun = 0;
+  /** Every live channel, fetched once, for search to match names against. */
+  private allChannels: Promise<XtreamChannel[]> | null = null;
 
   constructor(
     readonly store: Store = new Store(),
@@ -241,6 +297,8 @@ export class App {
     if (route.name === "requests") void this.loadRequests();
     if (route.name === "live") void this.loadLive();
     if (route.name === "requestTitle") void this.openRequestTitle(route.title);
+    if (route.name === "person") void this.openPerson(route.person);
+    if (route.name === "collection") void this.openCollection(route.item);
   }
 
   /** Back one page; false when there's nowhere back to go (Home's Back leaves the app). */
@@ -271,6 +329,16 @@ export class App {
 
   /** Back where it was left: the account kept, its server found again. */
   async start() {
+    const recent = this.store.json<string[]>("recentSearches", []);
+    const prefs = this.store.json<Partial<Prefs>>("prefs", {});
+    this.set((s) => ({
+      ...s,
+      search: { ...s.search, recent },
+      prefs: {
+        playbackMode: prefs.playbackMode === "direct" || prefs.playbackMode === "transcode" ? prefs.playbackMode : "auto",
+        maxBitrateKbps: BITRATE_CHOICES.includes(prefs.maxBitrateKbps ?? 0) ? prefs.maxBitrateKbps ?? 0 : 0,
+      },
+    }));
     const live = this.store.json<XtreamCredentials | null>("xtream", null);
     if (live) this.setLive({ credentials: live, favorites: this.store.json<number[]>("favorites", []) });
     const reelyUrl = this.store.get("reelyUrl");
@@ -331,7 +399,8 @@ export class App {
   signOut() {
     for (const key of ["plexToken", "plexAccountToken", "plexUser", "server"]) this.store.remove(key);
     const fresh = initialState();
-    this.set((s) => ({ ...fresh, route: s.route.name === "settings" ? { name: "home" } : fresh.route }));
+    // What's kept on the TV rather than the account stays: recent searches and playback choices.
+    this.set((s) => ({ ...fresh, search: emptySearch(s.search.recent), prefs: s.prefs, live: s.live, requests: s.requests }));
   }
 
   /** The servers, and the first that answers: the one last used, else the account's own. */
@@ -526,8 +595,9 @@ export class App {
       const playback = await plex.playback(base, token, item.ratingKey);
       if (!playback) throw new Error("That file isn't on the server any more.");
       const sessionId = randomHex(12);
-      const asIs = direct(playback);
-      const url = asIs ? playback.url : plex.transcodeUrl(base, token, item.ratingKey, sessionId, 0, "1920x1080");
+      const mode = this.current.prefs.playbackMode;
+      const asIs = mode === "direct" ? true : mode === "transcode" ? false : direct(playback);
+      const url = asIs ? playback.url : this.converted(base, token, item.ratingKey, sessionId);
       const startMs = resume && item.viewOffsetMs > 0 && !(item.durationMs > 0 && item.viewOffsetMs >= item.durationMs * 0.95) ? item.viewOffsetMs : 0;
       this.set((s) => ({ ...s, playError: null, playing: { item, base, token, playback, url, direct: asIs, startMs, sessionId, queue } }));
     } catch (error) {
@@ -539,9 +609,16 @@ export class App {
   convert(positionMs: number) {
     const p = this.current.playing;
     if (!p || !p.direct) return false;
-    const url = plex.transcodeUrl(p.base, p.token, p.item.ratingKey, p.sessionId, 0, "1920x1080");
+    const url = this.converted(p.base, p.token, p.item.ratingKey, p.sessionId);
     this.set((s) => ({ ...s, playing: { ...p, url, direct: false, startMs: positionMs } }));
     return true;
+  }
+
+  /** Plex's conversion, at the quality chosen in Settings. */
+  private converted(base: string, token: string, ratingKey: string, sessionId: string) {
+    const kbps = this.current.prefs.maxBitrateKbps;
+    const resolution = kbps >= 20_000 ? "3840x2160" : kbps === 0 || kbps >= 8_000 ? "1920x1080" : "1280x720";
+    return plex.transcodeUrl(base, token, ratingKey, sessionId, kbps, resolution);
   }
 
   /** Where playback is, told to the server: what keeps Continue Watching right everywhere. */
@@ -769,6 +846,7 @@ export class App {
     this.setLive({ busy: true, error: null });
     try {
       const account = await xtream.login(credentials);
+      this.allChannels = null;
       this.store.setJson("xtream", credentials);
       this.setLive({ credentials, account, busy: false });
       await this.loadLive();
@@ -778,6 +856,7 @@ export class App {
   }
 
   signOutLive() {
+    this.allChannels = null;
     this.store.remove("xtream");
     this.set((s) => ({ ...s, live: { ...emptyLive(), favorites: s.live.favorites } }));
   }
@@ -867,6 +946,140 @@ export class App {
   channelUrl(channel: XtreamChannel): string | null {
     const c = this.current.live.credentials;
     return c ? xtream.streamUrl(c, channel, "m3u8") : null;
+  }
+
+  // ---------------------------------------------------------------- Search
+
+  /** Movies, shows, people, collections and channels, from every server, as the Fire TV searches. */
+  async setQuery(query: string) {
+    const run = ++this.queryRun;
+    if (!query.trim()) {
+      this.set((s) => ({ ...s, search: { ...emptySearch(s.search.recent), query } }));
+      return;
+    }
+    this.set((s) => ({ ...s, search: { ...s.search, query, busy: true } }));
+    // Typing on a remote is slow: a pause, rather than a search for every letter.
+    await this.wait(400);
+    if (run !== this.queryRun) return;
+    const p = this.current.plex;
+    const servers = p.libraries
+      .map((l) => [l.baseUrl, l.token] as const)
+      .filter(([base], i, all) => all.findIndex(([b]) => b === base) === i);
+    if (!servers.length && p.baseUrl && p.serverToken) servers.push([p.baseUrl, p.serverToken]);
+    const [found, channels] = await Promise.all([
+      Promise.all(servers.map(([base, token]) => plex.searchAll(base, token, query).catch(() => null))),
+      this.channelsMatching(query),
+    ]);
+    if (run !== this.queryRun) return;
+    const answered = found.filter((f): f is plex.PlexFound => f !== null);
+    const [matches, others] = split(query, answered.reduce<PlexItem[]>((all, f) => all.concat(f.items), []));
+    const people = answered
+      .reduce<PlexPerson[]>((all, f) => all.concat(f.people), [])
+      .filter((x, i, all) => all.findIndex((y) => y.name.toLowerCase() === x.name.toLowerCase()) === i)
+      .slice(0, PEOPLE_RESULTS);
+    const collections = answered
+      .reduce<PlexItem[]>((all, f) => all.concat(f.collections), [])
+      .filter((x, i, all) => all.findIndex((y) => y.title.toLowerCase() === x.title.toLowerCase()) === i);
+    this.set((s) => ({
+      ...s,
+      search: {
+        ...s.search,
+        busy: false,
+        // Nothing by name, a misspelling most likely: then Plex's own guesses are the results.
+        results: matches.length ? matches : others,
+        more: matches.length ? others : [],
+        people,
+        collections,
+        channels,
+        unreachable: servers.length > 0 && answered.length === 0,
+      },
+    }));
+  }
+
+  /** Channels whose names have the words in them; the panel has no search of its own. */
+  private async channelsMatching(query: string): Promise<XtreamChannel[]> {
+    const c = this.current.live.credentials;
+    if (!c) return [];
+    this.allChannels ??= xtream.liveChannels(c).catch(() => {
+      this.allChannels = null;
+      return [];
+    });
+    const wanted = query.trim().toLowerCase();
+    return (await this.allChannels).filter((ch) => ch.name.toLowerCase().includes(wanted)).slice(0, CHANNEL_RESULTS);
+  }
+
+  /** What was searched kept, when something it found is opened: a search that worked. */
+  rememberSearch() {
+    const recent = rememberedSearches(this.current.search.recent, this.current.search.query);
+    this.store.setJson("recentSearches", recent);
+    this.set((s) => ({ ...s, search: { ...s.search, recent } }));
+  }
+
+  clearRecentSearches() {
+    this.store.setJson("recentSearches", []);
+    this.set((s) => ({ ...s, search: { ...s.search, recent: [] } }));
+  }
+
+  /** A channel found by search, watched with the others found beside it for channel up and down. */
+  watchFound(channel: XtreamChannel) {
+    const channels = this.current.search.channels;
+    const at = channels.findIndex((ch) => ch.streamId === channel.streamId);
+    if (at < 0) return;
+    this.setLive({ category: null, channels, watching: at });
+    void this.loadGuide(channels.slice(0, 12));
+  }
+
+  // ---------------------------------------------------------------- A person's and a collection's titles
+
+  /** Everything they're in, from the libraries on the server they were found on. */
+  async openPerson(person: PlexPerson) {
+    const key = `person:${person.serverBase ?? ""}|${person.id}`;
+    const run = ++this.listRun;
+    this.set((s) => ({ ...s, list: { key, items: [], busy: true, error: null } }));
+    const libraries = this.current.plex.libraries.filter((l) => !person.serverBase || l.baseUrl === person.serverBase);
+    const found = await Promise.all(
+      libraries.map((l) =>
+        plex.withActor(l.baseUrl, l.token, l.section.key, l.section.type === "movie" ? plex.TYPE_MOVIE : plex.TYPE_SHOW, person.id).catch(() => null),
+      ),
+    );
+    if (run !== this.listRun) return;
+    const items = found.reduce<PlexItem[]>((all, f) => all.concat(f ?? []), []);
+    const newest = stableSort(items, (a, b) => (b.year ?? 0) - (a.year ?? 0));
+    this.set((s) => ({
+      ...s,
+      list: { key, items: newest, busy: false, error: libraries.length && found.every((f) => f === null) ? "Couldn't reach your Plex server." : null },
+    }));
+  }
+
+  async openCollection(item: PlexItem) {
+    const key = `collection:${plex.listKey(item)}`;
+    const run = ++this.listRun;
+    this.set((s) => ({ ...s, list: { key, items: [], busy: true, error: null } }));
+    const base = item.serverBase ?? this.current.plex.baseUrl;
+    const token = this.tokenFor(base);
+    try {
+      if (!base || !token) throw new Error("Couldn't reach the server this collection is on.");
+      const items = await plex.collectionItems(base, token, item.ratingKey);
+      if (run === this.listRun) this.set((s) => ({ ...s, list: { key, items, busy: false, error: null } }));
+    } catch (error) {
+      if (run === this.listRun) this.set((s) => ({ ...s, list: { key, items: [], busy: false, error: readable(error) } }));
+    }
+  }
+
+  // ---------------------------------------------------------------- Settings
+
+  setPlaybackMode(playbackMode: PlaybackMode) {
+    this.setPrefs({ playbackMode });
+  }
+
+  setMaxBitrate(maxBitrateKbps: number) {
+    if (BITRATE_CHOICES.includes(maxBitrateKbps)) this.setPrefs({ maxBitrateKbps });
+  }
+
+  private setPrefs(change: Partial<Prefs>) {
+    const prefs = { ...this.current.prefs, ...change };
+    this.store.setJson("prefs", prefs);
+    this.set((s) => ({ ...s, prefs }));
   }
 
   /** A picture from the server a title is on, at the size it's drawn. */

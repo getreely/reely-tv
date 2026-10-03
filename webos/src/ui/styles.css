@@ -24,7 +24,9 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 :focus { outline: none; }
 
 .app { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column; }
-.tabs { display: grid; grid-auto-flow: column; justify-content: start; gap: 0.5rem; align-items: center; padding: 1.5rem 3rem 0.5rem; }
+/* The tabs on the left, Search and Settings at the far end; margins, as Chromium 68 has no flex gap. */
+.tabs { display: flex; align-items: center; padding: 1.5rem 3rem 0.5rem; }
+.tabs > * { margin-right: 0.5rem; }
 .tab { padding: 0.55rem 1.1rem; border-radius: 999px; color: var(--muted); font-size: 1.1rem; font-weight: 500; }
 .tab.on { color: var(--chalk); font-weight: 600; }
 .tab:focus { background: var(--chalk); color: var(--ink); }
@@ -131,3 +133,18 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .channel .name { font-size: 1.2rem; font-weight: 600; }
 .channel .scrub { margin-top: 0.4rem; max-width: 24rem; }
 .typed { position: absolute; top: 2rem; right: 3rem; font-size: 3rem; font-weight: 700; background: rgba(10,9,9,0.75); padding: 0.4rem 1.2rem; border-radius: 0.8rem; }
+
+/* Search, Settings, and pages of people's and collections' titles. */
+.tabs-end { display: flex; margin-left: auto; }
+.tabs-end > * { margin-left: 0.5rem; margin-right: 0; }
+.search-note { padding: 0.2rem 3rem 0; min-height: 2rem; }
+.hero.short { min-height: 0; padding-bottom: 1rem; }
+.person .name { font-size: 1rem; font-weight: 500; text-align: center; }
+.person .facts { text-align: center; }
+.settings { padding: 0.5rem 0 2rem; }
+.setting-group { margin: 1.2rem 3rem 0; }
+.setting-group h2 { margin: 0 0 0.6rem; font-size: 1.35rem; font-weight: 600; }
+.setting { padding: 0.8rem 1.2rem; margin-bottom: 0.6rem; border-radius: 1rem; background: var(--raised); }
+.setting-title { font-size: 1.1rem; font-weight: 600; }
+.setting .note { margin: 0.3rem 0 0; text-align: left; }
+.toolbar.flush { padding: 0.7rem 0 0; }

@@ -6,6 +6,8 @@ import { playDirect, Player } from "./player";
 import { Detail, Home, Library, Profiles, SignIn } from "./screens";
 import { Requests, RequestTitlePage } from "./requests";
 import { Live, LivePlayer } from "./live";
+import { collectionKey, ListPageView, personKey, Search } from "./search";
+import { Settings } from "./settings";
 
 const TABS: Array<[string, Route]> = [
   ["Home", { name: "home" }],
@@ -73,15 +75,20 @@ export function Root(props: { app: App }) {
             {label}
           </button>
         ))}
-        {connected && state.plex.homeUsers.length > 1 ? (
-          <button class="tab" data-focus onClick={() => setChoosingProfile(true)}>
-            {state.plex.user?.title ?? "Profiles"}
-          </button>
-        ) : null}
         {connected ? (
-          <button class="tab" data-focus onClick={() => app.signOut()}>
-            Sign out
-          </button>
+          <span class="tabs-end">
+            <button class={"tab" + (route.name === "search" ? " on" : "")} data-focus onClick={() => app.navigate({ name: "search" })}>
+              Search
+            </button>
+            {state.plex.homeUsers.length > 1 ? (
+              <button class="tab" data-focus onClick={() => setChoosingProfile(true)}>
+                {state.plex.user?.title ?? "Profiles"}
+              </button>
+            ) : null}
+            <button class={"tab" + (route.name === "settings" ? " on" : "")} data-focus onClick={() => app.navigate({ name: "settings" })}>
+              Settings
+            </button>
+          </span>
         ) : null}
       </nav>
       <main class="content" data-content>
@@ -99,6 +106,14 @@ export function Root(props: { app: App }) {
           <Requests app={app} state={state} />
         ) : route.name === "requestTitle" ? (
           <RequestTitlePage app={app} state={state} title={route.title} />
+        ) : route.name === "search" ? (
+          <Search app={app} state={state} />
+        ) : route.name === "person" ? (
+          <ListPageView app={app} state={state} title={route.person.name} listKey={personKey(route.person)} empty="Nothing they're in is in your libraries." />
+        ) : route.name === "collection" ? (
+          <ListPageView app={app} state={state} title={route.item.title} listKey={collectionKey(route.item)} empty="This collection is empty." />
+        ) : route.name === "settings" ? (
+          <Settings app={app} state={state} onProfiles={() => setChoosingProfile(true)} />
         ) : (
           <Home app={app} state={state} />
         )}

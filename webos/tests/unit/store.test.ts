@@ -38,6 +38,20 @@ function fakePlex(options: { claimAfter?: number; homeUsers?: number; serverUp?:
       if (path === "/library/sections") return json({ MediaContainer: { Directory: [{ key: "1", title: "Movies", type: "movie" }, { key: "2", title: "TV Shows", type: "show" }] } });
       if (path === "/hubs") return json({ MediaContainer: { Hub: [{ Metadata: [{ ratingKey: "m1", type: "movie", title: "Low Orbit", viewOffset: 100, duration: 1000, lastViewedAt: 5 }] }] } });
       if (path === "/playlists") return meta([]);
+      if (path === "/hubs/search") {
+        // Plex's answer to "orbit": the film by name, a guess, a person and a collection.
+        return json({ MediaContainer: { Hub: [
+          { type: "movie", Metadata: [{ ratingKey: "x1", type: "movie", title: "Gravity" }, { ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025 }] },
+          { type: "actor", Directory: [{ id: "77", tag: "Ana Orbit", thumb: "/p/77" }, { id: "78", tag: "ana orbit" }] },
+          { type: "collection", Metadata: [{ ratingKey: "c1", type: "collection", title: "Orbit Films" }] },
+        ] } });
+      }
+      if (path === "/library/collections/c1/children") return meta([{ ratingKey: "m1", type: "movie", title: "Low Orbit" }]);
+      if (url.searchParams.get("actor") === "77") {
+        return path === "/library/sections/1/all"
+          ? meta([{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025 }, { ratingKey: "m3", type: "movie", title: "Dust", year: 2019 }])
+          : meta([{ ratingKey: "show1", type: "show", title: "Northbound", year: 2024 }]);
+      }
       if (path === "/library/sections/1/all") return meta([{ ratingKey: "m2", type: "movie", title: "Glasshouse", addedAt: 9 }]);
       if (path === "/library/sections/2/all") {
         // Three episodes of one show and one of another: two shows on Home, one with a count.
@@ -131,6 +145,96 @@ describe("the LG app's state", () => {
     app.signOut();
     expect(app.state.plex.token).toBeNull();
     expect(app.store.get("plexToken")).toBeNull();
+  });
+});
+
+describe("search, as the Fire TV searches", () => {
+  const signedIn = async () => {
+    useFetcher(fakePlex().fetch);
+    await app.startSignIn();
+  };
+
+  it("what matches by name first, Plex's guesses after; one of each person; collections", async () => {
+    await signedIn();
+    await app.setQuery("orbit");
+    const s = app.state.search;
+    expect(s.results.map((i) => i.title)).toEqual(["Low Orbit"]);
+    expect(s.more.map((i) => i.title)).toEqual(["Gravity"]);
+    expect(s.people.map((p) => [p.id, p.name])).toEqual([["77", "Ana Orbit"]]);
+    expect(s.collections.map((c) => c.title)).toEqual(["Orbit Films"]);
+    expect(s.busy).toBe(false);
+  });
+
+  it("an empty box clears the results; a search that found something is remembered once", async () => {
+    await signedIn();
+    await app.setQuery("orbit");
+    app.rememberSearch();
+    await app.setQuery("Orbit ");
+    app.rememberSearch();
+    expect(app.state.search.recent).toEqual(["Orbit"]);
+    expect(app.store.json("recentSearches", [])).toEqual(["Orbit"]);
+    await app.setQuery("");
+    expect(app.state.search.results).toEqual([]);
+    expect(app.state.search.recent).toEqual(["Orbit"]);
+    app.clearRecentSearches();
+    expect(app.state.search.recent).toEqual([]);
+  });
+
+  it("a slower answer to an earlier query doesn't overwrite a later one", async () => {
+    await signedIn();
+    const first = app.setQuery("orbit");
+    await app.setQuery("");
+    await first;
+    expect(app.state.search.query).toBe("");
+    expect(app.state.search.results).toEqual([]);
+  });
+
+  it("a person's page has what they're in from every library, newest first", async () => {
+    await signedIn();
+    app.navigate({ name: "person", person: { id: "77", name: "Ana Orbit", thumb: null, serverBase: SERVER } });
+    for (let i = 0; i < 20 && (!app.state.list || app.state.list.busy); i++) await new Promise((r) => setTimeout(r, 0));
+    expect(app.state.list?.items.map((i) => i.title)).toEqual(["Low Orbit", "Northbound", "Dust"]);
+  });
+
+  it("a collection opens on its titles", async () => {
+    await signedIn();
+    await app.setQuery("orbit");
+    app.navigate({ name: "collection", item: app.state.search.collections[0] });
+    for (let i = 0; i < 20 && (!app.state.list || app.state.list.busy); i++) await new Promise((r) => setTimeout(r, 0));
+    expect(app.state.list?.items.map((i) => i.title)).toEqual(["Low Orbit"]);
+  });
+});
+
+describe("playback settings", () => {
+  it("are kept, and an unknown quality is refused", async () => {
+    app.setPlaybackMode("transcode");
+    app.setMaxBitrate(8_000);
+    app.setMaxBitrate(1234);
+    expect(app.state.prefs).toEqual({ playbackMode: "transcode", maxBitrateKbps: 8_000 });
+    const again = new App(app.store, instant);
+    await again.start();
+    expect(again.state.prefs).toEqual({ playbackMode: "transcode", maxBitrateKbps: 8_000 });
+  });
+
+  it("Always convert converts what the TV could play, at the quality chosen", async () => {
+    useFetcher(async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/library/metadata/m1") {
+        return new Response(JSON.stringify({ MediaContainer: { Metadata: [{ ratingKey: "m1", Media: [{ container: "mp4", videoCodec: "h264", audioCodec: "aac", Part: [{ id: 5, key: "/library/parts/5/file.mp4" }] }] }] } }));
+      }
+      return new Response("{}", { status: 404 });
+    });
+    app.setMaxBitrate(4_000);
+    app.setPlaybackMode("transcode");
+    const item = { ratingKey: "m1", type: "movie", title: "Low Orbit", serverBase: SERVER, viewOffsetMs: 0, durationMs: 1000 } as any;
+    (app as any).current.plex = { ...app.state.plex, baseUrl: SERVER, serverToken: "server-token" };
+    await app.play(item, false, () => true);
+    expect(app.state.playing?.direct).toBe(false);
+    expect(app.state.playing?.url).toContain("maxVideoBitrate=4000");
+    expect(app.state.playing?.url).toContain("videoResolution=1280x720");
+    app.setPlaybackMode("direct");
+    await app.play(item, false, () => false);
+    expect(app.state.playing?.direct).toBe(true);
   });
 });
 
