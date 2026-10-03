@@ -217,6 +217,20 @@ function Reely_Badge(marks as object, t as object) as string
     return ""
 end function
 
+' Whether Plex's own libraries have [t], by the outside ids its titles carry ("tmdb://603",
+' "tvdb://81189"): marks.plexMovies and marks.plexShows, when they've been read.
+function Reely_PlexHas(t as object, marks as object) as boolean
+    if t.kind = "show" then
+        shows = marks.plexShows
+        if shows = invalid then return false
+        if t.tvdbId > 0 and shows.DoesExist("tvdb://" + t.tvdbId.ToStr()) then return true
+        return t.tmdbId > 0 and shows.DoesExist("tmdb://" + t.tmdbId.ToStr())
+    end if
+    movies = marks.plexMovies
+    if movies = invalid then return false
+    return t.tmdbId > 0 and movies.DoesExist("tmdb://" + t.tmdbId.ToStr())
+end function
+
 ' This account's requests, newest first: { id, title, status, seasons }.
 function Reely_ParseRecords(root as dynamic) as object
     out = []
@@ -242,6 +256,8 @@ end function
 ' What a poster says: Reely's own word, else where this account's ask has got to.
 function Reely_BadgeFor(t as object, marks as object, mine as object) as string
     mark = Reely_Badge(marks, t)
+    ' On the Plex server already, though Reely didn't add it: in the library all the same.
+    if (mark = "" or mark = "Requested") and Reely_PlexHas(t, marks) then return "In library"
     if mark <> "" and mark <> "Requested" then return mark
     key = Reely_Key(t)
     for each r in mine

@@ -86,4 +86,17 @@ sub Main()
     plexItems = [{ type: "show", title: "Here", year: 2020 }, { type: "movie", title: "here", year: 2021 }]
     Expect("found in Plex by kind, name and year", Reely_FindInPlex({ kind: "movie", title: "Here", year: 2021 }, plexItems).year, 2021)
     Expect("not another year's", Reely_FindInPlex({ kind: "movie", title: "Here", year: 1999 }, plexItems), invalid)
+
+    ' What Plex has, by its titles' outside ids, is in the library too.
+    plexMarks = { movies: {}, showsByTmdb: {}, showsByTvdb: {}, requested: { "movie-27205": true }, plexMovies: {}, plexShows: {} }
+    Plex_AddGuids(plexMarks.plexMovies, [{ Guid: [{ id: "imdb://tt1375666" }, { id: "tmdb://27205" }] }, { Guid: [{ id: "tmdb://550" }] }, "junk", { title: "No guids" }])
+    Plex_AddGuids(plexMarks.plexShows, [{ Guid: [{ id: "tvdb://121361" }] }])
+    Expect("on Plex, though Reely didn't add it", Reely_BadgeFor({ kind: "movie", tmdbId: 550, tvdbId: 0 }, plexMarks, []), "In library")
+    Expect("asked for and on Plex now", Reely_BadgeFor({ kind: "movie", tmdbId: 27205, tvdbId: 0 }, plexMarks, []), "In library")
+    Expect("a show by its tvdb id", Reely_BadgeFor({ kind: "show", tmdbId: 1399, tvdbId: 121361 }, plexMarks, []), "In library")
+    Expect("a film's id isn't a show's", Reely_BadgeFor({ kind: "show", tmdbId: 550, tvdbId: 0 }, plexMarks, []), "")
+    Expect("not on Plex", Reely_BadgeFor({ kind: "movie", tmdbId: 1, tvdbId: 0 }, plexMarks, []), "")
+    Expect("Plex not read, nothing assumed", Reely_PlexHas({ kind: "movie", tmdbId: 550, tvdbId: 0 }, { movies: {} }), false)
+    rows = Reely_ShownRows([{ id: "movies", title: "Trending Movies", titles: [{ kind: "movie", tmdbId: 550, tvdbId: 0, title: "Fight Club" }, { kind: "movie", tmdbId: 1, tvdbId: 0, title: "One" }] }], plexMarks, [])
+    Expect("left out of the rows", [rows.Count(), rows[0].titles.Count(), rows[0].titles[0].title], [1, 1, "One"])
 end sub

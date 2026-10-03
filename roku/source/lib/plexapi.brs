@@ -207,6 +207,29 @@ function PlexApi_Decades(c as dynamic) as object
     end function)
 end function
 
+' Every outside id the films and shows on Plex carry, a page at a time with nothing else:
+' what Requests marks as in the library. { movies, shows }, each a set.
+function PlexApi_Holdings(libraries as object, clientId as string) as object
+    out = { movies: {}, shows: {} }
+    size = 1000
+    for each l in libraries
+        if l.type = "movie" or l.type = "show" then
+            into = Iif_(l.type = "movie", out.movies, out.shows)
+            t = Iif_(l.type = "movie", "1", "2")
+            start = 0
+            while start < 100000
+                c = PlexApi_Container(l.base + "/library/sections/" + l.key + "/all?type=" + t + "&includeGuids=1&includeFields=guid&X-Plex-Container-Start=" + start.ToStr() + "&X-Plex-Container-Size=" + size.ToStr(), l.token, clientId, 60000)
+                if c = invalid then exit while
+                list = Arr_(c.Metadata)
+                Plex_AddGuids(into, list)
+                if list.Count() < size then exit while
+                start = start + size
+            end while
+        end if
+    end for
+    return out
+end function
+
 ' A page of a library's grid, sorted and narrowed.
 function PlexApi_LibraryPage(l as object, sort as string, filters as string, start as integer, size as integer, clientId as string) as dynamic
     t = Iif_(l.type = "movie", "1", "2")

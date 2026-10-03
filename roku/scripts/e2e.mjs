@@ -83,7 +83,7 @@ const reelyApi = (req, res, url) => {
     if (!(req.headers.cookie ?? "").includes("reely_session=abc") && !reelySignedIn) return reply(401, { error: "login required" });
     switch (path) {
       case "/api/v1/explore": return reply(200, { imageBase: "https://image.tmdb.org/t/p",
-        movies: [{ tmdbId: 603, kind: "movie", title: "The Matrix", year: 1999 }, { tmdbId: 438631, kind: "movie", title: "Dune", year: 2021 }],
+        movies: [{ tmdbId: 603, kind: "movie", title: "The Matrix", year: 1999 }, { tmdbId: 438631, kind: "movie", title: "Dune", year: 2021 }, { tmdbId: 27205, kind: "movie", title: "Inception", year: 2010 }],
         shows: [{ tmdbId: 1399, kind: "show", title: "Game of Thrones", year: 2011 }] });
       case "/api/v1/movies": return reply(200, { movies: [{ tmdbId: 603, filePath: "/m/matrix.mkv" }] });
       case "/api/v1/shows": return reply(200, { shows: reelyArrived ? [{ tmdbId: 1399, onDisk: 20, aired: 73, wanted: 53 }] : [] });
@@ -126,7 +126,7 @@ const server = http.createServer((req, res) => {
     case "/identity": return send({});
     case "/library/sections": return send({ MediaContainer: { Directory: [{ key: "1", title: "Movies", type: "movie" }, { key: "2", title: "TV Shows", type: "show" }] } });
     case "/hubs": return send({ MediaContainer: { Hub: [{ Metadata: [{ ...episode("e2", 2), viewOffset: 20000, lastViewedAt: 5 }] }] } });
-    case "/library/sections/1/all": return meta([{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025, addedAt: 9, art: "/library/metadata/m1/art" }]);
+    case "/library/sections/1/all": return meta([{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025, addedAt: 9, art: "/library/metadata/m1/art", Guid: [{ id: "tmdb://438631" }] }]);
     case "/library/sections/2/all": {
       const start = Number(url.searchParams.get("X-Plex-Container-Start") ?? 0);
       const all = Array.from({ length: 333 }, (_, i) => episode(`n${i}`, i + 1));
@@ -450,9 +450,12 @@ try {
   await key("Select");
   await until("Reely's rows", () => output.includes("TRACE reely rows"), 15000).catch(() => undefined);
   expect("connects to Reely with the Plex sign-in", output.includes("TRACE reely connected"));
+  // The Matrix is in Reely's library and Dune on the Plex server: neither is offered.
+  await until("the films' row", () => output.includes("TRACE reely row movies"), 10000).catch(() => undefined);
+  expect("rows leave out what Reely and Plex already have", lastSaid("TRACE reely row movies:") === "Inception");
   await wait(2000);
   await snap("roku-requests");
-  // Down from the first row (Dune: The Matrix is in the library) to the shows'.
+  // Down from the first row (Inception: The Matrix is in Reely, Dune on Plex) to the shows'.
   await key("Down"); await wait(800);
   await key("Select");
   await until("the show's page", () => output.includes("TRACE reely title"), 10000).catch(() => undefined);

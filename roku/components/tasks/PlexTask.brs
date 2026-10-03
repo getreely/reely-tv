@@ -82,6 +82,12 @@ function answerFor(op as string, a as object) as object
         out.answer = ReelyApi_Ready(a.reely)
     else if op = "reelyHome" then
         out.answer = ReelyApi_Home(a.reely)
+        ' What Plex has, too, so a title already there isn't offered.
+        if out.answer.marks <> invalid and a.libraries <> invalid then
+            held = PlexApi_Holdings(a.libraries, cid)
+            out.answer.marks.plexMovies = held.movies
+            out.answer.marks.plexShows = held.shows
+        end if
     else if op = "reelySearch" then
         out.answer = ReelyApi_Search(a.reely, Str_(a.query))
     else if op = "reelyDetail" then

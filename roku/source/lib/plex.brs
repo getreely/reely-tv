@@ -626,3 +626,14 @@ function Plex_ProfileRole(u as object, currentUuid as string) as string
     if u.restricted then return "Managed"
     return ""
 end function
+
+' Every outside id a list of Plex titles carries, into [into].
+sub Plex_AddGuids(into as object, metadata as dynamic)
+    for each meta in Arr_(metadata)
+        if type(meta) = "roAssociativeArray" then
+            for each g in Arr_(meta.Guid)
+                if type(g) = "roAssociativeArray" and Str_(g.id) <> "" then into[Str_(g.id)] = true
+            end for
+        end if
+    end for
+end sub

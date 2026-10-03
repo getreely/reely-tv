@@ -157,7 +157,7 @@ end sub
 sub load()
     if Str_(Reely_().base) = "" then return
     if m.home = invalid then m.note.text = "Loading…"
-    Ask_("reelyHome", { reely: Asking_() })
+    Ask_("reelyHome", { reely: Asking_(), libraries: Session_().libraries })
 end sub
 
 ' Your requests, then Reely's rows less what's in the library; or what a search found.
@@ -184,9 +184,12 @@ sub paintRows()
         rows.Push({ title: "Your requests", items: mine, plain: true })
         for each row in Reely_ShownRows(m.home.rows, m.home.marks, m.home.mine)
             items = []
+            names = []
             for each t in row.titles
                 items.Push(Shown_(t))
+                names.Push(t.title)
             end for
+            Trace_("reely row " + row.id + ": " + Join_(names, ", "))
             rows.Push({ title: row.title, items: items, plain: true })
         end for
     end if
