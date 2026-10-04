@@ -237,12 +237,12 @@ fun Artwork(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(6.dp)
-                    .size(22.dp)
+                    .size(18.dp)
                     .clip(CircleShape)
                     .background(Accent),
                 contentAlignment = Alignment.Center,
             ) {
-                tv.reely.ui.components.CheckGlyph(tv.reely.ui.theme.OnAccent, size = 14.dp)
+                tv.reely.ui.components.CheckGlyph(tv.reely.ui.theme.OnAccent, size = 11.dp)
             }
         }
         if (progress != null && progress > 0f && !watched) {

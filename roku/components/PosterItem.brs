@@ -5,7 +5,7 @@ sub init()
     m.mask = m.top.findNode("mask")
     m.tick = m.top.findNode("tick")
     m.tickMark = m.top.findNode("tickMark")
-    m.tickMark.font = PosterFont_("pkg:/fonts/geist_bold.ttf", 24)
+    m.tickMark.font = PosterFont_("pkg:/fonts/geist_bold.ttf", 18)
     m.track = m.top.findNode("track")
     m.progress = m.top.findNode("progress")
     m.badge = m.top.findNode("badge")
@@ -45,8 +45,8 @@ sub layout()
     m.art.height = pic
     m.tagBack.translation = [8, 8]
     m.tag.translation = [8, 8]
-    m.tick.translation = [w - 48, 8]
-    m.tickMark.translation = [w - 48, 8]
+    m.tick.translation = [w - 38, 8]
+    m.tickMark.translation = [w - 38, 8]
     m.track.translation = [0, pic - 6]
     m.track.width = w
     m.track.height = 6

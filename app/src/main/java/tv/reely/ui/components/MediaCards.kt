@@ -245,12 +245,12 @@ fun PosterCard(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(6.dp)
-                        .size(24.dp)
+                        .size(18.dp)
                         .clip(CircleShape)
                         .background(tv.reely.ui.theme.Good),
                     contentAlignment = Alignment.Center,
                 ) {
-                    CheckGlyph(color = Ink, size = 15.dp)
+                    CheckGlyph(color = Ink, size = 11.dp)
                 }
             }
 
@@ -549,12 +549,12 @@ fun EpisodeTile(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(6.dp)
-                        .size(24.dp)
+                        .size(18.dp)
                         .clip(CircleShape)
                         .background(tv.reely.ui.theme.Good),
                     contentAlignment = Alignment.Center,
                 ) {
-                    CheckGlyph(color = Ink, size = 15.dp)
+                    CheckGlyph(color = Ink, size = 11.dp)
                 }
             }
             if (progress != null) {
