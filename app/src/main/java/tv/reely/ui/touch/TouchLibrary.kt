@@ -81,7 +81,7 @@ internal fun TouchLibrary(viewModel: ReelyViewModel, state: ReelyState, route: R
                 add(LibraryView.HOME to "For you")
                 add(LibraryView.GRID to "Library")
                 add(LibraryView.COLLECTIONS to "Collections")
-                if (iptvOn) add(LibraryView.IPTV to "IPTV")
+                if (iptvOn && state.prefs.iptvInMenus) add(LibraryView.IPTV to "IPTV")
             }
             items(views, key = { it.first.name }) { (target, label) ->
                 TouchChip(label, selected = view == target, onClick = { viewModel.navigate(Route.Library(kind, target)) })

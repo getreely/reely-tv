@@ -248,6 +248,8 @@ export interface Prefs {
   subtitlesAtStart: SubtitlesAtStart;
   /** The colour things are marked in; see ACCENTS. */
   accent: string;
+  /** The IPTV library offered in the Movies and TV Shows menus, beside Plex's. */
+  iptvInMenus: boolean;
   /** A show's theme on its page: -1 off, else an index into THEME_LEVELS. */
   themeLevel: number;
   /** The highlighted channel plays in the guide. */
@@ -307,7 +309,7 @@ export const ACCENTS: Array<{ id: string; label: string; color: string; on: stri
 export const accentOf = (id: string | undefined) => ACCENTS.find((a) => a.id === id) ?? ACCENTS[0];
 
 export const UP_NEXT_CHOICES = [0, 5, 10, 12, 15, 20, 30];
-const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], iptvLibrary: false, iptvWins: false, screensaverMinutes: 3, tourSeen: false, subtitleScale: 0.9, subtitleBackground: false, subtitlesAtStart: "plex", accent: "blue", themeLevel: -1, guidePreview: true, streamFormat: "m3u8" };
+const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], iptvLibrary: false, iptvWins: false, screensaverMinutes: 3, tourSeen: false, subtitleScale: 0.9, subtitleBackground: false, subtitlesAtStart: "plex", accent: "blue", iptvInMenus: true, themeLevel: -1, guidePreview: true, streamFormat: "m3u8" };
 
 /** As the Fire TV offers them. */
 export const BITRATE_CHOICES = [0, 20_000, 12_000, 8_000, 4_000, 2_000];
@@ -549,6 +551,7 @@ export class App {
         subtitleBackground: prefs.subtitleBackground === true,
         subtitlesAtStart: prefs.subtitlesAtStart === "off" ? "off" : "plex",
         accent: accentOf(prefs.accent).id,
+        iptvInMenus: prefs.iptvInMenus !== false,
         themeLevel: typeof prefs.themeLevel === "number" && prefs.themeLevel >= -1 && prefs.themeLevel < THEME_LEVELS.length ? prefs.themeLevel : -1,
         guidePreview: prefs.guidePreview !== false,
         streamFormat: prefs.streamFormat === "ts" ? "ts" : "m3u8",
@@ -973,7 +976,8 @@ export class App {
   librariesOf(kind: Kind): LibraryChoice[] {
     const plexOnes = this.current.plex.libraries.filter((l) => l.section.type === kind);
     // The provider's, after Plex's: one choice, the same object each time, so it reads as chosen.
-    return this.iptvOn() ? [...plexOnes, this.iptvChoices[kind]] : plexOnes;
+    // Unless taken out of the menus in Settings.
+    return this.iptvOn() && this.current.prefs.iptvInMenus ? [...plexOnes, this.iptvChoices[kind]] : plexOnes;
   }
 
   private readonly iptvChoices: Record<Kind, LibraryChoice> = { movie: iptvChoice("movie"), show: iptvChoice("show") };
@@ -2110,6 +2114,10 @@ export class App {
 
   setSubtitleBackground(on: boolean) {
     this.setPrefs({ subtitleBackground: on });
+  }
+
+  setIptvInMenus(on: boolean) {
+    this.setPrefs({ iptvInMenus: on });
   }
 
   setAccent(id: string) {

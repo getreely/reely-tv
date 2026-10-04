@@ -576,6 +576,16 @@ describe("the provider's movies and shows", () => {
     expect(app.state.browse.movie.genres.map((g) => g.title)).toEqual(["Action"]);
   });
 
+  it("taken out of the menus in Settings, IPTV is no longer a library to choose", async () => {
+    await withIptv();
+    app.setIptvInMenus(false);
+    expect(app.librariesOf("movie").map((l) => l.section.title)).toEqual(["Films"]);
+    // Still on Home: only the menus lose it.
+    expect(app.state.home.iptvMovies.map((i) => i.title)).toEqual(["Dust"]);
+    app.setIptvInMenus(true);
+    expect(app.librariesOf("movie").map((l) => l.section.title)).toEqual(["Films", "IPTV"]);
+  });
+
   it("with the provider's copy winning, Plex's copy of the same film leaves Home", async () => {
     await withIptv(true);
     expect(app.state.home.iptvMovies.map((i) => i.title)).toEqual(["Low Orbit", "Dust"]);

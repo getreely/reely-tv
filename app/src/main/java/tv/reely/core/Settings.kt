@@ -19,6 +19,11 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(SUBTITLE_BACKGROUND, false)
         set(value) = prefs.edit().putBoolean(SUBTITLE_BACKGROUND, value).apply()
 
+    /** The IPTV provider's library offered in the Movies and TV Shows menus, beside Plex's. */
+    var iptvInMenus: Boolean
+        get() = prefs.getBoolean(IPTV_IN_MENUS, true)
+        set(value) = prefs.edit().putBoolean(IPTV_IN_MENUS, value).apply()
+
     /** The colour things are marked in; see AccentChoice. */
     var accent: String
         get() = prefs.getString(ACCENT, "blue") ?: "blue"
@@ -217,6 +222,7 @@ class Settings(context: Context) {
         private const val SUBTITLE_BACKGROUND = "subtitle.background"
         private const val SUBTITLES_AT_START = "subtitle.atStart"
         private const val ACCENT = "look.accent"
+        private const val IPTV_IN_MENUS = "iptv.inMenus"
         const val SUBTITLES_PLEX = "plex"
         const val SUBTITLES_OFF = "off"
         private const val UP_NEXT_SECONDS = "upnext.seconds"

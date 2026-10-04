@@ -225,6 +225,23 @@ class TouchAppTest {
         }
     }
 
+    @Test fun `IPTV can be taken out of the Movies and TV Shows menus, and stays out`() {
+        signedIn()
+        model.setStateForTest {
+            it.copy(
+                iptv = it.iptv.copy(on = true),
+                stack = listOf(Route.Home, Route.Library(LibraryKind.MOVIES, LibraryView.HOME)),
+            )
+        }
+        show()
+        compose.onNodeWithText("IPTV").assertIsDisplayed()
+        compose.runOnIdle { model.toggleIptvInMenus() }
+        compose.waitForIdle()
+        assertTrue(compose.onAllNodesWithText("IPTV").fetchSemanticsNodes().isEmpty())
+        val again = ReelyViewModel(ApplicationProvider.getApplicationContext())
+        assertEquals(false, again.state.value.prefs.iptvInMenus)
+    }
+
     companion object {
         /** Nothing listens here, so anything asked of it fails at once. */
         const val SERVER = "http://127.0.0.1:9"

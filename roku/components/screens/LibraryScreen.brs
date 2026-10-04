@@ -39,8 +39,10 @@ sub open()
     for each l in Session_().libraries
         if l.type = m.kind then m.libraries.Push(l)
     end for
-    ' The provider's, after Plex's, while its films and series are on.
-    if IptvReady_() then m.libraries.Push({ base: "iptv:", key: "iptv-" + m.kind, title: "IPTV", type: m.kind, token: "" })
+    ' The provider's, after Plex's, while its films and series are on, unless taken out of
+    ' the menus in Settings.
+    inMenus = m.global.prefs.iptvInMenus = invalid or Bool_(m.global.prefs.iptvInMenus)
+    if IptvReady_() and inMenus then m.libraries.Push({ base: "iptv:", key: "iptv-" + m.kind, title: "IPTV", type: m.kind, token: "" })
     if m.libraries.Count() = 0 then
         m.note.text = "No " + Iif_(m.kind = "movie", "movie", "TV") + " library on your server."
         m.views.visible = false

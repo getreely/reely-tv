@@ -583,6 +583,8 @@ data class PlayerPrefs(
     val subtitlesAtStart: String = Settings.SUBTITLES_PLEX,
     /** The colour things are marked in; see AccentChoice. */
     val accent: String = "blue",
+    /** The IPTV library in the Movies and TV Shows menus, as one of the libraries. */
+    val iptvInMenus: Boolean = true,
     val upNextSeconds: Int = Settings.DEFAULT_UP_NEXT,
     val guidePreview: Boolean = true,
     val playbackMode: String = Settings.MODE_AUTO,
@@ -927,6 +929,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 subtitleBackground = settings.subtitleBackground,
                 subtitlesAtStart = settings.subtitlesAtStart,
                 accent = settings.accent,
+                iptvInMenus = settings.iptvInMenus,
                 upNextSeconds = settings.upNextSeconds,
                 guidePreview = settings.guidePreview,
                 playbackMode = settings.playbackMode,
@@ -4384,6 +4387,13 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         settings.iptvLibrary = on
         _state.update { it.copy(prefs = it.prefs.copy(iptvLibrary = on)) }
         if (on) startIptvLibrary() else stopIptvLibrary()
+    }
+
+    /** The IPTV library in or out of the Movies and TV Shows menus, as a Plex library can be. */
+    fun toggleIptvInMenus() {
+        val next = !settings.iptvInMenus
+        settings.iptvInMenus = next
+        _state.update { it.copy(prefs = it.prefs.copy(iptvInMenus = next)) }
     }
 
     fun setIptvWins(wins: Boolean) {

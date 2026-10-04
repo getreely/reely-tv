@@ -200,6 +200,12 @@ export function Settings(props: { app: App; state: AppState; onProfiles: () => v
               </Setting>
             ) : null}
             {prefs.iptvLibrary ? (
+              <Setting title="In the Movies and TV Shows menus" note="IPTV as one of the libraries to choose from, beside Plex's.">
+                <Pill label="On" on={prefs.iptvInMenus} onPress={() => app.setIptvInMenus(true)} />
+                <Pill label="Off" on={!prefs.iptvInMenus} onPress={() => app.setIptvInMenus(false)} />
+              </Setting>
+            ) : null}
+            {prefs.iptvLibrary ? (
               <Setting title="When a title is in both"
                 note={prefs.iptvWins ? "The provider's copy, in place of Plex's on Home and in search." : "Plex's copy. The IPTV library only has what Plex doesn't."}>
                 <Pill label="Plex" on={!prefs.iptvWins} onPress={() => app.setIptvWins(false)} />

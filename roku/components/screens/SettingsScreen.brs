@@ -223,6 +223,8 @@ sub MoviesAndShows_(out as object, p as object, playlist as boolean)
         counts = Int(Num_(s.movies)).ToStr() + " movies · " + Int(Num_(s.shows)).ToStr() + " shows"
     end if
     out.Push({ group: "", title: "Refresh movies and shows", note: counts, labels: ["Refresh"], on: [false], key: "iptvRefresh" })
+    inMenus = p.iptvInMenus = invalid or Bool_(p.iptvInMenus)
+    out.Push({ group: "", title: "In the Movies and TV Shows menus", note: "IPTV as one of the libraries to choose from, beside Plex's.", labels: ["On", "Off"], on: [inMenus, not inMenus], key: "iptvInMenus" })
     wins = Bool_(p.iptvWins)
     out.Push({ group: "", title: "When a title is in both", note: Iif_(wins, "The provider's copy, in place of Plex's on Home and in search.", "Plex's copy. The IPTV library only has what Plex doesn't."), labels: ["Plex", "IPTV"], on: [not wins, wins], key: "iptvWins" })
 end sub
@@ -409,6 +411,8 @@ sub onPressed(event as object)
         return
     else if key = "iptvLibrary" then
         p.iptvLibrary = i = 0
+    else if key = "iptvInMenus" then
+        p.iptvInMenus = i = 0
     else if key = "iptvWins" then
         p.iptvWins = i = 1
     else if key = "iptvRefresh" then

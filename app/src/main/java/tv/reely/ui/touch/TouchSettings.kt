@@ -28,6 +28,7 @@ internal fun TouchSettings(viewModel: ReelyViewModel, state: ReelyState, onSwitc
         onSetIptvWins = viewModel::setIptvWins,
         onRefreshIptv = viewModel::refreshIptvLibrary,
         onToggleFavourite = viewModel::toggleFavouriteLibrary,
+        onToggleIptvInMenus = viewModel::toggleIptvInMenus,
         onToggleFormat = viewModel::toggleFormat,
         onNudgeSubtitleScale = viewModel::nudgeSubtitleScale,
         onToggleSubtitleBackground = viewModel::toggleSubtitleBackground,

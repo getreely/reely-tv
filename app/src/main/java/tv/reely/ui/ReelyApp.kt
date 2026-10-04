@@ -743,6 +743,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onSetIptvWins = viewModel::setIptvWins,
                 onRefreshIptv = viewModel::refreshIptvLibrary,
                 onToggleFavourite = viewModel::toggleFavouriteLibrary,
+                onToggleIptvInMenus = viewModel::toggleIptvInMenus,
                 onToggleFormat = viewModel::toggleFormat,
                 onNudgeSubtitleScale = viewModel::nudgeSubtitleScale,
                 onToggleSubtitleBackground = viewModel::toggleSubtitleBackground,
@@ -817,6 +818,8 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 val kind = menuFor!!
                 val browse = state.plex.browseFor(kind)
                 val choices = state.plex.menuChoicesFor(kind)
+                // Unless taken out in Settings, as a Plex library can be.
+                val iptvInMenu = state.iptv.on && state.prefs.iptvInMenus
                 TabMenu(
                     groups = listOf(
                         "In ${kind.title}" to listOf(
@@ -846,7 +849,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                         // when there is more than one server to tell apart. The IPTV
                         // provider's, when switched on, is one more library in it.
                         "Libraries" to choices
-                            .takeIf { it.size > 1 || state.iptv.on }
+                            .takeIf { it.size > 1 || iptvInMenu }
                             .orEmpty()
                             .map { choice ->
                                 TabMenuItem(
@@ -870,7 +873,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                                 ) {
                                     menuFor = null
                                     viewModel.navigate(Route.Library(kind, LibraryView.IPTV))
-                                }.takeIf { state.iptv.on },
+                                }.takeIf { iptvInMenu },
                             ),
                     ),
                     focusRequester = menuFocus,

@@ -252,8 +252,13 @@ fun rowItem(row: RowFocus, key: String, index: Int = -1): Modifier {
 @Composable
 fun FollowRemovals(row: RowFocus) {
     val count = row.lostCount
+    // Only what goes while this screen is here. The row outlives the screen, and leaving
+    // it takes every card with it, the one just left for the tabs among them; counted
+    // from nought, coming back to Home along the tabs took the cursor off them and put it
+    // on the first card of Continue Watching.
+    val since = remember(row) { count }
     LaunchedEffect(row, count) {
-        if (count > 0) row.landAt(row.lost)
+        if (count > since) row.landAt(row.lost)
     }
 }
 

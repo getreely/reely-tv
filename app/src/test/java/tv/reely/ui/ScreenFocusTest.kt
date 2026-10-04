@@ -55,9 +55,13 @@ class ScreenFocusTest {
     private fun app() {
         compose.setContent {
             val saved = rememberSaveableStateHolder()
-            saved.SaveableStateProvider(route) {
-                CompositionLocalProvider(LocalScreenFocus provides screens.getOrPut(route) { ScreenFocus() }) {
-                    if (route == "home") Home() else Box(Modifier.size(10.dp).testTag("elsewhere").focusable())
+            Column {
+                // The tab row, which stays while the screen under it changes.
+                Box(Modifier.size(10.dp).testTag("tab").focusable())
+                saved.SaveableStateProvider(route) {
+                    CompositionLocalProvider(LocalScreenFocus provides screens.getOrPut(route) { ScreenFocus() }) {
+                        if (route == "home") Home() else Box(Modifier.size(10.dp).testTag("elsewhere").focusable())
+                    }
                 }
             }
         }
@@ -114,6 +118,24 @@ class ScreenFocusTest {
         compose.mainClock.advanceTimeBy(500)
         compose.waitForIdle()
         compose.onNodeWithTag("r0-c4").assertIsFocused()
+    }
+
+    /**
+     * Up from a card to the tabs and straight along them, past Home and back: the cards
+     * going with the screen are not cards taken from under the cursor, and Home coming
+     * back must leave the cursor on the tabs. It went to the first card of Continue
+     * Watching, and had to be brought back up to get anywhere.
+     */
+    @Test fun `along the tabs past Home, the cursor stays on the tabs`() {
+        app()
+        compose.onNodeWithTag("r0-c1").performScrollAndFocus()
+        compose.onNodeWithTag("tab").performScrollAndFocus()
+        route = "movies"
+        compose.waitForIdle()
+        route = "home"
+        compose.mainClock.advanceTimeBy(500)
+        compose.waitForIdle()
+        compose.onNodeWithTag("tab").assertIsFocused()
     }
 
     private fun androidx.compose.ui.test.SemanticsNodeInteraction.performScrollAndFocus() {

@@ -118,6 +118,7 @@ fun SettingsScreen(
     onSignOutXtream: () -> Unit,
     onSwitchServer: (PlexServer) -> Unit,
     onToggleFavourite: (LibraryChoice) -> Unit,
+    onToggleIptvInMenus: () -> Unit = {},
     onToggleFormat: () -> Unit,
     onNudgeSubtitleScale: (Float) -> Unit,
     onToggleSubtitleBackground: () -> Unit,
@@ -235,6 +236,9 @@ fun SettingsScreen(
                     onSwitchServer = onSwitchServer,
                     onToggleFavourite = onToggleFavourite,
                     onSignOutPlex = onSignOutPlex,
+                    iptvLibrary = iptv.on,
+                    iptvInMenus = prefs.iptvInMenus,
+                    onToggleIptvInMenus = onToggleIptvInMenus,
                 )
 
                 Section.UPDATES -> UpdatesSection(
@@ -737,6 +741,9 @@ private fun PlexPanel(
     onSwitchServer: (PlexServer) -> Unit,
     onToggleFavourite: (LibraryChoice) -> Unit,
     onSignOutPlex: () -> Unit,
+    iptvLibrary: Boolean = false,
+    iptvInMenus: Boolean = true,
+    onToggleIptvInMenus: () -> Unit = {},
 ) {
     if (!plex.isConnected) {
         SettingGroup("Plex") {
@@ -774,11 +781,12 @@ private fun PlexPanel(
         SettingRow(title = "Connection", value = connectionKind(plex.baseUrl))
     }
 
-    if (plex.libraryChoices.size > 1) {
+    if (plex.libraryChoices.size > 1 || iptvLibrary) {
         SettingGroup(
             "Libraries",
             note = "Pinned libraries are the only ones shown in the Movies and TV Shows " +
-                "menus. With none pinned, all of them are.",
+                "menus. With none pinned, all of them are." +
+                if (iptvLibrary) " IPTV is shown unless switched off here." else "",
         ) {
             plex.libraryChoices.forEachIndexed { index, choice ->
                 val pinned = choice.id in plex.favouriteSections
@@ -788,6 +796,17 @@ private fun PlexPanel(
                     else choice.section.title,
                     switch = pinned,
                     onClick = { onToggleFavourite(choice) },
+                )
+            }
+            // The provider's movies and shows: not pinned like a Plex library, only in or
+            // out of the menus, so taking it out leaves the Plex ones as they were.
+            if (iptvLibrary) {
+                SettingRow(
+                    first = plex.libraryChoices.isEmpty(),
+                    title = "IPTV",
+                    description = "In the Movies and TV Shows menus.",
+                    switch = iptvInMenus,
+                    onClick = onToggleIptvInMenus,
                 )
             }
         }

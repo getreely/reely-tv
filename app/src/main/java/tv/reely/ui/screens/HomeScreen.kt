@@ -157,6 +157,13 @@ fun HomeScreen(
     FollowRemovals(movieFocus)
     FollowRemovals(watchlistFocus)
 
+    // Arriving from the tabs, nothing has the cursor yet: the hero shows what the page
+    // starts with, its picture and its words, rather than a black screen until Down is
+    // pressed. The cursor stays on the tabs.
+    val hero = focused ?: home.continueWatching.firstOrNull()?.takeIf { HomeRow.CONTINUE.id !in hidden }
+        ?: home.recentEpisodes.firstOrNull()?.newest?.takeIf { HomeRow.EPISODES.id !in hidden }
+        ?: home.recentMovies.firstOrNull()?.takeIf { HomeRow.MOVIES.id !in hidden }
+
     // The screen takes its colour from the artwork of what has focus — the glow at the
     // bottom and behind a focused card. See HeroBackdrop and LocalTint.
     var tint by remember { mutableStateOf(Accent) }
@@ -164,7 +171,7 @@ fun HomeScreen(
     CompositionLocalProvider(LocalTint provides glow) {
         Box(modifier = modifier.fillMaxSize()) {
             HeroBackdrop(
-                url = backdropUrl(focused?.serverBase, focused?.art ?: focused?.thumb),
+                url = backdropUrl(hero?.serverBase, hero?.art ?: hero?.thumb),
                 modifier = Modifier.fillMaxSize(),
                 onTint = { tint = it },
                 glow = glow,
@@ -177,24 +184,24 @@ fun HomeScreen(
                         .height(HERO_HEIGHT)
                         .padding(horizontal = 40.dp, vertical = 6.dp),
                 ) {
-                    if (focused != null) {
+                    if (hero != null) {
                         // An episode is introduced by its show — the show's logo, or its name —
                         // with the episode's own title in the details beneath.
-                        val isEpisode = focused.type == "episode" && focused.grandparentTitle != null
+                        val isEpisode = hero.type == "episode" && hero.grandparentTitle != null
                         HeroText(
                             eyebrow = null,
-                            title = if (isEpisode) focused.grandparentTitle!! else focused.title,
-                            logoUrl = logoUrl(focused.serverBase, focused.logo),
+                            title = if (isEpisode) hero.grandparentTitle!! else hero.title,
+                            logoUrl = logoUrl(hero.serverBase, hero.logo),
                             criticRating = null,
                             audienceRating = null,
                             contentRating = null,
                             facts = listOfNotNull(
-                                focused.caption,
-                                focused.title.takeIf { isEpisode },
-                                formatDuration(focused.durationMs).takeIf { it.isNotEmpty() },
+                                hero.caption,
+                                hero.title.takeIf { isEpisode },
+                                formatDuration(hero.durationMs).takeIf { it.isNotEmpty() },
                             ),
-                            summary = focused.summary,
-                            qualities = focused.qualities,
+                            summary = hero.summary,
+                            qualities = hero.qualities,
                             modifier = Modifier.widthIn(max = 700.dp),
                         )
                     } else if (home.busy && home.isEmpty) {

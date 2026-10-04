@@ -159,6 +159,12 @@ fun LibraryScreen(
     }
     val recentMovies = home.recentMovies.filter { here(it.serverBase, it.librarySectionId) }
     val recentEpisodes = home.recentEpisodes.filter { here(it.serverBase, it.librarySectionId) }
+    // Arriving from the tabs, nothing has the cursor yet: the tab's own home shows what it
+    // starts with in the hero rather than a black screen until Down is pressed. The cursor
+    // stays on the tabs.
+    val hero = focused ?: if (view != LibraryView.HOME) null else resumable.firstOrNull()
+        ?: (if (kind == LibraryKind.MOVIES) recentMovies.firstOrNull() else recentEpisodes.firstOrNull()?.newest)
+        ?: browse.released.firstOrNull()
 
     // Held at screen level so a row scrolling out of view does not forget its place.
     val resumeFocus = rememberRowFocus("continue")
@@ -195,7 +201,7 @@ fun LibraryScreen(
 
     Box(modifier = modifier.fillMaxSize()) {
         HeroBackdrop(
-            url = backdropUrl(focused?.serverBase, focused?.art ?: focused?.thumb),
+            url = backdropUrl(hero?.serverBase, hero?.art ?: hero?.thumb),
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -206,23 +212,23 @@ fun LibraryScreen(
                     .height(HERO_HEIGHT)
                     .padding(horizontal = 40.dp, vertical = 8.dp),
             ) {
-                if (focused != null) {
+                if (hero != null) {
                     // As on Home: an episode goes under its show's name, with its own title
                     // among the details, which keeps the hero one line shorter than a
                     // heading above the title would, and leaves room for three lines of summary.
-                    val isEpisode = focused.type == "episode" && focused.grandparentTitle != null
+                    val isEpisode = hero.type == "episode" && hero.grandparentTitle != null
                     HeroText(
                         eyebrow = null,
-                        title = if (isEpisode) focused.grandparentTitle!! else focused.title,
+                        title = if (isEpisode) hero.grandparentTitle!! else hero.title,
                         criticRating = null,
                         audienceRating = null,
                         contentRating = null,
                         facts = listOfNotNull(
-                            focused.caption,
-                            focused.title.takeIf { isEpisode },
-                            formatDuration(focused.durationMs).takeIf { it.isNotEmpty() && focused.isPlayable },
+                            hero.caption,
+                            hero.title.takeIf { isEpisode },
+                            formatDuration(hero.durationMs).takeIf { it.isNotEmpty() && hero.isPlayable },
                         ),
-                        summary = focused.summary,
+                        summary = hero.summary,
                         modifier = Modifier.widthIn(max = 700.dp),
                     )
                 } else {
