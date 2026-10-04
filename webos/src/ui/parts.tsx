@@ -26,6 +26,8 @@ export function Card(props: {
   onHold?: () => void;
   /** The title, for its menu when OK is held. */
   item?: PlexItem;
+  /** The cursor arriving on it: the hero above shows it. */
+  onFocus?: () => void;
 }) {
   const badge = props.badge != null && props.badge > 1 ? badgeText(props.badge) : null;
   // The provider's titles say so, as on the Fire TV.
@@ -48,6 +50,7 @@ export function Card(props: {
       data-focus
       data-autofocus={props.autofocus ? "" : undefined}
       onClick={props.onPress}
+      onFocus={props.onFocus}
     >
       <div class="art">
         {props.image ? <img src={props.image} alt="" loading="lazy" /> : null}

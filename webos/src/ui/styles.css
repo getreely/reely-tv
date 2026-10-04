@@ -29,7 +29,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 .app { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column; }
 /* The tabs on the left, Search and Settings at the far end; margins, as Chromium 68 has no flex gap. */
-.tabs { display: flex; align-items: center; padding: 1.5rem 3rem 0.5rem; }
+.tabs { position: relative; z-index: 1; display: flex; align-items: center; padding: 1.5rem 3rem 0.5rem; }
 .tabs > * { margin-right: 0.5rem; }
 .tab { padding: 0.55rem 1.1rem; border-radius: 999px; color: var(--muted); font-size: 1.1rem; font-weight: 500; }
 .tab.on { color: var(--chalk); font-weight: 600; }
@@ -239,3 +239,19 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .guide { position: relative; }
 .guide-preview { position: absolute; top: 0; right: 3rem; width: 16rem; height: 9rem; background: #000; border-radius: 0.6rem; object-fit: cover; }
 .guide-about { padding-right: 20rem; }
+
+/* Home and the tabs' homes, as on the Fire TV: the hero stays put and the rows move under it. */
+.content.heroed { overflow: hidden; padding: 0; }
+/* Its own layer, so the backdrop sits behind the page but over the black of the body; the tabs stay above it. */
+.with-hero { position: relative; z-index: 0; display: flex; flex-direction: column; height: 100%; }
+.home-hero { flex: none; height: 17rem; padding: 0.6rem 3rem 0; display: flex; flex-direction: column; justify-content: flex-end; }
+.home-hero h1 { margin: 0 0 0.5rem; font-size: 2.8rem; font-weight: 700; letter-spacing: -0.02em; max-width: 50rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.home-hero .hero-logo { display: block; max-width: 24rem; max-height: 6rem; object-fit: contain; object-position: left bottom; margin-bottom: 0.7rem; }
+.home-hero .facts { display: flex; align-items: center; font-size: 1.15rem; color: var(--muted); margin-bottom: 0.5rem; }
+.home-hero .quality { margin-left: 0.6rem; padding: 0.1rem 0.5rem; border-radius: 0.4rem; background: rgba(242, 244, 247, 0.14); color: var(--chalk); font-size: 0.95rem; font-weight: 600; }
+.home-hero .summary { margin: 0; max-width: 46rem; }
+/* The picture behind the whole screen, fading into the black at the left and the bottom. */
+.screen-backdrop { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: -1; background-size: cover; background-position: center top; transition: background-image 0.4s ease; }
+.screen-backdrop::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+  background: linear-gradient(90deg, var(--ink) 0%, rgba(8, 9, 11, 0.72) 35%, rgba(8, 9, 11, 0.08) 100%), linear-gradient(0deg, var(--ink) 5%, rgba(8, 9, 11, 0.35) 50%, rgba(8, 9, 11, 0.15) 100%); }
+.hero-rows { flex: 1; overflow-y: auto; overflow-x: hidden; padding-bottom: 3rem; scroll-behavior: smooth; }

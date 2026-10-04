@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { App, AppState, Route } from "../app/store";
-import { accentOf, isConnected } from "../app/store";
+import { accentOf, isConnected, isIptvChoice } from "../app/store";
+import type { Kind } from "../app/store";
 import { arrived, arrowedOnto, focus, lastMoveAt, lastPressAt, rescue } from "./focus";
 import { Screensaver, slidesFrom } from "./screensaver";
 import { Tour } from "./tour";
@@ -189,7 +190,7 @@ export function Root(props: { app: App }) {
           </span>
         ) : null}
       </nav>
-      <main class="content" data-content>
+      <main class={"content" + (connected && (route.name === "home" || (route.name === "library" && heroed(state, route.kind))) ? " heroed" : "")} data-content>
         {!connected ? (
           <SignIn app={app} state={state} />
         ) : route.name === "home" ? (
@@ -252,4 +253,10 @@ function shuffled<T>(items: T[]): T[] {
     [out[i], out[j]] = [out[j], out[i]];
   }
   return out;
+}
+
+/** A tab's own home has the hero at the top, as Home has; its other views don't. */
+function heroed(state: AppState, kind: Kind): boolean {
+  const browse = state.browse[kind];
+  return browse.view === "home" && !isIptvChoice(browse.choice);
 }

@@ -98,8 +98,14 @@ export function Home(props: { app: App; state: AppState }) {
     return was;
   };
   const ready = state.requests.ready[0] ?? null;
+  // What the hero shows: the card with the cursor, else what the page starts with.
+  const [focused, setFocused] = useState<PlexItem | null>(null);
+  const seen = (i: PlexItem) => () => setFocused(i);
+  const hero = focused ?? home.continueWatching[0] ?? home.recentEpisodes[0]?.newest ?? home.recentMovies[0] ?? null;
   return (
-    <div>
+    <div class="with-hero">
+      <HomeHero app={app} item={hero} fallback="Home" />
+      <div class="hero-rows">
       {ready ? (
         <div class="ready">
           {ready.poster ? <img src={ready.poster} alt="" /> : null}
@@ -121,7 +127,7 @@ export function Home(props: { app: App; state: AppState }) {
           {home.continueWatching.map((i) => (
             <Card
               key={plex.listKey(i)}
-              item={i}
+              item={i} onFocus={seen(i)}
               wide
               autofocus={auto()}
               title={plex.rowTitle(i)}
@@ -145,6 +151,7 @@ export function Home(props: { app: App; state: AppState }) {
               badge={g.count}
               onPress={() => open(app, g.newest)}
               item={g.newest}
+              onFocus={seen(g.newest)}
             />
           ))}
         </Row>
@@ -152,7 +159,7 @@ export function Home(props: { app: App; state: AppState }) {
       {home.recentMovies.length ? (
         <Row title="Recently Added Movies">
           {home.recentMovies.map((i) => (
-            <Card key={plex.listKey(i)} item={i} autofocus={auto()} title={i.title} sub={plex.caption(i)} image={img(i, 300, 450)}
+            <Card key={plex.listKey(i)} item={i} onFocus={seen(i)} autofocus={auto()} title={i.title} sub={plex.caption(i)} image={img(i, 300, 450)}
               progress={plex.resumeFraction(i)} watched={plex.isWatched(i)} onPress={() => open(app, i)} />
           ))}
         </Row>
@@ -160,7 +167,7 @@ export function Home(props: { app: App; state: AppState }) {
       {home.watchlist.length ? (
         <Row title="Watchlist">
           {home.watchlist.map((i) => (
-            <Card key={`w:${plex.listKey(i)}`} item={i} autofocus={auto()} title={i.title} sub={plex.caption(i)} image={img(i, 300, 450)}
+            <Card key={`w:${plex.listKey(i)}`} item={i} onFocus={seen(i)} autofocus={auto()} title={i.title} sub={plex.caption(i)} image={img(i, 300, 450)}
               watched={plex.isWatched(i)} onPress={() => open(app, i)} />
           ))}
         </Row>
@@ -168,7 +175,7 @@ export function Home(props: { app: App; state: AppState }) {
       {home.iptvMovies.length ? (
         <Row title="New Movies on IPTV">
           {home.iptvMovies.map((i) => (
-            <Card key={`im:${i.ratingKey}`} item={i} autofocus={auto()} title={i.title} sub={plex.caption(i)} image={img(i, 300, 450)}
+            <Card key={`im:${i.ratingKey}`} item={i} onFocus={seen(i)} autofocus={auto()} title={i.title} sub={plex.caption(i)} image={img(i, 300, 450)}
               progress={plex.resumeFraction(i)} watched={plex.isWatched(i)} onPress={() => open(app, i)} />
           ))}
         </Row>
@@ -176,7 +183,7 @@ export function Home(props: { app: App; state: AppState }) {
       {home.iptvShows.length ? (
         <Row title="New Shows on IPTV">
           {home.iptvShows.map((i) => (
-            <Card key={`is:${i.ratingKey}`} item={i} autofocus={auto()} title={i.title} sub={plex.caption(i)} image={img(i, 300, 450)}
+            <Card key={`is:${i.ratingKey}`} item={i} onFocus={seen(i)} autofocus={auto()} title={i.title} sub={plex.caption(i)} image={img(i, 300, 450)}
               watched={plex.isWatched(i)} onPress={() => open(app, i)} />
           ))}
         </Row>
@@ -184,11 +191,12 @@ export function Home(props: { app: App; state: AppState }) {
       {home.playlists.length ? (
         <Row title="Playlists">
           {home.playlists.map((i) => (
-            <Card key={plex.listKey(i)} title={i.title} sub={i.leafCount === 1 ? "1 item" : `${i.leafCount} items`} image={img(i, 300, 450)} onPress={() => open(app, i)} />
+            <Card key={plex.listKey(i)} onFocus={seen(i)} title={i.title} sub={i.leafCount === 1 ? "1 item" : `${i.leafCount} items`} image={img(i, 300, 450)} onPress={() => open(app, i)} />
           ))}
         </Row>
       ) : null}
       {state.homeBusy && !home.continueWatching.length && !home.recentMovies.length ? <div class="center" style={{ height: "20rem" }}><Spinner /></div> : null}
+      </div>
     </div>
   );
 }
@@ -198,6 +206,8 @@ export function Library(props: { app: App; state: AppState; kind: Kind }) {
   const browse = state.browse[kind];
   const libraries = app.librariesOf(kind);
   const [choosing, setChoosing] = useState<"genre" | "decade" | null>(null);
+  // What the hero on the tab's home shows: the card with the cursor, else its first title.
+  const [focused, setFocused] = useState<PlexItem | null>(null);
   useRescue([browse.items.length > 0, browse.choice, browse.view, browse.released.length > 0, browse.collections != null]);
   if (!libraries.length) {
     return <div class="center"><p class="note">No {kind === "movie" ? "movie" : "TV"} library on {state.plex.serverName ?? "this server"}.</p></div>;
@@ -227,19 +237,22 @@ export function Library(props: { app: App; state: AppState; kind: Kind }) {
     let first = true;
     const auto = () => { const was = first; first = false; return was; };
     const poster = (i: PlexItem, key: string) => (
-      <Card key={key} item={i} autofocus={auto()} title={plex.rowTitle(i)} sub={i.type === "episode" ? episodeLine(i) : plex.caption(i)}
+      <Card key={key} item={i} onFocus={() => setFocused(i)} autofocus={auto()} title={plex.rowTitle(i)} sub={i.type === "episode" ? episodeLine(i) : plex.caption(i)}
         image={app.image(i.serverBase, i.type === "episode" ? i.grandparentThumb ?? i.thumb : i.thumb, 300, 450)}
         progress={plex.resumeFraction(i)} watched={plex.isWatched(i)} onPress={() => open(app, i)} />
     );
+    const hero = focused ?? resumable[0] ?? (kind === "movie" ? state.home.recentMovies[0] : state.home.recentEpisodes[0]?.newest) ?? browse.released[0] ?? null;
     return (
-      <div>
+      <div class="with-hero">
+        <HomeHero app={app} item={hero} fallback={kind === "movie" ? "Movies" : "TV Shows"} />
+        <div class="hero-rows">
         <div class="toolbar">{views}{libraryPills}</div>
         {resumable.length ? <Row title="Continue Watching">{resumable.map((i) => poster(i, `c:${plex.listKey(i)}`))}</Row> : null}
         {kind === "movie" && state.home.recentMovies.length ? <Row title="Recently Added">{state.home.recentMovies.map((i) => poster(i, `r:${plex.listKey(i)}`))}</Row> : null}
         {kind === "show" && state.home.recentEpisodes.length ? (
           <Row title="Recently Added">
             {state.home.recentEpisodes.map((g) => (
-              <Card key={`r:${groupKey(g)}`} item={g.newest} autofocus={auto()} title={g.showTitle} sub={g.count > 1 ? `${g.count} new episodes` : plex.caption(g.newest)}
+              <Card key={`r:${groupKey(g)}`} item={g.newest} onFocus={() => setFocused(g.newest)} autofocus={auto()} title={g.showTitle} sub={g.count > 1 ? `${g.count} new episodes` : plex.caption(g.newest)}
                 image={app.image(g.serverBase, g.thumb, 300, 450)} badge={g.count} onPress={() => open(app, g.newest)} />
             ))}
           </Row>
@@ -247,6 +260,7 @@ export function Library(props: { app: App; state: AppState; kind: Kind }) {
         {browse.released.length ? <Row title="Recently Released">{browse.released.map((i) => poster(i, `n:${plex.listKey(i)}`))}</Row> : null}
         {iptvNew.length ? <Row title="New on IPTV">{iptvNew.map((i) => poster(i, `i:${plex.listKey(i)}`))}</Row> : null}
         {browse.collections == null ? <div class="center" style={{ height: "12rem" }}><Spinner /></div> : null}
+        </div>
       </div>
     );
   }
@@ -550,6 +564,39 @@ export function Profiles(props: { app: App; state: AppState; onClose: () => void
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The top of Home and of the Movies and TV Shows homes, as on the Fire TV: what has the
+ * cursor, or what the page starts with while the cursor is still on the tabs. Its picture
+ * fills the screen behind everything; its name, or its logo, its details and a few lines
+ * about it sit above the rows.
+ */
+export function HomeHero(props: { app: App; item: PlexItem | null; fallback: string }) {
+  const { app, item } = props;
+  const art = item ? app.image(item.serverBase, item.art ?? item.thumb, 1920, 1080) : null;
+  if (!item) {
+    return (
+      <div class="home-hero">
+        <h1>{props.fallback}</h1>
+      </div>
+    );
+  }
+  // An episode is introduced by its show, with its own title among the details.
+  const isEpisode = item.type === "episode" && !!item.grandparentTitle;
+  const logo = item.logo ? app.image(item.serverBase, item.logo, 720, 280) : null;
+  const facts = [plex.caption(item), isEpisode ? item.title : null, formatDuration(item.durationMs) || null].filter(Boolean);
+  return (
+    <div class="home-hero">
+      <div class="screen-backdrop" style={art ? { backgroundImage: `url("${art}")` } : undefined} />
+      {logo ? <img class="hero-logo" src={logo} alt={isEpisode ? item.grandparentTitle! : item.title} /> : <h1>{isEpisode ? item.grandparentTitle : item.title}</h1>}
+      <div class="facts">
+        {facts.join("  ·  ")}
+        {item.qualities.map((q) => <span key={q} class="quality">{q}</span>)}
+      </div>
+      {item.summary ? <p class="summary">{item.summary}</p> : null}
     </div>
   );
 }

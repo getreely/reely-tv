@@ -18,6 +18,7 @@ async function fakePlex(page: Page, options: { tour?: boolean } = {}) {
   const episode = (key: string, index: number, viewed = false) => ({
     ratingKey: key, type: "episode", title: `Episode ${index}`, index, parentIndex: 1, parentRatingKey: "s1", grandparentRatingKey: "show1",
     grandparentTitle: "Northbound", addedAt: 1000 + index, viewCount: viewed ? 1 : 0, duration: 60_000, summary: `Episode ${index} of Northbound.`,
+    art: "/art/show1", thumb: `/thumb/${key}`,
   });
   await page.route("https://plex.tv/**", async (route) => {
     const url = new URL(route.request().url());
@@ -37,13 +38,24 @@ async function fakePlex(page: Page, options: { tour?: boolean } = {}) {
     const path = url.pathname;
     if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "*", "Access-Control-Allow-Methods": "*" } });
     if (path === "/identity") return json(route, {});
+    // Pictures: a dusk sky over hills, coloured by what's asked for, so the screenshots
+    // show artwork where a real library would have it.
+    if (path === "/photo/:/transcode") {
+      const of = url.searchParams.get("url") ?? "";
+      const hue = [...of].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90" preserveAspectRatio="none">
+        <defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="hsl(${hue},45%,18%)"/><stop offset="1" stop-color="hsl(${(hue + 30) % 360},60%,55%)"/></linearGradient></defs>
+        <rect width="160" height="90" fill="url(#s)"/><circle cx="110" cy="40" r="9" fill="hsl(${(hue + 40) % 360},80%,80%)"/>
+        <path d="M0 70 Q40 52 80 66 T160 60 V90 H0Z" fill="hsl(${hue},35%,12%)"/></svg>`;
+      return route.fulfill({ status: 200, contentType: "image/svg+xml", body: svg });
+    }
     if (path === "/library/sections") return json(route, { MediaContainer: { Directory: [{ key: "1", title: "Movies", type: "movie" }, { key: "2", title: "TV Shows", type: "show" }] } });
     if (path === "/hubs") return json(route, { MediaContainer: { Hub: [{ Metadata: [episode("e2", 2)].map((e) => ({ ...e, viewOffset: 20_000, lastViewedAt: 5 })) }] } });
     if (path === "/playlists") return meta(route, []);
     if (url.searchParams.get("actor") === "77") {
       return meta(route, path === "/library/sections/1/all" ? [{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025 }] : []);
     }
-    if (path === "/library/sections/1/all") return meta(route, [{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025, addedAt: 9 }, { ratingKey: "m2", type: "movie", title: "Glasshouse", year: 2024, addedAt: 8 }]);
+    if (path === "/library/sections/1/all") return meta(route, [{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025, addedAt: 9, thumb: "/thumb/m1", art: "/art/m1", summary: "A satellite engineer is stranded on the station she built." }, { ratingKey: "m2", type: "movie", title: "Glasshouse", year: 2024, addedAt: 8, thumb: "/thumb/m2", art: "/art/m2" }]);
     if (path === "/library/sections/2/all") {
       // 333 new episodes of one show: the count must sit on one line in its circle.
       const start = Number(url.searchParams.get("X-Plex-Container-Start") ?? 0);
