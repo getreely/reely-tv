@@ -85,6 +85,29 @@ object BluetoothAudio {
         return if (arrived != null || isConnected()) Result.CONNECTED else Result.FAILED
     }
 
+    /**
+     * Lets go of the Bluetooth headphones or speakers connected for sound, when something
+     * else has been chosen. While they're connected the system still thinks sound goes to
+     * them, so the remote's volume buttons turn them up and down rather than the TV, even
+     * with Reely's own sound on the TV. Disconnected, they stay paired, to choose again.
+     * False when there was nothing to let go of, or this system won't let an app do it.
+     */
+    @SuppressLint("MissingPermission") // Checked by allowed().
+    suspend fun release(context: Context): Boolean {
+        val adapter = adapter(context) ?: return false
+        if (!allowed(context) || !adapter.isEnabled) return false
+        val a2dp = withTimeoutOrNull(PROXY_WAIT_MS) { proxy(context, adapter) } ?: return false
+        return try {
+            val connected = runCatching { a2dp.connectedDevices.orEmpty() }.getOrDefault(emptyList())
+            val disconnect = runCatching { BluetoothA2dp::class.java.getMethod("disconnect", BluetoothDevice::class.java) }.getOrNull()
+            disconnect != null && connected.map { device ->
+                runCatching { disconnect.invoke(a2dp, device) as? Boolean }.getOrNull() == true
+            }.any { it }
+        } finally {
+            runCatching { adapter.closeProfileProxy(BluetoothProfile.A2DP, a2dp) }
+        }
+    }
+
     private suspend fun proxy(context: Context, adapter: BluetoothAdapter): BluetoothA2dp? =
         suspendCancellableCoroutine { waiting ->
             val asked = runCatching {

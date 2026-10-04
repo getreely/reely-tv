@@ -4944,6 +4944,11 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     fun setAudioOutput(key: String?) {
         settings.audioOutput = key
         _state.update { it.copy(prefs = it.prefs.copy(audioOutput = key)) }
+        // Back to the TV with headphones still connected: let go of them, or the remote's
+        // volume buttons go on turning them up and down instead of the TV.
+        if (tv.reely.core.AudioOutputs.releasesBluetooth(key)) {
+            viewModelScope.launch { tv.reely.core.BluetoothAudio.release(getApplication()) }
+        }
     }
 
     fun toggleLargerBuffer() {

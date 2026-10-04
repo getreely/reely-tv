@@ -71,4 +71,11 @@ class AudioOutputsTest {
         assertTrue(BluetoothAudio.isAudio(BluetoothClass.Device.Major.UNCATEGORIZED, true))
         assertFalse(BluetoothAudio.isAudio(BluetoothClass.Device.Major.PERIPHERAL, false))
     }
+
+    @Test fun `choosing the TV lets go of Bluetooth, so the remote's volume reaches the TV`() {
+        assertTrue(AudioOutputs.releasesBluetooth("TV"))
+        assertTrue(AudioOutputs.releasesBluetooth("USB:Soundbar"))
+        assertFalse("a Bluetooth choice keeps it", AudioOutputs.releasesBluetooth("BLUETOOTH:AA:BB:CC:DD:EE:FF"))
+        assertFalse("Automatic leaves it to the system", AudioOutputs.releasesBluetooth(null))
+    }
 }

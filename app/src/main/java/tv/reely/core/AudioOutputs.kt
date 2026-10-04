@@ -61,6 +61,13 @@ object AudioOutputs {
         return connected + away
     }
 
+    /**
+     * Whether choosing [key] means letting go of Bluetooth headphones or speakers: the TV,
+     * or anything else that isn't Bluetooth. Automatic leaves it all to the system.
+     */
+    fun releasesBluetooth(key: String?): Boolean =
+        key != null && !key.startsWith("${AudioOutput.Kind.BLUETOOTH.name}:")
+
     /** Whether the output kept in settings is connected now. */
     fun isConnected(context: Context, key: String): Boolean = connected(context).any { it.first.key == key }
 
