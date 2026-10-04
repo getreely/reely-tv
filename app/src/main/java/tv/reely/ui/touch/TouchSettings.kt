@@ -31,6 +31,7 @@ internal fun TouchSettings(viewModel: ReelyViewModel, state: ReelyState, onSwitc
         onToggleFormat = viewModel::toggleFormat,
         onNudgeSubtitleScale = viewModel::nudgeSubtitleScale,
         onToggleSubtitleBackground = viewModel::toggleSubtitleBackground,
+        onSetSubtitlesAtStart = viewModel::setSubtitlesAtStart,
         onNudgeUpNext = viewModel::nudgeUpNextSeconds,
         onToggleGuidePreview = viewModel::toggleGuidePreview,
         onToggleMultiviewLayout = viewModel::toggleMultiviewLayout,

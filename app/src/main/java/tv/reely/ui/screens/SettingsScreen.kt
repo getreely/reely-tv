@@ -121,6 +121,7 @@ fun SettingsScreen(
     onToggleFormat: () -> Unit,
     onNudgeSubtitleScale: (Float) -> Unit,
     onToggleSubtitleBackground: () -> Unit,
+    onSetSubtitlesAtStart: (String) -> Unit = {},
     onNudgeUpNext: (Int) -> Unit,
     onToggleGuidePreview: () -> Unit,
     onSetPlaybackMode: (String) -> Unit,
@@ -190,6 +191,7 @@ fun SettingsScreen(
                     prefs = prefs,
                     onNudgeSubtitleScale = onNudgeSubtitleScale,
                     onToggleSubtitleBackground = onToggleSubtitleBackground,
+                    onSetSubtitlesAtStart = onSetSubtitlesAtStart,
                     onNudgeUpNext = onNudgeUpNext,
                     onSetPlaybackMode = onSetPlaybackMode,
                     onSetMaxBitrate = onSetMaxBitrate,
@@ -317,6 +319,7 @@ private fun PlaybackSection(
     prefs: PlayerPrefs,
     onNudgeSubtitleScale: (Float) -> Unit,
     onToggleSubtitleBackground: () -> Unit,
+    onSetSubtitlesAtStart: (String) -> Unit,
     onNudgeUpNext: (Int) -> Unit,
     onSetPlaybackMode: (String) -> Unit,
     onSetMaxBitrate: (Int) -> Unit,
@@ -416,6 +419,16 @@ private fun PlaybackSection(
     }
 
     SettingGroup("Subtitles") {
+        ChoiceRow(
+            title = "At the start",
+            description = "Whether movies and episodes start with subtitles on.",
+            options = listOf(
+                Option(Settings.SUBTITLES_PLEX, "As Plex has them", "Your Plex account's subtitle settings, or what was last picked for the title."),
+                Option(Settings.SUBTITLES_OFF, "Off", "Off until you turn them on. Forced subtitles, for parts in another language, still show."),
+            ),
+            selected = prefs.subtitlesAtStart,
+            onSelect = onSetSubtitlesAtStart,
+        )
         ChoiceRow(
             title = "Size",
             options = SUBTITLE_SIZES.map { size ->

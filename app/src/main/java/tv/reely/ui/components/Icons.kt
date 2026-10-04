@@ -363,6 +363,22 @@ fun PlusGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) {
     }
 }
 
+/** A bar: one step less, beside [PlusGlyph]'s one step more. */
+@Composable
+fun MinusGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(size)) {
+        val s = size.toPx()
+        val arm = s * 0.3f
+        drawLine(
+            color,
+            start = center.copy(x = center.x - arm),
+            end = center.copy(x = center.x + arm),
+            strokeWidth = s * 0.12f,
+            cap = androidx.compose.ui.graphics.StrokeCap.Round,
+        )
+    }
+}
+
 /** An x: take this off, or close. */
 @Composable
 fun CrossGlyph(color: Color, size: Dp = 18.dp, modifier: Modifier = Modifier) {

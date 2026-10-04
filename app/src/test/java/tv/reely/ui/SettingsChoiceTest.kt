@@ -17,6 +17,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -89,7 +90,7 @@ class SettingsChoiceTest {
 
     @Test fun `subtitle size is picked from a list`() {
         open()
-        row("Size").performClick()
+        row("Size").performScrollTo().performClick()
         settle()
         assertTrue("the current size is under the cursor: ${focusedText()}", focusedText().contains("90%"))
         Shots.saveIfAsked(compose, "settings-choice")

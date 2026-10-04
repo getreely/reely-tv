@@ -6,6 +6,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.media3.exoplayer.analytics.AnalyticsListener
+import kotlin.math.roundToInt
 import tv.reely.core.AudioOutputs
 import tv.reely.ui.components.FollowAudioOutput
 import tv.reely.ui.components.focusFirstOf
@@ -108,6 +109,7 @@ import tv.reely.core.SkipPrompt
 import tv.reely.core.skipPromptAt
 import tv.reely.core.LivePlayer
 import tv.reely.core.Settings
+import tv.reely.core.startsWithServerSubtitles
 import tv.reely.core.SilentAudio
 import tv.reely.core.silentAudio
 import tv.reely.core.PlayerTrack
@@ -126,6 +128,7 @@ import tv.reely.ui.components.ChaptersGlyph
 import tv.reely.ui.components.InfoGlyph
 import tv.reely.ui.components.PauseGlyph
 import tv.reely.ui.components.PlayGlyph
+import tv.reely.ui.components.MinusGlyph
 import tv.reely.ui.components.PlusGlyph
 import tv.reely.ui.components.RestartGlyph
 import tv.reely.ui.components.SkipGlyph
@@ -677,7 +680,7 @@ fun PlayerScreen(
                 // Not for a conversion, where the server has already applied them.
                 if (!now.isLive && !now.transcoding && serverChoiceFor != now.url && !tracks.isEmpty) {
                     serverChoiceFor = now.url
-                    applyServerChoice(exoPlayer, now)
+                    applyServerChoice(exoPlayer, now, currentPrefs.subtitlesAtStart)
                 }
                 when (
                     silentAudio(
@@ -2571,16 +2574,23 @@ internal fun TrackPanel(
                 }
             }
             if (panel == Panel.SUBTITLES) {
-                item { MenuSection("Appearance") }
+                // The size it is now heads the two that change it, rather than sitting on one of them.
+                item { MenuSection("Size  ·  ${(prefs.subtitleScale * 100).roundToInt()}%") }
                 item {
                     MenuItem(
-                        label = "Bigger text",
-                        value = "${(prefs.subtitleScale * 100).toInt()}%",
+                        label = "Increase size",
                         icon = { PlusGlyph(it, size = 18.dp) },
                         onClick = { onNudgeScale(Settings.SCALE_STEP) },
                     )
                 }
-                item { MenuItem(label = "Smaller text", onClick = { onNudgeScale(-Settings.SCALE_STEP) }) }
+                item {
+                    MenuItem(
+                        label = "Decrease size",
+                        icon = { MinusGlyph(it, size = 18.dp) },
+                        onClick = { onNudgeScale(-Settings.SCALE_STEP) },
+                    )
+                }
+                item { MenuSection("Appearance") }
                 item {
                     MenuItem(
                         label = "Background",
@@ -2628,9 +2638,10 @@ private fun playerTracks(player: ExoPlayer, trackType: Int): List<Pair<Tracks.Gr
  * Plays the sound and subtitles the server has selected for this account: what its
  * language settings ask for, or what was last picked for this title in any Plex app.
  * Without a subtitle chosen there, the player's own choice stands, which is none unless
- * one was picked earlier in this sitting.
+ * one was picked earlier in this sitting. With subtitles set to start off, the server's
+ * subtitle is passed over unless it's forced.
  */
-private fun applyServerChoice(player: ExoPlayer, playback: Playback) {
+private fun applyServerChoice(player: ExoPlayer, playback: Playback, subtitlesAtStart: String) {
     var builder: TrackSelectionParameters.Builder? = null
     fun choose(trackType: Int, streams: List<PlexStream>) {
         val tracks = playerTracks(player, trackType)
@@ -2642,7 +2653,9 @@ private fun applyServerChoice(player: ExoPlayer, playback: Playback) {
             .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, 0))
     }
     choose(C.TRACK_TYPE_AUDIO, playback.audioStreams)
-    choose(C.TRACK_TYPE_TEXT, playback.subtitleStreams)
+    if (startsWithServerSubtitles(playback.subtitleStreams, subtitlesAtStart)) {
+        choose(C.TRACK_TYPE_TEXT, playback.subtitleStreams)
+    }
     builder?.let { player.trackSelectionParameters = it.build() }
 }
 

@@ -78,6 +78,15 @@ export function Settings(props: { app: App; state: AppState; onProfiles: () => v
       </Group>
 
       <Group title="Subtitles">
+        <Setting
+          title="At the start"
+          note={prefs.subtitlesAtStart === "off"
+            ? "Off until you turn them on. Forced subtitles, for parts in another language, still show."
+            : "Your Plex account's subtitle settings, or what was last picked for the title."}
+        >
+          <Pill label="As Plex has them" on={prefs.subtitlesAtStart === "plex"} onPress={() => app.setSubtitlesAtStart("plex")} />
+          <Pill label="Off" on={prefs.subtitlesAtStart === "off"} onPress={() => app.setSubtitlesAtStart("off")} />
+        </Setting>
         <Setting title="Size" note={prefs.subtitleScale === 0.9 ? "Standard" : null}>
           {SUBTITLE_SIZES.map((size) => (
             <Pill key={size} label={`${Math.round(size * 100)}%`} on={prefs.subtitleScale === size} onPress={() => app.setSubtitleScale(size)} />

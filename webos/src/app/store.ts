@@ -244,6 +244,8 @@ export interface Prefs {
   subtitleScale: number;
   /** A dark box behind subtitles rather than an outline. */
   subtitleBackground: boolean;
+  /** What a title starts with: the subtitles Plex has on, or none but forced ones. */
+  subtitlesAtStart: SubtitlesAtStart;
   /** A show's theme on its page: -1 off, else an index into THEME_LEVELS. */
   themeLevel: number;
   /** The highlighted channel plays in the guide. */
@@ -283,11 +285,31 @@ export const HOME_ROWS: Array<[HomeRowId, string]> = [
   ["iptvShows", "New Shows on IPTV"],
 ];
 
+export type SubtitlesAtStart = "plex" | "off";
+
 export const UP_NEXT_CHOICES = [0, 5, 10, 12, 15, 20, 30];
-const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], iptvLibrary: false, iptvWins: false, screensaverMinutes: 3, tourSeen: false, subtitleScale: 0.9, subtitleBackground: false, themeLevel: -1, guidePreview: true, streamFormat: "m3u8" };
+const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], iptvLibrary: false, iptvWins: false, screensaverMinutes: 3, tourSeen: false, subtitleScale: 0.9, subtitleBackground: false, subtitlesAtStart: "plex", themeLevel: -1, guidePreview: true, streamFormat: "m3u8" };
 
 /** As the Fire TV offers them. */
 export const BITRATE_CHOICES = [0, 20_000, 12_000, 8_000, 4_000, 2_000];
+
+/**
+ * The file's streams as a title starts: with subtitles set to start off, Plex's choice of
+ * subtitles is passed over unless it's forced — the lines for parts in another language,
+ * which are part of the film rather than a choice. Nothing is saved back to Plex.
+ */
+export function atStart<P extends Pick<plex.PlexPlayback, "subtitleStreams">>(playback: P, setting: SubtitlesAtStart): P {
+  const on = playback.subtitleStreams.find((s) => s.selected);
+  if (setting !== "off" || !on || on.forced) return playback;
+  return { ...playback, subtitleStreams: playback.subtitleStreams.map((s) => ({ ...s, selected: false })) };
+}
+
+/** One step bigger or smaller among SUBTITLE_SIZES, from wherever it is. */
+export function nextSubtitleSize(current: number, step: 1 | -1): number {
+  const at = SUBTITLE_SIZES.indexOf(current);
+  const from = at >= 0 ? at : SUBTITLE_SIZES.indexOf(DEFAULT_PREFS.subtitleScale);
+  return SUBTITLE_SIZES[Math.max(0, Math.min(SUBTITLE_SIZES.length - 1, from + step))];
+}
 
 /**
  * The subtitles Plex has on: text ones the app can draw (their own file, SRT and the
@@ -506,6 +528,7 @@ export class App {
         tourSeen: prefs.tourSeen === true,
         subtitleScale: SUBTITLE_SIZES.includes(prefs.subtitleScale ?? -1) ? prefs.subtitleScale! : DEFAULT_PREFS.subtitleScale,
         subtitleBackground: prefs.subtitleBackground === true,
+        subtitlesAtStart: prefs.subtitlesAtStart === "off" ? "off" : "plex",
         themeLevel: typeof prefs.themeLevel === "number" && prefs.themeLevel >= -1 && prefs.themeLevel < THEME_LEVELS.length ? prefs.themeLevel : -1,
         guidePreview: prefs.guidePreview !== false,
         streamFormat: prefs.streamFormat === "ts" ? "ts" : "m3u8",
@@ -1193,8 +1216,9 @@ export class App {
       return;
     }
     try {
-      const playback = await plex.playback(base, token, item.ratingKey, mediaIndex);
-      if (!playback) throw new Error("That file isn't on the server any more.");
+      const found = await plex.playback(base, token, item.ratingKey, mediaIndex);
+      if (!found) throw new Error("That file isn't on the server any more.");
+      const playback = atStart(found, this.current.prefs.subtitlesAtStart);
       const sessionId = randomHex(12);
       const mode = this.current.prefs.playbackMode;
       // The subtitles Plex has on for this file: text ones the app draws over the file as it
@@ -2066,6 +2090,15 @@ export class App {
 
   setSubtitleBackground(on: boolean) {
     this.setPrefs({ subtitleBackground: on });
+  }
+
+  setSubtitlesAtStart(setting: SubtitlesAtStart) {
+    this.setPrefs({ subtitlesAtStart: setting });
+  }
+
+  /** The player's Increase size and Decrease size. */
+  nudgeSubtitleScale(step: 1 | -1) {
+    this.setPrefs({ subtitleScale: nextSubtitleSize(this.current.prefs.subtitleScale, step) });
   }
 
   setScreensaver(minutes: number) {

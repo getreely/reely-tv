@@ -80,6 +80,7 @@ sub answered(r as object)
             if r.op = "iptvPlayback" then m.wait.text = Iif_(Str_(r.error) <> "", Str_(r.error), "Your provider couldn't send this. Try again in a moment.")
             return
         end if
+        if r.op = "playback" and m.global.prefs <> invalid then Plex_AtStart(p, Str_(m.global.prefs.subtitlesAtStart))
         m.p = p
         begin(m.startMs)
     end if

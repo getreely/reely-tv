@@ -14,7 +14,18 @@ data class PlexStream(
     val selected: Boolean,
     /** A separate file next to the video, which the player loads as a sidecar. */
     val external: Boolean = false,
+    /** Only the parts in another language: shown even with subtitles off. */
+    val forced: Boolean = false,
 )
+
+/**
+ * Whether a title starts with the subtitles the server has selected, by the "Subtitles at
+ * the start" setting: always as Plex has them, or, with them off, only when what Plex has
+ * chosen is forced — the lines for the parts in another language, which are part of the
+ * film rather than a choice.
+ */
+fun startsWithServerSubtitles(streams: List<PlexStream>, atStart: String): Boolean =
+    atStart != Settings.SUBTITLES_OFF || streams.firstOrNull { it.selected }?.forced == true
 
 /** A track as the player sees it: its format's id and language, and whether it's a sidecar. */
 data class PlayerTrack(val id: String?, val language: String?, val sidecar: Boolean)

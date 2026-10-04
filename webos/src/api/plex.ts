@@ -150,6 +150,8 @@ export interface PlexStream {
   language: string | null;
   selected: boolean;
   external: boolean;
+  /** Only the parts in another language: shown even with subtitles off. */
+  forced: boolean;
   label: string;
 }
 
@@ -692,7 +694,7 @@ export function parsePlayback(metadata: any, base: string, token: string, mediaI
   };
 }
 
-function streamsOf(streams: any[], type: number): PlexStream[] {
+export function streamsOf(streams: any[], type: number): PlexStream[] {
   return streams
     .filter((s) => Number(s.streamType) === type && str(s.id))
     .map((s) => ({
@@ -700,12 +702,17 @@ function streamsOf(streams: any[], type: number): PlexStream[] {
       language: str(s.languageTag) || str(s.languageCode) || null,
       selected: isSelected(s),
       external: !!str(s.key),
+      forced: isSet(s?.forced),
       label: str(s.displayTitle) || str(s.language) || (type === AUDIO_STREAM ? "Sound" : "Subtitles"),
     }));
 }
 
 function isSelected(stream: any): boolean {
-  const v = stream?.selected;
+  return isSet(stream?.selected);
+}
+
+/** Servers have said a flag as a boolean, a number and a string. */
+function isSet(v: any): boolean {
   return v === true || v === 1 || v === "1" || (typeof v === "string" && v.toLowerCase() === "true");
 }
 

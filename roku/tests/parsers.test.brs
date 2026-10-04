@@ -63,6 +63,16 @@ sub Main()
     Expect("PGS on: Plex burns it in", Plex_SubtitlePlan(p).burn, true)
     p.subtitles[1].selected = false
     Expect("none on", Plex_SubtitlePlan(p).on = invalid, true)
+    ' Subtitles set to start off: Plex's choice is passed over, unless it's forced.
+    p.subtitles[0].selected = true
+    Plex_AtStart(p, "plex")
+    Expect("as Plex has them leaves its choice", p.subtitles[0].selected, true)
+    Plex_AtStart(p, "off")
+    Expect("off passes over Plex's choice", Plex_SubtitlePlan(p).on = invalid, true)
+    p.subtitles[0].selected = true
+    p.subtitles[0].forced = true
+    Plex_AtStart(p, "off")
+    Expect("off keeps a forced choice", p.subtitles[0].selected, true)
     Expect("a version without a size", Plex_VersionLabel("", ""), "Other")
 
     ' The player's helpers.

@@ -11,7 +11,9 @@ import tv.reely.core.PlayerTrack
 import tv.reely.core.PlexStream
 import tv.reely.core.playerTrackFor
 import tv.reely.core.plexStreamFor
+import tv.reely.core.Settings
 import tv.reely.core.sidecarId
+import tv.reely.core.startsWithServerSubtitles
 import tv.reely.plex.PlexApi
 
 /** Plex's choice of sound and subtitles, found among the player's tracks and back again. */
@@ -82,5 +84,26 @@ class StreamChoiceTest {
         val subtitles = PlexApi.streamsOf(part, PlexApi.SUBTITLE_STREAM)
         assertEquals(listOf(false, true), subtitles.map { it.external })
         assertEquals(true, subtitles[0].selected)
+    }
+
+    @Test fun `forced subtitles are read as forced`() {
+        val part = JSONObject(
+            """
+            {"id":7,"Stream":[
+              {"id":4,"streamType":3,"languageTag":"en","forced":true},
+              {"id":5,"streamType":3,"languageTag":"en","forced":"1"},
+              {"id":6,"streamType":3,"languageTag":"en"}]}
+            """.trimIndent()
+        )
+        assertEquals(listOf(true, true, false), PlexApi.streamsOf(part, PlexApi.SUBTITLE_STREAM).map { it.forced })
+    }
+
+    @Test fun `with subtitles off at the start, only a forced choice of Plex's is kept`() {
+        val chosen = listOf(PlexStream("4", "en", selected = true), PlexStream("5", "en", selected = false))
+        val forced = listOf(PlexStream("4", "en", selected = true, forced = true))
+        assertEquals(true, startsWithServerSubtitles(chosen, Settings.SUBTITLES_PLEX))
+        assertEquals(false, startsWithServerSubtitles(chosen, Settings.SUBTITLES_OFF))
+        assertEquals(true, startsWithServerSubtitles(forced, Settings.SUBTITLES_OFF))
+        assertEquals(false, startsWithServerSubtitles(emptyList(), Settings.SUBTITLES_OFF))
     }
 }

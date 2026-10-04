@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { App, SERVER_RETRY_MS } from "../../src/app/store";
+import { App, SERVER_RETRY_MS, SUBTITLE_SIZES, atStart, nextSubtitleSize } from "../../src/app/store";
+import { streamsOf } from "../../src/api/plex";
 import { useFetcher } from "../../src/core/http";
 import { clearProblem, lastProblem, recordProblem } from "../../src/core/crash";
 import { slidesFrom } from "../../src/ui/screensaver";
@@ -673,5 +674,33 @@ describe("Back in Live TV", () => {
     expect(app.state.route.name).toBe("live");
     expect(app.goBack()).toBe(true);
     expect(app.state.route.name).toBe("home");
+  });
+});
+
+describe("subtitles at the start", () => {
+  const stream = (id: string, selected: boolean, forced = false) => ({ id, language: "en", selected, external: false, forced, label: "English" });
+
+  it("as Plex has them leaves Plex's choice alone", () => {
+    const p = { subtitleStreams: [stream("4", true), stream("5", false)] };
+    expect(atStart(p, "plex")).toBe(p);
+  });
+
+  it("off passes over Plex's choice, unless it's forced", () => {
+    const on = atStart({ subtitleStreams: [stream("4", true), stream("5", false)] }, "off");
+    expect(on.subtitleStreams.some((s) => s.selected)).toBe(false);
+    const forced = { subtitleStreams: [stream("4", true, true)] };
+    expect(atStart(forced, "off")).toBe(forced);
+  });
+
+  it("forced subtitles are read as forced", () => {
+    const read = streamsOf([{ id: 4, streamType: 3, forced: true }, { id: 5, streamType: 3, forced: "1" }, { id: 6, streamType: 3 }], 3);
+    expect(read.map((s) => s.forced)).toEqual([true, true, false]);
+  });
+
+  it("Increase size and Decrease size step through the sizes and stop at the ends", () => {
+    expect(nextSubtitleSize(0.9, 1)).toBe(1.0);
+    expect(nextSubtitleSize(0.9, -1)).toBe(0.8);
+    expect(nextSubtitleSize(SUBTITLE_SIZES[SUBTITLE_SIZES.length - 1], 1)).toBe(SUBTITLE_SIZES[SUBTITLE_SIZES.length - 1]);
+    expect(nextSubtitleSize(SUBTITLE_SIZES[0], -1)).toBe(SUBTITLE_SIZES[0]);
   });
 });

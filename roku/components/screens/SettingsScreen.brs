@@ -85,7 +85,9 @@ function Settings_() as object
     end for
     out.Push({ group: "", title: "Conversion quality", note: "The highest quality Plex uses when it converts a video. " + BitrateNote_(p.maxBitrateKbps), labels: labels, on: on, key: "bitrate" })
 
-    out.Push({ group: "Subtitles", title: "Size and background", note: "Subtitles take the caption style set on your Roku, in Settings > Accessibility > Captions style.", labels: [], on: [], key: "" })
+    off = p.subtitlesAtStart = "off"
+    out.Push({ group: "Subtitles", title: "At the start", note: Iif_(off, "Off until you turn them on. Forced subtitles, for parts in another language, still show.", "Your Plex account's subtitle settings, or what was last picked for the title."), labels: ["As Plex has them", "Off"], on: [not off, off], key: "subtitlesAtStart" })
+    out.Push({ group: "", title: "Size and background", note: "Subtitles take the caption style set on your Roku, in Settings > Accessibility > Captions style.", labels: [], on: [], key: "" })
 
     out.Push({ group: "Episodes", title: "Skip intros", note: "Goes straight past an episode's intro when Plex has found it.", labels: ["On", "Off"], on: [p.skipIntros, not p.skipIntros], key: "skipIntros" })
     out.Push({ group: "", title: "Skip credits", note: "Goes straight to the next episode when Plex finds the credits.", labels: ["On", "Off"], on: [p.skipCredits, not p.skipCredits], key: "skipCredits" })
@@ -359,6 +361,8 @@ sub onPressed(event as object)
         p.playbackMode = Modes_()[i].id
     else if key = "bitrate" then
         p.maxBitrateKbps = Bitrates_()[i]
+    else if key = "subtitlesAtStart" then
+        p.subtitlesAtStart = Iif_(i = 0, "plex", "off")
     else if key = "skipIntros" then
         p.skipIntros = i = 0
     else if key = "skipCredits" then

@@ -19,6 +19,11 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(SUBTITLE_BACKGROUND, false)
         set(value) = prefs.edit().putBoolean(SUBTITLE_BACKGROUND, value).apply()
 
+    /** "plex" to start with the subtitles Plex has chosen for the account, "off" for none but forced ones. */
+    var subtitlesAtStart: String
+        get() = prefs.getString(SUBTITLES_AT_START, SUBTITLES_PLEX) ?: SUBTITLES_PLEX
+        set(value) = prefs.edit().putString(SUBTITLES_AT_START, value).apply()
+
     /**
      * Whether the guide plays a preview of the channel under the cursor. It costs one of
      * the provider's simultaneous connections while it runs, so it can be switched off.
@@ -205,6 +210,9 @@ class Settings(context: Context) {
     companion object {
         private const val SUBTITLE_SCALE = "subtitle.scale"
         private const val SUBTITLE_BACKGROUND = "subtitle.background"
+        private const val SUBTITLES_AT_START = "subtitle.atStart"
+        const val SUBTITLES_PLEX = "plex"
+        const val SUBTITLES_OFF = "off"
         private const val UP_NEXT_SECONDS = "upnext.seconds"
         private const val GUIDE_PREVIEW = "guide.preview"
         private const val PLAYBACK_MODE = "playback.mode"

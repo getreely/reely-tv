@@ -313,6 +313,9 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
           onChapter={(ms) => { setPanel(false); if (video.current) video.current.currentTime = ms / 1000; }}
           onSleep={setSleepFor}
           onFind={playing.base !== "iptv:" ? () => void find() : null}
+          prefs={prefs}
+          onSize={(step) => app.nudgeSubtitleScale(step)}
+          onBackground={() => app.setSubtitleBackground(!prefs.subtitleBackground)}
         />
       ) : null}
       {finding ? <FindSubtitles finding={finding} onAdd={(s) => void add(s)} onClose={() => setFinding(null)} /> : null}
@@ -329,6 +332,9 @@ function Options(props: {
   onChapter: (ms: number) => void;
   onSleep: (minutes: number) => void;
   onFind: (() => void) | null;
+  prefs: Prefs;
+  onSize: (step: 1 | -1) => void;
+  onBackground: () => void;
 }) {
   const p = props.playing.playback;
   const panel = useRef<HTMLDivElement>(null);
@@ -364,6 +370,19 @@ function Options(props: {
         <section>
           <h3>Subtitles</h3>
           {chosen("s-find", false, "Find subtitles online", props.onFind, p.audioStreams.length <= 1)}
+        </section>
+      ) : null}
+      {props.playing.textSubtitle ? (
+        <section>
+          {/* The size it is now heads the two that change it, rather than sitting on one of them. */}
+          <h3>Size  ·  {Math.round(props.prefs.subtitleScale * 100)}%</h3>
+          <button key="size-up" class="option" data-focus onClick={() => props.onSize(1)}><span class="tick">+</span>Increase size</button>
+          <button key="size-down" class="option" data-focus onClick={() => props.onSize(-1)}><span class="tick">−</span>Decrease size</button>
+          <h3>Appearance</h3>
+          <button key="background" class="option" data-focus onClick={props.onBackground}>
+            <span class="tick" />
+            Background  <span class="facts">{props.prefs.subtitleBackground ? "On" : "Off"}</span>
+          </button>
         </section>
       ) : null}
       {p.chapters.length ? (

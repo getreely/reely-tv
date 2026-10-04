@@ -1117,6 +1117,7 @@ object PlexApi {
         maxBitrateKbps: Int,
         resolution: String,
         mediaIndex: Int = 0,
+        subtitles: Boolean = true,
     ): String {
         /*
          * No `offset`, on purpose. With one, the transcode starts part-way in and the
@@ -1132,8 +1133,8 @@ object PlexApi {
             "?path=$path&mediaIndex=$mediaIndex&partIndex=0" +
             "&protocol=hls&fastSeek=1&directPlay=0&directStream=1" +
             // Burned in, because a transcode is exactly when the picture subtitles that
-            // cannot be sideloaded become playable.
-            "&subtitles=burn&audioBoost=100&videoQuality=100" +
+            // cannot be sideloaded become playable. None when they're to start off.
+            "&subtitles=${if (subtitles) "burn" else "none"}&audioBoost=100&videoQuality=100" +
             "&videoResolution=$resolution$bitrate" +
             "&session=$sessionId" +
             "&X-Plex-Client-Identifier=$clientId" +
@@ -1585,8 +1586,10 @@ object PlexApi {
     }
 
     /** Servers have said this as a boolean and as a number. */
-    private fun isSelected(stream: JSONObject): Boolean =
-        when (val value = stream.opt("selected")) {
+    private fun isSelected(stream: JSONObject): Boolean = isSet(stream, "selected")
+
+    private fun isSet(stream: JSONObject, name: String): Boolean =
+        when (val value = stream.opt(name)) {
             is Boolean -> value
             is Number -> value.toInt() == 1
             is String -> value == "1" || value.equals("true", ignoreCase = true)
@@ -1605,6 +1608,7 @@ object PlexApi {
                         ?: stream.optString("languageCode").takeIf(String::isNotEmpty),
                     selected = isSelected(stream),
                     external = stream.optString("key").isNotEmpty(),
+                    forced = isSet(stream, "forced"),
                 )
             }
     }

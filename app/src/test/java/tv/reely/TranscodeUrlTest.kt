@@ -35,6 +35,16 @@ class TranscodeUrlTest {
     }
 
     @Test
+    fun `a full transcode burns in subtitles unless they're to start off`() {
+        fun url(subtitles: Boolean) = PlexApi.transcodeUrl(
+            base = "http://s:32400", token = "t", clientId = "c", ratingKey = "1", sessionId = "s",
+            maxBitrateKbps = 0, resolution = "1920x1080", subtitles = subtitles,
+        )
+        assertEquals("burn", paramsOf(url(true))["subtitles"])
+        assertEquals("none", paramsOf(url(false))["subtitles"])
+    }
+
+    @Test
     fun `an audio conversion keeps the file's own timeline`() {
         val url = PlexApi.audioConvertUrl(
             base = "http://s:32400",

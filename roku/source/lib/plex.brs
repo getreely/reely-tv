@@ -560,7 +560,7 @@ function Plex_PlaybackDetail(metadata as dynamic, base as string, token as strin
             if label = "" then label = "Subtitles"
             url = ""
             if Str_(st.key) <> "" then url = base + Str_(st.key) + "?X-Plex-Token=" + token
-            subtitles.Push({ id: Str_(st.id), label: label, selected: isOn, codec: LCase(Str_(st.codec)), url: url, language: Str_(st.languageCode) })
+            subtitles.Push({ id: Str_(st.id), label: label, selected: isOn, codec: LCase(Str_(st.codec)), url: url, language: Str_(st.languageCode), forced: Bool_(st.forced) })
         end if
     end for
     markers = []
@@ -595,6 +595,21 @@ end function
 
 ' The subtitles Plex has on: text in their own file the Roku draws itself (SRT, WebVTT),
 ' anything else only Plex's conversion can put in the picture.
+'' The file as a title starts: with subtitles set to start off, Plex's choice of subtitles
+' is passed over unless it's forced, the lines for parts in another language, which are
+' part of the film rather than a choice. Nothing is saved back to Plex.
+sub Plex_AtStart(p as object, setting as string)
+    if setting <> "off" then return
+    for each s in p.subtitles
+        if s.selected and not Bool_(s.forced) then
+            for each t in p.subtitles
+                t.selected = false
+            end for
+            return
+        end if
+    end for
+end sub
+
 function Plex_SubtitlePlan(p as object) as object
     for each s in p.subtitles
         if s.selected then

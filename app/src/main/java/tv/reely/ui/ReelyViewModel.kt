@@ -26,6 +26,7 @@ import tv.reely.core.ThemePlayer
 import tv.reely.core.UpdateInfo
 import tv.reely.core.Updater
 import tv.reely.core.Settings
+import tv.reely.core.startsWithServerSubtitles
 import tv.reely.BuildConfig
 import tv.reely.core.wrapIndex
 import tv.reely.plex.PlexApi
@@ -578,6 +579,8 @@ data class Playback(
 data class PlayerPrefs(
     val subtitleScale: Float = Settings.DEFAULT_SCALE,
     val subtitleBackground: Boolean = false,
+    /** Settings.SUBTITLES_PLEX or SUBTITLES_OFF: what a title starts with. */
+    val subtitlesAtStart: String = Settings.SUBTITLES_PLEX,
     val upNextSeconds: Int = Settings.DEFAULT_UP_NEXT,
     val guidePreview: Boolean = true,
     val playbackMode: String = Settings.MODE_AUTO,
@@ -920,6 +923,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             prefs = PlayerPrefs(
                 subtitleScale = settings.subtitleScale,
                 subtitleBackground = settings.subtitleBackground,
+                subtitlesAtStart = settings.subtitlesAtStart,
                 upNextSeconds = settings.upNextSeconds,
                 guidePreview = settings.guidePreview,
                 playbackMode = settings.playbackMode,
@@ -2736,6 +2740,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                                 maxBitrateKbps = it.prefs.maxBitrateKbps,
                                 resolution = RESOLUTION,
                                 mediaIndex = mediaIndex,
+                                subtitles = startsWithServerSubtitles(resolved.subtitleStreams, it.prefs.subtitlesAtStart),
                             )
                         } else {
                             resolved.url
@@ -3203,6 +3208,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                         maxBitrateKbps = it.prefs.maxBitrateKbps,
                         resolution = RESOLUTION,
                         mediaIndex = playback.mediaIndex,
+                        subtitles = startsWithServerSubtitles(playback.subtitleStreams, it.prefs.subtitlesAtStart),
                     ),
                     startPositionMs = positionMs,
                     subtitles = emptyList(),
@@ -3388,6 +3394,11 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val next = !settings.subtitleBackground
         settings.subtitleBackground = next
         _state.update { it.copy(prefs = it.prefs.copy(subtitleBackground = next)) }
+    }
+
+    fun setSubtitlesAtStart(value: String) {
+        settings.subtitlesAtStart = value
+        _state.update { it.copy(prefs = it.prefs.copy(subtitlesAtStart = value)) }
     }
 
     // ---------------------------------------------------------------- Search
