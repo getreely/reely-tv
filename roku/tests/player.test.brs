@@ -31,4 +31,18 @@ sub Main()
     Expect("a managed profile with a PIN", [kid.restricted, kid.protected, kid.thumb], [true, true, ""])
     Expect("no id, no profile", Plex_HomeUser({ title: "x" }), invalid)
     Expect("whose this is", [Plex_ProfileRole(owner, "u1"), Plex_ProfileRole(owner, "u2"), Plex_ProfileRole(kid, "u1")], ["Watching now", "Owner", "Managed"])
+
+    ' Subtitles found online by the Plex server.
+    found = Plex_OnlineSubtitles({ Stream: [
+        { key: "/sub/1", title: "English", providerTitle: "OpenSubtitles", languageCode: "en", codec: "srt" },
+        { key: "", title: "No key" },
+        { key: "/sub/2", displayTitle: "English (SDH)", languageTag: "en-US", hearingImpaired: true }
+    ] })
+    Expect("those the server can fetch", found.Count(), 2)
+    Expect("as the list shows them", [Plex_OnlineSubtitleLabel(found[0]), Plex_OnlineSubtitleLabel(found[1])], ["English · OpenSubtitles", "English (SDH) · SDH"])
+    Expect("nothing found is an empty list", [Plex_OnlineSubtitles(invalid), Plex_OnlineSubtitles({})], [[], []])
+    Expect("what the server is asked to fetch", Plex_AddSubtitleQuery(found[0], "fr"), "key=%2Fsub%2F1&codec=srt&language=en&hearingImpaired=0&forced=0&providerTitle=OpenSubtitles")
+    Expect("its own language, else the TV's", Plex_AddSubtitleQuery({ key: "k", codec: "", language: "", hearingImpaired: true, forced: false, provider: "" }, "fr"), "key=k&language=fr&hearingImpaired=1&forced=0")
+    Expect("the track that's new", Plex_NewSubtitleId([{ id: "21" }], [{ id: "21" }, { id: "22" }]), "22")
+    Expect("none new", Plex_NewSubtitleId([{ id: "21" }], [{ id: "21" }]), "")
 end sub

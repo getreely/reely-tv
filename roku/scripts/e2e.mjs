@@ -9,6 +9,9 @@ import { spawn } from "node:child_process";
 const asked = [];
 const queries = [];
 const timeline = [];
+const methods = [];
+// Set once the server's been asked to add the subtitles it found.
+let subtitleAdded = false;
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
 const episode = (key, index, viewed = false) => ({
   ratingKey: key, type: "episode", title: `Episode ${index}`, index, parentIndex: 1, parentRatingKey: "s1",
@@ -103,6 +106,7 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://x");
   asked.push(url.pathname);
   queries.push(url.pathname + url.search);
+  methods.push(`${req.method} ${url.pathname}${url.search}`);
   const send = (v) => { res.writeHead(200, { "Content-Type": "application/json" }); res.end(JSON.stringify(v)); };
   const meta = (Metadata) => send({ MediaContainer: { Metadata } });
   if (url.pathname === "/player_api.php") return panel(url, send);
@@ -146,11 +150,15 @@ const server = http.createServer((req, res) => {
     case "/library/sections/1/firstCharacter": return send({ MediaContainer: { Directory: [{ key: "L", title: "L", size: 1 }] } });
     case "/library/metadata/show1/children": return meta([{ ratingKey: "s1", type: "season", title: "Season 1", index: 1 }]);
     case "/library/metadata/s1/children": return meta([episode("e1", 1, true), episode("e2", 2), episode("e3", 3)]);
+    case "/library/metadata/e2/subtitles":
+      if (req.method === "PUT") { subtitleAdded = true; return send({}); }
+      return send({ MediaContainer: { Stream: [{ key: "/sub/os/1", title: "English", providerTitle: "OpenSubtitles", languageCode: "en", codec: "srt" }] } });
     case "/library/metadata/e2": return meta([{ ...episode("e2", 2), viewOffset: 20000,
       Media: [{ container: "mkv", videoCodec: "h264", audioCodec: "dca", Part: [{ id: 5, key: "/library/parts/5/file.mkv", Stream: [
         { id: 11, streamType: 2, displayTitle: "English (DTS 5.1)", selected: true, codec: "dca" },
         { id: 12, streamType: 2, displayTitle: "Commentary (AAC Stereo)", codec: "aac" },
-        { id: 21, streamType: 3, displayTitle: "English (SRT)", codec: "srt", key: "/library/streams/21" }] }] }],
+        { id: 21, streamType: 3, displayTitle: "English (SRT)", codec: "srt", key: "/library/streams/21" },
+        ...(subtitleAdded ? [{ id: 22, streamType: 3, displayTitle: "English (OpenSubtitles)", codec: "srt", key: "/library/streams/22" }] : [])] }] }],
       Marker: [{ type: "intro", startTimeOffset: 0, endTimeOffset: 30000 }, { type: "credits", startTimeOffset: 50000, endTimeOffset: 60000 }],
       Chapter: [{ tag: "Cold open", startTimeOffset: 0 }, { tag: "Last stop", startTimeOffset: 52000 }] }]);
     case "/:/timeline": timeline.push(`${url.searchParams.get("state")}@${url.searchParams.get("ratingKey")}`); return send({});
@@ -278,6 +286,22 @@ try {
   await wait(800);
   await snap("roku-player-options");
   expect("Down opens sound, subtitles, chapters and sleep", output.includes("TRACE options shown"));
+  // Subtitles found online by the server, one added and switched on.
+  await moveTo("TRACE option", "find:", "Down");
+  await key("Select");
+  await until("subtitles found", () => output.includes("TRACE subtitles found"), 10000).catch(() => undefined);
+  await wait(800);
+  await snap("roku-player-find-subtitles");
+  expect("Find subtitles online asks the server, in the TV's language", queries.some((q) => q.startsWith("/library/metadata/e2/subtitles?language=en")) && lastSaid("TRACE subtitles found") === "1");
+  await key("Select");
+  await until("the subtitles added", () => output.includes("TRACE subtitle added 22"), 10000).catch(() => undefined);
+  await until("switched on", () => methods.some((m) => m.startsWith("PUT /library/parts/5?subtitleStreamID=22")), 10000).catch(() => undefined);
+  expect("the one chosen is added to the file and switched on", methods.some((m) => m.startsWith("PUT /library/metadata/e2/subtitles?key=%2Fsub%2Fos%2F1")) && methods.some((m) => m.startsWith("PUT /library/parts/5?subtitleStreamID=22")));
+  await wait(1200);
+  const shown = (output.match(/TRACE options shown/g) ?? []).length;
+  await key("Down");
+  await until("the options again", () => (output.match(/TRACE options shown/g) ?? []).length > shown, 5000).catch(() => undefined);
+  await wait(800);
   // A chapter, chosen: the panel closes and it plays on. (The simulator doesn't play
   // video, so Up Next at the credits is tested in tests/player.test.brs instead.)
   await moveTo("TRACE option", "chapter:52000", "Down");

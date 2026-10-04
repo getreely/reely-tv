@@ -391,6 +391,24 @@ function PlexApi_SelectStreams(base as string, token as string, partId as string
     return r.code >= 200 and r.code < 300
 end function
 
+' Subtitles online for a title, in [language], as the Plex server finds them; invalid when
+' it couldn't look.
+function PlexApi_SearchSubtitles(base as string, token as string, ratingKey as string, language as string, clientId as string) as dynamic
+    c = PlexApi_Container(base + "/library/metadata/" + ratingKey + "/subtitles?language=" + UrlEncode_(language) + "&hearingImpaired=0&forced=0", token, clientId, 30000)
+    if c = invalid then return invalid
+    return Plex_OnlineSubtitles(c)
+end function
+
+' The server fetches one and adds it to the file: the file's playback read again after,
+' with the new track in it; invalid when it couldn't.
+function PlexApi_AddSubtitle(base as string, token as string, ratingKey as string, s as object, language as string, mediaIndex as integer, clientId as string) as dynamic
+    r = Http_Ask(base + "/library/metadata/" + ratingKey + "/subtitles?" + Plex_AddSubtitleQuery(s, language), "PUT", PlexApi_Headers(token, clientId), "", 30000)
+    if r.code < 200 or r.code > 299 then return invalid
+    c = PlexApi_Container(base + "/library/metadata/" + ratingKey + "?includeMarkers=1&includeChapters=1", token, clientId)
+    if c = invalid or Arr_(c.Metadata).Count() = 0 then return invalid
+    return Plex_PlaybackDetail(c.Metadata[0], base, token, mediaIndex)
+end function
+
 ' Where playback is, told to the server: what keeps Continue Watching right everywhere.
 function PlexApi_Timeline(base as string, token as string, ratingKey as string, state as string, ms as integer, durationMs as integer, session as string, clientId as string) as boolean
     h = PlexApi_Headers(token, clientId)

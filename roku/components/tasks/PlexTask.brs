@@ -59,6 +59,10 @@ function answerFor(op as string, a as object) as object
         meta = invalid
         if c <> invalid and Arr_(c.Metadata).Count() > 0 then meta = c.Metadata[0]
         out.answer = Plex_PlaybackDetail(meta, a.base, a.token, Int(Num_(a.mediaIndex)))
+    else if op = "findSubtitles" then
+        out.results = PlexApi_SearchSubtitles(a.base, a.token, a.ratingKey, a.language, cid)
+    else if op = "addSubtitle" then
+        out.answer = PlexApi_AddSubtitle(a.base, a.token, a.ratingKey, a.subtitle, a.language, Int(Num_(a.mediaIndex)), cid)
     else if op = "streams" then
         out.ok = PlexApi_SelectStreams(a.base, a.token, a.partId, Str_(a.audioId), Str_(a.subtitleId), cid)
     else if op = "timeline" then

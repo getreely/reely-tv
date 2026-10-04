@@ -637,3 +637,53 @@ sub Plex_AddGuids(into as object, metadata as dynamic)
         end if
     end for
 end sub
+
+' Subtitles the Plex server found online for a title: { key, title, provider, language,
+' codec, hearingImpaired, forced }, those it can fetch only.
+function Plex_OnlineSubtitles(container as dynamic) as object
+    out = []
+    if container = invalid then return out
+    for each s in Arr_(container.Stream)
+        if type(s) = "roAssociativeArray" and Str_(s.key) <> "" then
+            title = Str_(s.title)
+            if title = "" then title = Str_(s.displayTitle)
+            if title = "" then title = Str_(s.languageTag)
+            if title = "" then title = "Subtitles"
+            language = Str_(s.languageCode)
+            if language = "" then language = Str_(s.languageTag)
+            out.Push({ key: Str_(s.key), title: title, provider: Str_(s.providerTitle), language: language, codec: Str_(s.codec), hearingImpaired: s.hearingImpaired = true, forced: s.forced = true })
+        end if
+    end for
+    return out
+end function
+
+' What the server is asked to fetch one of them and add it to the file.
+function Plex_AddSubtitleQuery(s as object, language as string) as string
+    q = ["key=" + UrlEncode_(s.key)]
+    if s.codec <> "" then q.Push("codec=" + UrlEncode_(s.codec))
+    q.Push("language=" + UrlEncode_(Iif_(s.language <> "", s.language, language)))
+    q.Push("hearingImpaired=" + Iif_(s.hearingImpaired, "1", "0"))
+    q.Push("forced=" + Iif_(s.forced, "1", "0"))
+    if s.provider <> "" then q.Push("providerTitle=" + UrlEncode_(s.provider))
+    return Join_(q, "&")
+end function
+
+' A found one as the list shows it: "English · OpenSubtitles".
+function Plex_OnlineSubtitleLabel(s as object) as string
+    parts = [s.title]
+    if s.provider <> "" then parts.Push(s.provider)
+    if s.hearingImpaired then parts.Push("SDH")
+    return Join_(parts, " · ")
+end function
+
+' The subtitle track that's new since [before] (the ids there were), or "".
+function Plex_NewSubtitleId(before as object, after as object) as string
+    had = {}
+    for each s in before
+        had[s.id] = true
+    end for
+    for each s in after
+        if not had.DoesExist(s.id) then return s.id
+    end for
+    return ""
+end function

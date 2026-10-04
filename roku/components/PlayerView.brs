@@ -66,6 +66,13 @@ sub start()
 end sub
 
 sub answered(r as object)
+    if r.op = "findSubtitles" then
+        showFound(r.results)
+        return
+    else if r.op = "addSubtitle" then
+        onAdded(r.answer)
+        return
+    end if
     if r.op = "playback" or r.op = "iptvPlayback" then
         p = r.answer
         if p = invalid then
@@ -99,7 +106,7 @@ end function
 ' conversion; otherwise converted, at the quality chosen in Settings.
 sub begin(fromMs as dynamic)
     p = m.p
-    if p.iptv = true then
+    if Bool_(p.iptv) then
         beginIptv(fromMs)
         return
     end if
@@ -180,7 +187,7 @@ sub onState()
         ended()
     else if s = "error" then
         ' The file wouldn't play as it is: Plex converts it, from where it got to.
-        if m.p <> invalid and m.p.iptv = true then
+        if m.p <> invalid and Bool_(m.p.iptv) then
             m.wait.text = "Your provider couldn't play this. Try again in a moment."
             report("stopped")
         else if m.direct and m.p <> invalid then
@@ -203,6 +210,7 @@ end sub
 
 ' Skip Intro over an intro; Up Next when the credits start; the sleep timer's word.
 sub onTick()
+    if m.sayUntil <> invalid and m.sayUntil > 0 and CreateObject("roDateTime").AsSeconds() >= m.sayUntil then say("", 0)
     if m.p = invalid then return
     ms = m.video.position * 1000
     prefs = m.global.prefs
@@ -318,13 +326,18 @@ sub showOptions()
             Option_(content, m.optionIds, Iif_(a.selected, "✓  ", "    ") + a.label, "audio:" + a.id)
         end for
     end if
-    if m.p.subtitles.Count() > 0 then
+    ' More found online by the Plex server, for what's on it (not the provider's, nor a trailer).
+    canFind = not m.trailer and not Bool_(m.p.iptv)
+    if m.p.subtitles.Count() > 0 or canFind then
         Heading_(content, "Subtitles")
-        anyOn = Plex_SubtitlePlan(m.p).on <> invalid
-        Option_(content, m.optionIds, Iif_(not anyOn, "✓  ", "    ") + "Off", "subtitle:0")
-        for each s in m.p.subtitles
-            Option_(content, m.optionIds, Iif_(s.selected, "✓  ", "    ") + s.label, "subtitle:" + s.id)
-        end for
+        if m.p.subtitles.Count() > 0 then
+            anyOn = Plex_SubtitlePlan(m.p).on <> invalid
+            Option_(content, m.optionIds, Iif_(not anyOn, "✓  ", "    ") + "Off", "subtitle:0")
+            for each s in m.p.subtitles
+                Option_(content, m.optionIds, Iif_(s.selected, "✓  ", "    ") + s.label, "subtitle:" + s.id)
+            end for
+        end if
+        if canFind then Option_(content, m.optionIds, "    Find subtitles online", "find:")
     end if
     if m.p.chapters.Count() > 1 then
         Heading_(content, "Chapters")
@@ -340,9 +353,15 @@ sub showOptions()
             Option_(content, m.optionIds, Iif_(on, "✓  ", "    ") + label, "sleep:" + minutes.ToStr())
         end if
     end for
+    showList(content, "Sound, subtitles and more")
+    Trace_("options shown")
+end sub
+
+' The panel with [content] in it, on its first choice rather than a heading.
+sub showList(content as object, title as string)
+    m.top.findNode("optionsTitle").text = title
     m.optionList.content = content
     m.options.visible = true
-    Trace_("options shown")
     m.skip.visible = false
     m.optionList.setFocus(true)
     ' The first thing that can be chosen, not a heading.
@@ -382,7 +401,15 @@ sub onOption()
     parts = id.Split(":")
     kind = parts[0]
     value = parts[1]
+    if kind = "find" then
+        findSubtitles()
+        return
+    end if
     hideOptions()
+    if kind = "found" then
+        addFound(Int(Val(value)))
+        return
+    end if
     if kind = "rokuAudio" then
         m.video.audioTrack = value
     else if kind = "audio" or kind = "subtitle" then
@@ -416,6 +443,70 @@ sub chooseStream(kind as string, id as string)
     first = m.p.audio.Count() > 0 and m.p.audio[0].selected
     m.forceConvert = kind = "audio" and not first
     begin(Int(m.video.position * 1000))
+end sub
+
+' ------------------------------------------------------------------ Subtitles found online
+
+' In the TV's language, as the other apps look.
+function Language_() as string
+    locale = CreateObject("roDeviceInfo").GetCurrentLocale()
+    if Len(locale) >= 2 then return LCase(Left(locale, 2))
+    return "en"
+end function
+
+sub findSubtitles()
+    m.findLanguage = Language_()
+    content = CreateObject("roSGNode", "ContentNode")
+    m.optionIds = []
+    Heading_(content, "Looking for subtitles…")
+    showList(content, "Find subtitles online")
+    Ask_("findSubtitles", { base: m.base, token: m.token, ratingKey: m.item.ratingKey, language: m.findLanguage })
+end sub
+
+sub showFound(results as dynamic)
+    if not m.options.visible then return
+    content = CreateObject("roSGNode", "ContentNode")
+    m.optionIds = []
+    m.found = Arr_(results)
+    if results = invalid then
+        Heading_(content, "Couldn't look for subtitles")
+    else if m.found.Count() = 0 then
+        Heading_(content, "None found online")
+    else
+        Heading_(content, "Found online")
+        for i = 0 to m.found.Count() - 1
+            Option_(content, m.optionIds, "    " + Plex_OnlineSubtitleLabel(m.found[i]), "found:" + i.ToStr())
+        end for
+    end if
+    Trace_("subtitles found " + m.found.Count().ToStr())
+    showList(content, "Find subtitles online")
+end sub
+
+' The server fetches it and adds it to the file; then it's played on with.
+sub addFound(i as integer)
+    if m.found = invalid or i < 0 or i >= m.found.Count() then return
+    say("Adding subtitles…", 0)
+    Ask_("addSubtitle", { base: m.base, token: m.token, ratingKey: m.item.ratingKey, subtitle: m.found[i], language: m.findLanguage, mediaIndex: m.mediaIndex })
+end sub
+
+sub onAdded(fresh as dynamic)
+    newId = ""
+    if fresh <> invalid and m.p <> invalid then newId = Plex_NewSubtitleId(m.p.subtitles, fresh.subtitles)
+    if newId = "" then
+        say("Plex couldn't add those subtitles. Try another.", 5)
+        return
+    end if
+    say("", 0)
+    m.p.subtitles = fresh.subtitles
+    Trace_("subtitle added " + newId)
+    chooseStream("subtitle", newId)
+end sub
+
+' A word over the picture, gone after [seconds] (0: until it's replaced).
+sub say(text as string, seconds as integer)
+    m.wait.text = text
+    m.sayUntil = 0
+    if seconds > 0 then m.sayUntil = CreateObject("roDateTime").AsSeconds() + seconds
 end sub
 
 sub stopNow()
