@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -103,7 +102,7 @@ private fun TitleGrid(
     Column(Modifier.fillMaxSize()) {
         TouchPageBar(title, onBack)
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 104.dp),
+            columns = touchPosterColumns(),
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = TouchMargin, end = TouchMargin, top = 8.dp, bottom = 24.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),

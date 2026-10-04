@@ -92,6 +92,8 @@ class TouchShots {
                             section = tv.reely.plex.PlexSection("1", "Movies", "movie"),
                             items = listOf("ember", "field", "orbit", "glass", "ferry", "cardinal", "shift", "quiet", "salt").map(::item).map { it.copy(type = "movie", grandparentTitle = null) },
                             genres = listOf(tv.reely.plex.PlexGenre("1", "Drama"), tv.reely.plex.PlexGenre("2", "Thriller")),
+                            total = 212,
+                            letters = ('A'..'Z').map { tv.reely.plex.PlexLetter(it.toString(), 8) },
                         ),
                         LibraryKind.SHOWS to BrowseState(),
                     ),

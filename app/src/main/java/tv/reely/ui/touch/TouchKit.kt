@@ -111,6 +111,18 @@ fun TouchTheme(content: @Composable () -> Unit) {
 /** Side margin on a phone; a tablet's screens keep the same, and fit more across. */
 val TouchMargin = 16.dp
 
+/**
+ * How many posters a grid has across: three on a phone, as Plex and the like have them,
+ * rather than two that fill the screen; as many as fit at a comfortable size on a tablet
+ * or a phone turned sideways.
+ */
+@Composable
+fun touchPosterColumns(): androidx.compose.foundation.lazy.grid.GridCells {
+    val width = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
+    return if (width < 600) androidx.compose.foundation.lazy.grid.GridCells.Fixed(3)
+    else androidx.compose.foundation.lazy.grid.GridCells.Adaptive(minSize = 128.dp)
+}
+
 /** A poster, pressed to open and held for its menu. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

@@ -22,12 +22,17 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import tv.reely.core.FormFactor
 import tv.reely.screens.Shots
+import tv.reely.plex.PlexLetter
+import tv.reely.plex.PlexSection
+import tv.reely.ui.BrowseState
 import tv.reely.ui.HomeState
 import tv.reely.ui.LibraryKind
+import tv.reely.ui.LibraryView
 import tv.reely.ui.PlexState
 import tv.reely.ui.ReelyViewModel
 import tv.reely.ui.Route
 import tv.reely.ui.touch.TouchApp
+import tv.reely.ui.touch.countLabel
 
 /** The phone and tablet app, on the real view model: the way round it a finger takes. */
 @RunWith(RobolectricTestRunner::class)
@@ -169,6 +174,38 @@ class TouchAppTest {
         }
         show()
         compose.onNodeWithText("Up next  ·  S1 · E3  ·  Episode 3").assertIsDisplayed()
+    }
+
+    @Test fun `a phone's library says how many there are, and its A to Z rail goes to a letter`() {
+        val films = PlexSection("1", "Films", "movie")
+        val items = (0 until 50).map { i -> Shots.item("ember").copy(ratingKey = "m$i", title = "Film $i", serverBase = SERVER) }
+        signedIn()
+        model.setStateForTest {
+            it.copy(
+                stack = listOf(Route.Home, Route.Library(LibraryKind.MOVIES, LibraryView.GRID)),
+                plex = it.plex.copy(
+                    sections = listOf(films),
+                    browse = mapOf(
+                        LibraryKind.MOVIES to BrowseState(
+                            section = films, items = items, total = 1212,
+                            letters = listOf(PlexLetter("A", 20), PlexLetter("M", 25)),
+                        ),
+                    ),
+                ),
+            )
+        }
+        show()
+        compose.onNodeWithText("1,212 movies").assertIsDisplayed()
+        compose.onNodeWithText("M").performClick()
+        compose.runOnIdle { assertEquals(20, model.state.value.plex.browseFor(LibraryKind.MOVIES).jump?.index) }
+        compose.onNodeWithText("A").performClick()
+        compose.runOnIdle { assertEquals(0, model.state.value.plex.browseFor(LibraryKind.MOVIES).jump?.index) }
+    }
+
+    @Test fun `the count reads right for one and for many`() {
+        assertEquals("1 movie", countLabel(1, LibraryKind.MOVIES))
+        assertEquals("48 shows", countLabel(48, LibraryKind.SHOWS))
+        assertEquals("12,040 movies", countLabel(12040, LibraryKind.MOVIES))
     }
 
     companion object {

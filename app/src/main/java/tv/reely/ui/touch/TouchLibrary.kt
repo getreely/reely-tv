@@ -5,11 +5,18 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -28,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import tv.reely.plex.PlexItem
 import tv.reely.ui.BrowseState
 import tv.reely.ui.LibraryKind
@@ -207,17 +215,28 @@ private fun Grid(
     }
     val sections = state.plex.sectionsFor(kind)
     val hasLibrary = iptv || sections.isNotEmpty()
+    // The A–Z rail, in title order and when there are enough titles to need it, as on the TV.
+    val rail = browse.sort == LibrarySort.TITLE && browse.letters.size > 1 && browse.letters.sumOf { it.count } >= RAIL_MIN_TITLES
+    var pointing by remember { mutableStateOf<String?>(null) }
+    Box(Modifier.fillMaxSize()) {
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 104.dp),
+        columns = touchPosterColumns(),
         state = gridState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = TouchMargin, end = TouchMargin, top = 12.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(start = TouchMargin, end = if (rail) TouchMargin + 14.dp else TouchMargin, top = 12.dp, bottom = 24.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (hasLibrary) GridFilters(viewModel, kind, browse, iptv)
+                browse.total?.takeIf { hasLibrary }?.let { total ->
+                    Text(
+                        countLabel(total, kind),
+                        style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                        color = tv.reely.ui.theme.Muted,
+                    )
+                }
                 browse.error?.let { TouchError(it, onDismiss = { viewModel.dismissBrowseError(kind) }, modifier = Modifier.padding(0.dp)) }
                 if (iptv && state.iptv.error != null && browse.items.isEmpty()) TouchError(state.iptv.error)
                 when {
@@ -248,6 +267,84 @@ private fun Grid(
                 onClick = { actions.open(item) },
                 onLongPress = { actions.hold(item) },
             )
+        }
+    }
+    if (rail) {
+        LetterRail(
+            letters = browse.letters.map { it.letter },
+            onLetter = { letter -> if (iptv) viewModel.jumpToIptvLetter(kind, letter) else viewModel.jumpToLetter(kind, letter) },
+            onPointing = { pointing = it },
+            modifier = Modifier.align(Alignment.CenterEnd).padding(top = 12.dp, bottom = 12.dp, end = 2.dp),
+        )
+    }
+    // The letter under the finger, big enough to read past it.
+    pointing?.let { letter ->
+        Box(
+            Modifier.align(Alignment.Center).size(72.dp)
+                .background(tv.reely.ui.theme.SurfaceHigh, androidx.compose.foundation.shape.RoundedCornerShape(16.dp)),
+            contentAlignment = Alignment.Center,
+        ) { Text(letter, fontSize = 34.sp, color = tv.reely.ui.theme.Chalk) }
+    }
+    }
+}
+
+/** "212 movies", "1 show": how many there are, with the filters on. */
+internal fun countLabel(total: Int, kind: LibraryKind): String {
+    val noun = if (kind == LibraryKind.MOVIES) "movie" else "show"
+    return "%,d %s".format(total, if (total == 1) noun else noun + "s")
+}
+
+/**
+ * The A–Z rail down the right edge: a tap on a letter goes there, and so does a finger run
+ * down it, the letter under it shown big ([onPointing]) while it's down.
+ */
+@Composable
+private fun LetterRail(letters: List<String>, onLetter: (String) -> Unit, onPointing: (String?) -> Unit, modifier: Modifier) {
+    var height by remember { mutableStateOf(0) }
+    var current by remember { mutableStateOf<String?>(null) }
+    fun pick(y: Float) {
+        if (letters.isEmpty() || height <= 0) return
+        val letter = letters[(y / height * letters.size).toInt().coerceIn(0, letters.lastIndex)]
+        if (letter != current) {
+            current = letter
+            onPointing(letter)
+            onLetter(letter)
+        }
+    }
+    Column(
+        modifier
+            .fillMaxHeight()
+            .width(22.dp)
+            .onSizeChanged { height = it.height }
+            .pointerInput(letters) {
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    pick(down.position.y)
+                    down.consume()
+                    do {
+                        val event = awaitPointerEvent()
+                        event.changes.forEach { change ->
+                            if (change.pressed) {
+                                pick(change.position.y)
+                                change.consume()
+                            }
+                        }
+                    } while (event.changes.any { it.pressed })
+                    current = null
+                    onPointing(null)
+                }
+            },
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        // Each letter the middle of an equal share of the height, as [pick] reads it.
+        letters.forEach { letter ->
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Text(
+                    letter,
+                    fontSize = 11.sp,
+                    color = if (letter == current) Accent else tv.reely.ui.theme.Muted,
+                )
+            }
         }
     }
 }
@@ -308,7 +405,7 @@ private fun GridFilters(viewModel: ReelyViewModel, kind: LibraryKind, browse: Br
 private fun Collections(browse: BrowseState, actions: TouchActions) {
     val collections = browse.collections
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 104.dp),
+        columns = touchPosterColumns(),
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = TouchMargin, end = TouchMargin, top = 12.dp, bottom = 24.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -337,3 +434,6 @@ private fun Collections(browse: BrowseState, actions: TouchActions) {
 }
 
 private const val LOAD_AHEAD = 24
+
+/** Fewer titles than this and the rail is more in the way than useful, as on the TV. */
+private const val RAIL_MIN_TITLES = 40

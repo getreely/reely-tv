@@ -144,6 +144,7 @@ class IptvLibrary {
             genreId = options.categoryId,
             unwatchedOnly = options.unwatchedOnly,
             letters = if (options.sort == LibrarySort.TITLE) letters(items) else emptyList(),
+            total = items.size,
         )
     }
 

@@ -316,6 +316,8 @@ data class BrowseState(
     val unwatchedOnly: Boolean = false,
     /** Where each letter starts, for the A–Z rail. Only ever for title order. */
     val letters: List<PlexLetter> = emptyList(),
+    /** How many titles there are in all, with the filters on: the count over the grid. Null until known. */
+    val total: Int? = null,
     val jump: GridJump? = null,
     val busy: Boolean = false,
     val error: String? = null,
@@ -2255,19 +2257,19 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val token = plex.serverToken ?: return
         val browse = plex.browseFor(kind)
         val section = browse.section ?: return
-        if (browse.sort != LibrarySort.TITLE) {
-            updateBrowse(kind) { it.copy(letters = emptyList()) }
-            return
-        }
+        // Asked whatever the order: the letters' counts add up to the whole, for the count
+        // over the grid. The rail itself is only for title order, the one they're in.
+        val titleOrder = browse.sort == LibrarySort.TITLE
+        updateBrowse(kind) { it.copy(letters = if (titleOrder) it.letters else emptyList(), total = null) }
         viewModelScope.launch {
             val letters = runCatching {
                 PlexApi.firstCharacters(base, token, section.key, kind.filter, browseFilters(browse))
-            }.getOrElse { emptyList() }
+            }.getOrNull()
             updateBrowse(kind) {
                 // Only if nothing has changed the grid's order or filters meanwhile.
                 val same = it.section?.key == section.key && it.sort == browse.sort &&
                     browseFilters(it) == browseFilters(browse)
-                if (same) it.copy(letters = letters) else it
+                if (same) it.copy(letters = if (titleOrder) letters.orEmpty() else emptyList(), total = letters?.sumOf { l -> l.count }) else it
             }
         }
     }
