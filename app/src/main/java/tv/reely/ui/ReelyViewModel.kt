@@ -39,6 +39,7 @@ import tv.reely.plex.PlexItem
 import tv.reely.plex.PlexMarker
 import tv.reely.plex.PlexSection
 import tv.reely.plex.PlexServer
+import tv.reely.plex.unreachableMessage
 import tv.reely.plex.PlexSubtitle
 import tv.reely.xtream.StreamFormat
 import tv.reely.xtream.XtreamAccount
@@ -1725,7 +1726,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             updatePlex {
                 it.copy(
                     busy = false,
-                    error = "This Plex account doesn't have a Plex server, or access to anybody else's yet.",
+                    error = "This Plex account has no Plex server of its own, and nobody has shared one with it yet.",
                 )
             }
             connectAgainSoon(token)
@@ -1749,14 +1750,16 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             loadSections()
             return
         }
-        updatePlex {
-            it.copy(
-                busy = false,
-                error = "Couldn't reach your Plex server. Make sure it's on and connected.",
-            )
-        }
+        updatePlex { it.copy(busy = false, error = unreachable(servers)) }
         connectAgainSoon(token)
     }
+
+    /**
+     * What's said when none of the servers this account can use answered: which they were,
+     * and whose. Somebody with only a friend's server shared with them was told to check
+     * "your Plex server", as though they had to have one of their own.
+     */
+    private fun unreachable(servers: List<PlexServer>): String = unreachableMessage(servers)
 
     /*
      * Signed in, with no server to show. It used to stay that way until the app was

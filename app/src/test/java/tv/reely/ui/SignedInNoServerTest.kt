@@ -27,7 +27,7 @@ class SignedInNoServerTest {
         compose.setContent {
             PlexSignInPanel(plex = PlexState(token = "t", busy = true), onStartLink = {}, onCancelLink = {}, onDismissError = {})
         }
-        compose.onNodeWithText("Finding your Plex server").assertIsDisplayed()
+        compose.onNodeWithText("Finding a Plex server").assertIsDisplayed()
         assertEquals(0, compose.onAllNodesWithTextCount("Sign in with Plex"))
         assertEquals(0, compose.onAllNodesWithTextCount("Getting a code…"))
     }
@@ -42,7 +42,7 @@ class SignedInNoServerTest {
                 onRetryConnect = { retried++ }, onSignOut = { signedOut++ },
             )
         }
-        compose.onNodeWithText("Can't find your Plex server").assertIsDisplayed()
+        compose.onNodeWithText("Couldn't reach a Plex server").assertIsDisplayed()
         compose.onNodeWithText("Try again").performClick()
         compose.onNodeWithText("Use a different Plex account").performClick()
         compose.runOnIdle {

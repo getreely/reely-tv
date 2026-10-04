@@ -164,8 +164,8 @@ sub connect()
     m.page = "finding"
     if not signedIn() then
         showOnly(m.signIn)
-        m.top.findNode("signInTitle").text = "Finding your Plex server"
-        m.top.findNode("signInHint").text = "You're signed in. Looking for your server, at home first, then over the internet."
+        m.top.findNode("signInTitle").text = "Finding a Plex server"
+        m.top.findNode("signInHint").text = "You're signed in. Looking for the servers you can use, your own or shared with you, at home first, then over the internet."
         m.top.findNode("code").text = ""
         m.top.findNode("signInNote").text = ""
     end if
@@ -256,8 +256,8 @@ sub onConnected(a as object)
             m.global.home = h
         else
             m.page = "noServer"
-            m.top.findNode("signInTitle").text = "Can't find your Plex server"
-            m.top.findNode("signInHint").text = Iif_(a.noServers, "No Plex servers on this account.", "Make sure Plex Media Server is running and signed in to the same account. Press OK to try again.")
+            m.top.findNode("signInTitle").text = "Couldn't reach a Plex server"
+            m.top.findNode("signInHint").text = Iif_(a.noServers, "This Plex account has no Plex server of its own, and nobody has shared one with it yet.", "Any server this account owns or has been given access to will do. Make sure it's on. Press OK to try again.")
         end if
         ' It keeps looking, every little while, as well as at OK.
         m.top.findNode("retryTimer").control = "start"

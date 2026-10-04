@@ -230,13 +230,13 @@ internal fun TouchSignIn(viewModel: ReelyViewModel, state: ReelyState) {
         if (plex.token != null && plex.linkCode == null) {
             // Signed in, with no server to show yet: the same as the television says.
             Text(
-                if (plex.busy) "Finding your Plex server" else "Can't find your Plex server",
+                if (plex.busy) "Finding a Plex server" else "Couldn't reach a Plex server",
                 style = MaterialTheme.typography.headlineSmall,
                 color = Chalk,
             )
             Text(
-                if (plex.busy) "You're signed in. Looking for your server, at home first, then over the internet."
-                else "Make sure Plex Media Server is running and signed in to the same account. Reely keeps looking, or try again now.",
+                if (plex.busy) "You're signed in. Looking for the servers you can use, your own or shared with you, at home first, then over the internet."
+                else "Any server this account owns or has been given access to will do. Make sure it's on. Reely keeps looking, or try again now.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = Muted,
             )

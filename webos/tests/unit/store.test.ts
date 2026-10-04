@@ -120,7 +120,7 @@ describe("the LG app's state", () => {
     useFetcher(fakePlex({ serverUp: false }).fetch);
     await app.startSignIn();
     expect(app.state.plex.baseUrl).toBeNull();
-    expect(app.state.plex.error).toBe("Can't find your Plex server. Make sure it's on.");
+    expect(app.state.plex.error).toBe("Found Living Room, but couldn't reach it. Make sure it's on. Reely keeps trying.");
   });
 
   it("a server that's off is looked for again, and found once it's back", async () => {

@@ -34,7 +34,25 @@ data class PlexServer(
     val name: String,
     val accessToken: String,
     val connections: List<String>,
+    /** The account's own, rather than shared with it by somebody else. */
+    val owned: Boolean = true,
+    /** Who shared it, for one that isn't the account's own. */
+    val sharedBy: String? = null,
 )
+
+/**
+ * Said when none of [servers] answered: the server by name, and whose it is when it was
+ * shared, rather than "your Plex server" to somebody who only has a friend's.
+ */
+fun unreachableMessage(servers: List<PlexServer>): String {
+    fun named(server: PlexServer) = server.sharedBy?.let { "${server.name}, shared by $it" } ?: server.name
+    return when {
+        servers.size == 1 && !servers[0].owned ->
+            "Found ${named(servers[0])}, but couldn't reach it. It may be off, or not reachable from here. Reely keeps trying."
+        servers.size == 1 -> "Found ${servers[0].name}, but couldn't reach it. Make sure it's on and connected. Reely keeps trying."
+        else -> "Found ${servers.joinToString(" and ") { named(it) }}, but couldn't reach any of them. Reely keeps trying."
+    }
+}
 
 data class PlexSection(
     val key: String,
@@ -541,40 +559,50 @@ object PlexApi {
         Http.client.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
             require(response.isSuccessful) { "Couldn't load your Plex servers. Try again." }
-            val resources = JSONArray(body)
-            val owned = mutableSetOf<String>()
-            buildList {
-                for (index in 0 until resources.length()) {
-                    val resource = resources.getJSONObject(index)
-                    if (!resource.optString("provides").contains("server")) continue
-
-                    val connections = resource.optJSONArray("connections") ?: JSONArray()
-                    val uris = connectionOrder(
-                        (0 until connections.length()).map { index ->
-                            val connection = connections.getJSONObject(index)
-                            PlexConnection(
-                                uri = connection.optString("uri"),
-                                address = connection.optString("address"),
-                                port = connection.optInt("port", 32400),
-                                local = connection.optBoolean("local"),
-                                relay = connection.optBoolean("relay"),
-                            )
-                        }
-                    )
-
-                    if (uris.isEmpty()) continue
-                    val server = PlexServer(
-                        name = resource.optString("name").ifEmpty { "Plex Media Server" },
-                        accessToken = resource.optString("accessToken").ifEmpty { token },
-                        connections = uris,
-                    )
-                    if (resource.optBoolean("owned")) owned += server.accessToken
-                    add(server)
-                }
-            // The account's own servers first: signing in connects to the first that
-            // answers, and plex.tv lists a friend's shared server as readily as your own.
-            }.sortedBy { it.accessToken !in owned }
+            serversFrom(body, token)
         }
+    }
+
+    /**
+     * The servers in plex.tv's list of resources: the account's own first, then any shared
+     * with it, each with the addresses to try and the token to use there.
+     */
+    internal fun serversFrom(body: String, token: String): List<PlexServer> {
+        val resources = JSONArray(body)
+        val owned = mutableSetOf<String>()
+        return buildList {
+            for (index in 0 until resources.length()) {
+                val resource = resources.getJSONObject(index)
+                if (!resource.optString("provides").contains("server")) continue
+
+                val connections = resource.optJSONArray("connections") ?: JSONArray()
+                val uris = connectionOrder(
+                    (0 until connections.length()).map { index ->
+                        val connection = connections.getJSONObject(index)
+                        PlexConnection(
+                            uri = connection.optString("uri"),
+                            address = connection.optString("address"),
+                            port = connection.optInt("port", 32400),
+                            local = connection.optBoolean("local"),
+                            relay = connection.optBoolean("relay"),
+                        )
+                    }
+                )
+
+                if (uris.isEmpty()) continue
+                val server = PlexServer(
+                    name = resource.optString("name").ifEmpty { "Plex Media Server" },
+                    accessToken = resource.optString("accessToken").ifEmpty { token },
+                    connections = uris,
+                    owned = resource.optBoolean("owned"),
+                    sharedBy = resource.optString("sourceTitle").takeIf { it.isNotEmpty() && !resource.optBoolean("owned") },
+                )
+                if (server.owned) owned += server.accessToken
+                add(server)
+            }
+        // The account's own servers first: signing in connects to the first that
+        // answers, and plex.tv lists a friend's shared server as readily as your own.
+        }.sortedBy { it.accessToken !in owned }
     }
 
     /** One way to reach a server, as plex.tv lists it. */

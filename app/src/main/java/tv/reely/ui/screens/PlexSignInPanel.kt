@@ -210,17 +210,17 @@ private fun SignedInNoServer(
         ) {
             SectionHeading("Plex")
             Text(
-                text = if (looking) "Finding your Plex server" else "Can't find your Plex server",
+                text = if (looking) "Finding a Plex server" else "Couldn't reach a Plex server",
                 color = Chalk,
                 style = ReelyType.Display.copy(fontSize = 30.sp, lineHeight = 36.sp),
             )
             Text(
                 text = if (looking) {
                     "You're signed in${plex.user?.title?.let { " as $it" }.orEmpty()}. " +
-                        "Looking for your server, at home first, then over the internet."
+                        "Looking for the servers you can use, your own or shared with you, at home first, then over the internet."
                 } else {
-                    "Make sure Plex Media Server is running and signed in to the same account. " +
-                        "Reely keeps looking, or try again now."
+                    "Any server this account owns or has been given access to will do. " +
+                        "Make sure it's on. Reely keeps looking, or try again now."
                 },
                 color = Muted,
                 style = ReelyType.Body,

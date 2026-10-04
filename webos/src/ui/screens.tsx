@@ -31,11 +31,11 @@ export function SignIn(props: { app: App; state: AppState }) {
   if (session.token && !session.baseUrl) {
     return (
       <div class="center">
-        <h1 class="big">{session.finding ? "Finding your Plex server" : "Can't find your Plex server"}</h1>
+        <h1 class="big">{session.finding ? "Finding a Plex server" : "Couldn't reach a Plex server"}</h1>
         <p class="note">
           {session.finding
-            ? "You're signed in. Looking for your server, at home first, then over the internet."
-            : session.error ?? "Make sure Plex Media Server is running and signed in to the same account."}
+            ? "You're signed in. Looking for the servers you can use, your own or shared with you, at home first, then over the internet."
+            : session.error ?? "Any server this account owns or has been given access to will do. Make sure it's on."}
         </p>
         {session.finding ? <Spinner /> : (
           <div class="actions">

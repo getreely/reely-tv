@@ -660,7 +660,9 @@ export class App {
     }
     if (this.current.plex.token !== token) return;
     if (!chosen) {
-      this.setPlex({ servers, finding: false, error: servers.length ? "Can't find your Plex server. Make sure it's on." : "No Plex servers on this account." });
+      this.setPlex({ servers, finding: false, error: servers.length
+        ? `Found ${servers.map((s) => s.name).join(" and ")}, but couldn't reach ${servers.length > 1 ? "any of them" : "it"}. Make sure it's on. Reely keeps trying.`
+        : "This Plex account has no Plex server of its own, and nobody has shared one with it yet." });
       // It keeps looking, every little while, as well as at Try again.
       this.lookAgainSoon(token);
       return;
