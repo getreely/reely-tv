@@ -23,8 +23,9 @@
     </Group>
 
     <Group id="shell" visible="false">
-      <NavBar id="nav" />
+      <!-- The tabs drawn after the screens, so a page's picture can fill the screen behind them. -->
       <Group id="screens" translation="[0, 130]" />
+      <NavBar id="nav" />
     </Group>
 
     <PlayerView id="player" visible="false" />

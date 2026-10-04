@@ -31,6 +31,7 @@ app (Amazon's Vega SDK, React Native), which can reuse the LG app's TypeScript c
 | Resume, progress and watched kept with Plex | ✅ | ✅ | ✅ | ✅ | ⬜ |
 | Sound and subtitle tracks, kept with Plex; subtitle size and style | ✅ | ✅ | ✅ | 🟡 (the choices tested; size and style are the Roku's caption style) | ⬜ |
 | Colour of your own (blue by default): highlights, progress and the mark | ✅ | ✅ (same setting) | ✅ | ✅ (as each screen is drawn) | ⬜ |
+| Home and the Movies/TV Shows homes: hero with the title, details, summary and backdrop of what has the cursor, the first title before it does | ✅ | ✅ | ✅ | ✅ (title in text: Roku items carry no logo) | ⬜ |
 | Subtitles off at the start (forced ones still shown) | ✅ | ✅ (same setting) | ✅ | ✅ | ⬜ |
 | Find subtitles online | ✅ | ✅ | ✅ | ✅ (found, added and switched on, in the simulator) | ⬜ |
 | Skip intro and credits; Up Next; next season | ✅ | ✅ | ✅ | ✅ (Skip Intro in the simulator; Up Next and skipping in unit tests) | ⬜ |

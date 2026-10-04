@@ -13,6 +13,7 @@
   <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/ScreenKit.brs" />
   <children>
+    <HeroView id="hero" fallback="Home" />
     <!-- A request that's arrived: what it is, Watch and Dismiss, above the rows. -->
     <Group id="ready" visible="false">
       <Poster uri="pkg:/images/card.9.png" blendColor="0x15171BFF" translation="[96, 10]" width="1728" height="150" />
@@ -22,7 +23,7 @@
       <PillRow id="readyActions" translation="[1340, 50]" fontSize="26" />
     </Group>
     <Label id="note" translation="[96, 40]" width="1700" color="0xFF6B6BFF" />
-    <RowList id="rows" translation="[96, 30]" itemComponentName="PosterItem" numRows="3"
+    <RowList id="rows" translation="[96, 30]" itemComponentName="PosterItem" numRows="2"
       rowItemSpacing="[[24, 0]]" itemSpacing="[0, 44]" showRowLabel="[true]" rowLabelColor="0xF2F4F7FF"
       rowLabelOffset="[[0, 14]]" rowFocusAnimationStyle="floatingFocus" drawFocusFeedback="false" />
   </children>

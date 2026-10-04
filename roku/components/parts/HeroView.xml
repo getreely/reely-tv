@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The top of Home and of the Movies and TV Shows homes, as on the Fire TV: what has the
+     cursor, or what the page starts with, its picture behind the whole screen, its name,
+     its details and a few lines about it. -->
+<component name="HeroView" extends="Group">
+  <interface>
+    <field id="item" type="assocarray" onChange="show" />
+    <!-- Said when there's nothing to show yet. -->
+    <field id="fallback" type="string" onChange="show" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/parts/HeroView.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/ScreenKit.brs" />
+  <children>
+    <!-- The whole screen, the tabs' strip included: the screens sit 130 down. -->
+    <Poster id="art" translation="[0, -130]" width="1920" height="1080" loadDisplayMode="scaleToZoom" />
+    <Poster id="fadeLeft" uri="pkg:/images/fade_left.png" translation="[0, -130]" width="1920" height="1080" />
+    <Poster id="fadeBottom" uri="pkg:/images/fade_bottom.png" translation="[0, -130]" width="1920" height="1080" />
+    <Label id="title" translation="[96, 30]" width="1400" color="0xF2F4F7FF" />
+    <Label id="facts" translation="[96, 118]" width="1400" color="0xB3BAC4FF" />
+    <Label id="summary" translation="[96, 166]" width="1100" wrap="true" maxLines="3" lineSpacing="6" color="0xB3BAC4FF" />
+  </children>
+</component>

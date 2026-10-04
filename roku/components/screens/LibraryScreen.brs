@@ -16,6 +16,8 @@ sub init()
     m.tools.observeField("pressed", "onTool")
     m.letters.observeField("pressed", "onLetter")
     m.rows.observeField("rowItemSelected", "onRowPicked")
+    m.hero = m.top.findNode("hero")
+    m.rows.observeField("rowItemFocused", "showHero")
     m.grid.observeField("itemSelected", "onGridPicked")
     m.grid.observeField("itemFocused", "onGridFocused")
     m.global.observeField("home", "paintHome")
@@ -187,6 +189,12 @@ sub paint()
     m.letters.visible = grid and m.sort = "titleSort:asc" and m.meta.letters.Count() > 1
     m.rows.visible = m.view = "home"
     m.grid.visible = m.view <> "home"
+    ' The tab's home has the hero at the top, with the views and the rows under it.
+    heroOn = m.view = "home"
+    m.hero.visible = heroOn
+    m.hero.fallback = Iif_(m.kind = "movie", "Movies", "TV Shows")
+    m.views.translation = Iif_(heroOn, [96, 300], [96, 10])
+    m.rows.translation = Iif_(heroOn, [96, 390], [96, 100])
     m.grid.translation = Iif_(m.letters.visible, [96, 230], Iif_(grid, [96, 160], [96, 100]))
     m.note.text = ""
     if m.view = "collections" then
@@ -233,6 +241,20 @@ sub paintHome()
         { title: "Recently Added", items: added, groups: groups },
         { title: "Recently Released", items: Arr_(m.meta.released) }
     ])
+    showHero()
+end sub
+
+' The hero: the title with the cursor in the rows, else the first title on the page.
+sub showHero()
+    if m.view <> "home" then return
+    item = invalid
+    if m.rows.isInFocusChain() then item = FocusedRowItem_(m.rows)
+    if item = invalid and m.rowItems <> invalid and m.rowItems.Count() > 0 and m.rowItems[0].Count() > 0 then item = m.rowItems[0][0]
+    if item = invalid then item = {}
+    ' Set only when it's another title: each setting draws the hero again.
+    was = m.hero.item
+    if was <> invalid and Str_(was.ratingKey) = Str_(item.ratingKey) and Str_(was.serverBase) = Str_(item.serverBase) and was.Count() = item.Count() then return
+    m.hero.item = item
 end sub
 
 sub onView()

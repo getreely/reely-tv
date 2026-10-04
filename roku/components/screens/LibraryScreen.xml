@@ -14,6 +14,8 @@
   <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/ScreenKit.brs" />
   <children>
+    <!-- On the tab's own home only, as on the Fire TV. -->
+    <HeroView id="hero" visible="false" />
     <PillRow id="views" translation="[96, 10]" />
     <PillRow id="tools" translation="[96, 88]" visible="false" fontSize="24" />
     <PillRow id="letters" translation="[96, 158]" visible="false" fontSize="22" />

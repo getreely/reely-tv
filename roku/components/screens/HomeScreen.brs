@@ -4,6 +4,8 @@ sub init()
     m.note.font = Regular_(28)
     m.rows.rowLabelFont = Bold_(32)
     m.rows.observeField("rowItemSelected", "onSelected")
+    m.hero = m.top.findNode("hero")
+    m.rows.observeField("rowItemFocused", "onFocused")
     m.global.observeField("home", "render")
     m.global.observeField("prefs", "render")
     m.global.observeField("ready", "paintReady")
@@ -50,12 +52,32 @@ sub render()
         m.note.text = "Loading your library…"
         m.note.color = "0xB3BAC4FF"
     end if
-    top = 30
-    if m.readyGroup.visible then top = 190
+    ' Under the hero, which shows what has the cursor, or the first title before it does.
+    top = HERO_ROWS_TOP()
+    ' A request that's arrived goes between the hero and the rows.
+    m.readyGroup.translation = [0, top - 10]
+    if m.readyGroup.visible then top = top + 170
     if m.note.text <> "" then top = top + 60
     m.note.translation = [96, top - 50]
     m.rows.translation = [96, top]
     if not had and m.top.isInFocusChain() then m.rows.setFocus(true)
+    showHero()
+end sub
+
+' The hero: the title with the cursor in the rows, else the first title on the page.
+sub onFocused()
+    showHero()
+end sub
+
+sub showHero()
+    item = invalid
+    if m.rows.hasFocus() or m.rows.isInFocusChain() then item = FocusedRowItem_(m.rows)
+    if item = invalid and m.rowItems <> invalid and m.rowItems.Count() > 0 and m.rowItems[0].Count() > 0 then item = m.rowItems[0][0]
+    if item = invalid then item = {}
+    ' Set only when it's another title: each setting draws the hero again.
+    was = m.hero.item
+    if was <> invalid and Str_(was.ratingKey) = Str_(item.ratingKey) and Str_(was.serverBase) = Str_(item.serverBase) and was.Count() = item.Count() then return
+    m.hero.item = item
 end sub
 
 sub focusIn()
@@ -112,4 +134,9 @@ function onKeyEvent(key as string, press as boolean) as boolean
         return true
     end if
     return false
+end function
+
+' Where the rows start: under the hero's name, details and summary.
+function HERO_ROWS_TOP() as integer
+    return 330
 end function
