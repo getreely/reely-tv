@@ -45,7 +45,7 @@ function Tour_Steps() as object
         { title: "The top row", body: "Press Up to reach the tabs: Search, Home, Movies, TV Shows, Live TV and Request. Settings is the gear on the right. Moving onto a tab opens it.", key: "Up" },
         { title: "The ✱ key for more", body: "Press ✱ on any poster for more: carry on or start again, mark it watched, or go to its page. On a show, it can play the next episode.", key: "✱" },
         { title: "While you watch", body: "Left and Right, or Rewind and Fast Forward, move through it, with pictures of where you'll land. Down brings up sound, subtitles, chapters and the sleep timer. Back puts them away.", key: "Down" },
-        { title: "Live TV", body: "Left and Right change channel, and ✱ adds it to Favorites or starts the programme over. In the guide, OK on something to come reminds you when it starts.", key: "Left · Right" },
+        { title: "Live TV", body: "Left and Right change channel, and ✱ adds it to Favorites or starts the show over. In the guide, OK on something to come reminds you when it starts.", key: "Left · Right" },
         { title: "Can't find something?", body: "The Request tab finds movies and shows your server doesn't have yet and asks for them. The first time, enter your Reely address there.", key: "" },
         { title: "You're all set", body: "You can take this tour again from Settings, under About.", key: "" }
     ]

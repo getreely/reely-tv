@@ -105,7 +105,7 @@ function Settings_() as object
         labels.Push(a.label)
         on.Push(Accent_Of(p.accent).id = a.id)
     end for
-    out.Push({ group: "Look", title: "Colour", note: "For what's highlighted, progress, and the Reely mark.", labels: labels, on: on, key: "accent" })
+    out.Push({ group: "Theme", title: "Theme", note: "The color of what's highlighted, progress bars, and the Reely mark.", labels: labels, on: on, key: "accent" })
 
     hidden = {}
     for each id in Arr_(p.hiddenRows)

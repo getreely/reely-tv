@@ -236,8 +236,8 @@ export function Settings(props: { app: App; state: AppState; onProfiles: () => v
         </Setting>
       </Group>
 
-      <Group title="Look">
-        <Setting title="Colour" note="For what's highlighted, progress, and the Reely mark.">
+      <Group title="Theme">
+        <Setting title="Theme" note="The color of what's highlighted, progress bars, and the Reely mark.">
           {ACCENTS.map((a) => (
             <Pill key={a.id} label={a.label} on={prefs.accent === a.id} onPress={() => app.setAccent(a.id)} />
           ))}

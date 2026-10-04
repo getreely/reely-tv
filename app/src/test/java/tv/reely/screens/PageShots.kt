@@ -80,7 +80,8 @@ class PageShots {
     private fun openSection(name: String, @Suppress("UNUSED_PARAMETER") focusOn: String = "") {
         compose.onNodeWithText(name).performClick()
         compose.waitForIdle()
-        compose.onNodeWithText(name).requestFocus()
+        // The section in the rail, which comes first: a row inside can share its name.
+        compose.onAllNodesWithText(name).onFirst().requestFocus()
         compose.waitForIdle()
         compose.onRoot().performKeyInput { pressKey(androidx.compose.ui.input.key.Key.DirectionRight) }
         compose.waitForIdle()
@@ -112,6 +113,12 @@ class PageShots {
         )
         openSection("Updates", "Download and install")
         Shots.save(compose, "settings-updates")
+    }
+
+    @Test fun settingsTheme() {
+        settings()
+        openSection("Theme", "Reely's own")
+        Shots.save(compose, "settings-theme")
     }
 
     @Test fun settingsAbout() {

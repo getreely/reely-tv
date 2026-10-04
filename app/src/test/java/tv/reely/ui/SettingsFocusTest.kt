@@ -58,7 +58,7 @@ class SettingsFocusTest {
 
     private fun optionsHaveFocus(): Boolean {
         val focused = compose.onAllNodes(isFocused()).fetchSemanticsNodes()
-        val sections = listOf("Playback", "Home", "Live TV", "Requests", "Plex", "Updates", "About", "TV Shows", "Settings tab")
+        val sections = listOf("Playback", "Home", "Theme", "Live TV", "Requests", "Plex", "Updates", "About", "TV Shows", "Settings tab")
         return focused.isNotEmpty() && focused.none { node ->
             sections.any { name -> hasText(name).matches(node) }
         }
@@ -102,7 +102,7 @@ class SettingsFocusTest {
         open()
         compose.runOnIdle { content.requestFocus() }
         compose.waitForIdle()
-        repeat(5) { press(Key.DirectionDown) }
+        repeat(6) { press(Key.DirectionDown) }
         section("Updates").assertIsFocused()
 
         press(Key.DirectionRight)
@@ -120,7 +120,7 @@ class SettingsFocusTest {
         open()
         compose.runOnIdle { content.requestFocus() }
         compose.waitForIdle()
-        repeat(5) { press(Key.DirectionDown) }
+        repeat(6) { press(Key.DirectionDown) }
         section("Updates").assertIsFocused()
         press(Key.DirectionRight)
         assertTrue(optionsHaveFocus())

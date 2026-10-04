@@ -90,6 +90,7 @@ import kotlin.math.roundToInt
 private enum class Section(val title: String) {
     PLAYBACK("Playback"),
     HOME("Home"),
+    THEME("Theme"),
     LIVE_TV("Live TV"),
     REQUESTS("Requests"),
     PLEX("Plex"),
@@ -225,8 +226,9 @@ fun SettingsScreen(
                 Section.HOME -> HomeSection(
                     prefs, reelyConnected = requests.server != null, onToggleHomeRow, onSetScreensaver,
                     iptvOn = iptv.on,
-                    onSetAccent = onSetAccent,
                 )
+
+                Section.THEME -> ThemeSection(prefs, onSetAccent)
 
                 Section.REQUESTS -> RequestsSection(requests, onDisconnectReely)
 
@@ -657,7 +659,6 @@ private fun HomeSection(
     onToggle: (tv.reely.ui.HomeRow) -> Unit,
     onSetScreensaver: (Int) -> Unit,
     iptvOn: Boolean = false,
-    onSetAccent: (String) -> Unit = {},
 ) {
     // IPTV's rows only while its movies and shows are switched on.
     val iptvRows = setOf(tv.reely.ui.HomeRow.IPTV_MOVIES, tv.reely.ui.HomeRow.IPTV_SHOWS)
@@ -702,10 +703,16 @@ private fun HomeSection(
             onSelect = onSetScreensaver,
         )
     }
-    SettingGroup("Look") {
+}
+
+/** The color things are marked in: Reely's blue unless another is picked. */
+@Composable
+private fun ThemeSection(prefs: PlayerPrefs, onSetAccent: (String) -> Unit) {
+    SettingGroup("Theme") {
         ChoiceRow(
-            title = "Colour",
-            description = "For what's highlighted, progress, and the Reely mark.",
+            title = "Theme",
+            description = "The color of what's highlighted, progress bars, and the Reely mark.",
+            first = true,
             options = tv.reely.ui.theme.AccentChoice.entries.map { choice ->
                 Option(choice.id, choice.label, if (choice == tv.reely.ui.theme.AccentChoice.BLUE) "Reely's own" else null)
             },

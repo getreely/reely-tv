@@ -27,7 +27,7 @@ export const TOUR: Array<{ title: string; body: string; key: string | null }> = 
   },
   {
     title: "Live TV",
-    body: "Left and Right change channel, and Down opens the guide. In the guide, OK on something to come reminds you when it starts. The green key adds a channel to Favorites; yellow starts a programme over.",
+    body: "Left and Right change channel, and Down opens the guide. In the guide, OK on something to come reminds you when it starts. The green key adds a channel to Favorites; yellow starts a show over.",
     key: "Down",
   },
   {
