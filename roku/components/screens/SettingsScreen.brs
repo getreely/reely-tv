@@ -99,6 +99,14 @@ function Settings_() as object
     end for
     out.Push({ group: "", title: "Up Next", note: "How long before the next episode starts by itself.", labels: labels, on: on, key: "upNext" })
 
+    labels = []
+    on = []
+    for each a in Accent_Choices()
+        labels.Push(a.label)
+        on.Push(Accent_Of(p.accent).id = a.id)
+    end for
+    out.Push({ group: "Look", title: "Colour", note: "For what's highlighted, progress, and the Reely mark.", labels: labels, on: on, key: "accent" })
+
     hidden = {}
     for each id in Arr_(p.hiddenRows)
         hidden[id] = true
@@ -361,6 +369,8 @@ sub onPressed(event as object)
         p.playbackMode = Modes_()[i].id
     else if key = "bitrate" then
         p.maxBitrateKbps = Bitrates_()[i]
+    else if key = "accent" then
+        p.accent = Accent_Choices()[i].id
     else if key = "subtitlesAtStart" then
         p.subtitlesAtStart = Iif_(i = 0, "plex", "off")
     else if key = "skipIntros" then

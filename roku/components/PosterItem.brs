@@ -75,6 +75,9 @@ sub show()
     if c.tag <> invalid then tag = c.tag
     m.tag.text = tag
     m.tag.visible = tag <> ""
+    m.tagBack.color = Accent_()
+    m.tag.color = AccentOn_()
+    m.progress.color = Accent_()
     m.tagBack.visible = tag <> ""
     m.tickMark.visible = watched
     count = c.badgeCount

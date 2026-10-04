@@ -10,6 +10,7 @@
   </interface>
   <script type="text/brightscript" uri="pkg:/components/parts/ChannelItem.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
   <children>
     <Poster id="back" uri="pkg:/images/card.9.png" blendColor="0x15171BFF" />
     <Poster id="ring" uri="pkg:/images/ring.9.png" blendColor="0xF2F4F7FF" visible="false" />

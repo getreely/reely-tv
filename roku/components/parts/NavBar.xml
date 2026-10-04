@@ -5,6 +5,8 @@
   <interface>
     <!-- The tab that's open, by id; set from outside when a page changes it. -->
     <field id="current" type="string" onChange="paint" />
+    <!-- The colour picked in Settings, for the mark. -->
+    <field id="accent" type="string" onChange="paintMark" />
     <!-- A tab arrived at or pressed: its id. -->
     <field id="chosen" type="string" alwaysNotify="true" />
     <!-- Down out of the tabs, into the page. -->
@@ -14,7 +16,7 @@
   <script type="text/brightscript" uri="pkg:/components/parts/NavBar.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
   <children>
-    <Poster id="mark" uri="pkg:/images/mark.png" width="29" height="60" translation="[96, 30]" />
+    <Poster id="mark" uri="pkg:/images/mark_white.png" blendColor="0x2E6BFFFF" width="29" height="60" translation="[96, 30]" />
     <Group id="tabs" />
     <Label id="clock" translation="[1704, 28]" width="120" height="64" horizAlign="right" vertAlign="center" color="0x7F8792FF" />
     <Timer id="clockTimer" duration="20" repeat="true" />

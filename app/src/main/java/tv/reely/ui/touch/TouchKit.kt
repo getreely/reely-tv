@@ -63,7 +63,7 @@ import tv.reely.ui.theme.SurfaceRaised
  * than focused. The television's screens use none of this.
  */
 
-private val TouchColors = darkColorScheme(
+private fun touchColors() = darkColorScheme(
     primary = Accent,
     onPrimary = Ink,
     secondary = Chalk,
@@ -89,7 +89,7 @@ private val TouchColors = darkColorScheme(
 fun TouchTheme(content: @Composable () -> Unit) {
     val base = androidx.compose.material3.Typography()
     MaterialTheme(
-        colorScheme = TouchColors,
+        colorScheme = touchColors(),
         typography = androidx.compose.material3.Typography(
             displaySmall = base.displaySmall.copy(fontFamily = Geist, fontWeight = FontWeight.Bold),
             headlineMedium = base.headlineMedium.copy(fontFamily = Geist, fontWeight = FontWeight.Bold),

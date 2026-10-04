@@ -39,6 +39,16 @@ class HomeShot {
     @Test fun home() = homeWithFocusOn("Harbor Lights", "home")
 
     /** Focus down in a lower row: the page scrolls, and the lifted card must stay whole. */
+    /** Another colour picked in Settings: the mark, the tab underline and progress follow it. */
+    @Test fun homeInGold() {
+        tv.reely.ui.theme.useAccent("gold")
+        try {
+            homeWithFocusOn("Harbor Lights", "home-gold")
+        } finally {
+            tv.reely.ui.theme.useAccent("blue")
+        }
+    }
+
     @Test fun homeLowerRow() = homeWithFocusOn("2 new episodes", "home-lower-row")
 
     /** Holding OK on a half-watched episode: its own still, where it's up to, and what to do. */

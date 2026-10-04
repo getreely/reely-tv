@@ -42,6 +42,7 @@ internal fun TouchSettings(viewModel: ReelyViewModel, state: ReelyState, onSwitc
         onToggleSkipCredits = viewModel::toggleSkipCredits,
         onSetAudioOutput = viewModel::setAudioOutput,
         onSetScreensaver = viewModel::setScreensaverMinutes,
+        onSetAccent = viewModel::setAccent,
         onNudgeThemeVolume = viewModel::nudgeThemeVolume,
         onSetPlaybackMode = viewModel::setPlaybackMode,
         onSetMaxBitrate = viewModel::setMaxBitrate,

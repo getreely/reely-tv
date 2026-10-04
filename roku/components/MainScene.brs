@@ -16,6 +16,8 @@ sub init()
     m.iptv.observeField("catalogState", "onIptvState")
     m.iptv.control = "run"
     m.global.addFields({ iptv: m.iptv })
+    a = Accent_Of(m.global.prefs.accent)
+    m.global.addFields({ accent: a.color, accentOn: a.on })
     m.http = {}
     m.signIn = m.top.findNode("signIn")
     m.shell = m.top.findNode("shell")
@@ -30,6 +32,7 @@ sub init()
         m.top.findNode(id).font = Regular_(30)
     end for
     m.nav.observeField("chosen", "onTab")
+    paintAccent()
     m.nav.observeField("leave", "intoScreen")
     m.player.observeField("done", "onPlayerDone")
     m.liveView = m.top.findNode("liveView")
@@ -54,7 +57,7 @@ end sub
 ' The settings kept on this Roku, with the Fire TV's defaults.
 function Prefs_() as object
     p = ReadJson_("prefs", {})
-    defaults = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], streamFormat: "m3u8", iptvLibrary: false, iptvWins: false, screensaver: true, tourSeen: false, subtitlesAtStart: "plex" }
+    defaults = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], streamFormat: "m3u8", iptvLibrary: false, iptvWins: false, screensaver: true, tourSeen: false, subtitlesAtStart: "plex", accent: "blue" }
     for each k in defaults
         if p[k] = invalid then p[k] = defaults[k]
     end for
@@ -452,6 +455,11 @@ sub onGo(event as object)
         before = m.global.prefs
         m.global.prefs = route.prefs
         WriteJson_("prefs", route.prefs)
+        a = Accent_Of(route.prefs.accent)
+        if a.color <> m.global.accent then
+            m.global.setFields({ accent: a.color, accentOn: a.on })
+            paintAccent()
+        end if
         on = Bool_(route.prefs.iptvLibrary)
         if on <> Bool_(before.iptvLibrary) then
             if on then loadIptv(false) else Ask_("iptvOff", {})
@@ -874,3 +882,13 @@ function onKeyEvent(key as string, press as boolean) as boolean
     end if
     return false
 end function
+
+' The colour picked in Settings on what's already drawn: the mark, here and in the tabs.
+' Everything else takes it as it's drawn.
+sub paintAccent()
+    for each id in ["signInMark"]
+        n = m.top.findNode(id)
+        if n <> invalid then n.blendColor = Accent_()
+    end for
+    m.nav.accent = Accent_()
+end sub

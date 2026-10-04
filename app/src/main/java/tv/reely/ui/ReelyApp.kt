@@ -757,6 +757,7 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
                 onToggleSkipCredits = viewModel::toggleSkipCredits,
                 onSetAudioOutput = viewModel::setAudioOutput,
                 onSetScreensaver = viewModel::setScreensaverMinutes,
+                onSetAccent = viewModel::setAccent,
                 onNudgeThemeVolume = viewModel::nudgeThemeVolume,
                 onSetPlaybackMode = viewModel::setPlaybackMode,
                 onSetMaxBitrate = viewModel::setMaxBitrate,
@@ -1019,6 +1020,8 @@ internal fun TopBar(
         androidx.compose.foundation.Image(
             painter = androidx.compose.ui.res.painterResource(tv.reely.R.drawable.ic_mark),
             contentDescription = "Reely",
+            // In the colour chosen in Settings, blue as drawn unless another is picked.
+            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(tv.reely.ui.theme.Accent),
             modifier = Modifier.padding(end = 22.dp).height(30.dp),
         )
 

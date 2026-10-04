@@ -134,6 +134,7 @@ fun SettingsScreen(
     onToggleSkipCredits: () -> Unit = {},
     onSetAudioOutput: (String?) -> Unit = {},
     onSetScreensaver: (Int) -> Unit = {},
+    onSetAccent: (String) -> Unit = {},
     onNudgeThemeVolume: (Float) -> Unit,
     onRefreshChannels: () -> Unit,
     onRefreshGuide: () -> Unit,
@@ -223,6 +224,7 @@ fun SettingsScreen(
                 Section.HOME -> HomeSection(
                     prefs, reelyConnected = requests.server != null, onToggleHomeRow, onSetScreensaver,
                     iptvOn = iptv.on,
+                    onSetAccent = onSetAccent,
                 )
 
                 Section.REQUESTS -> RequestsSection(requests, onDisconnectReely)
@@ -651,6 +653,7 @@ private fun HomeSection(
     onToggle: (tv.reely.ui.HomeRow) -> Unit,
     onSetScreensaver: (Int) -> Unit,
     iptvOn: Boolean = false,
+    onSetAccent: (String) -> Unit = {},
 ) {
     // IPTV's rows only while its movies and shows are switched on.
     val iptvRows = setOf(tv.reely.ui.HomeRow.IPTV_MOVIES, tv.reely.ui.HomeRow.IPTV_SHOWS)
@@ -693,6 +696,17 @@ private fun HomeSection(
             ),
             selected = prefs.screensaverMinutes,
             onSelect = onSetScreensaver,
+        )
+    }
+    SettingGroup("Look") {
+        ChoiceRow(
+            title = "Colour",
+            description = "For what's highlighted, progress, and the Reely mark.",
+            options = tv.reely.ui.theme.AccentChoice.entries.map { choice ->
+                Option(choice.id, choice.label, if (choice == tv.reely.ui.theme.AccentChoice.BLUE) "Reely's own" else null)
+            },
+            selected = prefs.accent,
+            onSelect = onSetAccent,
         )
     }
 }

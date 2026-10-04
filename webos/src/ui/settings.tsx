@@ -1,7 +1,7 @@
 import type { ComponentChildren } from "preact";
 import type { App, AppState, PlaybackMode } from "../app/store";
 import { useState } from "preact/hooks";
-import { BITRATE_CHOICES, HOME_ROWS, SCREENSAVER_CHOICES, SUBTITLE_SIZES, THEME_LEVELS, UP_NEXT_CHOICES } from "../app/store";
+import { ACCENTS, BITRATE_CHOICES, HOME_ROWS, SCREENSAVER_CHOICES, SUBTITLE_SIZES, THEME_LEVELS, UP_NEXT_CHOICES } from "../app/store";
 import { clearProblem, lastProblem } from "../core/crash";
 import { Pill, useRescue } from "./parts";
 
@@ -226,6 +226,14 @@ export function Settings(props: { app: App; state: AppState; onProfiles: () => v
         <Setting title="Screensaver" note="Your library's artwork and the time, when the remote's been put down.">
           {SCREENSAVER_CHOICES.map((m) => (
             <Pill key={m} label={m === 0 ? "Off" : `After ${m} minutes`} on={prefs.screensaverMinutes === m} onPress={() => app.setScreensaver(m)} />
+          ))}
+        </Setting>
+      </Group>
+
+      <Group title="Look">
+        <Setting title="Colour" note="For what's highlighted, progress, and the Reely mark.">
+          {ACCENTS.map((a) => (
+            <Pill key={a.id} label={a.label} on={prefs.accent === a.id} onPress={() => app.setAccent(a.id)} />
           ))}
         </Setting>
       </Group>

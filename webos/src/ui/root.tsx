@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { App, AppState, Route } from "../app/store";
-import { isConnected } from "../app/store";
+import { accentOf, isConnected } from "../app/store";
 import { arrived, arrowedOnto, focus, lastMoveAt, lastPressAt, rescue } from "./focus";
 import { Screensaver, slidesFrom } from "./screensaver";
 import { Tour } from "./tour";
@@ -93,6 +93,14 @@ export function Root(props: { app: App }) {
   const video = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => app.subscribe(setState), [app]);
+  // The colour picked in Settings, for everything drawn in the accent.
+  useEffect(() => {
+    const a = accentOf(state.prefs.accent);
+    document.documentElement.style.setProperty("--accent", a.color);
+    document.documentElement.style.setProperty("--on-accent", a.on);
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(a.color.slice(i, i + 2), 16));
+    document.documentElement.style.setProperty("--accent-glow", `rgba(${r}, ${g}, ${b}, 0.3)`);
+  }, [state.prefs.accent]);
   useEffect(() => {
     void app.start();
   }, [app]);
@@ -144,7 +152,11 @@ export function Root(props: { app: App }) {
     <HoldContext.Provider value={setMenuFor}>
     <div class="app">
       <nav class="tabs">
-        <img class="brand" src="mark.svg" alt="Reely" />
+        {/* Drawn here rather than as a picture, so it takes the colour picked in Settings. */}
+        <svg class="brand" viewBox="43.1 30 22 46" role="img" aria-label="Reely">
+          <path fill="var(--accent)" d="M43.19 66V30H52.72L52.99 37.19Q54.07 33.43 56.15 31.71Q58.23 30 61.52 30H64.81V38.33H61.52Q57.29 38.33 55.28 40.04Q53.26 41.75 53.26 45.78V66Z" />
+          <path fill="var(--accent)" d="M47.5,72h13a2,2 0 0 1 2,2v0a2,2 0 0 1 -2,2h-13a2,2 0 0 1 -2,-2v0a2,2 0 0 1 2,-2z" />
+        </svg>
         {connected ? (
           // Search first, as a glass, as on the Fire TV.
           <button class={"tab icon" + (route.name === "search" ? " on" : "")} data-focus aria-label="Search" onClick={() => app.navigate({ name: "search" })}>

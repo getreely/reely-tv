@@ -26,4 +26,9 @@ sub Main()
     Expect("what went wrong, kept", [p.at, p.what, p.message, p.lines], [1700000000, "libraryPage", "Type Mismatch.", ["pkg:/source/lib/plexapi.brs:212", "pkg:/components/tasks/PlexTask.brs:30"]])
     Expect("as it reads in Settings", Problem_Detail(p), "Type Mismatch." + Chr(10) + "While: libraryPage" + Chr(10) + "  at pkg:/source/lib/plexapi.brs:212" + Chr(10) + "  at pkg:/components/tasks/PlexTask.brs:30")
     Expect("no message is still a report", Problem_Entry("", "", invalid, 1).message, "Something stopped working.")
+
+    ' The colour things are marked in: the blue unless another is picked.
+    Expect("the blue for anything unknown", [Accent_Of(invalid).id, Accent_Of("plaid").color], ["blue", "0x2E6BFFFF"])
+    Expect("gold, with black written on it", [Accent_Of("gold").color, Accent_Of("gold").on], ["0xF5C542FF", "0x08090BFF"])
+    Expect("seven to choose from", Accent_Choices().Count(), 7)
 end sub

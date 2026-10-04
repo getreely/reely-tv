@@ -135,3 +135,7 @@ sub arrive()
     id = m.ids[m.at]
     if id <> "search" and id <> "settings" then m.top.chosen = id
 end sub
+
+sub paintMark()
+    if m.top.accent <> "" then m.top.findNode("mark").blendColor = m.top.accent
+end sub

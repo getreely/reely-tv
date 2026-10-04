@@ -103,3 +103,42 @@ sub Trace_(what as string)
         print "TRACE "; what
     #end if
 end sub
+
+' ---------------------------------------------------------------- The accent
+
+' The colours things can be marked in, as the other apps offer them: Reely's blue unless
+' another is picked. Each with what's written on it, white or black, whichever reads.
+function Accent_Choices() as object
+    return [
+        { id: "blue", label: "Blue", color: "0x2E6BFFFF", on: "0xFFFFFFFF" },
+        { id: "red", label: "Red", color: "0xFF5E69FF", on: "0x08090BFF" },
+        { id: "purple", label: "Purple", color: "0x8B5CF6FF", on: "0xFFFFFFFF" },
+        { id: "pink", label: "Pink", color: "0xEC4899FF", on: "0xFFFFFFFF" },
+        { id: "orange", label: "Orange", color: "0xFF8A3DFF", on: "0x08090BFF" },
+        { id: "gold", label: "Gold", color: "0xF5C542FF", on: "0x08090BFF" },
+        { id: "teal", label: "Teal", color: "0x14B8A6FF", on: "0x08090BFF" }
+    ]
+end function
+
+' The choice for an id; the blue for anything unknown.
+function Accent_Of(id as dynamic) as object
+    choices = Accent_Choices()
+    for each a in choices
+        if a.id = Str_(id) then return a
+    end for
+    return choices[0]
+end function
+
+' The colour picked in Settings, as the scene keeps it for every component.
+function Accent_() as string
+    g = m.global
+    if g <> invalid and g.accent <> invalid and g.accent <> "" then return g.accent
+    return "0x2E6BFFFF"
+end function
+
+' What's written on it.
+function AccentOn_() as string
+    g = m.global
+    if g <> invalid and g.accentOn <> invalid and g.accentOn <> "" then return g.accentOn
+    return "0xFFFFFFFF"
+end function

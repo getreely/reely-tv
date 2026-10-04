@@ -1,4 +1,6 @@
 sub init()
+    m.top.findNode("keyBack").blendColor = Accent_()
+    m.top.findNode("key").color = AccentOn_()
     m.steps = Tour_Steps()
     m.step = 0
     m.actions = m.top.findNode("actions")

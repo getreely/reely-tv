@@ -1,4 +1,5 @@
 sub init()
+    m.top.findNode("kicker").color = Accent_()
     m.top.findNode("kicker").font = Semibold_(24)
     m.top.findNode("title").font = Bold_(36)
     m.top.findNode("channel").font = Regular_(26)

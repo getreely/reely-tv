@@ -246,6 +246,8 @@ export interface Prefs {
   subtitleBackground: boolean;
   /** What a title starts with: the subtitles Plex has on, or none but forced ones. */
   subtitlesAtStart: SubtitlesAtStart;
+  /** The colour things are marked in; see ACCENTS. */
+  accent: string;
   /** A show's theme on its page: -1 off, else an index into THEME_LEVELS. */
   themeLevel: number;
   /** The highlighted channel plays in the guide. */
@@ -287,8 +289,25 @@ export const HOME_ROWS: Array<[HomeRowId, string]> = [
 
 export type SubtitlesAtStart = "plex" | "off";
 
+/**
+ * The colours things can be marked in, as the Fire TV offers them: the electric blue
+ * unless another is picked. Each comes with what's written on it, white or black.
+ */
+export const ACCENTS: Array<{ id: string; label: string; color: string; on: string }> = [
+  { id: "blue", label: "Blue", color: "#2e6bff", on: "#ffffff" },
+  { id: "red", label: "Red", color: "#ff5e69", on: "#08090b" },
+  { id: "purple", label: "Purple", color: "#8b5cf6", on: "#ffffff" },
+  { id: "pink", label: "Pink", color: "#ec4899", on: "#ffffff" },
+  { id: "orange", label: "Orange", color: "#ff8a3d", on: "#08090b" },
+  { id: "gold", label: "Gold", color: "#f5c542", on: "#08090b" },
+  { id: "teal", label: "Teal", color: "#14b8a6", on: "#08090b" },
+];
+
+/** The colour for an id; the blue for anything unknown. */
+export const accentOf = (id: string | undefined) => ACCENTS.find((a) => a.id === id) ?? ACCENTS[0];
+
 export const UP_NEXT_CHOICES = [0, 5, 10, 12, 15, 20, 30];
-const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], iptvLibrary: false, iptvWins: false, screensaverMinutes: 3, tourSeen: false, subtitleScale: 0.9, subtitleBackground: false, subtitlesAtStart: "plex", themeLevel: -1, guidePreview: true, streamFormat: "m3u8" };
+const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], iptvLibrary: false, iptvWins: false, screensaverMinutes: 3, tourSeen: false, subtitleScale: 0.9, subtitleBackground: false, subtitlesAtStart: "plex", accent: "blue", themeLevel: -1, guidePreview: true, streamFormat: "m3u8" };
 
 /** As the Fire TV offers them. */
 export const BITRATE_CHOICES = [0, 20_000, 12_000, 8_000, 4_000, 2_000];
@@ -529,6 +548,7 @@ export class App {
         subtitleScale: SUBTITLE_SIZES.includes(prefs.subtitleScale ?? -1) ? prefs.subtitleScale! : DEFAULT_PREFS.subtitleScale,
         subtitleBackground: prefs.subtitleBackground === true,
         subtitlesAtStart: prefs.subtitlesAtStart === "off" ? "off" : "plex",
+        accent: accentOf(prefs.accent).id,
         themeLevel: typeof prefs.themeLevel === "number" && prefs.themeLevel >= -1 && prefs.themeLevel < THEME_LEVELS.length ? prefs.themeLevel : -1,
         guidePreview: prefs.guidePreview !== false,
         streamFormat: prefs.streamFormat === "ts" ? "ts" : "m3u8",
@@ -2090,6 +2110,10 @@ export class App {
 
   setSubtitleBackground(on: boolean) {
     this.setPrefs({ subtitleBackground: on });
+  }
+
+  setAccent(id: string) {
+    this.setPrefs({ accent: accentOf(id).id });
   }
 
   setSubtitlesAtStart(setting: SubtitlesAtStart) {

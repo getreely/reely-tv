@@ -581,6 +581,8 @@ data class PlayerPrefs(
     val subtitleBackground: Boolean = false,
     /** Settings.SUBTITLES_PLEX or SUBTITLES_OFF: what a title starts with. */
     val subtitlesAtStart: String = Settings.SUBTITLES_PLEX,
+    /** The colour things are marked in; see AccentChoice. */
+    val accent: String = "blue",
     val upNextSeconds: Int = Settings.DEFAULT_UP_NEXT,
     val guidePreview: Boolean = true,
     val playbackMode: String = Settings.MODE_AUTO,
@@ -924,6 +926,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 subtitleScale = settings.subtitleScale,
                 subtitleBackground = settings.subtitleBackground,
                 subtitlesAtStart = settings.subtitlesAtStart,
+                accent = settings.accent,
                 upNextSeconds = settings.upNextSeconds,
                 guidePreview = settings.guidePreview,
                 playbackMode = settings.playbackMode,
@@ -976,6 +979,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     private var allChannels: List<XtreamChannel>? = null
 
     init {
+        // The colour picked in Settings, before anything is drawn in it.
+        tv.reely.ui.theme.useAccent(settings.accent)
         setReminders(tv.reely.core.Reminders.decode(settings.reminders))
 
         PlexApi.clientId = clientId
@@ -3394,6 +3399,13 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val next = !settings.subtitleBackground
         settings.subtitleBackground = next
         _state.update { it.copy(prefs = it.prefs.copy(subtitleBackground = next)) }
+    }
+
+    fun setAccent(id: String) {
+        val choice = tv.reely.ui.theme.AccentChoice.of(id)
+        settings.accent = choice.id
+        tv.reely.ui.theme.useAccent(choice.id)
+        _state.update { it.copy(prefs = it.prefs.copy(accent = choice.id)) }
     }
 
     fun setSubtitlesAtStart(value: String) {

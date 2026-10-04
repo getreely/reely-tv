@@ -26,6 +26,7 @@ sub show()
     c = m.top.itemContent
     if c = invalid then return
     m.top.findNode("name").text = c.title
+    m.top.findNode("bar").color = Accent_()
     m.top.findNode("now").text = c.description
     m.top.findNode("logo").uri = c.HDPOSTERURL
     m.top.findNode("initials").text = Iif2_(c.HDPOSTERURL = "", UCase(Left(c.ShortDescriptionLine1, 3)), "")

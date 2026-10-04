@@ -19,6 +19,11 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(SUBTITLE_BACKGROUND, false)
         set(value) = prefs.edit().putBoolean(SUBTITLE_BACKGROUND, value).apply()
 
+    /** The colour things are marked in; see AccentChoice. */
+    var accent: String
+        get() = prefs.getString(ACCENT, "blue") ?: "blue"
+        set(value) = prefs.edit().putString(ACCENT, value).apply()
+
     /** "plex" to start with the subtitles Plex has chosen for the account, "off" for none but forced ones. */
     var subtitlesAtStart: String
         get() = prefs.getString(SUBTITLES_AT_START, SUBTITLES_PLEX) ?: SUBTITLES_PLEX
@@ -211,6 +216,7 @@ class Settings(context: Context) {
         private const val SUBTITLE_SCALE = "subtitle.scale"
         private const val SUBTITLE_BACKGROUND = "subtitle.background"
         private const val SUBTITLES_AT_START = "subtitle.atStart"
+        private const val ACCENT = "look.accent"
         const val SUBTITLES_PLEX = "plex"
         const val SUBTITLES_OFF = "off"
         private const val UP_NEXT_SECONDS = "upnext.seconds"

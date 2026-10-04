@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { App, SERVER_RETRY_MS, SUBTITLE_SIZES, atStart, nextSubtitleSize } from "../../src/app/store";
+import { App, SERVER_RETRY_MS, SUBTITLE_SIZES, accentOf, atStart, nextSubtitleSize } from "../../src/app/store";
 import { streamsOf } from "../../src/api/plex";
 import { useFetcher } from "../../src/core/http";
 import { clearProblem, lastProblem, recordProblem } from "../../src/core/crash";
@@ -702,5 +702,23 @@ describe("subtitles at the start", () => {
     expect(nextSubtitleSize(0.9, -1)).toBe(0.8);
     expect(nextSubtitleSize(SUBTITLE_SIZES[SUBTITLE_SIZES.length - 1], 1)).toBe(SUBTITLE_SIZES[SUBTITLE_SIZES.length - 1]);
     expect(nextSubtitleSize(SUBTITLE_SIZES[0], -1)).toBe(SUBTITLE_SIZES[0]);
+  });
+});
+
+describe("the colour things are marked in", () => {
+  it("is the blue unless another is picked, and the blue for anything unknown", () => {
+    expect(accentOf(undefined).color).toBe("#2e6bff");
+    expect(accentOf("gold").on).toBe("#08090b");
+    expect(accentOf("plaid").id).toBe("blue");
+  });
+
+  it("is kept for next time", async () => {
+    const store = new Store("t:", new MemoryStorage());
+    const app = new App(store, instant);
+    app.setAccent("teal");
+    expect(app.state.prefs.accent).toBe("teal");
+    const again = new App(store, instant);
+    await again.start();
+    expect(again.state.prefs.accent).toBe("teal");
   });
 });

@@ -1,4 +1,5 @@
 sub init()
+    m.top.findNode("bar").color = Accent_()
     m.video = m.top.findNode("video")
     m.banner = m.top.findNode("banner")
     m.menu = m.top.findNode("menu")

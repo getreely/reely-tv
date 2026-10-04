@@ -27,9 +27,36 @@ val Line = Color(0xFF2B3038)
 val Chalk = Color(0xFFF2F4F7)
 val Muted = Color(0xFFB3BAC4)
 val Faint = Color(0xFF7F8792)
-val Accent = Color(0xFF2E6BFF)
-/** What's written on the blue: white reads on it, black doesn't quite. */
-val OnAccent = Color(0xFFFFFFFF)
+
+/**
+ * The colour things are marked in, chosen in Settings: the electric blue unless another
+ * is picked. Each comes with what's written on it, white or black, whichever reads.
+ */
+enum class AccentChoice(val id: String, val label: String, val color: Color, val on: Color) {
+    BLUE("blue", "Blue", Color(0xFF2E6BFF), Color(0xFFFFFFFF)),
+    RED("red", "Red", Color(0xFFFF5E69), Color(0xFF08090B)),
+    PURPLE("purple", "Purple", Color(0xFF8B5CF6), Color(0xFFFFFFFF)),
+    PINK("pink", "Pink", Color(0xFFEC4899), Color(0xFFFFFFFF)),
+    ORANGE("orange", "Orange", Color(0xFFFF8A3D), Color(0xFF08090B)),
+    GOLD("gold", "Gold", Color(0xFFF5C542), Color(0xFF08090B)),
+    TEAL("teal", "Teal", Color(0xFF14B8A6), Color(0xFF08090B));
+
+    companion object {
+        fun of(id: String?): AccentChoice = entries.firstOrNull { it.id == id } ?: BLUE
+    }
+}
+
+// Read as state, so whatever is drawn in it is drawn again when it changes.
+private val accentChoice = androidx.compose.runtime.mutableStateOf(AccentChoice.BLUE)
+
+val Accent: Color get() = accentChoice.value.color
+/** What's written on the accent: white on the blue, black on the lighter ones. */
+val OnAccent: Color get() = accentChoice.value.on
+
+/** The colour picked in Settings, from its id; blue for anything unknown. */
+fun useAccent(id: String?) {
+    accentChoice.value = AccentChoice.of(id)
+}
 val Danger = Color(0xFFFF6B6B)
 val Good = Color(0xFF8CBE6E)
 val Warn = Color(0xFFE9A343)
@@ -72,7 +99,7 @@ object ReelyType {
     val Label = TextStyle(fontFamily = Geist, fontWeight = FontWeight.Medium, fontSize = 14.sp, lineHeight = 18.sp)
 }
 
-private val ReelyColors = darkColorScheme(
+private fun reelyColors() = darkColorScheme(
     primary = Accent,
     onPrimary = Ink,
     secondary = Chalk,
@@ -110,7 +137,7 @@ private val ReelyTypography = Typography().let { base ->
 
 @Composable
 fun ReelyTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = ReelyColors, typography = ReelyTypography) {
+    MaterialTheme(colorScheme = reelyColors(), typography = ReelyTypography) {
         // Text with no colour or style of its own gets these. Left to the library it came
         // out black, and in the system font.
         CompositionLocalProvider(

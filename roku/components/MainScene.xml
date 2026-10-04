@@ -15,7 +15,7 @@
 
     <Group id="signIn" visible="false">
       <!-- The mark, as on Fire TV: the "r" and the bar under it. -->
-      <Poster uri="pkg:/images/mark.png" width="29" height="60" translation="[96, 40]" />
+      <Poster id="signInMark" uri="pkg:/images/mark_white.png" blendColor="0x2E6BFFFF" width="29" height="60" translation="[96, 40]" />
       <Label id="signInTitle" width="1920" translation="[0, 330]" horizAlign="center" color="0xF2F4F7FF" text="Sign in to watch your library" />
       <Label id="signInHint" width="1920" translation="[0, 420]" horizAlign="center" color="0xB3BAC4FF" wrap="true" />
       <Label id="code" width="1920" translation="[0, 500]" horizAlign="center" color="0xF2F4F7FF" />

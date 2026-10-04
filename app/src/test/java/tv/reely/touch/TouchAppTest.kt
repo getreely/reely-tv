@@ -208,6 +208,23 @@ class TouchAppTest {
         assertEquals("12,040 movies", countLabel(12040, LibraryKind.MOVIES))
     }
 
+    @Test fun `a colour picked in Settings is used everywhere, and kept for next time`() {
+        try {
+            assertEquals(tv.reely.ui.theme.AccentChoice.BLUE.color, tv.reely.ui.theme.Accent)
+            model.setAccent("gold")
+            assertEquals(tv.reely.ui.theme.AccentChoice.GOLD.color, tv.reely.ui.theme.Accent)
+            assertEquals(tv.reely.ui.theme.AccentChoice.GOLD.on, tv.reely.ui.theme.OnAccent)
+            val again = ReelyViewModel(ApplicationProvider.getApplicationContext())
+            assertEquals("gold", again.state.value.prefs.accent)
+            assertEquals(tv.reely.ui.theme.AccentChoice.GOLD.color, tv.reely.ui.theme.Accent)
+            // Anything unknown is the blue.
+            model.setAccent("plaid")
+            assertEquals(tv.reely.ui.theme.AccentChoice.BLUE.color, tv.reely.ui.theme.Accent)
+        } finally {
+            tv.reely.ui.theme.useAccent("blue")
+        }
+    }
+
     companion object {
         /** Nothing listens here, so anything asked of it fails at once. */
         const val SERVER = "http://127.0.0.1:9"

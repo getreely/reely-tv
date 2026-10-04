@@ -58,9 +58,9 @@ private const val GLOW_ALPHA = 0.06f
 
 /**
  * The colour of what is on screen, for the glow behind a focused card. Set from the
- * artwork where a screen knows it; coral until then.
+ * artwork where a screen knows it; the accent until then.
  */
-val LocalTint = compositionLocalOf { Accent }
+val LocalTint = compositionLocalOf<Color?> { null }
 
 /** Whether something in the enclosing row has focus, so the rest of it can step back. */
 private val LocalRowFocused = compositionLocalOf { false }
@@ -102,7 +102,7 @@ fun Modifier.cardLift(focused: Boolean): Modifier {
 @Composable
 fun Modifier.cardRing(focused: Boolean, corner: Dp, round: Boolean = false): Modifier {
     val on by animateFloatAsState(if (focused) 1f else 0f, tween(200), label = "card-ring")
-    val tint = LocalTint.current
+    val tint = LocalTint.current ?: Accent
     return this
         .drawWithContent {
             // The glow: a few stacked outlines, each wider and fainter, fading out by
