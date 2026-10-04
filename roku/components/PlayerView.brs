@@ -418,6 +418,7 @@ sub onOption()
         m.video.seek = Num_(value) / 1000
     else if kind = "sleep" then
         minutes = Int(Val(value))
+        Trace_("sleep " + minutes.ToStr())
         m.sleepTimer.control = "stop"
         m.sleepEnd = minutes = -1
         m.sleepUntil = 0

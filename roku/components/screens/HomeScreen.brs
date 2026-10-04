@@ -35,6 +35,13 @@ sub render()
     if not hidden.DoesExist("iptvMovies") then rows.Push({ title: "New Movies on IPTV", items: Arr_(h.iptvMovies) })
     if not hidden.DoesExist("iptvShows") then rows.Push({ title: "New Shows on IPTV", items: Arr_(h.iptvShows) })
     had = m.rows.content <> invalid and m.rows.content.getChildCount() > 0
+    #if DEBUG
+        names = []
+        for each r in rows
+            if r.items.Count() > 0 then names.Push(r.title)
+        end for
+        Trace_("home rows " + Join_(names, ", "))
+    #end if
     ShowRows_(m.rows, rows)
     m.note.text = Str_(h.error)
     m.note.color = "0xFF6B6BFF"

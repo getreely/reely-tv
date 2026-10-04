@@ -304,6 +304,16 @@ try {
   await wait(800);
   // A chapter, chosen: the panel closes and it plays on. (The simulator doesn't play
   // video, so Up Next at the credits is tested in tests/player.test.brs instead.)
+  // The sleep timer, from the same panel.
+  await moveTo("TRACE option", "sleep:15", "Down");
+  await key("Select");
+  await until("the sleep timer", () => output.includes("TRACE sleep 15"), 5000).catch(() => undefined);
+  expect("the sleep timer is set from the player's options", output.includes("TRACE sleep 15"));
+  await wait(800);
+  const panels = (output.match(/TRACE options shown/g) ?? []).length;
+  await key("Down");
+  await until("the options once more", () => (output.match(/TRACE options shown/g) ?? []).length > panels, 5000).catch(() => undefined);
+  await wait(800);
   await moveTo("TRACE option", "chapter:52000", "Down");
   await key("Select");
   await wait(800);
@@ -341,9 +351,15 @@ try {
   await key("Select");
   await wait(1200);
   await snap("roku-settings-skip-intros");
+  // A Home row switched off: Playlists, left out of Home.
+  await moveTo("TRACE setting", "rows", "Down");
+  await moveTo("PILL", "Playlists", "Right");
+  await key("Select");
+  await wait(1000);
   await key("Back");
   await wait(1500);
   await snap("roku-home-from-settings");
+  expect("a Home row switched off in Settings is left out", (lastSaid("TRACE home rows") ?? "").includes("Continue Watching") && !(lastSaid("TRACE home rows") ?? "Playlists").includes("Playlists"));
   // The poster menu, on the * key, as Roku apps have it.
   await key("Info");
   await wait(1000);
@@ -378,6 +394,18 @@ try {
   await wait(1500);
   await snap("roku-movies-drama");
   expect("a genre narrows the library", queries.some((q) => q.startsWith("/library/sections/1/all") && q.includes("genre=7")));
+  // Another order, and unwatched only.
+  await moveTo("PILL", "Recently added", "Left");
+  await key("Select");
+  await until("sorted by recently added", () => queries.some((q) => q.startsWith("/library/sections/1/all") && q.includes("sort=addedAt:desc")), 10000).catch(() => undefined);
+  expect("the library sorted by recently added", queries.some((q) => q.startsWith("/library/sections/1/all") && q.includes("sort=addedAt:desc")));
+  await wait(1200);
+  await moveTo("PILL", "Unwatched", "Right");
+  await key("Select");
+  await until("unwatched only", () => queries.some((q) => q.startsWith("/library/sections/1/all") && q.includes("unwatched=1")), 10000).catch(() => undefined);
+  expect("unwatched only narrows it", queries.some((q) => q.startsWith("/library/sections/1/all") && q.includes("unwatched=1")));
+  await wait(1200);
+  await snap("roku-movies-sorted");
   // Live TV: signed in to the provider with the on-screen keyboard.
   await toTabs();
   await moveTo("TAB", "live", "Right");
