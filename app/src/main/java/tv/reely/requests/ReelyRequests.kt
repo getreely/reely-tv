@@ -49,7 +49,29 @@ data class RequestDetail(
     val inLibrary: Boolean,
     /** Which of Reely's libraries hold it already. */
     val inLibraries: Set<Long> = emptySet(),
-)
+    /**
+     * For a show, which seasons each library holding it has been asked for. Null when Reely
+     * doesn't say (one older than this), and then a library holding it is taken to have all of it.
+     */
+    val seasonsAsked: Map<Long, Set<Int>>? = null,
+) {
+    /** The seasons already asked for in [libraryId]: none where it doesn't hold the show. */
+    fun askedIn(libraryId: Long?): Set<Int> = libraryId?.let { seasonsAsked?.get(it) }.orEmpty()
+
+    /**
+     * Whether [libraryId] has the whole of it, with nothing left to ask for there: a film it
+     * holds, or a show with every season asked for. Holding a show is not holding all of it.
+     */
+    fun complete(libraryId: Long): Boolean {
+        if (libraryId !in inLibraries) return false
+        if (!title.isShow) return true
+        val asked = seasonsAsked?.get(libraryId) ?: return true
+        return seasons.all { it.number in asked }
+    }
+
+    /** The seasons that can still be asked for in [libraryId]. */
+    fun seasonsLeft(libraryId: Long?): List<RequestSeason> = askedIn(libraryId).let { asked -> seasons.filter { it.number !in asked } }
+}
 
 /** One of Reely's libraries: a folder of movies or of shows. */
 data class RequestLibrary(val id: Long, val name: String, val kind: String) {
@@ -254,6 +276,11 @@ class ReelyRequests(
             inLibrary = (root.optJSONArray("inLibraries")?.length() ?: 0) > 0,
             inLibraries = root.optJSONArray("inLibraries")
                 ?.let { a -> (0 until a.length()).map { a.optLong(it) }.toSet() }.orEmpty(),
+            seasonsAsked = root.optJSONArray("seasonsAsked")?.let { a ->
+                (0 until a.length()).mapNotNull { a.optJSONObject(it) }.associate { o ->
+                    o.optLong("libraryId") to (o.optJSONArray("seasons")?.let { s -> (0 until s.length()).map { s.optInt(it) }.toSet() }.orEmpty())
+                }
+            },
         )
     }
 
@@ -295,7 +322,9 @@ class ReelyRequests(
         fun showMark(s: JSONObject) = when {
             s.optBoolean("downloading") -> "Downloading"
             s.optInt("onDisk") == 0 -> "Requested"
-            s.optInt("aired") > 0 && s.optInt("wanted") == 0 -> "In library"
+            // Every aired episode here. Nothing wanted only means nothing asked for is
+            // missing: a show asked for one season of is that season, not all of it.
+            s.optInt("aired") > 0 && s.optInt("onDisk") >= s.optInt("aired") -> "In library"
             else -> "Partial"
         }
         val requested = buildSet {

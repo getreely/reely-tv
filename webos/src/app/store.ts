@@ -1452,7 +1452,7 @@ export class App {
     if (!client) return;
     try {
       const [detail, places] = await Promise.all([client.detail(title), client.places().catch(() => null)]);
-      const addable = places ? reely.librariesFor(places, detail.title, detail.inLibraries) : [];
+      const addable = places ? reely.librariesFor(places, detail.title, reely.holdingAll(detail)) : [];
       const preferred = places ? reely.preferredLibrary(places, addable) : undefined;
       this.setRequestPage(key, {
         detail, places, busy: false,
@@ -1481,15 +1481,19 @@ export class App {
     const client = this.client();
     if (!page || !page.detail || !client || page.sending) return;
     const key = reely.requestKey(page.title);
-    const show = page.title.kind === "show" && page.detail.seasons.length > 0;
-    if (show && page.chosen.length === 0) {
+    // Of a show partly here, the seasons it hasn't got: Reely keeps the ones already asked for.
+    const offered = reely.seasonsLeft(page.detail, page.libraryId).map((s) => s.number);
+    const picked = page.chosen.filter((n) => offered.includes(n));
+    const show = page.title.kind === "show" && offered.length > 0;
+    if (show && picked.length === 0) {
       this.setRequestPage(key, { outcome: "Pick at least one season." });
       return;
     }
-    const all = show && page.chosen.length === page.detail.seasons.length;
+    // Every season is the whole show, which also takes in seasons still to come.
+    const all = show && picked.length === offered.length && reely.askedIn(page.detail, page.libraryId).length === 0;
     this.setRequestPage(key, { sending: true, outcome: null });
     try {
-      const outcome = await client.request(page.detail.title, show && !all ? page.chosen : null, page.libraryId ?? undefined);
+      const outcome = await client.request(page.detail.title, show && !all ? picked : null, page.libraryId ?? undefined);
       // As the Fire TV words it.
       const library = page.places?.libraries.find((l) => l.id === page.libraryId);
       const said =

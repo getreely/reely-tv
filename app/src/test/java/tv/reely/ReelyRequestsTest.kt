@@ -94,6 +94,15 @@ class ReelyRequestsTest {
                                   {"number":1,"name":"Season 1","episodes":[{},{}]},
                                   {"number":2,"name":"Season 2","episodes":[{}]}]}}
                 """.trimIndent())
+                // A show asked for one season of, which has arrived: two more to ask for.
+                path == "/api/v1/preview/show/1396" -> ex.reply(200, """
+                    {"imageBase":"https://image.tmdb.org/t/p","inLibraries":[4],
+                     "seasonsAsked":[{"libraryId":4,"seasons":[1]}],
+                     "preview":{"tmdbId":1396,"kind":"show","title":"Breaking Bad","year":2008,
+                       "seasons":[{"number":1,"name":"Season 1","episodes":[{}]},
+                                  {"number":2,"name":"Season 2","episodes":[{}]},
+                                  {"number":3,"name":"Season 3","episodes":[{}]}]}}
+                """.trimIndent())
                 path == "/api/v1/preview/movie/603" -> ex.reply(200, """
                     {"imageBase":"https://image.tmdb.org/t/p","inLibraries":[3],
                      "preview":{"tmdbId":603,"kind":"movie","title":"The Matrix","year":1999,"runtime":136,"genres":[]}}
@@ -104,6 +113,7 @@ class ReelyRequestsTest {
                     {"tmdbId":11,"filePath":""}]}""")
                 path == "/api/v1/shows" -> ex.reply(200, """{"shows":[
                     {"tmdbId":1399,"onDisk":10,"aired":73,"wanted":63},
+                    {"tmdbId":1396,"onDisk":7,"aired":62,"wanted":0},
                     {"tmdbId":0,"tvdbId":81189,"onDisk":62,"aired":62,"wanted":0}]}""")
                 path == "/api/v1/requests" && ex.requestMethod == "GET" && !query.contains("mine=1") ->
                     ex.reply(200, """{"requests":[{"id":2,"kind":"movie","tmdbId":550,"title":"Fight Club","status":"pending"}]}""")
@@ -292,6 +302,8 @@ class ReelyRequestsTest {
         assertEquals("Requested", marks.badge(film(550)))     // somebody's open request
         assertNull(marks.badge(film(99)))
         assertEquals("Partial", marks.badge(show(1399)))
+        // One season asked for and all of it here: still only part of the show.
+        assertEquals("Partial", marks.badge(show(1396)))
         assertEquals("In library", marks.badge(show(0, 81189)))
     }
 
@@ -322,5 +334,31 @@ class ReelyRequestsTest {
         assertEquals(listOf("Film 2", "Film 3"), state.shownRows[0].titles.map { it.title })
         // A show with seasons still to come is still there to ask for.
         assertEquals(listOf("Show 4", "Show 5"), state.shownRows[1].titles.map { it.title })
+    }
+
+    @Test fun `a show partly here offers the seasons it hasn't got`() = runBlocking {
+        val title = tv.reely.requests.RequestTitle("show", 1396, 0, "Breaking Bad", null, null, null, null)
+        val detail = reely().detail(title)
+        assertEquals(false, detail.complete(4))
+        assertEquals(listOf(2, 3), detail.seasonsLeft(4).map { it.number })
+        assertEquals(listOf(1, 2, 3), detail.seasonsLeft(5).map { it.number })
+        val series = tv.reely.requests.RequestLibrary(4, "TV", "shows")
+        val page = tv.reely.ui.RequestDetailState(
+            title, detail, busy = false, chosen = setOf(1, 2, 3),
+            places = tv.reely.requests.RequestPlaces(listOf(series), 4, adds = false), libraryId = 4,
+        )
+        assertEquals("the library holding part of it can still take more", listOf(series), page.addable)
+        assertEquals(listOf(2, 3), page.seasonsOffered.map { it.number })
+        assertEquals(setOf(2, 3), page.chosenOffered)
+        assertEquals("Request the other 2 seasons", page.askLabel("Request"))
+        assertEquals("Season 1 here already. Pick more to ask for.", page.partNote)
+        assertEquals("Request 1 season", page.copy(chosen = setOf(3)).askLabel("Request"))
+    }
+
+    @Test fun `a show with every season asked for, or from a Reely that doesn't say, is all here`() = runBlocking {
+        val title = tv.reely.requests.RequestTitle("show", 1396, 0, "Breaking Bad", null, null, null, null)
+        val detail = reely().detail(title)
+        assertEquals(true, detail.copy(seasonsAsked = mapOf(4L to setOf(1, 2, 3))).complete(4))
+        assertEquals(true, detail.copy(seasonsAsked = null).complete(4))
     }
 }

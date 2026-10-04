@@ -58,14 +58,23 @@ sub paint()
     d = m.detail
     held = d.inLibraries.Count()
     if m.places <> invalid then
-        m.addable = Reely_LibrariesFor(m.places, d.title, d.inLibraries)
+        m.addable = Reely_LibrariesFor(m.places, d.title, Reely_HoldingAll(d))
         canAsk = m.addable.Count() > 0
     else
         m.addable = []
         canAsk = held = 0
     end if
+    ' Of a show partly here, only the seasons it hasn't got are offered.
+    m.offered = Reely_SeasonsLeft(d, m.libraryId)
+    m.here = []
+    asked = Reely_AskedIn(d, m.libraryId)
+    for each s in d.seasons
+        if asked.DoesExist(s.number.ToStr()) then m.here.Push(s)
+    end for
     notes = []
-    if not canAsk then
+    if canAsk and m.here.Count() > 0 and m.offered.Count() > 0 then
+        notes.Push(Iif_(m.here.Count() = 1, m.here[0].name, m.here.Count().ToStr() + " seasons") + " here already. Pick more to ask for.")
+    else if not canAsk then
         notes.Push(Iif_(held > 1, "Already in " + held.ToStr() + " libraries: there's nowhere left for it to go.", "Already in your library."))
     else if held = 1 then
         notes.Push("Already in a library. It can go in another as well.")
@@ -100,13 +109,13 @@ sub paint()
         m.libraries.labels = labels
         m.libraries.on = on
     end if
-    seasons = canAsk and m.t.kind = "show" and d.seasons.Count() > 0
+    seasons = canAsk and m.t.kind = "show" and m.offered.Count() > 0
     m.seasons.visible = seasons
     m.top.findNode("seasonsTitle").visible = seasons
     if seasons then
         labels = []
         on = []
-        for each s in d.seasons
+        for each s in m.offered
             labels.Push(s.name)
             on.Push(m.chosen.DoesExist(s.number.ToStr()))
         end for
@@ -122,11 +131,21 @@ function askLabel() as string
     verb = "Request"
     if m.places <> invalid and m.places.adds then verb = "Add"
     if m.sending then return Iif_(verb = "Add", "Adding…", "Requesting…")
-    if m.t.kind <> "show" or m.detail.seasons.Count() = 0 then return verb
-    n = m.chosen.Count()
-    if n = m.detail.seasons.Count() then return verb + " all seasons"
+    if m.t.kind <> "show" or m.offered.Count() = 0 then return verb
+    n = pickedCount()
+    if n = m.offered.Count() and m.here.Count() = 0 then return verb + " all seasons"
+    if n = m.offered.Count() and n > 1 then return verb + " the other " + n.ToStr() + " seasons"
     if n = 1 then return verb + " 1 season"
     return verb + " " + n.ToStr() + " seasons"
+end function
+
+' How many of the seasons offered are picked.
+function pickedCount() as integer
+    n = 0
+    for each s in m.offered
+        if m.chosen.DoesExist(s.number.ToStr()) then n = n + 1
+    end for
+    return n
 end function
 
 sub onLibrary()
@@ -135,7 +154,7 @@ sub onLibrary()
 end sub
 
 sub onSeason()
-    n = m.detail.seasons[m.seasons.pressed].number.ToStr()
+    n = m.offered[m.seasons.pressed].number.ToStr()
     if m.chosen.DoesExist(n) then m.chosen.Delete(n) else m.chosen[n] = true
     paint()
 end sub
@@ -143,14 +162,15 @@ end sub
 sub onAsk()
     if m.sending or not m.canAsk then return
     seasons = invalid
-    if m.t.kind = "show" and m.detail.seasons.Count() > 0 then
-        if m.chosen.Count() = 0 then
+    if m.t.kind = "show" and m.offered.Count() > 0 then
+        if pickedCount() = 0 then
             m.outcome = "Choose at least one season."
             paint()
             return
         end if
+        ' Of a show partly here, the seasons picked: Reely keeps the ones already asked for.
         seasons = []
-        for each s in m.detail.seasons
+        for each s in m.offered
             if m.chosen.DoesExist(s.number.ToStr()) then seasons.Push(s.number)
         end for
     end if
@@ -177,7 +197,7 @@ sub answered(r as object)
         end for
         m.libraryId = 0
         if m.places <> invalid then
-            best = Reely_PreferredLibrary(m.places, Reely_LibrariesFor(m.places, a.detail.title, a.detail.inLibraries))
+            best = Reely_PreferredLibrary(m.places, Reely_LibrariesFor(m.places, a.detail.title, Reely_HoldingAll(a.detail)))
             if best <> invalid then m.libraryId = best.id
         end if
         paintFacts()

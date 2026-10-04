@@ -158,6 +158,7 @@ internal fun TouchRequestTitle(viewModel: ReelyViewModel, state: ReelyState, rou
                     if (held > 1) "Already in $held libraries: there's nowhere left for it to go." else "Already in your library.",
                     color = Chalk,
                 )
+                page.partNote != null -> Text(page.partNote!!, color = Chalk)
                 held == 1 -> Text("Already in a library. It can go in another as well.", color = Chalk)
                 held > 1 -> Text("Already in $held libraries. It can go in another as well.", color = Chalk)
                 detail.inLibrary -> Text("Already in your library.", color = Chalk)
@@ -172,13 +173,19 @@ internal fun TouchRequestTitle(viewModel: ReelyViewModel, state: ReelyState, rou
                     }
                 }
             }
-            if (detail != null && page.canAsk && route.title.isShow && detail.seasons.isNotEmpty()) {
+            val offered = page.seasonsOffered
+            if (detail != null && page.canAsk && route.title.isShow && offered.isNotEmpty()) {
                 TouchSectionTitle("Seasons", Modifier.padding(0.dp))
-                val all = detail.seasons.map { it.number }.toSet()
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    item(key = "all") { TouchChip("All seasons", selected = page.chosen == all, onClick = viewModel::toggleAllRequestSeasons) }
-                    items(detail.seasons, key = { it.number }) { season ->
-                        TouchChip(season.name, selected = season.number in page.chosen, onClick = { viewModel.toggleRequestSeason(season.number) })
+                    if (offered.size > 1) item(key = "all") {
+                        TouchChip(
+                            if (page.seasonsHere.isEmpty()) "All seasons" else "All the others",
+                            selected = page.chosenOffered.size == offered.size,
+                            onClick = viewModel::toggleAllRequestSeasons,
+                        )
+                    }
+                    items(offered, key = { it.number }) { season ->
+                        TouchChip(season.name, selected = season.number in page.chosenOffered, onClick = { viewModel.toggleRequestSeason(season.number) })
                     }
                 }
             }
@@ -188,13 +195,7 @@ internal fun TouchRequestTitle(viewModel: ReelyViewModel, state: ReelyState, rou
             if (detail != null && page.canAsk) {
                 val verb = if (page.places?.adds == true) "Add" else "Request"
                 TouchPrimaryButton(
-                    when {
-                        page.sending -> if (verb == "Add") "Adding…" else "Requesting…"
-                        !route.title.isShow || detail.seasons.isEmpty() -> verb
-                        page.chosen.size == detail.seasons.size -> "$verb all seasons"
-                        page.chosen.size == 1 -> "$verb 1 season"
-                        else -> "$verb ${page.chosen.size} seasons"
-                    },
+                    page.askLabel(verb),
                     viewModel::submitRequest,
                     Modifier.fillMaxWidth(),
                     enabled = !page.sending,

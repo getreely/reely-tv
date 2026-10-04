@@ -133,7 +133,68 @@ function Reely_ParseDetail(root as dynamic, fallback as object) as dynamic
     for each id in Arr_(root.inLibraries)
         held.Push(Int(Num_(id)))
     end for
-    return { title: t, backdrop: Reely_ImageUrl(Str_(p.backdrop), image, "w1280"), genres: genres, runtime: Int(Num_(p.runtime)), status: Str_(p.status).Trim(), seasons: seasons, inLibraries: held }
+    ' For a show, which seasons each library holding it has been asked for; invalid when Reely
+    ' doesn't say (one older than this), and then a library holding it has all of it.
+    asked = invalid
+    if type(root.seasonsAsked) = "roArray" then
+        asked = {}
+        for each x in root.seasonsAsked
+            if type(x) = "roAssociativeArray" then
+                list = []
+                for each n in Arr_(x.seasons)
+                    list.Push(Int(Num_(n)))
+                end for
+                asked[Int(Num_(x.libraryId)).ToStr()] = list
+            end if
+        end for
+    end if
+    return { title: t, backdrop: Reely_ImageUrl(Str_(p.backdrop), image, "w1280"), genres: genres, runtime: Int(Num_(p.runtime)), status: Str_(p.status).Trim(), seasons: seasons, inLibraries: held, seasonsAsked: asked }
+end function
+
+' The seasons already asked for in [libraryId], as a set: none where it doesn't hold the show.
+function Reely_AskedIn(d as object, libraryId as dynamic) as object
+    out = {}
+    if d.seasonsAsked = invalid or libraryId = invalid then return out
+    for each n in Arr_(d.seasonsAsked[Int(Num_(libraryId)).ToStr()])
+        out[n.ToStr()] = true
+    end for
+    return out
+end function
+
+' Whether [libraryId] has the whole of it, with nothing left to ask for there: a film it
+' holds, or a show with every season asked for. Holding a show is not holding all of it.
+function Reely_CompleteIn(d as object, libraryId as integer) as boolean
+    holds = false
+    for each id in d.inLibraries
+        if id = libraryId then holds = true
+    end for
+    if not holds then return false
+    if d.title.kind <> "show" or d.seasonsAsked = invalid then return true
+    if not d.seasonsAsked.DoesExist(libraryId.ToStr()) then return true
+    asked = Reely_AskedIn(d, libraryId)
+    for each s in d.seasons
+        if not asked.DoesExist(s.number.ToStr()) then return false
+    end for
+    return true
+end function
+
+' The libraries holding all of it: where there's nothing left to ask for.
+function Reely_HoldingAll(d as object) as object
+    out = []
+    for each id in d.inLibraries
+        if Reely_CompleteIn(d, id) then out.Push(id)
+    end for
+    return out
+end function
+
+' The seasons that can still be asked for in [libraryId].
+function Reely_SeasonsLeft(d as object, libraryId as dynamic) as object
+    asked = Reely_AskedIn(d, libraryId)
+    out = []
+    for each s in d.seasons
+        if not asked.DoesExist(s.number.ToStr()) then out.Push(s)
+    end for
+    return out
 end function
 
 ' Where things go: { libraries, defaultLibraryId, adds } from /auth/me and /libraries.
@@ -186,7 +247,9 @@ function Reely_ParseMarks(movies as dynamic, shows as dynamic, asked as dynamic)
     for each s in Arr_(shows)
         if type(s) = "roAssociativeArray" then
             mark = "Partial"
-            if Num_(s.aired) > 0 and Num_(s.wanted) = 0 then mark = "In library"
+            ' Every aired episode here. Nothing wanted only means nothing asked for is
+            ' missing: a show asked for one season of is that season, not all of it.
+            if Num_(s.aired) > 0 and Num_(s.onDisk) >= Num_(s.aired) then mark = "In library"
             if Num_(s.onDisk) = 0 then mark = "Requested"
             if s.downloading = true then mark = "Downloading"
             if Int(Num_(s.tmdbId)) > 0 then marks.showsByTmdb[Int(Num_(s.tmdbId)).ToStr()] = mark

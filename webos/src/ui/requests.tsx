@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { RequestTitle } from "../api/reely";
-import { librariesFor, requestKey } from "../api/reely";
+import { askedIn, holdingAll, librariesFor, requestKey, seasonsLeft } from "../api/reely";
 import type { App, AppState } from "../app/store";
 import { requestBadge, shownRequestRows } from "../app/store";
 import { Card, Pill, Row, Spinner, useRescue } from "./parts";
@@ -87,15 +87,21 @@ export function RequestTitlePage(props: { app: App; state: AppState; title: Requ
   const detail = page?.detail ?? null;
   const status = state.requests.mine.find((m) => requestKey(m.title) === requestKey(title))?.status;
   const held = detail?.inLibraries.length ?? 0;
-  const addable = detail && page?.places ? librariesFor(page.places, detail.title, detail.inLibraries) : [];
+  const addable = detail && page?.places ? librariesFor(page.places, detail.title, holdingAll(detail)) : [];
   const canAsk = !!detail && (page?.places ? addable.length > 0 : !detail.inLibrary);
   const show = title.kind === "show";
   const verb = page?.places?.adds ? "Add" : "Request";
+  // Of a show partly here, only the seasons it hasn't got are offered.
+  const offered = detail ? seasonsLeft(detail, page?.libraryId) : [];
+  const here = detail ? detail.seasons.filter((s) => askedIn(detail, page?.libraryId).includes(s.number)) : [];
+  const picked = offered.filter((s) => page?.chosen.includes(s.number)).length;
   const label = page?.sending
     ? verb === "Add" ? "Adding…" : "Requesting…"
-    : !show || !detail?.seasons.length ? verb
-    : page!.chosen.length === detail.seasons.length ? `${verb} all seasons`
-    : page!.chosen.length === 1 ? `${verb} 1 season` : `${verb} ${page!.chosen.length} seasons`;
+    : !show || !offered.length ? verb
+    : picked === offered.length && !here.length ? `${verb} all seasons`
+    : picked === offered.length && offered.length > 1 ? `${verb} the other ${offered.length} seasons`
+    : picked === 1 ? `${verb} 1 season` : `${verb} ${picked} seasons`;
+  const partNote = here.length && offered.length ? `${here.length === 1 ? here[0].name : `${here.length} seasons`} here already. Pick more to ask for.` : null;
   return (
     <div>
       <div class="hero">
@@ -109,7 +115,8 @@ export function RequestTitlePage(props: { app: App; state: AppState; title: Requ
         {!page || page.busy ? <Spinner /> : null}
         {page?.error ? <p class="note error">{page.error}</p> : null}
         {detail && !canAsk ? <p class="note">{held > 1 ? `Already in ${held} libraries: there's nowhere left for it to go.` : "Already in your library."}</p> : null}
-        {detail && canAsk && held > 0 ? <p class="note">{held === 1 ? "Already in a library. It can go in another as well." : `Already in ${held} libraries. It can go in another as well.`}</p> : null}
+        {detail && canAsk && partNote ? <p class="note">{partNote}</p> : null}
+        {detail && canAsk && held > 0 && !partNote ? <p class="note">{held === 1 ? "Already in a library. It can go in another as well." : `Already in ${held} libraries. It can go in another as well.`}</p> : null}
         {status ? <p class="note">{statusWords[status] ?? ""}</p> : null}
         {page?.outcome ? <p class="note" style={{ color: "var(--chalk)" }}>{page.outcome}</p> : null}
         {detail && canAsk ? <div class="actions"><Pill label={label} primary autofocus onPress={() => void app.submitRequest()} /></div> : null}
@@ -119,9 +126,9 @@ export function RequestTitlePage(props: { app: App; state: AppState; title: Requ
           {addable.map((l) => <Pill key={l.id} label={l.name} on={page?.libraryId === l.id} onPress={() => app.chooseRequestLibrary(l.id)} />)}
         </div>
       ) : null}
-      {detail && canAsk && show && detail.seasons.length ? (
+      {detail && canAsk && show && offered.length ? (
         <div class="toolbar">
-          {detail.seasons.map((s) => <Pill key={s.number} label={s.name} on={page!.chosen.includes(s.number)} onPress={() => app.toggleRequestSeason(s.number)} />)}
+          {offered.map((s) => <Pill key={s.number} label={s.name} on={page!.chosen.includes(s.number)} onPress={() => app.toggleRequestSeason(s.number)} />)}
         </div>
       ) : null}
     </div>

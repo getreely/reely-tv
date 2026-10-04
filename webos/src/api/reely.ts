@@ -47,7 +47,37 @@ export interface RequestDetail {
   seasons: RequestSeason[];
   inLibrary: boolean;
   inLibraries: number[];
+  /**
+   * For a show, which seasons each library holding it has been asked for. Null when Reely
+   * doesn't say (one older than this), and then a library holding it is taken to have all of it.
+   */
+  seasonsAsked?: Record<number, number[]> | null;
 }
+
+/** The seasons already asked for in [libraryId]: none where it doesn't hold the show. */
+export const askedIn = (detail: RequestDetail, libraryId: number | null | undefined): number[] =>
+  libraryId != null ? detail.seasonsAsked?.[libraryId] ?? [] : [];
+
+/**
+ * Whether [libraryId] has the whole of it, with nothing left to ask for there: a film it
+ * holds, or a show with every season asked for. Holding a show is not holding all of it.
+ */
+export function completeIn(detail: RequestDetail, libraryId: number): boolean {
+  if (!detail.inLibraries.includes(libraryId)) return false;
+  if (!isShowTitle(detail.title)) return true;
+  const asked = detail.seasonsAsked?.[libraryId];
+  if (!asked) return true;
+  return detail.seasons.every((s) => asked.includes(s.number));
+}
+
+/** The libraries holding all of it: where there's nothing left to ask for. */
+export const holdingAll = (detail: RequestDetail) => detail.inLibraries.filter((id) => completeIn(detail, id));
+
+/** The seasons that can still be asked for in [libraryId]. */
+export const seasonsLeft = (detail: RequestDetail, libraryId: number | null | undefined) => {
+  const asked = askedIn(detail, libraryId);
+  return detail.seasons.filter((s) => !asked.includes(s.number));
+};
 
 export interface RequestLibrary {
   id: number;
@@ -262,6 +292,10 @@ export function parseDetail(root: any, fallback: RequestTitle): RequestDetail {
       .filter((it: RequestSeason) => it.number > 0),
     inLibrary: held.length > 0,
     inLibraries: held,
+    seasonsAsked: Array.isArray(root.seasonsAsked)
+      ? Object.fromEntries(root.seasonsAsked.filter((x: any) => x && typeof x === "object")
+        .map((x: any) => [num(x.libraryId), Array.isArray(x.seasons) ? x.seasons.map(num) : []]))
+      : null,
   };
 }
 
@@ -272,7 +306,10 @@ export function parseMarks(movies: any[], shows: any[], open: any[]): TitleMarks
     marks.movies.set(num(m.tmdbId), m.downloading ? "Downloading" : str(m.filePath).trim() ? "In library" : "Requested");
   }
   const showMark = (s: any) =>
-    s.downloading ? "Downloading" : num(s.onDisk) === 0 ? "Requested" : num(s.aired) > 0 && num(s.wanted) === 0 ? "In library" : "Partial";
+    s.downloading ? "Downloading" : num(s.onDisk) === 0 ? "Requested"
+    // Every aired episode here. Nothing wanted only means nothing asked for is missing: a
+    // show asked for one season of is that season, not all of it.
+    : num(s.aired) > 0 && num(s.onDisk) >= num(s.aired) ? "In library" : "Partial";
   for (const s of shows) {
     if (!s) continue;
     if (num(s.tmdbId) > 0) marks.showsByTmdb.set(num(s.tmdbId), showMark(s));

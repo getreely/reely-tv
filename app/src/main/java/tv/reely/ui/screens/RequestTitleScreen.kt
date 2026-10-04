@@ -79,6 +79,7 @@ fun RequestTitleScreen(
                     if (held > 1) "Already in $held libraries: there's nowhere left for it to go."
                     else "Already in your library."
                 )
+                page.partNote != null -> EmptyNote(page.partNote!!)
                 held == 1 -> EmptyNote("Already in a library. It can go in another as well.")
                 held > 1 -> EmptyNote("Already in $held libraries. It can go in another as well.")
                 detail.inLibrary -> EmptyNote("Already in your library.")
@@ -99,17 +100,21 @@ fun RequestTitleScreen(
                 }
             }
 
-            if (detail != null && page.canAsk && page.title.isShow && detail.seasons.isNotEmpty()) {
+            val offered = page.seasonsOffered
+            if (detail != null && page.canAsk && page.title.isShow && offered.isNotEmpty()) {
                 SectionHeading("Seasons", modifier = Modifier.padding(top = 6.dp))
-                val all = detail.seasons.map { it.number }.toSet()
                 ChipRow {
-                    item(key = "all") {
-                        TvChip(label = "All seasons", selected = page.chosen == all, onClick = onToggleAll)
+                    if (offered.size > 1) item(key = "all") {
+                        TvChip(
+                            label = if (page.seasonsHere.isEmpty()) "All seasons" else "All the others",
+                            selected = page.chosenOffered.size == offered.size,
+                            onClick = onToggleAll,
+                        )
                     }
-                    items(detail.seasons, key = { it.number }) { season ->
+                    items(offered, key = { it.number }) { season ->
                         TvChip(
                             label = season.name,
-                            selected = season.number in page.chosen,
+                            selected = season.number in page.chosenOffered,
                             onClick = { onToggleSeason(season.number) },
                         )
                     }
@@ -133,13 +138,7 @@ fun RequestTitleScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     TvActionButton(
-                        label = when {
-                            page.sending -> if (verb == "Add") "Adding…" else "Requesting…"
-                            !page.title.isShow || detail.seasons.isEmpty() -> verb
-                            page.chosen.size == detail.seasons.size -> "$verb all seasons"
-                            page.chosen.size == 1 -> "$verb 1 season"
-                            else -> "$verb ${page.chosen.size} seasons"
-                        },
+                        label = page.askLabel(verb),
                         onClick = onRequest,
                         emphasised = true,
                     )

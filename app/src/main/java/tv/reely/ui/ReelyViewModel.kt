@@ -195,9 +195,38 @@ data class RequestDetailState(
     /** The library picked, from [addable]. */
     val libraryId: Long? = null,
 ) {
-    /** The libraries it could go to: the right kind, and not holding it already. */
+    /** The libraries it could go to: the right kind, and not holding all of it already. */
     val addable: List<tv.reely.requests.RequestLibrary>?
-        get() = places?.librariesFor(title, detail?.inLibraries.orEmpty())
+        get() = places?.librariesFor(title, detail?.let { d -> d.inLibraries.filter(d::complete).toSet() }.orEmpty())
+
+    /** The seasons offered in the library picked: those not asked for there already. */
+    val seasonsOffered: List<tv.reely.requests.RequestSeason>
+        get() = detail?.seasonsLeft(libraryId).orEmpty()
+
+    /** Of [seasonsOffered], the ones picked. */
+    val chosenOffered: Set<Int>
+        get() = seasonsOffered.map { it.number }.toSet().intersect(chosen)
+
+    /** The seasons the library picked has already, when it holds part of the show. */
+    val seasonsHere: List<tv.reely.requests.RequestSeason>
+        get() = detail?.let { d -> d.askedIn(libraryId).let { asked -> d.seasons.filter { it.number in asked } } }.orEmpty()
+
+    /** The button: what pressing it asks for. */
+    fun askLabel(verb: String): String = when {
+        sending -> if (verb == "Add") "Adding…" else "Requesting…"
+        !title.isShow || seasonsOffered.isEmpty() -> verb
+        chosenOffered.size == seasonsOffered.size && seasonsHere.isEmpty() -> "$verb all seasons"
+        chosenOffered.size == seasonsOffered.size && seasonsOffered.size > 1 -> "$verb the other ${seasonsOffered.size} seasons"
+        chosenOffered.size == 1 -> "$verb 1 season"
+        else -> "$verb ${chosenOffered.size} seasons"
+    }
+
+    /** What the library picked has of a show it holds part of, to say above the seasons. */
+    val partNote: String?
+        get() = seasonsHere.takeIf { it.isNotEmpty() && seasonsOffered.isNotEmpty() }?.let { here ->
+            val names = if (here.size == 1) here.first().name else "${here.size} seasons"
+            "$names here already. Pick more to ask for."
+        }
 
     /** Whether there's anywhere left for it to go. Unknown counts as yes: Reely decides. */
     val canAsk: Boolean get() = addable?.isNotEmpty() ?: true
@@ -1317,11 +1346,12 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         current.copy(requestDetail = page.copy(chosen = chosen, outcome = null))
     }
 
-    /** Every season, or, when every season is already picked, none. */
+    /** Every season offered, or, when every one is already picked, none. */
     fun toggleAllRequestSeasons() = _state.update { current ->
         val page = current.requestDetail ?: return@update current
+        val offered = page.seasonsOffered.map { it.number }.toSet()
         val all = page.detail?.seasons?.map { it.number }?.toSet().orEmpty()
-        current.copy(requestDetail = page.copy(chosen = if (page.chosen == all) emptySet() else all, outcome = null))
+        current.copy(requestDetail = page.copy(chosen = if (page.chosenOffered == offered) page.chosen - offered else all, outcome = null))
     }
 
     /** Which library the title on the page goes to. */
@@ -1339,10 +1369,11 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         if (page.sending) return
         val detail = page.detail ?: return
         val title = detail.title
-        val allSeasons = detail.seasons.map { it.number }.toSet()
-        // Every season is the whole show, which also takes in seasons still to come.
-        val seasons = if (!title.isShow || page.chosen == allSeasons) null else page.chosen.sorted()
-        if (title.isShow && page.chosen.isEmpty()) {
+        val offered = page.seasonsOffered.map { it.number }.toSet()
+        // Every season is the whole show, which also takes in seasons still to come. Of a
+        // show partly here, it's the seasons picked: Reely keeps the ones already asked for.
+        val seasons = if (!title.isShow || (page.chosenOffered == offered && page.seasonsHere.isEmpty())) null else page.chosenOffered.sorted()
+        if (title.isShow && offered.isNotEmpty() && page.chosenOffered.isEmpty()) {
             _state.update { it.copy(requestDetail = page.copy(outcome = "Pick at least one season.")) }
             return
         }

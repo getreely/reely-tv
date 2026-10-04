@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { useFetcher } from "../../src/core/http";
 import {
-  badge, isValid, OWNER_LINK_BROKEN, PLEX_REJECTED, librariesFor, noMarks, normalize, plexHas, preferredLibrary, readyRequests, ReelyRequests, requestKey,
+  askedIn, badge, completeIn, holdingAll, isValid, OWNER_LINK_BROKEN, parseDetail, PLEX_REJECTED, librariesFor, noMarks, normalize, plexHas, preferredLibrary, readyRequests, ReelyRequests, requestKey, seasonsLeft,
   type RequestRecord, type RequestTitle,
 } from "../../src/api/reely";
 
@@ -61,7 +61,7 @@ class FakeReely {
       case "/api/v1/movies":
         return reply(200, { movies: [{ tmdbId: 603, filePath: "/films/matrix.mkv" }, { tmdbId: 27205, filePath: "", downloading: true }, { tmdbId: 11, filePath: "" }] });
       case "/api/v1/shows":
-        return reply(200, { shows: [{ tmdbId: 1399, onDisk: 10, aired: 73, wanted: 63 }, { tmdbId: 0, tvdbId: 81189, onDisk: 62, aired: 62, wanted: 0 }] });
+        return reply(200, { shows: [{ tmdbId: 1399, onDisk: 10, aired: 73, wanted: 63 }, { tmdbId: 1396, onDisk: 7, aired: 62, wanted: 0 }, { tmdbId: 0, tvdbId: 81189, onDisk: 62, aired: 62, wanted: 0 }] });
       case "/api/v1/requests":
         if (method === "POST") {
           if (this.alreadyRequested) return reply(409, { error: "already requested" });
@@ -215,7 +215,31 @@ describe("Reely requests", () => {
     expect(badge(marks, film(550))).toBe("Requested");
     expect(badge(marks, film(99))).toBeUndefined();
     expect(badge(marks, show(1399))).toBe("Partial");
+    // One season asked for and all of it here: still only part of the show.
+    expect(badge(marks, show(1396))).toBe("Partial");
     expect(badge(marks, show(0, 81189))).toBe("In library");
+  });
+});
+
+describe("a show partly here", () => {
+  const fallback: RequestTitle = { kind: "show", tmdbId: 1396, tvdbId: 0, title: "Breaking Bad" };
+  const detail = parseDetail({
+    inLibraries: [4], seasonsAsked: [{ libraryId: 4, seasons: [1] }],
+    preview: { kind: "show", tmdbId: 1396, title: "Breaking Bad", seasons: [1, 2, 3].map((n) => ({ number: n, name: `Season ${n}`, episodes: [{}] })) },
+  }, fallback);
+  it("offers the seasons it hasn't got, in the library holding the rest", () => {
+    expect(askedIn(detail, 4)).toEqual([1]);
+    expect(seasonsLeft(detail, 4).map((s) => s.number)).toEqual([2, 3]);
+    expect(seasonsLeft(detail, 5).map((s) => s.number)).toEqual([1, 2, 3]);
+    expect(completeIn(detail, 4)).toBe(false);
+    expect(holdingAll(detail)).toEqual([]);
+    const places = { libraries: [{ id: 4, name: "TV", kind: "shows" }], defaultLibraryId: 4, adds: false };
+    expect(librariesFor(places, detail.title, holdingAll(detail)).map((l) => l.id)).toEqual([4]);
+  });
+  it("is all here with every season asked for, or from a Reely that doesn't say", () => {
+    expect(completeIn({ ...detail, seasonsAsked: { 4: [1, 2, 3] } }, 4)).toBe(true);
+    expect(completeIn({ ...detail, seasonsAsked: null }, 4)).toBe(true);
+    expect(holdingAll({ ...detail, seasonsAsked: null })).toEqual([4]);
   });
 });
 
