@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -365,7 +366,14 @@ internal fun TouchHeader(title: String, actions: TouchActions, modifier: Modifie
         modifier = modifier.fillMaxWidth().padding(start = TouchMargin, end = 8.dp, top = 8.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, style = MaterialTheme.typography.headlineMedium, color = Chalk, modifier = Modifier.weight(1f))
+        // The mark, top left, as on the television: in the color chosen in Settings.
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(tv.reely.R.drawable.ic_mark),
+            contentDescription = "Reely",
+            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Accent),
+            modifier = Modifier.padding(end = 14.dp).height(26.dp),
+        )
+        Text(title, style = MaterialTheme.typography.headlineMedium, color = Chalk, maxLines = 1, modifier = Modifier.weight(1f))
         Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             HeaderButton(onClick = actions.search) { tv.reely.ui.components.SearchGlyph(it, 22.dp) }
             actions.profile?.let { onProfile ->
