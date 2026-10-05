@@ -154,12 +154,42 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .hero.short { min-height: 0; padding-bottom: 1rem; }
 .person .name { font-size: 1rem; font-weight: 500; text-align: center; }
 .person .facts { text-align: center; }
-.settings { padding: 0.5rem 0 2rem; }
-.setting-group { margin: 1.2rem 3rem 0; }
-.setting-group h2 { margin: 0 0 0.6rem; font-size: 1.35rem; font-weight: 600; }
-.setting { padding: 0.8rem 1.2rem; margin-bottom: 0.6rem; border-radius: 1rem; background: var(--raised); }
-.setting-title { font-size: 1.1rem; font-weight: 600; }
-.setting .note { margin: 0.3rem 0 0; text-align: left; }
+.settings { display: flex; align-items: flex-start; padding: 0.5rem 3rem 2rem; }
+.settings-rail { position: -webkit-sticky; position: sticky; top: 0.5rem; width: 13rem; flex-shrink: 0; margin-right: 1.9rem; }
+.settings-rail h1 { margin: 0 0 0.9rem; font-size: 1.6rem; font-weight: 700; }
+.section-tab { display: block; width: 100%; margin-bottom: 0.45rem; padding: 0.6rem 1.1rem; border-radius: 999px; text-align: left; font-size: 1.05rem; color: var(--muted); background: transparent; }
+.section-tab.on { background: var(--high); color: var(--chalk); font-weight: 600; }
+.section-tab:focus { background: var(--chalk); color: var(--ink); }
+.settings-page { flex: 1; min-width: 0; }
+.setting-group { margin-bottom: 1.3rem; }
+.setting-group h2 { margin: 0 0 0.45rem 0.3rem; font-size: 0.85rem; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--faint); }
+.setting-box { padding: 0.3rem; border-radius: 1rem; background: var(--raised); }
+.setting { display: flex; align-items: center; width: 100%; min-height: 3.2rem; padding: 0.8rem 1rem; border-radius: 0.75rem; text-align: left; background: transparent; color: var(--chalk); }
+.setting + .setting, .setting + .problem, .problem + .setting { margin-top: 0.15rem; }
+.setting:focus { background: var(--chalk); color: var(--ink); }
+.setting-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.setting-title { font-size: 1.1rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.setting-sub { margin-top: 0.15rem; font-size: 0.9rem; color: var(--muted); line-height: 1.35; }
+.setting:focus .setting-sub { color: rgba(8, 9, 11, 0.7); }
+.setting-value { margin-left: 1.2rem; max-width: 22rem; font-size: 1.05rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.setting:focus .setting-value { color: var(--ink); }
+.chevron { margin-left: 0.8rem; font-size: 1.6rem; line-height: 1; color: var(--faint); }
+.setting:focus .chevron { color: var(--ink); }
+.switch { position: relative; flex-shrink: 0; margin-left: 1.2rem; width: 3.2rem; height: 1.9rem; border-radius: 999px; background: rgba(242, 244, 247, 0.18); transition: background 0.16s; }
+.switch .knob { position: absolute; top: 0.22rem; left: 0.22rem; width: 1.46rem; height: 1.46rem; border-radius: 50%; background: var(--chalk); transition: transform 0.16s; }
+.switch.on { background: var(--accent); }
+.switch.on .knob { transform: translateX(1.3rem); }
+.setting:focus .switch:not(.on) { background: rgba(8, 9, 11, 0.22); }
+.setting:focus .switch:not(.on) .knob { background: rgba(8, 9, 11, 0.55); }
+.setting-note { margin: 0.45rem 0.3rem 0; font-size: 0.9rem; color: var(--faint); line-height: 1.4; max-width: 46rem; }
+.about-mark { margin: 0 0 1.3rem 0.3rem; }
+.about-mark .wordmark { font-size: 3rem; line-height: 1.1; font-weight: 700; color: var(--accent); }
+.about-mark .facts { margin: 0.2rem 0; }
+.option-text { display: flex; flex-direction: column; }
+.option-note { margin-top: 0.15rem; font-size: 0.9rem; color: var(--muted); }
+.option:focus .option-note { color: rgba(8, 9, 11, 0.7); }
+.choice-panel { z-index: 1; background: var(--raised); }
+.choice-panel .menu-list { margin-top: 1rem; }
 .toolbar.flush { padding: 0.7rem 0 0; }
 
 /* The player's prompts and its options panel. */

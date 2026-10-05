@@ -114,8 +114,10 @@ export function Root(props: { app: App }) {
   }, [state.askWho]);
   // Back from a page or the player: the cursor onto something on the screen arrived at.
   useEffect(() => {
-    // Moving along the tabs opens each, and the cursor stays on the tabs.
-    const alongTabs = (document.activeElement as HTMLElement | null)?.classList.contains("tab") && Date.now() - lastMoveAt() < 1000;
+    // Moving along the tabs opens each, and the cursor stays on the tabs. Settings opens
+    // on OK only, and is entered at its sections, however quickly OK followed the arrows.
+    const alongTabs = (document.activeElement as HTMLElement | null)?.classList.contains("tab") && Date.now() - lastMoveAt() < 1000
+      && state.route.name !== "settings";
     if (alongTabs) return;
     arrived();
     const t = setTimeout(rescue, 0);

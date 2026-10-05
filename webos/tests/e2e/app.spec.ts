@@ -170,18 +170,37 @@ test("Search finds by name and people; Settings keeps a playback choice", async 
   await page.locator("input.field").dispatchEvent("input");
   await expect(page.getByText("Recent searches")).toBeVisible();
 
+  // Settings: the sections down the left, entered on the one showing.
   await page.getByRole("button", { name: "Settings" }).focus();
   await press(page, "Enter");
-  await expect(page.getByText("Playback mode")).toBeVisible();
-  await page.getByRole("button", { name: "Always convert" }).focus();
-  await press(page, "Enter");
-  await expect(page.getByRole("button", { name: "Always convert" })).toHaveClass(/on/);
+  await expect(page.locator(".section-tab:focus")).toHaveText("Playback");
+  await expect(page.locator(".setting-group h2")).toHaveText(["Video", "Subtitles", "Episodes", "Show pages"]);
   await page.screenshot({ path: "shots/lg-settings.png" });
+  // Right to the first setting; OK opens its values, the one in use ticked and under the cursor.
+  await press(page, "ArrowRight");
+  await expect(page.locator(".setting:focus .setting-title")).toHaveText("Playback mode");
+  await press(page, "Enter");
+  await expect(page.locator(".choice-panel .option:focus")).toContainText("Automatic");
+  await page.screenshot({ path: "shots/lg-settings-choice.png" });
+  await press(page, "ArrowDown");
+  await press(page, "ArrowDown");
+  await press(page, "Enter");
+  await expect(page.locator(".choice-panel")).toHaveCount(0);
+  // Back on the setting that opened it, showing the new value.
+  await expect(page.locator(".setting:focus .setting-value")).toHaveText("Always convert");
+  // Left goes back to its section, not whichever sits level with it.
+  await press(page, "ArrowLeft");
+  await expect(page.locator(".section-tab:focus")).toHaveText("Playback");
+  // Down the sections shows each one.
+  await press(page, "ArrowDown");
+  await press(page, "ArrowDown");
+  await expect(page.locator(".section-tab:focus")).toHaveText("Theme");
+  await expect(page.locator(".setting .setting-title")).toHaveText(["Theme"]);
   await page.reload();
   await expect(page.getByText("Recently Added Movies")).toBeVisible({ timeout: 10_000 });
   await page.getByRole("button", { name: "Settings" }).focus();
   await press(page, "Enter");
-  await expect(page.getByRole("button", { name: "Always convert" })).toHaveClass(/on/);
+  await expect(page.locator(".setting", { hasText: "Playback mode" }).locator(".setting-value")).toHaveText("Always convert");
 });
 
 /**
@@ -306,8 +325,13 @@ test("holding OK on a poster opens its menu; a Home row can be switched off", as
   // Settings, Home: Continue Watching off, and it's gone from Home.
   await page.getByRole("button", { name: "Settings" }).focus();
   await press(page, "Enter");
-  await page.getByRole("button", { name: "Continue Watching" }).focus();
+  await expect(page.locator(".section-tab:focus")).toHaveText("Playback");
+  await press(page, "ArrowDown");
+  await expect(page.locator(".section-tab:focus")).toHaveText("Home");
+  await press(page, "ArrowRight");
+  await expect(page.locator(".setting:focus .setting-title")).toHaveText("Continue Watching");
   await press(page, "Enter");
+  await expect(page.locator(".setting:focus .switch")).not.toHaveClass(/on/);
   await page.getByRole("button", { name: "Home" }).first().focus();
   await press(page, "Enter");
   await expect(page.getByText("Recently Added Movies")).toBeVisible();
