@@ -2,11 +2,18 @@ sub init()
     m.list = m.top.findNode("list")
     m.top.findNode("title").font = Bold_(40)
     m.top.findNode("sub").font = Regular_(26)
-    m.list.font = Regular_(30)
-    m.list.focusedFont = Semibold_(30)
-    m.list.observeField("itemSelected", "onPicked")
-    m.top.observeField("focusedChild", "onFocus")
+    m.rows = []
+    m.at = 0
 end sub
+
+' Each choice's icon, as the Fire TV's menu has them.
+function Icon_(id as string) as string
+    if id = "restart" then return "restart"
+    if id = "watched" or id = "unwatched" then return "check"
+    if id = "details" then return "info"
+    if id = "remove" then return "cross"
+    return "play"
+end function
 
 sub build()
     i = m.top.item
@@ -38,29 +45,66 @@ sub build()
         labels.Push("Remove from Continue Watching")
         m.ids.Push("remove")
     end if
-    content = CreateObject("roSGNode", "ContentNode")
-    for each l in labels
-        c = content.createChild("ContentNode")
-        c.title = l
+    m.list.removeChildrenIndex(m.list.getChildCount(), 0)
+    m.rows = []
+    for k = 0 to labels.Count() - 1
+        y = k * 70
+        fill = CreateObject("roSGNode", "Poster")
+        fill.uri = "pkg:/images/card.9.png"
+        fill.width = 532
+        fill.height = 64
+        fill.translation = [0, y]
+        icon = CreateObject("roSGNode", "Poster")
+        icon.uri = "pkg:/images/glyph_" + Icon_(m.ids[k]) + ".png"
+        icon.width = 28
+        icon.height = 28
+        icon.translation = [22, y + 18]
+        label = CreateObject("roSGNode", "Label")
+        label.text = labels[k]
+        label.width = 450
+        label.height = 64
+        label.vertAlign = "center"
+        label.translation = [68, y]
+        m.list.appendChild(fill)
+        m.list.appendChild(icon)
+        m.list.appendChild(label)
+        m.rows.Push({ fill: fill, icon: icon, label: label })
     end for
-    m.list.content = content
+    m.at = 0
+    paint()
 end sub
 
-sub onFocus()
-    if m.top.hasFocus() then m.list.setFocus(true)
-end sub
-
-sub onPicked()
-    m.top.chosen = m.ids[m.list.itemSelected]
+sub paint()
+    for k = 0 to m.rows.Count() - 1
+        on = k = m.at
+        r = m.rows[k]
+        r.fill.visible = on
+        r.fill.blendColor = "0xF2F4F7FF"
+        r.icon.blendColor = Iif_(on, "0x08090BFF", "0xB3BAC4FF")
+        r.label.color = Iif_(on, "0x08090BFF", "0xF2F4F7FF")
+        r.label.font = Iif_(on, Semibold_(30), Regular_(30))
+    end for
+    #if DEBUG
+        if m.at < m.rows.Count() then print "PILL "; m.rows[m.at].label.text
+    #end if
 end sub
 
 sub answered(r as object)
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
-    if press and (key = "back" or key = "options" or key = "left") then
+    if not press then return true
+    if key = "back" or key = "options" or key = "left" then
         m.top.chosen = ""
-        return true
+    else if key = "up" and m.at > 0 then
+        m.at = m.at - 1
+        paint()
+    else if key = "down" and m.at < m.rows.Count() - 1 then
+        m.at = m.at + 1
+        paint()
+    else if key = "OK" and m.rows.Count() > 0 then
+        m.top.chosen = m.ids[m.at]
     end if
+    ' Nothing reaches what's underneath while it's up.
     return true
 end function

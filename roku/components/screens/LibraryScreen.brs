@@ -154,26 +154,32 @@ sub paintViews()
     m.views.visible = labels.Count() > 0
 end sub
 
+' As on the Fire TV: sort, the watched filter, the decade, then the genres, in one row
+' that slides along. Sort and decade open their lists from the right.
 sub paintTools()
-    labels = []
-    on = []
+    sortLabel = m.sorts[0][1]
     for each s in m.sorts
-        labels.Push(s[1])
-        on.Push(s[0] = m.sort)
+        if s[0] = m.sort then sortLabel = s[1]
     end for
-    labels.Push("Unwatched")
-    on.Push(m.unwatched)
-    m.toolIds = ["sort0", "sort1", "sort2", "sort3", "unwatched"]
-    if m.meta.genres.Count() > 0 then
-        if m.genre <> invalid then labels.Push(Str_(m.genre.title)) else labels.Push(Iif_(isIptv(), "Category", "Genre"))
-        on.Push(m.genre <> invalid)
-        m.toolIds.Push("genre")
-    end if
-    if m.meta.decades.Count() > 0 then
-        if m.decade <> invalid then labels.Push(Str_(m.decade.title)) else labels.Push("Decade")
+    labels = ["Sort · " + sortLabel, "Unwatched"]
+    on = [m.sort <> m.sorts[0][0], m.unwatched]
+    m.toolIds = ["sort", "unwatched"]
+    if m.meta.decades.Count() > 1 then
+        if m.decade <> invalid then labels.Push(Str_(m.decade.title)) else labels.Push("All decades")
         on.Push(m.decade <> invalid)
         m.toolIds.Push("decade")
     end if
+    if m.meta.genres.Count() > 0 then
+        labels.Push(Iif_(isIptv(), "All categories", "All genres"))
+        on.Push(m.genre = invalid)
+        m.toolIds.Push("genre:")
+        for each g in m.meta.genres
+            labels.Push(Str_(g.title))
+            on.Push(m.genre <> invalid and m.genre.id = g.id)
+            m.toolIds.Push("genre:" + Str_(g.id))
+        end for
+    end if
+    m.tools.visibleWidth = 1728
     m.tools.labels = labels
     m.tools.on = on
     letters = []
@@ -274,14 +280,19 @@ end sub
 
 sub onTool()
     id = m.toolIds[m.tools.pressed]
-    if Left(id, 4) = "sort" then
-        m.sort = m.sorts[Val(Mid(id, 5))][0]
-        restart()
+    if id = "sort" then
+        choose("sort")
     else if id = "unwatched" then
         m.unwatched = not m.unwatched
         restart()
-    else if id = "genre" or id = "decade" then
-        choose(id)
+    else if id = "decade" then
+        choose("decade")
+    else if Left(id, 6) = "genre:" then
+        m.genre = invalid
+        for each g in m.meta.genres
+            if "genre:" + Str_(g.id) = id then m.genre = g
+        end for
+        restart()
     end if
 end sub
 
@@ -298,37 +309,46 @@ sub restart()
 end sub
 
 sub choose(what as string)
-    values = m.meta.genres
-    if what = "decade" then values = m.meta.decades
-    names = ["All"]
+    names = []
     current = 0
-    chosen = Iif_(what = "genre", m.genre, m.decade)
-    for i = 0 to values.Count() - 1
-        names.Push(values[i].title)
-        if chosen <> invalid and values[i].id = chosen.id then current = i + 1
-    end for
+    title = "Sort by"
+    if what = "sort" then
+        for i = 0 to m.sorts.Count() - 1
+            names.Push(m.sorts[i][1])
+            if m.sorts[i][0] = m.sort then current = i
+        end for
+    else
+        title = "Decade"
+        names.Push("All decades")
+        for i = 0 to m.meta.decades.Count() - 1
+            names.Push(m.meta.decades[i].title)
+            if m.decade <> invalid and m.meta.decades[i].id = m.decade.id then current = i + 1
+        end for
+    end if
     m.choosing = what
     m.chooser = CreateObject("roSGNode", "Chooser")
-    ' Over the whole screen, tabs and all, from inside a page that starts under them.
-    m.chooser.translation = [0, -130]
     m.chooser.current = current
     m.chooser.options = names
-    m.chooser.title = Iif_(what = "genre", Iif_(isIptv(), "Category", "Genre"), "Decade")
+    m.chooser.title = title
     m.chooser.observeField("picked", "onChosen")
-    m.top.appendChild(m.chooser)
+    ' Over the whole screen, tabs and all.
+    Overlays_().appendChild(m.chooser)
     m.chooser.setFocus(true)
 end sub
 
 sub onChosen()
     picked = m.chooser.picked
-    values = Iif_(m.choosing = "genre", m.meta.genres, m.meta.decades)
-    m.top.removeChild(m.chooser)
+    Overlays_().removeChild(m.chooser)
     m.chooser = invalid
     m.tools.setFocus(true)
     if picked < 0 then return
-    value = invalid
-    if picked > 0 then value = values[picked - 1]
-    if m.choosing = "genre" then m.genre = value else m.decade = value
+    if m.choosing = "sort" then
+        m.sort = m.sorts[picked][0]
+    else if picked = 0 then
+        m.decade = invalid
+    else
+        m.decade = m.meta.decades[picked - 1]
+    end if
     restart()
 end sub
 

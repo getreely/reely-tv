@@ -27,3 +27,13 @@ end sub
 function Gone_() as boolean
     return m.top.gone = true
 end function
+
+' The scene's top layer, over the tabs: where a page puts a list of choices.
+function Overlays_() as object
+    scene = m.top.getScene()
+    if scene <> invalid then
+        layer = scene.findNode("overlays")
+        if layer <> invalid then return layer
+    end if
+    return m.top
+end function

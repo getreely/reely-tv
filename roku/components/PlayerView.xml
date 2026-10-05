@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The player, as the Fire TV's: the Roku's own video with its trick-play pictures from
-     Plex's index; Skip Intro; Up Next when the credits start; down for sound, subtitles,
-     chapters and the sleep timer; where it's got to told to Plex. -->
+     Plex's index; Skip Intro; down for the controls, a round button each for chapters,
+     subtitles, audio, the sleep timer and what's playing, each opening its panel; Up Next
+     over the screen when the credits start, the credits in a window in the corner; where
+     it's got to told to Plex. -->
 <component name="PlayerView" extends="Group">
   <interface>
     <!-- { item, resume, queue, mediaIndex, trailer }: plays it. -->
@@ -19,24 +21,44 @@
   <script type="text/brightscript" uri="pkg:/components/parts/ScreenKit.brs" />
   <children>
     <Rectangle width="1920" height="1080" color="0x000000FF" />
+    <!-- Up Next: the next episode's picture over the screen; the video goes into the corner. -->
+    <Group id="post" visible="false">
+      <Rectangle width="1920" height="1080" color="0x08090BFF" />
+      <Poster id="postArt" width="1920" height="1080" loadDisplayMode="scaleToZoom" />
+      <Poster uri="pkg:/images/fade_left.png" width="1920" height="1080" />
+      <Poster uri="pkg:/images/fade_bottom.png" width="1920" height="1080" />
+      <Rectangle translation="[1146, 48]" width="680" height="386" color="0x4A4D52FF" />
+      <Label id="postNow" translation="[1150, 452]" width="672" color="0xB3BAC4FF" />
+      <Label id="postLabel" text="UP NEXT" translation="[96, 520]" />
+      <Label id="postShow" translation="[96, 560]" width="1050" color="0xF2F4F7FF" />
+      <Label id="postLine" translation="[96, 660]" width="1050" color="0xB3BAC4FF" />
+      <Label id="postTitle" translation="[96, 706]" width="1050" color="0xF2F4F7FF" />
+      <Label id="postSummary" translation="[96, 772]" width="1000" height="84" wrap="true" maxLines="2" color="0xB3BAC4FF" />
+      <Group translation="[96, 900]">
+        <Poster id="playNextFill" uri="pkg:/images/pill.9.png" width="360" height="76" />
+        <Poster id="playNextCount" uri="pkg:/images/pill.9.png" width="0" height="76" />
+        <Label id="playNextLabel" width="360" height="76" horizAlign="center" vertAlign="center" />
+        <Poster id="creditsFill" uri="pkg:/images/pill.9.png" translation="[380, 0]" width="300" height="76" />
+        <Label id="creditsLabel" text="Watch credits" translation="[380, 0]" width="300" height="76" horizAlign="center" vertAlign="center" />
+      </Group>
+    </Group>
     <Video id="video" width="1920" height="1080" />
     <Label id="wait" translation="[0, 500]" width="1920" horizAlign="center" color="0xB3BAC4FF" />
-    <Group id="skip" visible="false" translation="[1500, 860]">
+    <Group id="skip" visible="false" translation="[1524, 900]">
       <Poster uri="pkg:/images/pill.9.png" blendColor="0xF2F4F7FF" width="300" height="72" />
       <Label id="skipLabel" text="Skip Intro" width="300" height="72" horizAlign="center" vertAlign="center" color="0x08090BFF" />
     </Group>
-    <Group id="upNext" visible="false" translation="[1180, 780]">
-      <Poster uri="pkg:/images/card.9.png" blendColor="0x15171BF0" width="660" height="190" />
-      <Label id="upNextLabel" text="Up next" translation="[30, 24]" color="0xB3BAC4FF" />
-      <Label id="upNextTitle" translation="[30, 64]" width="600" color="0xF2F4F7FF" />
-      <Label id="upNextHint" translation="[30, 124]" width="600" color="0xB3BAC4FF" />
-    </Group>
     <Label id="sleepNote" translation="[96, 40]" width="1700" color="0xF2F4F7FF" />
-    <Group id="options" visible="false">
-      <Rectangle translation="[1380, 0]" width="540" height="1080" color="0x15171BF5" />
-      <Label id="optionsTitle" text="Sound, subtitles and more" translation="[1420, 50]" width="480" color="0xB3BAC4FF" />
-      <LabelList id="optionList" translation="[1410, 110]" itemSize="[440, 58]" numRows="15" vertFocusAnimationStyle="floatingFocus"
-        focusBitmapUri="pkg:/images/pill.9.png" color="0xF2F4F7FF" focusedColor="0x08090BFF" />
+    <!-- The controls: the bar, what's playing, the transport and a button for each panel. -->
+    <Group id="controls" visible="false" focusable="true">
+      <Poster uri="pkg:/images/fade_bottom.png" width="1920" height="1080" />
+      <Rectangle id="barTrack" translation="[96, 840]" width="1728" height="6" color="0xF2F4F740" />
+      <Rectangle id="barFill" translation="[96, 840]" width="0" height="6" />
+      <Label id="barAt" translation="[96, 858]" width="400" color="0xB3BAC4FF" />
+      <Label id="barLeft" translation="[1424, 858]" width="400" horizAlign="right" color="0xB3BAC4FF" />
+      <Label id="ctlTitle" translation="[96, 924]" width="620" color="0xF2F4F7FF" />
+      <Label id="ctlSub" translation="[96, 970]" width="620" color="0xB3BAC4FF" />
+      <Group id="ctlRow" />
     </Group>
     <Timer id="ticker" duration="0.5" repeat="true" />
     <Timer id="sleepTimer" repeat="false" />

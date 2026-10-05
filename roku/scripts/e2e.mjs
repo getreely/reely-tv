@@ -285,14 +285,20 @@ try {
   await key("Select");
   await until("the intro skipped", () => output.includes("TRACE skipped intro"), 5000).catch(() => undefined);
   expect("OK skips the intro", output.includes("TRACE skipped intro"));
-  // The options panel: sound, subtitles, chapters and the sleep timer.
+  // Down: the controls, the cursor on play; a round button each for the panels.
   await key("Down");
-  await until("the options", () => output.includes("TRACE options shown"), 5000).catch(() => undefined);
+  await until("the controls", () => output.includes("TRACE controls shown"), 5000).catch(() => undefined);
+  await wait(800);
+  await snap("roku-player-controls");
+  expect("Down brings up the controls", output.includes("TRACE controls shown"));
+  // Subtitles found online by the server, one added and switched on.
+  await moveTo("TRACE control", "subtitles", "Right");
+  await key("Select");
+  await until("the subtitles panel", () => output.includes("TRACE panel subtitles"), 5000).catch(() => undefined);
   await wait(800);
   await snap("roku-player-options");
-  expect("Down opens sound, subtitles, chapters and sleep", output.includes("TRACE options shown"));
-  // Subtitles found online by the server, one added and switched on.
-  await moveTo("TRACE option", "find:", "Down");
+  expect("the Subtitles button opens its panel", output.includes("TRACE panel subtitles"));
+  await moveTo("PILL", "Find subtitles online", "Down");
   await key("Select");
   await until("subtitles found", () => output.includes("TRACE subtitles found"), 10000).catch(() => undefined);
   await wait(800);
@@ -303,23 +309,30 @@ try {
   await until("switched on", () => methods.some((m) => m.startsWith("PUT /library/parts/5?subtitleStreamID=22")), 10000).catch(() => undefined);
   expect("the one chosen is added to the file and switched on", methods.some((m) => m.startsWith("PUT /library/metadata/e2/subtitles?key=%2Fsub%2Fos%2F1")) && methods.some((m) => m.startsWith("PUT /library/parts/5?subtitleStreamID=22")));
   await wait(1200);
-  const shown = (output.match(/TRACE options shown/g) ?? []).length;
+  // The sleep timer, from its own button. (The simulator doesn't play video, so Up Next
+  // at the credits is tested in tests/player.test.brs instead.)
+  const shown = (output.match(/TRACE controls shown/g) ?? []).length;
   await key("Down");
-  await until("the options again", () => (output.match(/TRACE options shown/g) ?? []).length > shown, 5000).catch(() => undefined);
+  await until("the controls again", () => (output.match(/TRACE controls shown/g) ?? []).length > shown, 5000).catch(() => undefined);
+  await wait(600);
+  await moveTo("TRACE control", "sleep", "Right");
+  await key("Select");
   await wait(800);
-  // A chapter, chosen: the panel closes and it plays on. (The simulator doesn't play
-  // video, so Up Next at the credits is tested in tests/player.test.brs instead.)
-  // The sleep timer, from the same panel.
-  await moveTo("TRACE option", "sleep:15", "Down");
+  await moveTo("PILL", "15 minutes", "Down");
   await key("Select");
   await until("the sleep timer", () => output.includes("TRACE sleep 15"), 5000).catch(() => undefined);
-  expect("the sleep timer is set from the player's options", output.includes("TRACE sleep 15"));
+  expect("the sleep timer is set from the player's controls", output.includes("TRACE sleep 15"));
   await wait(800);
-  const panels = (output.match(/TRACE options shown/g) ?? []).length;
+  // A chapter, chosen from its panel: it closes and plays on from there.
+  const again = (output.match(/TRACE controls shown/g) ?? []).length;
   await key("Down");
-  await until("the options once more", () => (output.match(/TRACE options shown/g) ?? []).length > panels, 5000).catch(() => undefined);
+  await until("the controls once more", () => (output.match(/TRACE controls shown/g) ?? []).length > again, 5000).catch(() => undefined);
+  await wait(600);
+  await moveTo("TRACE control", "chapters", "Right");
+  await key("Select");
   await wait(800);
-  await moveTo("TRACE option", "chapter:52000", "Down");
+  expect("the Chapters button opens its panel", output.includes("TRACE panel chapters"));
+  await moveTo("PILL", "Last stop", "Down");
   await key("Select");
   await wait(800);
   await key("Back");
@@ -349,18 +362,26 @@ try {
   await key("Select");
   await wait(1500);
   await snap("roku-settings");
+  // Right into Playback; OK on its mode opens the values from the right.
+  await key("Right"); await wait(400);
+  expect("right from the sections lands on the first setting", lastSaid("TRACE setting") === "mode");
+  await key("Select"); await wait(1200);
+  expect("the values open on the one in use", lastSaid("PILL") === "Automatic");
+  await snap("roku-settings-choice");
+  await key("Back"); await wait(600);
   // Down to Skip intros, and on.
-  await key("Down"); await wait(300);
-  await key("Down"); await wait(300);
-  await key("Left"); await wait(300);
+  await moveTo("TRACE setting", "skipIntros", "Down");
   await key("Select");
   await wait(1200);
   await snap("roku-settings-skip-intros");
   // A Home row switched off: Playlists, left out of Home.
-  await moveTo("TRACE setting", "rows", "Down");
-  await moveTo("PILL", "Playlists", "Right");
+  await key("Left"); await wait(400);
+  await moveTo("TRACE section", "home", "Down");
+  await key("Right"); await wait(400);
+  await moveTo("TRACE setting", "row:playlists", "Down");
   await key("Select");
   await wait(1000);
+  await key("Back"); await wait(400);
   await key("Back");
   await wait(1500);
   await snap("roku-home-from-settings");
@@ -390,17 +411,22 @@ try {
   await moveTo("PILL", "All", "Right");
   await key("Select"); await wait(1500);
   await key("Down"); await wait(700);
-  await moveTo("PILL", "Genre", "Right");
-  await key("Select"); await wait(1500);
+  // Sort opens its list from the right; a genre is one press, as on the Fire TV.
+  await moveTo("PILL", "Sort · A–Z", "Right");
+  await key("Select"); await wait(1200);
   await snap("roku-genre-chooser");
-  await key("Down"); await wait(600);
+  expect("Sort opens its list on the one in use", lastSaid("PILL") === "A–Z");
+  await key("Back"); await wait(800);
+  await moveTo("PILL", "Drama", "Right");
   await key("Select");
   await until("the grid narrowed by genre", () => queries.some((q) => q.startsWith("/library/sections/1/all") && q.includes("genre=7")), 10000).catch(() => undefined);
   await wait(1500);
   await snap("roku-movies-drama");
   expect("a genre narrows the library", queries.some((q) => q.startsWith("/library/sections/1/all") && q.includes("genre=7")));
   // Another order, and unwatched only.
-  await moveTo("PILL", "Recently added", "Left");
+  await moveTo("PILL", "Sort · A–Z", "Left");
+  await key("Select"); await wait(1000);
+  await moveTo("PILL", "Recently added", "Down");
   await key("Select");
   await until("sorted by recently added", () => queries.some((q) => q.startsWith("/library/sections/1/all") && q.includes("sort=addedAt:desc")), 10000).catch(() => undefined);
   expect("the library sorted by recently added", queries.some((q) => q.startsWith("/library/sections/1/all") && q.includes("sort=addedAt:desc")));
@@ -538,7 +564,8 @@ try {
   await toTabs();
   await moveTo("TAB", "settings", "Right");
   await key("Select"); await wait(1500);
-  await moveTo("PILL", "Switch profile", "Down");
+  await moveTo("TRACE section", "plex", "Down");
+  await key("Right"); await wait(400);
   await key("Select");
   await until("the profiles", () => (output.match(/TRACE who's watching/g) ?? []).length >= 2, 5000).catch(() => undefined);
   await wait(800);
@@ -560,7 +587,8 @@ try {
   await toTabs();
   await moveTo("TAB", "settings", "Right");
   await key("Select"); await wait(1500);
-  await moveTo("PILL", "Switch profile", "Down");
+  await moveTo("TRACE section", "plex", "Down");
+  await key("Right"); await wait(400);
   await key("Select");
   await until("the profiles again", () => (output.match(/TRACE who's watching/g) ?? []).length >= 3, 5000).catch(() => undefined);
   await wait(800);
@@ -583,8 +611,9 @@ try {
   await toTabs();
   await moveTo("TAB", "settings", "Right");
   await key("Select"); await wait(1500);
+  await moveTo("TRACE section", "live", "Down");
+  await key("Right"); await wait(400);
   await moveTo("TRACE setting", "iptvLibrary", "Down");
-  await key("Left"); await wait(500);
   await key("Select");
   await until("the provider's catalogue", () => output.includes("TRACE iptv ready"), 20000).catch(() => undefined);
   expect("switched on, the provider's films and series are read", queries.some((q) => q.includes("action=get_vod_streams")) && queries.some((q) => /action=get_series(&|$)/.test(q)) && lastSaid("TRACE iptv ready") === "2 1");
@@ -593,6 +622,8 @@ try {
   await snap("roku-settings-iptv");
   await until("Home with the provider's newest", () => output.includes("TRACE iptv home"), 10000).catch(() => undefined);
   expect("Home's IPTV row leaves out what Plex has", lastSaid("TRACE iptv home") === "Harbour Lights");
+  // Back to the sections, and Back again to Home.
+  await key("Back"); await wait(600);
   await key("Back"); await wait(1500);
   await toTabs();
   await moveTo("TAB", "movies", "Right");

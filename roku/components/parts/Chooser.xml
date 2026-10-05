@@ -1,20 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- One of a list, over the screen: a genre, a decade, a sort. Back leaves it as it was. -->
+<!-- One of a list, from the right like every menu here: a setting's values, a genre, a
+     decade. The one in use ticked and under the cursor; Back leaves it as it was. -->
 <component name="Chooser" extends="Group">
   <interface>
     <field id="title" type="string" onChange="build" />
     <field id="options" type="array" onChange="build" />
-    <field id="current" type="integer" value="-1" />
+    <!-- A line on what each does, by index; "" for none. -->
+    <field id="notes" type="array" onChange="build" />
+    <field id="current" type="integer" value="-1" onChange="build" />
     <!-- The index chosen, or -1 for none (Back). -->
     <field id="picked" type="integer" alwaysNotify="true" />
   </interface>
   <script type="text/brightscript" uri="pkg:/components/parts/Chooser.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
   <children>
-    <Rectangle width="1920" height="1080" color="0x08090BD9" />
-    <Poster id="panel" uri="pkg:/images/card.9.png" blendColor="0x15171BFF" width="760" height="860" translation="[580, 110]" />
-    <Label id="heading" translation="[640, 150]" width="640" color="0xF2F4F7FF" />
-    <LabelList id="list" translation="[640, 240]" itemSize="[640, 64]" numRows="11" vertFocusAnimationStyle="floatingFocus"
-      focusBitmapUri="pkg:/images/pill.9.png" focusFootprintBitmapUri="" color="0xF2F4F7FF" focusedColor="0x08090BFF" />
+    <Rectangle width="1920" height="1080" color="0x08090BA6" />
+    <Rectangle translation="[1238, 0]" width="2" height="1080" color="0x2B3038FF" />
+    <Rectangle translation="[1240, 0]" width="680" height="1080" color="0x15171BFF" />
+    <Label id="heading" translation="[1280, 64]" width="600" color="0xF2F4F7FF" />
+    <Rectangle id="clip" translation="[1264, 150]" width="632" height="900" color="0x00000000" clippingRect="[0, 0, 632, 900]">
+      <Group id="list" />
+    </Rectangle>
   </children>
 </component>

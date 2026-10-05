@@ -19,6 +19,10 @@ sub init()
     m.episodes.observeField("rowItemFocused", "onEpisodeFocused")
     m.rows.observeField("rowItemSelected", "onRowPicked")
     Listen_("watchlist", "paintActions")
+    ' The theme stops when another page covers this one, or it's taken away.
+    m.top.observeField("visible", "onShown")
+    m.top.observeField("gone", "themeOff")
+    m.theme = invalid
     m.detail = invalid
     m.versionIndex = 0
 end sub
@@ -71,6 +75,7 @@ sub answered(r as object)
         m.related = a.related
         m.trailer = a.trailer
         paint()
+        themeOn()
         if hadFocus and not m.rows.isInFocusChain() and not m.episodes.isInFocusChain() and not m.seasons.isInFocusChain() then m.actions.setFocus(true)
     else if r.op = "season" or r.op = "iptvSeason" then
         if r.answer = invalid then return
@@ -88,6 +93,32 @@ sub answered(r as object)
             m.note.text = "Plex couldn't update the watched status."
         end if
     end if
+end sub
+
+'' A show's theme song, once, while its page is up, when Settings says so. (The Roku
+' gives an app's sound no volume of its own: it's on or off.)
+sub themeOn()
+    d = m.detail
+    if m.theme <> invalid or d = invalid or d.type <> "show" or Str_(d.theme) = "" or m.base = "iptv:" then return
+    if not Bool_(m.global.prefs.themeMusic) or not m.top.visible then return
+    content = CreateObject("roSGNode", "ContentNode")
+    content.url = m.base + d.theme + "?X-Plex-Token=" + m.token
+    m.theme = CreateObject("roSGNode", "Audio")
+    m.theme.content = content
+    m.top.appendChild(m.theme)
+    m.theme.control = "play"
+    Trace_("theme playing")
+end sub
+
+sub themeOff()
+    if m.theme = invalid then return
+    m.theme.control = "stop"
+    m.top.removeChild(m.theme)
+    m.theme = invalid
+end sub
+
+sub onShown()
+    if not m.top.visible then themeOff()
 end sub
 
 sub paint()
@@ -286,6 +317,7 @@ sub onAction()
         if t = invalid then return
         queue = []
         if t.type = "episode" then queue = m.episodeList
+        themeOff()
         m.top.play = { item: t, resume: id = "play", queue: queue, mediaIndex: m.versionIndex }
     else if id = "watched" then
         if m.base = "iptv:" then
@@ -296,6 +328,7 @@ sub onAction()
     else if id = "watchlist" then
         m.top.go = { name: "watchlist", guid: m.detail.guid, on: not Watchlisted_(m.detail.guid) }
     else if id = "trailer" then
+        themeOff()
         m.top.play = { item: m.trailer, resume: false, queue: [], mediaIndex: 0, trailer: true }
     end if
 end sub
@@ -333,7 +366,10 @@ sub onEpisodePicked()
     at = m.episodes.rowItemSelected
     if at = invalid or at.Count() < 2 then return
     i = at[1]
-    if i >= 0 and i < m.episodeList.Count() then m.top.play = { item: m.episodeList[i], resume: true, queue: m.episodeList, mediaIndex: 0 }
+    if i >= 0 and i < m.episodeList.Count() then
+        themeOff()
+        m.top.play = { item: m.episodeList[i], resume: true, queue: m.episodeList, mediaIndex: 0 }
+    end if
 end sub
 
 sub onRowPicked()

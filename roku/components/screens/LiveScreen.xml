@@ -35,11 +35,26 @@
         focusBitmapUri="pkg:/images/pill.9.png" color="0xF2F4F7FF" focusedColor="0x08090BFF" />
       <MarkupList id="channels" translation="[540, 90]" itemComponentName="ChannelItem" itemSize="[1284, 104]" itemSpacing="[0, 12]"
         numRows="7" drawFocusFeedback="false" vertFocusAnimationStyle="floatingFocus" />
+      <!-- The guide as the Fire TV's: the programme in focus above, channels as tiles, the
+           programmes as soft blocks, the one in focus in the accent, a line for now. -->
       <Group id="guide" visible="false">
-        <Label id="about" translation="[96, 80]" width="1700" color="0xF2F4F7FF" />
-        <Label id="aboutFacts" translation="[96, 130]" width="1700" color="0xB3BAC4FF" />
-        <TimeGrid id="grid" translation="[96, 190]" numRows="6" duration="10800" channelInfoWidth="300"
-          programTitleColor="0xF2F4F7FF" programTitleFocusedColor="0x08090BFF" channelInfoColor="0xF2F4F7FF" />
+        <Label id="aboutCategory" translation="[96, 80]" width="1300" color="0x7F8792FF" />
+        <Label id="about" translation="[96, 112]" width="1300" color="0xF2F4F7FF" />
+        <Label id="aboutFacts" translation="[96, 168]" width="1300" color="0xB3BAC4FF" />
+        <Label id="aboutText" translation="[96, 206]" width="1240" height="70" wrap="true" maxLines="2" color="0xB3BAC4FF" />
+        <!-- The highlighted channel, playing, a moment after the cursor stops on it. -->
+        <Group id="previewBox" translation="[1420, 60]" visible="false">
+          <Rectangle translation="[-2, -2]" width="408" height="229" color="0x2B3038FF" />
+          <Rectangle width="404" height="225" color="0x000000FF" />
+          <Video id="preview" width="404" height="225" enableUI="false" mute="false" />
+        </Group>
+        <TimeGrid id="grid" translation="[96, 290]" numRows="6" duration="9000" channelInfoWidth="240" infoGridGap="12"
+          rowHeight="[96]" itemSpacing="[0, 12]" channelInfoAlignment="center"
+          channelInfoBackgroundBitmapUri="pkg:/images/guide_channel.9.png"
+          programBackgroundBitmapUri="pkg:/images/guide_cell.9.png" focusBitmapUri="pkg:/images/guide_focus.9.png"
+          programTitleColor="0xF2F4F7FF" programTitleFocusedColor="0x08090BFF" channelInfoTextColor="0xF2F4F7FF"
+          timeLabelColor="0x7F8792FF" nowBarBitmapUri="pkg:/images/white.png" nowBarBlendColor="0xF2F4F7CC" nowBarWidth="3"
+          programHorizMargin="20" />
       </Group>
     </Group>
   </children>

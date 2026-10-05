@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Settings, as the other apps have them: each setting its title, a line on what it does,
-     and its choices as pills. Up and down go from setting to setting. -->
+<!-- Settings as the other apps lay them out: the sections down the left, each shown as the
+     cursor reaches it, and its settings on the right, in groups. A setting with several
+     values opens the list of them from the right; one that's on or off is a switch. -->
 <component name="SettingsScreen" extends="Group">
   <interface>
     <field id="route" type="assocarray" onChange="build" />
@@ -15,8 +16,12 @@
   <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/Listen.brs" />
   <children>
-    <Rectangle id="clip" width="1920" height="950" color="0x00000000" clippingRect="[0, 0, 1920, 950]">
-      <Group id="body" translation="[96, 0]" />
+    <Group id="rail" translation="[96, 6]">
+      <Label id="heading" text="Settings" color="0xF2F4F7FF" />
+      <Group id="sections" translation="[0, 84]" />
+    </Group>
+    <Rectangle id="clip" translation="[456, 0]" width="1380" height="950" color="0x00000000" clippingRect="[0, 0, 1380, 950]">
+      <Group id="page" />
     </Rectangle>
   </children>
 </component>

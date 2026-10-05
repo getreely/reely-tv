@@ -7,28 +7,34 @@ sub init()
     m.video = m.top.findNode("video")
     m.wait = m.top.findNode("wait")
     m.skip = m.top.findNode("skip")
-    m.upNext = m.top.findNode("upNext")
-    m.options = m.top.findNode("options")
-    m.optionList = m.top.findNode("optionList")
+    m.post = m.top.findNode("post")
+    m.controls = m.top.findNode("controls")
+    m.ctlRow = m.top.findNode("ctlRow")
     m.ticker = m.top.findNode("ticker")
     m.sleepTimer = m.top.findNode("sleepTimer")
     m.wait.font = Regular_(30)
     m.top.findNode("skipLabel").font = Semibold_(30)
-    m.top.findNode("upNextLabel").font = Regular_(26)
-    m.top.findNode("upNextTitle").font = Bold_(36)
-    m.top.findNode("upNextHint").font = Regular_(24)
-    m.top.findNode("optionsTitle").font = Regular_(26)
     m.top.findNode("sleepNote").font = Regular_(26)
-    m.optionList.font = Regular_(28)
-    m.optionList.focusedFont = Semibold_(28)
+    m.top.findNode("postNow").font = Regular_(24)
+    m.top.findNode("postLabel").font = Semibold_(24)
+    m.top.findNode("postShow").font = Bold_(72)
+    m.top.findNode("postLine").font = Regular_(30)
+    m.top.findNode("postTitle").font = Bold_(44)
+    m.top.findNode("postSummary").font = Regular_(28)
+    m.top.findNode("playNextLabel").font = Semibold_(30)
+    m.top.findNode("creditsLabel").font = Semibold_(30)
+    m.top.findNode("barAt").font = Regular_(24)
+    m.top.findNode("barLeft").font = Regular_(24)
+    m.top.findNode("ctlTitle").font = Semibold_(34)
+    m.top.findNode("ctlSub").font = Regular_(26)
     m.video.observeField("state", "onState")
     m.video.observeField("position", "onPosition")
-    m.optionList.observeField("itemSelected", "onOption")
-    m.optionList.observeField("itemFocused", "onOptionFocused")
     m.ticker.observeField("fire", "onTick")
     m.sleepTimer.observeField("fire", "onSleep")
     m.sleepEnd = false
     m.sleepUntil = 0
+    m.ctlAt = -1
+    m.chooser = invalid
 end sub
 
 sub takeFocus()
@@ -52,8 +58,9 @@ sub start()
     m.upNextAt = 0
     m.lastReport = 0
     m.skip.visible = false
-    m.upNext.visible = false
-    m.options.visible = false
+    hidePostPlay()
+    hideControls()
+    closePanel()
     m.wait.text = "Loading…"
     m.video.control = "stop"
     m.video.setFocus(true)
@@ -221,7 +228,7 @@ sub onTick()
         m.introDone = true
         m.video.seek = cues.skipTo / 1000
     end if
-    showSkip = cues.showSkip and not m.options.visible and not m.upNext.visible
+    showSkip = cues.showSkip and m.chooser = invalid and not m.post.visible and m.ctlAt < 0
     if showSkip and not m.skip.visible then
         Trace_("skip intro shown")
         m.skip.visible = true
@@ -236,27 +243,22 @@ sub onTick()
             playNext(nextUp)
             return
         end if
-        seconds = 12
-        if prefs <> invalid and prefs.upNextSeconds <> invalid then seconds = Int(prefs.upNextSeconds)
-        m.upNextItem = nextUp
-        m.upNextAt = 0
-        if seconds > 0 then m.upNextAt = CreateObject("roDateTime").AsSeconds() + seconds
-        m.top.findNode("upNextTitle").text = Join_([Plex_Caption(nextUp), nextUp.title], " · ")
-        m.upNext.visible = true
-        m.upNext.setFocus(true)
-        Trace_("up next " + nextUp.ratingKey)
+        showPostPlay(nextUp)
     end if
-    if m.upNext.visible then
-        hint = "OK to play  ·  Back to keep watching"
-        if m.upNextAt > 0 then
+    if m.post.visible then
+        if m.upNextAt > 0 and not m.upNextHeld then
             remaining = m.upNextAt - CreateObject("roDateTime").AsSeconds()
             if remaining <= 0 then
                 playNext(m.upNextItem)
                 return
             end if
-            hint = "Playing in " + remaining.ToStr() + "  ·  OK to play now  ·  Back to keep watching"
         end if
-        m.top.findNode("upNextHint").text = hint
+        paintPostPlay()
+    end if
+    if m.ctlAt >= 0 then
+        paintBar()
+        ' Put away after a while untouched, unless paused.
+        if m.video.state <> "paused" and CreateObject("roDateTime").AsSeconds() >= m.ctlHideAt then hideControls()
     end if
     note = ""
     if m.sleepEnd then note = "Sleep at the end of this"
@@ -306,112 +308,346 @@ sub report(state as string)
     Ask_("timeline", { base: m.base, token: m.token, ratingKey: m.item.ratingKey, state: state, ms: ms, durationMs: Int(m.durationMs), session: Str_(m.session) })
 end sub
 
-' ------------------------------------------------------------------ The options panel
+'' ------------------------------------------------------------------ The controls
 
-sub showOptions()
+' The row under the bar: the episodes either side of play, then a button for each panel.
+function Controls_() as object
+    out = []
+    episodes = m.item.type = "episode" and m.queue.Count() > 1
+    if episodes then out.Push({ id: "previous", glyph: "previous", enabled: Previous_() <> invalid })
+    out.Push({ id: "play", glyph: Iif_(m.video.state = "paused", "play", "pause"), enabled: true, primary: true })
+    if episodes then out.Push({ id: "next", glyph: "next", enabled: Plex_NextInQueue(m.queue, m.item) <> invalid })
+    if m.p <> invalid and m.p.chapters.Count() > 1 then out.Push({ id: "chapters", glyph: "chapters", enabled: true })
+    out.Push({ id: "subtitles", glyph: "subtitles", enabled: true })
+    out.Push({ id: "audio", glyph: "audio", enabled: true })
+    out.Push({ id: "sleep", glyph: "sleep", enabled: true, lit: m.sleepEnd or m.sleepUntil > 0 })
+    out.Push({ id: "info", glyph: "info", enabled: true })
+    return out
+end function
+
+function Previous_() as dynamic
+    for i = 1 to m.queue.Count() - 1
+        if m.queue[i].ratingKey = m.item.ratingKey then return m.queue[i - 1]
+    end for
+    return invalid
+end function
+
+sub showControls()
     if m.p = invalid then return
-    content = CreateObject("roSGNode", "ContentNode")
-    m.optionIds = []
-    ' Sound: the Roku's own tracks while the file plays as it is; Plex's otherwise.
-    tracks = m.video.availableAudioTracks
-    if m.direct and tracks <> invalid and tracks.Count() > 1 then
-        Heading_(content, "Sound")
-        for each t in tracks
-            name = Str_(t.Name)
-            if name = "" then name = Str_(t.Language)
-            Option_(content, m.optionIds, Iif_(m.video.currentAudioTrack = t.Track, "✓  ", "    ") + name, "rokuAudio:" + Str_(t.Track))
-        end for
-    else if m.p.audio.Count() > 1 then
-        Heading_(content, "Sound")
-        for each a in m.p.audio
-            Option_(content, m.optionIds, Iif_(a.selected, "✓  ", "    ") + a.label, "audio:" + a.id)
+    m.buttons = Controls_()
+    if m.ctlAt < 0 or m.ctlAt >= m.buttons.Count() then
+        for i = 0 to m.buttons.Count() - 1
+            if m.buttons[i].id = "play" then m.ctlAt = i
         end for
     end if
-    ' More found online by the Plex server, for what's on it (not the provider's, nor a trailer).
-    canFind = not m.trailer and not Bool_(m.p.iptv)
-    if m.p.subtitles.Count() > 0 or canFind then
-        Heading_(content, "Subtitles")
-        if m.p.subtitles.Count() > 0 then
-            anyOn = Plex_SubtitlePlan(m.p).on <> invalid
-            Option_(content, m.optionIds, Iif_(not anyOn, "✓  ", "    ") + "Off", "subtitle:0")
-            for each s in m.p.subtitles
-                Option_(content, m.optionIds, Iif_(s.selected, "✓  ", "    ") + s.label, "subtitle:" + s.id)
+    m.controls.visible = true
+    m.skip.visible = false
+    m.controls.setFocus(true)
+    m.ctlHideAt = CreateObject("roDateTime").AsSeconds() + 5
+    title = m.item.title
+    if m.item.type = "episode" and Str_(m.item.grandparentTitle) <> "" then title = m.item.grandparentTitle
+    m.top.findNode("ctlTitle").text = title
+    m.top.findNode("ctlSub").text = Iif_(m.item.type = "episode", Join_([Plex_Caption(m.item), m.item.title], " · "), "")
+    buildControls()
+    paintBar()
+    Trace_("controls shown")
+end sub
+
+sub hideControls()
+    m.ctlAt = -1
+    m.controls.visible = false
+    if m.controls.isInFocusChain() then m.video.setFocus(true)
+end sub
+
+sub buildControls()
+    m.ctlRow.removeChildrenIndex(m.ctlRow.getChildCount(), 0)
+    m.ctlNodes = []
+    ' The transport in the middle of the screen; the panels' buttons to the right.
+    transport = []
+    panels = []
+    for i = 0 to m.buttons.Count() - 1
+        b = m.buttons[i]
+        if b.id = "previous" or b.id = "play" or b.id = "next" then transport.Push(i) else panels.Push(i)
+    end for
+    width = 0
+    for each i in transport
+        width = width + Iif_(m.buttons[i].id = "play", 84, 64) + 28
+    end for
+    x = 960 - Int((width - 28) / 2)
+    for each i in transport
+        size = Iif_(m.buttons[i].id = "play", 84, 64)
+        m.ctlNodes[i] = ControlNode_(m.buttons[i], x, 952 - Int(size / 2), size)
+        x = x + size + 28
+    end for
+    x = 1824 - panels.Count() * 64 - (panels.Count() - 1) * 20
+    for each i in panels
+        m.ctlNodes[i] = ControlNode_(m.buttons[i], x, 920, 64)
+        x = x + 84
+    end for
+    paintControls()
+end sub
+
+function ControlNode_(b as object, x as integer, y as integer, size as integer) as object
+    g = CreateObject("roSGNode", "Group")
+    g.translation = [x, y]
+    ring = CreateObject("roSGNode", "Poster")
+    ring.uri = "pkg:/images/circlering.png"
+    ring.width = size + 12
+    ring.height = size + 12
+    ring.translation = [-6, -6]
+    ring.visible = false
+    disc = CreateObject("roSGNode", "Poster")
+    disc.uri = "pkg:/images/circle.png"
+    disc.width = size
+    disc.height = size
+    glyph = CreateObject("roSGNode", "Poster")
+    glyph.uri = "pkg:/images/glyph_" + b.glyph + ".png"
+    g.appendChild(ring)
+    g.appendChild(disc)
+    g.appendChild(glyph)
+    gs = Int(size * 0.44)
+    glyph.width = gs
+    glyph.height = gs
+    glyph.translation = [Int((size - gs) / 2), Int((size - gs) / 2)]
+    m.ctlRow.appendChild(g)
+    return { group: g, ring: ring, disc: disc, glyph: glyph }
+end function
+
+sub paintControls()
+    accent = m.global.accent
+    if accent = invalid then accent = "0x2E6BFFFF"
+    onAccent = m.global.accentOn
+    if onAccent = invalid then onAccent = "0xFFFFFFFF"
+    for i = 0 to m.buttons.Count() - 1
+        b = m.buttons[i]
+        n = m.ctlNodes[i]
+        on = i = m.ctlAt
+        n.ring.visible = on
+        n.group.opacity = Iif_(b.enabled, 1.0, 0.35)
+        if b.primary = true then
+            n.disc.blendColor = Iif_(on, accent, "0xF2F4F7FF")
+            n.glyph.blendColor = Iif_(on, onAccent, "0x08090BFF")
+        else if on then
+            n.disc.blendColor = "0xF2F4F7FF"
+            n.glyph.blendColor = "0x08090BFF"
+        else if b.lit = true then
+            n.disc.blendColor = accent
+            n.glyph.blendColor = onAccent
+        else
+            n.disc.blendColor = "0x2A2E35FF"
+            n.glyph.blendColor = "0xF2F4F7FF"
+        end if
+    end for
+end sub
+
+' Where it's got to, along the bar, and what's left.
+sub paintBar()
+    total = m.durationMs
+    if (total = invalid or total <= 0) and m.video.duration <> invalid then total = m.video.duration * 1000
+    at = m.video.position * 1000
+    fraction = 0
+    if total <> invalid and total > 0 then fraction = at / total
+    if fraction > 1 then fraction = 1
+    fill = m.top.findNode("barFill")
+    fill.width = Int(1728 * fraction)
+    accent = m.global.accent
+    if accent = invalid then accent = "0x2E6BFFFF"
+    fill.color = accent
+    m.top.findNode("barAt").text = Iif_(m.video.state = "paused", "Paused  ·  ", "") + Clock_(at)
+    left = 0
+    if total <> invalid and total > at then left = total - at
+    m.top.findNode("barLeft").text = "−" + Clock_(left)
+end sub
+
+function Clock_(ms as dynamic) as string
+    total = Int(ms / 1000)
+    if total < 0 then total = 0
+    h = Int(total / 3600)
+    mm = Int((total MOD 3600) / 60)
+    ss = total MOD 60
+    if h > 0 then return h.ToStr() + ":" + Two_(mm) + ":" + Two_(ss)
+    return mm.ToStr() + ":" + Two_(ss)
+end function
+
+function Two_(n as integer) as string
+    if n < 10 then return "0" + n.ToStr()
+    return n.ToStr()
+end function
+
+' Along the row, past any that can't be pressed.
+sub moveControl(stepBy as integer)
+    i = m.ctlAt + stepBy
+    while i >= 0 and i < m.buttons.Count()
+        if m.buttons[i].enabled then
+            m.ctlAt = i
+            Trace_("control " + m.buttons[i].id)
+            paintControls()
+            return
+        end if
+        i = i + stepBy
+    end while
+end sub
+
+sub pressControl()
+    b = m.buttons[m.ctlAt]
+    if not b.enabled then return
+    if b.id = "play" then
+        if m.video.state = "paused" then m.video.control = "resume" else m.video.control = "pause"
+        m.buttons[m.ctlAt].glyph = Iif_(m.video.state = "paused", "pause", "play")
+        m.ctlNodes[m.ctlAt].glyph.uri = "pkg:/images/glyph_" + m.buttons[m.ctlAt].glyph + ".png"
+    else if b.id = "previous" then
+        playNext(Previous_())
+    else if b.id = "next" then
+        playNext(Plex_NextInQueue(m.queue, m.item))
+    else
+        openPanel(b.id)
+    end if
+end sub
+
+' ------------------------------------------------------------------ The panels
+
+' A panel from the right, as the other apps' players have them; the one in use ticked.
+sub openPanel(kind as string)
+    labels = []
+    notes = []
+    current = -1
+    m.panelIds = []
+    title = ""
+    if kind = "audio" then
+        title = "Audio"
+        tracks = m.video.availableAudioTracks
+        ' The Roku's own tracks while the file plays as it is; Plex's otherwise.
+        if m.direct and tracks <> invalid and tracks.Count() > 1 then
+            for each t in tracks
+                name = Str_(t.Name)
+                if name = "" then name = Str_(t.Language)
+                if m.video.currentAudioTrack = t.Track then current = labels.Count()
+                labels.Push(name)
+                notes.Push("")
+                m.panelIds.Push("rokuAudio:" + Str_(t.Track))
+            end for
+        else
+            for each a in m.p.audio
+                if a.selected then current = labels.Count()
+                labels.Push(a.label)
+                notes.Push("")
+                m.panelIds.Push("audio:" + a.id)
             end for
         end if
-        if canFind then Option_(content, m.optionIds, "    Find subtitles online", "find:")
-    end if
-    if m.p.chapters.Count() > 1 then
-        Heading_(content, "Chapters")
+        if labels.Count() <= 1 then
+            notes = ["There's only one audio track."]
+            if labels.Count() = 0 then
+                labels = ["Default"]
+                m.panelIds = [""]
+            end if
+            current = 0
+        end if
+    else if kind = "subtitles" then
+        title = "Subtitles"
+        if m.p.subtitles.Count() > 0 then
+            anyOn = Plex_SubtitlePlan(m.p).on <> invalid
+            if not anyOn then current = 0
+            labels.Push("Off")
+            notes.Push("")
+            m.panelIds.Push("subtitle:0")
+            for each s in m.p.subtitles
+                if s.selected then current = labels.Count()
+                labels.Push(s.label)
+                notes.Push("")
+                m.panelIds.Push("subtitle:" + s.id)
+            end for
+        end if
+        ' More found online by the Plex server, for what's on it (not the provider's, nor a trailer).
+        if not m.trailer and not Bool_(m.p.iptv) then
+            labels.Push("Find subtitles online")
+            notes.Push(Iif_(m.p.subtitles.Count() = 0, "None came with this video.", ""))
+            m.panelIds.Push("find:")
+        end if
+        labels.Push("Size and style")
+        notes.Push("Set on your Roku: Settings > Accessibility > Captions style.")
+        m.panelIds.Push("")
+    else if kind = "chapters" then
+        title = "Chapters"
+        at = m.video.position * 1000
         for each ch in m.p.chapters
-            Option_(content, m.optionIds, "    " + ch.title, "chapter:" + Str_(ch.startMs))
+            if ch.startMs <= at then current = labels.Count()
+            labels.Push(ch.title)
+            notes.Push(Clock_(ch.startMs))
+            m.panelIds.Push("chapter:" + Str_(ch.startMs))
+        end for
+    else if kind = "sleep" then
+        title = "Sleep timer"
+        for each minutes in SleepChoices_()
+            if minutes <> -1 or m.item.type = "episode" then
+                on = (minutes = 0 and not m.sleepEnd and m.sleepUntil = 0) or (minutes = -1 and m.sleepEnd)
+                if on then current = labels.Count()
+                labels.Push(Iif_(minutes = 0, "Off", Iif_(minutes = -1, "End of this episode", minutes.ToStr() + " minutes")))
+                notes.Push("")
+                m.panelIds.Push("sleep:" + minutes.ToStr())
+            end if
+        end for
+    else if kind = "info" then
+        title = "Playback info"
+        facts = [["Playing", Iif_(m.direct, "The original file", "Converted by Plex")]]
+        if Str_(m.p.videoCodec) <> "" then facts.Push(["Video", UCase(Str_(m.p.videoCodec))])
+        if Str_(m.p.audioCodec) <> "" then facts.Push(["Audio", UCase(Str_(m.p.audioCodec))])
+        if Str_(m.p.container) <> "" then facts.Push(["File", UCase(Str_(m.p.container))])
+        for each f in facts
+            labels.Push(f[1])
+            notes.Push(f[0])
+            m.panelIds.Push("")
         end for
     end if
-    Heading_(content, "Sleep timer")
-    for each minutes in SleepChoices_()
-        if minutes <> -1 or m.item.type = "episode" then
-            label = Iif_(minutes = 0, "Off", Iif_(minutes = -1, "End of this episode", minutes.ToStr() + " minutes"))
-            on = (minutes = 0 and not m.sleepEnd and m.sleepUntil = 0) or (minutes = -1 and m.sleepEnd)
-            Option_(content, m.optionIds, Iif_(on, "✓  ", "    ") + label, "sleep:" + minutes.ToStr())
-        end if
-    end for
-    showList(content, "Sound, subtitles and more")
-    Trace_("options shown")
+    m.panelKind = kind
+    showChooser(title, labels, notes, current)
+    Trace_("panel " + kind)
 end sub
 
-' The panel with [content] in it, on its first choice rather than a heading.
-sub showList(content as object, title as string)
-    m.top.findNode("optionsTitle").text = title
-    m.optionList.content = content
-    m.options.visible = true
+sub showChooser(title as string, labels as object, notes as object, current as integer)
+    closePanel()
+    m.controls.visible = false
     m.skip.visible = false
-    m.optionList.setFocus(true)
-    ' The first thing that can be chosen, not a heading.
-    for i = 0 to m.optionIds.Count() - 1
-        if m.optionIds[i] <> "" then
-            m.optionList.jumpToItem = i
-            exit for
+    m.chooser = CreateObject("roSGNode", "Chooser")
+    m.chooser.setFields({ title: title, notes: notes, current: current })
+    m.chooser.options = labels
+    m.chooser.observeField("picked", "onPicked")
+    m.top.appendChild(m.chooser)
+    m.chooser.setFocus(true)
+end sub
+
+sub closePanel()
+    if m.chooser = invalid then return
+    m.chooser.unobserveField("picked")
+    m.top.removeChild(m.chooser)
+    m.chooser = invalid
+end sub
+
+sub onPicked()
+    picked = m.chooser.picked
+    id = ""
+    if picked >= 0 and picked < m.panelIds.Count() then id = m.panelIds[picked]
+    if picked >= 0 and id = "" and m.panelKind <> "finding" then return
+    closePanel()
+    if picked < 0 or id = "" then
+        ' Back: to the controls, on the button that opened it.
+        if m.ctlAt >= 0 then
+            m.controls.visible = true
+            m.controls.setFocus(true)
+            m.ctlHideAt = CreateObject("roDateTime").AsSeconds() + 5
+        else
+            m.video.setFocus(true)
         end if
-    end for
-end sub
-
-sub Heading_(content as object, title as string)
-    c = content.createChild("ContentNode")
-    c.title = UCase(title)
-    m.optionIds.Push("")
-end sub
-
-sub Option_(content as object, ids as object, title as string, id as string)
-    c = content.createChild("ContentNode")
-    c.title = title
-    ids.Push(id)
-end sub
-
-sub hideOptions()
-    m.options.visible = false
-    m.video.setFocus(true)
-end sub
-
-sub onOptionFocused()
-    i = m.optionList.itemFocused
-    if m.optionIds <> invalid and i >= 0 and i < m.optionIds.Count() then Trace_("option " + m.optionIds[i])
-end sub
-
-sub onOption()
-    id = m.optionIds[m.optionList.itemSelected]
-    if id = "" then return
+        return
+    end if
+    hideControls()
     parts = id.Split(":")
     kind = parts[0]
     value = parts[1]
     if kind = "find" then
         findSubtitles()
-        return
-    end if
-    hideOptions()
-    if kind = "found" then
+    else if kind = "found" then
         addFound(Int(Val(value)))
-        return
-    end if
-    if kind = "rokuAudio" then
+    else if kind = "rokuAudio" then
         m.video.audioTrack = value
     else if kind = "audio" or kind = "subtitle" then
         chooseStream(kind, value)
@@ -429,6 +665,76 @@ sub onOption()
             m.sleepTimer.control = "start"
         end if
     end if
+end sub
+
+' ------------------------------------------------------------------ Up Next
+
+' The next episode over the screen; what's finishing goes on in a window in the corner.
+sub showPostPlay(nextUp as object)
+    prefs = m.global.prefs
+    seconds = 12
+    if prefs <> invalid and prefs.upNextSeconds <> invalid then seconds = Int(prefs.upNextSeconds)
+    m.upNextItem = nextUp
+    m.upNextSeconds = seconds
+    m.upNextHeld = false
+    m.upNextAt = 0
+    if seconds > 0 then m.upNextAt = CreateObject("roDateTime").AsSeconds() + seconds
+    hideControls()
+    closePanel()
+    m.skip.visible = false
+    path = Str_(nextUp.thumb)
+    if path = "" then path = Str_(nextUp.art)
+    m.top.findNode("postArt").uri = Image_(nextUp.serverBase, path, 1280, 720)
+    accent = m.global.accent
+    if accent = invalid then accent = "0x2E6BFFFF"
+    m.top.findNode("postLabel").color = accent
+    show = Str_(nextUp.grandparentTitle)
+    m.top.findNode("postShow").text = Iif_(show <> "", show, nextUp.title)
+    facts = []
+    if nextUp.parentIndex <> invalid then facts.Push("Season " + nextUp.parentIndex.ToStr())
+    if nextUp.index <> invalid then facts.Push("Episode " + nextUp.index.ToStr())
+    if Num_(nextUp.durationMs) > 0 then facts.Push(Int(Num_(nextUp.durationMs) / 60000 + 0.5).ToStr() + " min")
+    m.top.findNode("postLine").text = Join_(facts, "  ·  ")
+    m.top.findNode("postTitle").text = Iif_(show <> "", nextUp.title, "")
+    m.top.findNode("postSummary").text = Str_(nextUp.summary)
+    m.top.findNode("postNow").text = "Credits  ·  " + Iif_(Str_(m.item.grandparentTitle) <> "", m.item.grandparentTitle, m.item.title)
+    m.video.translation = [1150, 52]
+    m.video.width = 672
+    m.video.height = 378
+    m.postAt = 0
+    m.post.visible = true
+    m.post.setFocus(true)
+    paintPostPlay()
+    Trace_("up next " + nextUp.ratingKey)
+end sub
+
+sub hidePostPlay()
+    m.post.visible = false
+    m.video.translation = [0, 0]
+    m.video.width = 1920
+    m.video.height = 1080
+    if m.post.isInFocusChain() then m.video.setFocus(true)
+end sub
+
+sub paintPostPlay()
+    accent = m.global.accent
+    if accent = invalid then accent = "0x2E6BFFFF"
+    onPlay = m.postAt = 0
+    counting = m.upNextAt > 0 and not m.upNextHeld
+    left = 0
+    if counting then left = m.upNextAt - CreateObject("roDateTime").AsSeconds()
+    if left < 0 then left = 0
+    m.top.findNode("playNextFill").blendColor = Iif_(onPlay, "0xF2F4F7FF", "0x1F2329FF")
+    count = m.top.findNode("playNextCount")
+    count.blendColor = accent
+    count.opacity = 0.45
+    count.width = 0
+    if counting and m.upNextSeconds > 0 then count.width = Int(360 * (1 - left / m.upNextSeconds))
+    label = m.top.findNode("playNextLabel")
+    label.text = Iif_(counting, "Play next  ·  " + left.ToStr(), "Play next")
+    label.color = Iif_(onPlay, "0x08090BFF", "0xF2F4F7FF")
+    m.top.findNode("creditsFill").blendColor = Iif_(onPlay, "0x1F2329FF", "0xF2F4F7FF")
+    m.top.findNode("creditsLabel").color = Iif_(onPlay, "0xF2F4F7FF", "0x08090BFF")
 end sub
 
 ' Another sound track or subtitles: kept with Plex, as the other apps keep them, and
@@ -458,30 +764,36 @@ end function
 
 sub findSubtitles()
     m.findLanguage = Language_()
-    content = CreateObject("roSGNode", "ContentNode")
-    m.optionIds = []
-    Heading_(content, "Looking for subtitles…")
-    showList(content, "Find subtitles online")
+    m.found = []
+    m.panelIds = [""]
+    m.panelKind = "finding"
+    showChooser("Find subtitles online", ["Looking for subtitles…"], [""], -1)
     Ask_("findSubtitles", { base: m.base, token: m.token, ratingKey: m.item.ratingKey, language: m.findLanguage })
 end sub
 
 sub showFound(results as dynamic)
-    if not m.options.visible then return
-    content = CreateObject("roSGNode", "ContentNode")
-    m.optionIds = []
+    if m.chooser = invalid or m.panelKind <> "finding" then return
     m.found = Arr_(results)
+    labels = []
+    notes = []
+    m.panelIds = []
     if results = invalid then
-        Heading_(content, "Couldn't look for subtitles")
+        labels = ["Couldn't look for subtitles"]
+        notes = [""]
+        m.panelIds = [""]
     else if m.found.Count() = 0 then
-        Heading_(content, "None found online")
+        labels = ["None found online"]
+        notes = [""]
+        m.panelIds = [""]
     else
-        Heading_(content, "Found online")
         for i = 0 to m.found.Count() - 1
-            Option_(content, m.optionIds, "    " + Plex_OnlineSubtitleLabel(m.found[i]), "found:" + i.ToStr())
+            labels.Push(Plex_OnlineSubtitleLabel(m.found[i]))
+            notes.Push("")
+            m.panelIds.Push("found:" + i.ToStr())
         end for
     end if
     Trace_("subtitles found " + m.found.Count().ToStr())
-    showList(content, "Find subtitles online")
+    m.chooser.options = labels
 end sub
 
 ' The server fetches it and adds it to the file; then it's played on with.
@@ -521,19 +833,35 @@ end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press then return false
-    if m.options.visible then
-        if key = "back" or key = "left" then hideOptions()
+    if m.chooser <> invalid then return true
+    if m.post.visible then
+        ' Any press but OK on Play next stops the countdown: somebody reaching for the
+        ' remote is making up their mind.
+        if not (key = "OK" and m.postAt = 0) then m.upNextHeld = true
+        if key = "left" or key = "right" then
+            m.postAt = Iif_(key = "left", 0, 1)
+        else if key = "OK" then
+            if m.postAt = 0 then
+                playNext(m.upNextItem)
+            else
+                hidePostPlay()
+            end if
+        else if key = "back" then
+            hidePostPlay()
+        end if
+        if m.post.visible then paintPostPlay()
         return true
     end if
-    if m.upNext.visible then
-        if key = "OK" then
-            playNext(m.upNextItem)
-            return true
-        else if key = "back" then
-            m.upNext.visible = false
-            m.video.setFocus(true)
-            return true
+    if m.ctlAt >= 0 then
+        m.ctlHideAt = CreateObject("roDateTime").AsSeconds() + 5
+        if key = "left" or key = "right" then
+            moveControl(Iif_(key = "left", -1, 1))
+        else if key = "OK" then
+            pressControl()
+        else if key = "back" or key = "up" then
+            hideControls()
         end if
+        return true
     end if
     if m.skip.visible and m.skip.isInFocusChain() and key = "OK" then
         intro = Plex_MarkerAt(m.p.markers, "intro", m.video.position * 1000)
@@ -548,7 +876,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
         finish(false)
         return true
     else if key = "down" or key = "options" then
-        showOptions()
+        showControls()
         return true
     end if
     return false

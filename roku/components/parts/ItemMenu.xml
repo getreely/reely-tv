@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- A poster's menu, as the Fire TV's (there from holding OK, here from the Options key):
-     down the right with the title's picture at the top. -->
+     down the right with the title's picture at the top, each choice with its icon. -->
 <component name="ItemMenu" extends="Group">
   <interface>
     <field id="item" type="assocarray" onChange="build" />
@@ -19,7 +19,6 @@
     <Poster id="art" translation="[1340, 0]" width="580" height="326" loadDisplayMode="scaleToZoom" />
     <Label id="title" translation="[1380, 350]" width="500" color="0xF2F4F7FF" wrap="true" maxLines="2" />
     <Label id="sub" translation="[1380, 450]" width="500" color="0xB3BAC4FF" />
-    <LabelList id="list" translation="[1380, 510]" itemSize="[480, 64]" numRows="8" vertFocusAnimationStyle="floatingFocus"
-      focusBitmapUri="pkg:/images/pill.9.png" color="0xF2F4F7FF" focusedColor="0x08090BFF" />
+    <Group id="list" translation="[1364, 510]" />
   </children>
 </component>

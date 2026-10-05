@@ -56,28 +56,26 @@ app (Amazon's Vega SDK, React Native), which can reuse the LG app's TypeScript c
 | Request with seasons and library | ✅ | ✅ | ✅ | ✅ | ⬜ |
 | Rows leave out what's in the library; Reely sends three pages a row | ✅ | ✅ | ✅ | ✅ (what Reely and Plex have left out, in the simulator) | ⬜ |
 | **App** | | | | | |
-| Settings (every row) | ✅ | ✅ (same rows) | ✅ (all but frame rate, buffer and Bluetooth, which webOS handles itself) | 🟡 (no theme music, guide preview, or refresh channels and guide; frame rate, buffer, Bluetooth and subtitle style are the Roku's own) | ⬜ |
+| Settings (every row) | ✅ | ✅ (same rows) | ✅ (all but frame rate, buffer and Bluetooth, which webOS handles itself) | ✅ (theme music on or off: the Roku gives an app's sound no volume of its own; channels and the guide are read afresh each time Live TV opens; frame rate, buffer, Bluetooth and subtitle style are the Roku's own) | ⬜ |
 | Updates from GitHub | ✅ | ✅ | — (store) | — (store) | — (store) |
 | Screensaver, remote tour | ✅ | — | ✅ | ✅ (the Roku starts the screensaver after its own idle time, set in its Settings) | — |
 | Crash report | ✅ | ✅ | ✅ (problem report) | 🟡 (problem report of what fails in background work; Roku gives apps no hook for the rest) | ⬜ |
 
 ## Look and feel
 
-The table above is what each app can do. How it looks is a separate question, and the
-LG and Roku apps are not there yet: they have the same screens and choices as the Fire
-TV, in the same colors, but drawn more plainly. Measured against the Fire TV's
-screenshots:
+The table above is what each app can do. How it looks is a separate question: each
+screen of the LG and Roku apps measured against the Fire TV's screenshots.
 
 | Screen | LG | Roku |
 |---|---|---|
 | Home and the tabs' homes: hero with picture, title, details | ✅ | ✅ |
 | Overall size of text and spacing | ✅ | ✅ |
 | Title page: backdrop, logo, ratings, round buttons, episodes as a row of pictures | ✅ | ✅ |
-| Settings: sections down the left, a row opens its choices | ✅ | ⬜ one long list of pills |
-| Player: a panel for each of sound, subtitles, chapters; full-screen Up Next with picture | ✅ | ⬜ one list; Up Next card |
-| Guide: channel tiles, the programme's details above | ✅ | 🟡 plain text grid |
-| Library: views and sort in the tab's menu, filter chips | 🟡 pills | 🟡 pills |
-| Poster menu: side sheet with the title's picture | ✅ | 🟡 no icons |
+| Settings: sections down the left, a row opens its choices | ✅ | ✅ |
+| Player: a panel for each of sound, subtitles, chapters; full-screen Up Next with picture | ✅ | ✅ |
+| Guide: channel tiles, the programme's details above | ✅ | ✅ (one color for the tiles, and the cursor white, as the Roku's grid draws them) |
+| Library: sort, decade and genres as chips, sort and decade opening their lists | ✅ | ✅ |
+| Poster menu: side sheet with the title's picture, each choice with its icon | ✅ | ✅ |
 
 ## Tests
 

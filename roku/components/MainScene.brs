@@ -57,7 +57,7 @@ end sub
 ' The settings kept on this Roku, with the Fire TV's defaults.
 function Prefs_() as object
     p = ReadJson_("prefs", {})
-    defaults = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], streamFormat: "m3u8", iptvLibrary: false, iptvWins: false, screensaver: true, tourSeen: false, subtitlesAtStart: "plex", accent: "blue", iptvInMenus: true }
+    defaults = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], streamFormat: "m3u8", iptvLibrary: false, iptvWins: false, screensaver: true, tourSeen: false, subtitlesAtStart: "plex", accent: "blue", iptvInMenus: true, themeMusic: false, guidePreview: true }
     for each k in defaults
         if p[k] = invalid then p[k] = defaults[k]
     end for

@@ -16,8 +16,13 @@ sub init()
     m.top.findNode("signInTitle").font = Bold_(48)
     m.top.findNode("signInNote").font = Regular_(28)
     m.top.findNode("signInError").font = Regular_(26)
-    m.top.findNode("about").font = Bold_(36)
-    m.top.findNode("aboutFacts").font = Regular_(24)
+    m.top.findNode("about").font = Semibold_(44)
+    m.top.findNode("aboutFacts").font = Regular_(26)
+    m.top.findNode("aboutCategory").font = Semibold_(22)
+    m.top.findNode("aboutText").font = Regular_(24)
+    m.grid.programTitleFont = Regular_(28)
+    m.grid.timeLabelFont = Regular_(24)
+    m.grid.channelInfoFont = Bold_(26)
     m.note.font = Regular_(28)
     for each list in [m.form, m.categories]
         list.font = Regular_(28)
@@ -33,6 +38,14 @@ sub init()
     m.channelList.observeField("itemSelected", "onChannelSelected")
     m.channelList.observeField("itemFocused", "onChannelFocused")
     m.grid.observeField("programFocused", "onProgramFocused")
+    m.preview = m.top.findNode("preview")
+    m.previewBox = m.top.findNode("previewBox")
+    m.previewTimer = CreateObject("roSGNode", "Timer")
+    m.previewTimer.duration = 1.2
+    m.previewTimer.observeField("fire", "playPreview")
+    m.top.observeField("visible", "onShown")
+    if not m.top.hasField("gone") then m.top.addField("gone", "boolean", false)
+    m.top.observeField("gone", "stopPreview")
     m.grid.observeField("programSelected", "onProgramSelected")
     m.epgTimer = CreateObject("roSGNode", "Timer")
     m.epgTimer.duration = 0.5
@@ -400,6 +413,7 @@ sub watch(index as integer, catchUp as dynamic)
         if r.streamId <> ch.streamId and recent.Count() < 30 then recent.Push(r)
     end for
     s.recent = recent
+    stopPreview()
     m.top.go = { name: "live", live: s }
     m.top.watch = { channels: m.channels, index: index, catchUp: catchUp, guide: m.guide, table: m.table }
 end sub
@@ -432,6 +446,8 @@ end sub
 
 sub paintView()
     guide = m.view = "guide"
+    m.previewBox.visible = guide and PreviewOn_()
+    if not guide then stopPreview()
     m.views.on = [not guide, guide]
     m.categories.visible = not guide
     m.channelList.visible = not guide
@@ -448,6 +464,11 @@ end function
 
 sub paintGuide()
     start = GuideStart_()
+    name = ""
+    for each cat in Arr_(m.cats)
+        if cat.id = m.categoryId then name = Str_(cat.name)
+    end for
+    m.top.findNode("aboutCategory").text = UCase(name)
     m.grid.contentStartTime = start
     m.shown = []
     content = CreateObject("roSGNode", "ContentNode")
@@ -510,11 +531,16 @@ sub onProgramFocused()
     ch = m.shown[ci]
     p = GridProgramme_(ci, m.grid.programFocused)
     Trace_("guide on " + Iif_(p = invalid, ch.name, p.title))
+    ' Long enough that walking past channels doesn't open a connection for each.
+    m.previewWanted = ch
+    m.previewTimer.control = "stop"
+    m.previewTimer.control = "start"
     if p <> invalid then m.guideAt = p.start + 1
     now = CreateObject("roDateTime").AsSeconds()
     if p = invalid then
         m.top.findNode("about").text = ch.name
         m.top.findNode("aboutFacts").text = "OK to watch"
+        m.top.findNode("aboutText").text = ""
         return
     end if
     hint = "OK to watch"
@@ -524,7 +550,8 @@ sub onProgramFocused()
         hint = Iif_(hasReminder(ch, p), "Reminder set  ·  OK to cancel it", "OK to be reminded when it starts")
     end if
     m.top.findNode("about").text = p.title
-    m.top.findNode("aboutFacts").text = Join_([ch.name, Clock_(p.start) + "–" + Clock_(p.ends), hint], "  ·  ")
+    m.top.findNode("aboutFacts").text = Join_([ch.name, Clock_(p.start) + " – " + Clock_(p.ends), hint], "  ·  ")
+    m.top.findNode("aboutText").text = Str_(p.description)
 end sub
 
 ' OK in the guide: what's on, watched; what's over, from the archive; what's to come, a reminder.
@@ -649,3 +676,38 @@ function onKeyEvent(key as string, press as boolean) as boolean
     end if
     return false
 end function
+
+' ------------------------------------------------------------------ The guide's preview
+
+function PreviewOn_() as boolean
+    prefs = m.global.prefs
+    return prefs = invalid or prefs.guidePreview = invalid or Bool_(prefs.guidePreview)
+end function
+
+sub playPreview()
+    ch = m.previewWanted
+    if ch = invalid or m.view <> "guide" or not PreviewOn_() or not m.top.visible then return
+    if m.previewing <> invalid and m.previewing.streamId = ch.streamId then return
+    c = LiveState_().credentials
+    format = "m3u8"
+    if m.global.prefs <> invalid and m.global.prefs.streamFormat = "ts" then format = "ts"
+    content = CreateObject("roSGNode", "ContentNode")
+    content.url = Xtream_StreamUrl(c, ch, format)
+    content.streamFormat = Iif_(format = "ts" or LCase(Right(content.url.Split("?")[0], 3)) = ".ts", "ts", "hls")
+    content.live = true
+    m.previewing = ch
+    m.preview.content = content
+    m.preview.control = "play"
+    Trace_("preview " + ch.streamId.ToStr())
+end sub
+
+sub stopPreview()
+    if m.previewTimer <> invalid then m.previewTimer.control = "stop"
+    if m.previewing = invalid then return
+    m.preview.control = "stop"
+    m.previewing = invalid
+end sub
+
+sub onShown()
+    if not m.top.visible then stopPreview()
+end sub
