@@ -20,5 +20,6 @@
     <Label id="key" translation="[540, 440]" height="56" horizAlign="center" vertAlign="center" color="0xFFFFFFFF" />
     <Label id="body" translation="[540, 530]" width="840" color="0xB3BAC4FF" wrap="true" lineSpacing="8" />
     <PillRow id="actions" translation="[540, 730]" fontSize="26" />
+    <Timer id="keeper" duration="0.4" repeat="true" />
   </children>
 </component>

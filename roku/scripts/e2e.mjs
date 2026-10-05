@@ -381,7 +381,30 @@ try {
   await moveTo("TRACE setting", "row:playlists", "Down");
   await key("Select");
   await wait(1000);
-  await key("Back"); await wait(400);
+  // The tour again, from About, stepped through to Done: it goes, and stays gone.
+  await key("Left"); await wait(400);
+  await moveTo("TRACE section", "about", "Down");
+  await key("Right"); await wait(400);
+  await key("Select");
+  await until("the tour from Settings", () => (output.match(/TRACE tour step 1/g) ?? []).length >= 2, 5000).catch(() => undefined);
+  // The simulator now and then loses a press altogether (no part of the app hears it):
+  // pressed again when a step doesn't come.
+  const pressUntil = async (what, done) => {
+    for (let tries = 0; tries < 3 && !done(); tries++) {
+      await key("Select");
+      await until(what, done, 4000).catch(() => undefined);
+    }
+    await wait(300);
+  };
+  for (let i = 2; i <= 7; i++) await pressUntil(`tour step ${i}`, () => lastSaid("TRACE tour step") === String(i));
+  expect("Next steps the tour through to its last", lastSaid("TRACE tour step") === "7");
+  await wait(1000);
+  const dones = (output.match(/TRACE tour removed/g) ?? []).length;
+  await pressUntil("Done puts the tour away", () => (output.match(/TRACE tour removed/g) ?? []).length > dones);
+  expect("Done on the tour's last step puts it away", (output.match(/TRACE tour removed/g) ?? []).length > dones);
+  await wait(1200);
+  await snap("roku-tour-gone");
+  // Back from the sections, out to Home.
   await key("Back");
   await wait(1500);
   await snap("roku-home-from-settings");

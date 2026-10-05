@@ -3,6 +3,7 @@ sub init()
     m.top.findNode("key").color = AccentOn_()
     m.steps = Tour_Steps()
     m.step = 0
+    m.finished = false
     m.actions = m.top.findNode("actions")
     m.top.findNode("count").font = Regular_(24)
     m.top.findNode("title").font = Bold_(52)
@@ -10,6 +11,11 @@ sub init()
     m.top.findNode("body").font = Regular_(30)
     m.actions.observeField("pressed", "onAction")
     m.top.observeField("focusedChild", "onFocus")
+    ' Whatever else takes the cursor while the tour is up (Home arriving behind it, say),
+    ' the tour takes it back: otherwise it sits on screen with nothing able to answer it.
+    m.keeper = m.top.findNode("keeper")
+    m.keeper.observeField("fire", "keepFocus")
+    m.keeper.control = "start"
     paint()
 end sub
 
@@ -49,8 +55,25 @@ sub onFocus()
     if m.top.hasFocus() then m.actions.setFocus(true)
 end sub
 
+sub keepFocus()
+    if m.finished then return
+    ' Something put over the tour (a reminder) keeps the cursor while it's there.
+    parent = m.top.getParent()
+    if parent <> invalid and parent.getChildCount() > 0 then
+        if not parent.getChild(parent.getChildCount() - 1).isSameNode(m.top) then return
+    end if
+    if not m.top.isInFocusChain() then
+        Trace_("tour took the cursor back")
+        m.actions.setFocus(true)
+    end if
+end sub
+
 sub onAction()
-    id = m.ids[m.actions.pressed]
+    act(m.ids[m.actions.pressed])
+end sub
+
+sub act(id as string)
+    if m.finished then return
     if id = "next" then
         if m.step = m.steps.Count() - 1 then
             finish()
@@ -66,13 +89,18 @@ sub onAction()
     end if
 end sub
 
+' Gone from the screen at once, whatever the scene does next.
 sub finish()
+    if m.finished then return
+    m.finished = true
+    m.keeper.control = "stop"
+    m.top.visible = false
     Trace_("tour done")
     m.top.done = true
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
-    if not press then return false
+    if not press or m.finished then return true
     if key = "back" then
         if m.step = 0 then
             finish()
@@ -82,6 +110,17 @@ function onKeyEvent(key as string, press as boolean) as boolean
         end if
         return true
     end if
+    ' The buttons answer for themselves when they have the cursor; if a press reaches here
+    ' instead, the tour answers it, so it can always be stepped through or skipped.
+    i = m.actions.focusIndex
+    if key = "left" and i > 0 then
+        m.actions.focusIndex = i - 1
+    else if key = "right" and i < m.ids.Count() - 1 then
+        m.actions.focusIndex = i + 1
+    else if key = "OK" and i >= 0 and i < m.ids.Count() then
+        act(m.ids[i])
+    end if
+    if not m.finished then m.actions.setFocus(true)
     ' Nothing under the tour moves while it's up.
-    return key <> "left" and key <> "right" and key <> "OK"
+    return true
 end function

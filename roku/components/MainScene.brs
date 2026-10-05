@@ -722,9 +722,11 @@ end sub
 
 ' ------------------------------------------------------------------ The tour
 
-' Once, after signing in (and choosing who's watching), as the other apps show it.
+' Once, after signing in (and choosing who's watching), as the other apps show it. Seen is
+' kept on its own as well as in the preferences, so the tour can't come back by itself.
 sub maybeTour()
-    if not Bool_(m.global.prefs.tourSeen) then showTour()
+    if Bool_(m.global.prefs.tourSeen) or m.store.Read("tourSeen") = "1" then return
+    showTour()
 end sub
 
 sub showTour()
@@ -736,14 +738,24 @@ sub showTour()
 end sub
 
 sub onTourDone()
-    m.overlays.removeChild(m.tour)
+    ' Every tour there is goes, not only the one this remembers.
+    for i = m.overlays.getChildCount() - 1 to 0 step -1
+        child = m.overlays.getChild(i)
+        if child <> invalid and child.subtype() = "TourView" then
+            child.unobserveField("done")
+            m.overlays.removeChild(child)
+        end if
+    end for
     m.tour = invalid
+    m.store.Write("tourSeen", "1")
+    m.store.Flush()
     p = m.global.prefs
     if not Bool_(p.tourSeen) then
         p.tourSeen = true
         m.global.prefs = p
         WriteJson_("prefs", p)
     end if
+    Trace_("tour removed")
     c = topScreen()
     if c <> invalid then c.focusIn = true
 end sub
