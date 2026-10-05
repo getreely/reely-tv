@@ -170,6 +170,9 @@ private const val AUDIO_NOTICE_MS = 9_000L
 /** Attempts at picking a film up again after the connection drops, and the wait before the first. */
 private const val RECONNECT_TRIES = 3
 private const val RECONNECT_WAIT_MS = 3_000L
+/** Half a minute of starting again, every two seconds, while the Fire TV notices headphones have gone. */
+private const val SOUND_RETRIES = 15
+private const val SOUND_RETRY_MS = 2_000L
 
 /** What Play does: see [livePlayAction]. */
 internal enum class LivePlay { TOGGLE, REJOIN, FROM_PAUSE }
@@ -344,6 +347,8 @@ fun PlayerScreen(
      * it waits for OK.
      */
     var reconnects by remember { mutableIntStateOf(0) }
+    // Starting again after the sound lost its output; see onPlayerError.
+    var soundRetries by remember { mutableIntStateOf(0) }
     var reconnectAt by remember { mutableLongStateOf(0L) }
     fun reconnect() {
         error = null
@@ -706,6 +711,20 @@ fun PlayerScreen(
                 if (playbackError.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
                     return
                 }
+                // The sound had nowhere to go — headphones died or were switched off.
+                // Nothing wrong with what's playing, and nothing Plex converting it would
+                // help: it starts again on whatever the sound goes to now, the TV, once the
+                // Fire TV has noticed they've gone. Live TV does that itself (LivePlayer).
+                if (tv.reely.core.AudioOutputs.lostOutput(playbackError.errorCode)) {
+                    if (soundRetries < SOUND_RETRIES) {
+                        soundRetries++
+                        error = "Headphones or speaker disconnected. Carrying on with the TV…"
+                        if (!currentPlayback.isLive) reconnectAt = System.currentTimeMillis() + SOUND_RETRY_MS
+                    } else {
+                        error = "The sound has nowhere to play. Check the TV or your headphones, and press OK to try again."
+                    }
+                    return
+                }
                 // Anything in the parsing, decoding or audio-output ranges means this
                 // device could not handle the file — which is what the server's
                 // transcoder is for. Network errors are not that, and stay errors.
@@ -751,7 +770,12 @@ fun PlayerScreen(
         reconnect()
     }
     // Playing again: the next drop gets its full set of attempts.
-    LaunchedEffect(playing) { if (playing) reconnects = 0 }
+    LaunchedEffect(playing) {
+        if (playing) {
+            reconnects = 0
+            soundRetries = 0
+        }
+    }
 
     LaunchedEffect(playback.url) {
         reconnects = 0

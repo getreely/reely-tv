@@ -78,4 +78,14 @@ class AudioOutputsTest {
         assertFalse("a Bluetooth choice keeps it", AudioOutputs.releasesBluetooth("BLUETOOTH:AA:BB:CC:DD:EE:FF"))
         assertFalse("Automatic leaves it to the system", AudioOutputs.releasesBluetooth(null))
     }
+
+    @Test fun `headphones dying is the sound's output going, not the stream or the file failing`() {
+        val p = androidx.media3.common.PlaybackException::class.java
+        fun code(name: String) = p.getField(name).getInt(null)
+        assertTrue(AudioOutputs.lostOutput(code("ERROR_CODE_AUDIO_TRACK_INIT_FAILED")))
+        assertTrue(AudioOutputs.lostOutput(code("ERROR_CODE_AUDIO_TRACK_WRITE_FAILED")))
+        assertFalse("a stream that won't load is the stream", AudioOutputs.lostOutput(code("ERROR_CODE_IO_NETWORK_CONNECTION_FAILED")))
+        assertFalse("sound this device can't decode is the file", AudioOutputs.lostOutput(code("ERROR_CODE_DECODING_FAILED")))
+        assertFalse(AudioOutputs.lostOutput(null))
+    }
 }

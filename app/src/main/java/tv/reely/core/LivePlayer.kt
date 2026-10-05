@@ -46,6 +46,7 @@ class LivePlayer(context: Context) {
         .apply { setWakeMode(C.WAKE_MODE_NETWORK) }
 
     private var loaded: String? = null
+    private var soundRetries = 0
     private var retries = 0
 
     /**
@@ -70,6 +71,23 @@ class LivePlayer(context: Context) {
                     error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW ->
                         rejoin()
 
+                    /*
+                     * The sound had nowhere to go: Bluetooth headphones died or were
+                     * switched off. The Fire TV can take a good few seconds to notice
+                     * they've gone, and until it does every start fails the same way —
+                     * changing channel included. So it keeps starting again, every couple
+                     * of seconds for half a minute, and carries on on the TV once it's
+                     * the TV the sound goes to. It stopped at the first failure, with
+                     * "This couldn't be played", and stayed stopped.
+                     */
+                    AudioOutputs.lostOutput(error.errorCode) && soundRetries < SOUND_RETRIES -> {
+                        soundRetries++
+                        scope.launch {
+                            delay(SOUND_RETRY_MS)
+                            rejoin()
+                        }
+                    }
+
                     // Anything else that can be retried. Worth a few goes before giving
                     // up: a provider hiccup should not end an evening's viewing.
                     RECOVERABLE.any { error.errorCode in it } && retries < MAX_RETRIES -> {
@@ -83,7 +101,10 @@ class LivePlayer(context: Context) {
             }
 
             override fun onPlaybackStateChanged(state: Int) {
-                if (state == Player.STATE_READY) retries = 0
+                if (state == Player.STATE_READY) {
+                    retries = 0
+                    soundRetries = 0
+                }
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -107,6 +128,7 @@ class LivePlayer(context: Context) {
             return
         }
         loaded = url
+        soundRetries = 0
         player.setMediaItem(MediaItem.fromUri(url))
         player.prepare()
         player.playWhenReady = true
@@ -138,6 +160,7 @@ class LivePlayer(context: Context) {
     fun stop() {
         loaded = null
         retries = 0
+        soundRetries = 0
         player.stop()
         player.clearMediaItems()
     }
@@ -158,5 +181,7 @@ class LivePlayer(context: Context) {
         val RECOVERABLE = listOf(1_000..1_004, 2_000..2_999)
         const val MAX_RETRIES = 4
         const val RETRY_DELAY_MS = 1_500L
+        const val SOUND_RETRIES = 15
+        const val SOUND_RETRY_MS = 2_000L
     }
 }

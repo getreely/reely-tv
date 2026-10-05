@@ -8,6 +8,7 @@ import android.media.AudioManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import androidx.media3.common.PlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 
 /** Somewhere the sound can go: the television, a Bluetooth speaker or headphones, USB. */
@@ -133,7 +134,22 @@ object AudioOutputs {
     fun route(context: Context, player: ExoPlayer, key: String?) {
         val device = key?.let { wanted -> connected(context).firstOrNull { it.first.key == wanted }?.second }
         runCatching { player.setPreferredAudioDevice(device) }
+        // Stopped because the sound had nowhere to go — headphones whose battery died
+        // mid-programme — and now somewhere is there: start again, on it.
+        if (lostOutput(player.playerError?.errorCode)) {
+            player.prepare()
+            player.playWhenReady = true
+        }
     }
+
+    /**
+     * Whether a player stopped because its sound output went away, rather than anything
+     * wrong with what's playing: Bluetooth headphones switched off or out of battery leave
+     * the player writing to a device that isn't there. Starting again, on whatever is
+     * connected now, is the cure, and nothing to do with the file or the stream.
+     */
+    fun lostOutput(errorCode: Int?): Boolean =
+        errorCode != null && errorCode in PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED..PlaybackException.ERROR_CODE_AUDIO_TRACK_OFFLOAD_INIT_FAILED
 
     /** Told whenever something is connected or disconnected. Returns the way to stop. */
     fun watch(context: Context, onChange: () -> Unit): () -> Unit {
