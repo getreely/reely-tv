@@ -46,6 +46,9 @@ sub init()
     end for
     m.at = 1
     m.focused = false
+    m.pending = ""
+    m.settle = m.top.findNode("settle")
+    m.settle.observeField("fire", "openPending")
     m.top.observeField("focusedChild", "focusChanged")
     timer = m.top.findNode("clockTimer")
     timer.observeField("fire", "tick")
@@ -73,10 +76,14 @@ sub takeFocus()
         if m.ids[i] = m.top.current then m.at = i
     end for
     m.top.setFocus(true)
+    m.focused = true
+    paint()
 end sub
 
 sub focusChanged()
-    m.focused = m.top.hasFocus()
+    focused = m.top.hasFocus()
+    if focused = m.focused then return
+    m.focused = focused
     paint()
 end sub
 
@@ -120,20 +127,39 @@ function onKeyEvent(key as string, press as boolean) as boolean
         arrive()
         return true
     else if key = "OK" then
+        m.pending = ""
+        m.settle.control = "stop"
         m.top.chosen = m.ids[m.at]
         return true
     else if key = "down" then
+        ' Down before the tab moved onto has opened: it opens now, and the cursor goes in.
+        openPending()
         m.top.leave = true
         return true
     end if
     return false
 end function
 
-' Moving onto a tab opens it, as the Fire TV's do; Search and Settings wait for OK.
+' Moving onto a tab opens it, as the Fire TV's do; Search and Settings wait for OK. It opens
+' once the cursor rests there: making a page holds up the remote for a moment on a Roku TV,
+' and walking along the tabs made every page passed.
 sub arrive()
     paint()
     id = m.ids[m.at]
-    if id <> "search" and id <> "settings" then m.top.chosen = id
+    m.settle.control = "stop"
+    if id = "search" or id = "settings" or id = m.top.current then
+        m.pending = ""
+    else
+        m.pending = id
+        m.settle.control = "start"
+    end if
+end sub
+
+sub openPending()
+    m.settle.control = "stop"
+    id = m.pending
+    m.pending = ""
+    if id <> "" and id <> m.top.current then m.top.chosen = id
 end sub
 
 sub paintMark()

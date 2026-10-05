@@ -2,6 +2,8 @@
 
 ' The Plex session: the account, the server used first, and every library.
 function Session_() as object
+    ' Held while rows are made: each read of the scene's copy is a copy of all of it.
+    if m.sessionHeld_ <> invalid then return m.sessionHeld_
     s = m.global.session
     if s = invalid or s.base = invalid then return { token: "", base: "", serverToken: "", libraries: [], servers: [], user: invalid, homeUsers: [] }
     return s
@@ -103,6 +105,13 @@ end function
 ' Rows of posters for a RowList: [{ title, items, wide, groups }] in, the content and
 ' each row's sizes out, and the items kept in [m.rowItems] for what's selected.
 sub ShowRows_(list as object, rows as object)
+    ' The same rows again (the Watchlist or a setting changed, not what's in them): left as
+    ' they are. Building them anew made every poster and fetched every picture again, and
+    ' on a Roku TV the remote went unanswered for seconds each time.
+    key = RowsKey_(rows)
+    if key = m.rowsKey_ and list.content <> invalid then return
+    m.rowsKey_ = key
+    m.sessionHeld_ = Session_()
     root = CreateObject("roSGNode", "ContentNode")
     sizes = []
     heights = []
@@ -144,11 +153,35 @@ sub ShowRows_(list as object, rows as object)
             end if
         end if
     end for
+    m.sessionHeld_ = invalid
     list.itemSize = [1728, 500]
     list.rowItemSize = sizes
     list.rowHeights = heights
     list.content = root
 end sub
+
+'' What the rows show, in a few words per poster: what's in them, how far through, the color.
+function RowsKey_(rows as object) as string
+    parts = [Str_(m.global.accent)]
+    for each r in rows
+        if r.items.Count() > 0 then
+            parts.Push(r.title + "#" + r.items.Count().ToStr())
+            for each it in r.items
+                if r.groups = true then
+                    n = it.newest
+                    parts.Push(Str_(it.serverBase) + Str_(n.ratingKey) + "/" + Str_(it.newCount))
+                else if r.plain = true then
+                    parts.Push(Str_(it.title) + Str_(it.caption) + Str_(it.poster))
+                else if r.people = true then
+                    parts.Push(Str_(it.name) + Str_(it.thumb))
+                else
+                    parts.Push(Str_(it.serverBase) + Str_(it.ratingKey) + "/" + Str_(it.viewOffsetMs) + "/" + Str_(it.viewCount) + "/" + Str_(it.viewedLeafCount))
+                end if
+            end for
+        end if
+    end for
+    return Join_(parts, "|")
+end function
 
 ' What's selected in a RowList shown by ShowRows_.
 function SelectedRowItem_(list as object) as dynamic

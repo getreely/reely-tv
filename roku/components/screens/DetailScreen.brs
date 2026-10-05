@@ -126,7 +126,7 @@ sub paint()
     m.top.findNode("title").text = d.title
     paintFacts(d)
     m.top.findNode("summary").text = d.summary
-    m.top.findNode("backdrop").uri = Image_(m.base, Iif_(d.art <> "", d.art, d.thumb), 1920, 1080)
+    m.top.findNode("backdrop").uri = Image_(m.base, Iif_(d.art <> "", d.art, d.thumb), 1280, 720)
     show = d.type = "show"
     m.episodes.visible = show
     ' The seasons as chips, the one shown outlined, when there's more than one.

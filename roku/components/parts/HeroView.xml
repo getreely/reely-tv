@@ -15,7 +15,10 @@
   <script type="text/brightscript" uri="pkg:/components/parts/ScreenKit.brs" />
   <children>
     <!-- The whole screen, the tabs' strip included: the screens sit 130 down. -->
-    <Poster id="art" translation="[0, -130]" width="1920" height="1080" loadDisplayMode="scaleToZoom" />
+    <!-- Fetched and decoded at half size: a full-size picture each time the cursor moved
+         held up the remote on a Roku TV. Under the fades it reads the same. -->
+    <Poster id="art" translation="[0, -130]" width="1920" height="1080" loadWidth="960" loadHeight="540" loadDisplayMode="scaleToZoom" />
+    <Timer id="settle" duration="0.35" repeat="false" />
     <Poster id="fadeLeft" uri="pkg:/images/fade_left.png" translation="[0, -130]" width="1920" height="1080" />
     <Poster id="fadeBottom" uri="pkg:/images/fade_bottom.png" translation="[0, -130]" width="1920" height="1080" />
     <Label id="title" translation="[96, 30]" width="1400" color="0xF2F4F7FF" />

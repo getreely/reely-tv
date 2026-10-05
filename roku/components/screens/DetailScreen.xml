@@ -21,7 +21,7 @@
   <children>
     <!-- As the Fire TV's: the title's picture behind the whole screen, fading into the black
          at the left and the bottom; the screens sit 130 down, under the tabs. -->
-    <Poster id="backdrop" translation="[0, -130]" width="1920" height="1080" loadDisplayMode="scaleToZoom" />
+    <Poster id="backdrop" translation="[0, -130]" width="1920" height="1080" loadWidth="1280" loadHeight="720" loadDisplayMode="scaleToZoom" />
     <Poster uri="pkg:/images/fade_left.png" translation="[0, -130]" width="1920" height="1080" />
     <Poster uri="pkg:/images/fade_bottom.png" translation="[0, -130]" width="1920" height="1080" />
     <Group id="page">

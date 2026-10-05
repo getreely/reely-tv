@@ -5,18 +5,19 @@ sub init()
     m.mask = m.top.findNode("mask")
     m.tick = m.top.findNode("tick")
     m.tickMark = m.top.findNode("tickMark")
-    m.tickMark.font = PosterFont_("pkg:/fonts/geist_bold.ttf", 18)
+    m.tickMark.font = FontOf_("pkg:/fonts/geist_bold.ttf", 18)
     m.track = m.top.findNode("track")
     m.progress = m.top.findNode("progress")
     m.badge = m.top.findNode("badge")
     m.countLabel = m.top.findNode("count")
     m.tag = m.top.findNode("tag")
     m.tagBack = m.top.findNode("tagBack")
-    m.tag.font = PosterFont_("pkg:/fonts/geist_bold.ttf", 17)
+    m.tag.font = FontOf_("pkg:/fonts/geist_bold.ttf", 17)
     m.title = m.top.findNode("title")
     m.sub = m.top.findNode("sub")
-    m.title.font = PosterFont_("pkg:/fonts/geist_semibold.ttf", 24)
-    m.sub.font = PosterFont_("pkg:/fonts/geist_regular.ttf", 20)
+    m.title.font = FontOf_("pkg:/fonts/geist_semibold.ttf", 24)
+    m.sub.font = FontOf_("pkg:/fonts/geist_regular.ttf", 20)
+    m.focused = false
 end sub
 
 sub layout()
@@ -86,7 +87,7 @@ sub show()
         ' The circle stays one size; a longer number is drawn smaller, never wrapped.
         size = 26
         if Len(text) > 2 then size = 19
-        m.countLabel.font = PosterFont_("pkg:/fonts/geist_bold.ttf", size)
+        m.countLabel.font = FontOf_("pkg:/fonts/geist_bold.ttf", size)
         m.countLabel.text = text
         m.badge.visible = true
         m.countLabel.visible = true
@@ -107,6 +108,9 @@ end sub
 
 sub focusChanged()
     focused = m.top.focusPercent > 0.5 and (m.top.rowListHasFocus or m.top.gridHasFocus)
+    ' Told many times a second while the cursor glides: only a change is drawn.
+    if m.focused = focused then return
+    m.focused = focused
     m.ring.visible = focused
     if focused then
         m.title.color = "0xF2F4F7FF"
@@ -114,11 +118,3 @@ sub focusChanged()
         m.title.color = "0xB3BAC4FF"
     end if
 end sub
-
-function PosterFont_(uri as string, size as integer) as object
-    f = CreateObject("roSGNode", "Font")
-    f.uri = uri
-    f.size = size
-    return f
-end function
-

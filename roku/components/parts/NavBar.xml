@@ -20,5 +20,7 @@
     <Group id="tabs" />
     <Label id="clock" translation="[1704, 28]" width="120" height="64" horizAlign="right" vertAlign="center" color="0x7F8792FF" />
     <Timer id="clockTimer" duration="20" repeat="true" />
+    <!-- A tab is opened once the cursor rests on it, not at each tab it passes. -->
+    <Timer id="settle" duration="0.45" repeat="false" />
   </children>
 </component>
