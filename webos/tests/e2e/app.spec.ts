@@ -55,6 +55,9 @@ async function fakePlex(page: Page, options: { tour?: boolean } = {}) {
     if (url.searchParams.get("actor") === "77") {
       return meta(route, path === "/library/sections/1/all" ? [{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025 }] : []);
     }
+    if (path === "/library/sections/1/genre") return json(route, { MediaContainer: { Directory: [{ key: "7", title: "Drama" }, { key: "8", title: "Thriller" }] } });
+    if (path === "/library/sections/1/decade") return json(route, { MediaContainer: { Directory: [{ key: "2020", title: "2020s" }, { key: "2010", title: "2010s" }] } });
+    if (path === "/library/sections/1/all" && url.searchParams.get("genre") === "7") return meta(route, [{ ratingKey: "m2", type: "movie", title: "Glasshouse", year: 2024, thumb: "/thumb/m2" }]);
     if (path === "/library/sections/1/all") return meta(route, [{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025, addedAt: 9, thumb: "/thumb/m1", art: "/art/m1", summary: "A satellite engineer is stranded on the station she built." }, { ratingKey: "m2", type: "movie", title: "Glasshouse", year: 2024, addedAt: 8, thumb: "/thumb/m2", art: "/art/m2" }]);
     if (path === "/library/sections/2/all") {
       // 333 new episodes of one show: the count must sit on one line in its circle.
@@ -413,6 +416,20 @@ test("arrows move along a row and down to the next; Back from a tab goes Home", 
   await page.screenshot({ path: "shots/lg-movies-home.png" });
   await page.getByRole("button", { name: "All", exact: true }).click();
   await expect(page.locator(".grid .card").first()).toBeVisible();
+  // Sort, the watched filter, the decade and the genres in a row, as on the Fire TV.
+  await expect(page.locator(".toolbar.chips .pill")).toHaveText(["Sort · A–Z", "Unwatched", "All decades", "All genres", "Drama", "Thriller"]);
+  await page.screenshot({ path: "shots/lg-movies-all.png" });
+  // Sort opens its list from the right, on the one in use.
+  await page.getByRole("button", { name: "Sort · A–Z" }).focus();
+  await press(page, "Enter");
+  await expect(page.locator(".choice-panel .option:focus")).toContainText("A–Z");
+  await press(page, "ArrowDown");
+  await press(page, "Enter");
+  await expect(page.getByRole("button", { name: "Sort · Recently added" })).toBeFocused();
+  // A genre narrows it.
+  await page.getByRole("button", { name: "Drama" }).focus();
+  await press(page, "Enter");
+  await expect(page.locator(".grid .card .title")).toHaveText(["Glasshouse"]);
   await press(page, "Escape");
   await expect(page.getByText("Recently Added Movies")).toBeVisible();
 });

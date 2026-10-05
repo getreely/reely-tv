@@ -8,6 +8,7 @@ import { formatDuration } from "../core/quality";
 import { focus, onKeys } from "./focus";
 import { Card, Pill, Qr, Row, Spinner, useRescue, useReturnFocus } from "./parts";
 import { PersonButton } from "./search";
+import { ChoicePanel, type ChoiceRequest } from "./settings";
 
 const episodeLine = (i: PlexItem) =>
   i.type === "episode" ? [i.parentIndex != null ? `S${i.parentIndex}` : null, i.index != null ? `E${i.index}` : null, i.title].filter(Boolean).join(" · ") : plex.caption(i);
@@ -205,7 +206,7 @@ export function Library(props: { app: App; state: AppState; kind: Kind }) {
   const { app, state, kind } = props;
   const browse = state.browse[kind];
   const libraries = app.librariesOf(kind);
-  const [choosing, setChoosing] = useState<"genre" | "decade" | null>(null);
+  const [choice, setChoice] = useState<ChoiceRequest | null>(null);
   // What the hero on the tab's home shows: the card with the cursor, else its first title.
   const [focused, setFocused] = useState<PlexItem | null>(null);
   useRescue([browse.items.length > 0, browse.choice, browse.view, browse.released.length > 0, browse.collections != null]);
@@ -286,12 +287,41 @@ export function Library(props: { app: App; state: AppState; kind: Kind }) {
       <div class="toolbar">
         {views}
         {libraryPills}
-        {sorts.map(([key, label]) => (
-          <Pill key={key} label={label} on={browse.sort === key} onPress={() => void app.setSort(kind, key)} />
-        ))}
+      </div>
+      {/* As on the Fire TV: sort, the watched filter, the decade, then the genres, in one row
+          that runs off to the right. Sort and decade open their lists from the right. */}
+      <div class="toolbar chips">
+        <Pill
+          label={`Sort · ${(sorts.find(([key]) => key === browse.sort) ?? sorts[0])[1]}`}
+          on={browse.sort !== "titleSort:asc"}
+          onPress={() => setChoice({
+            title: "Sort by",
+            options: sorts.map(([value, label]) => ({ value, label })),
+            selected: Math.max(0, sorts.findIndex(([key]) => key === browse.sort)),
+            onPick: (i) => void app.setSort(kind, sorts[i][0]),
+          })}
+        />
         <Pill label="Unwatched" on={browse.unwatched} onPress={() => void app.setFilter(kind, { unwatched: !browse.unwatched })} />
-        {browse.genres.length ? <Pill label={browse.genre ? browse.genre.title : isIptvChoice(browse.choice) ? "Category" : "Genre"} on={!!browse.genre} onPress={() => setChoosing("genre")} /> : null}
-        {browse.decades.length ? <Pill label={browse.decade ? browse.decade.title : "Decade"} on={!!browse.decade} onPress={() => setChoosing("decade")} /> : null}
+        {browse.decades.length > 1 ? (
+          <Pill
+            label={browse.decade ? browse.decade.title : "All decades"}
+            on={!!browse.decade}
+            onPress={() => setChoice({
+              title: "Decade",
+              options: [{ value: null, label: "All decades" }, ...browse.decades.map((d) => ({ value: d.id, label: d.title }))],
+              selected: browse.decade ? browse.decades.findIndex((d) => d.id === browse.decade?.id) + 1 : 0,
+              onPick: (i) => void app.setFilter(kind, { decade: i === 0 ? null : browse.decades[i - 1] }),
+            })}
+          />
+        ) : null}
+        {browse.genres.length ? (
+          <>
+            <Pill label={isIptvChoice(browse.choice) ? "All categories" : "All genres"} on={!browse.genre} onPress={() => void app.setFilter(kind, { genre: null })} />
+            {browse.genres.map((g) => (
+              <Pill key={g.id} label={g.title} on={browse.genre?.id === g.id} onPress={() => void app.setFilter(kind, { genre: g })} />
+            ))}
+          </>
+        ) : null}
       </div>
       {browse.sort === "titleSort:asc" && browse.letters.length > 1 ? (
         <div class="letters">
@@ -300,15 +330,7 @@ export function Library(props: { app: App; state: AppState; kind: Kind }) {
           ))}
         </div>
       ) : null}
-      {choosing ? (
-        <Chooser
-          title={choosing === "genre" ? (isIptvChoice(browse.choice) ? "Category" : "Genre") : "Decade"}
-          options={choosing === "genre" ? browse.genres : browse.decades}
-          chosen={choosing === "genre" ? browse.genre : browse.decade}
-          onChoose={(g) => { setChoosing(null); void app.setFilter(kind, choosing === "genre" ? { genre: g } : { decade: g }); }}
-          onClose={() => setChoosing(null)}
-        />
-      ) : null}
+      {choice ? <ChoicePanel request={choice} onClose={() => setChoice(null)} /> : null}
       {!browse.busy && !browse.items.length && !browse.error ? <p class="note" style={{ margin: "1rem 3rem" }}>Nothing here matches. Try fewer filters.</p> : null}
       {browse.error ? <p class="note error" style={{ margin: "0 3rem" }}>{browse.error}</p> : null}
       <div class="grid">
@@ -328,26 +350,6 @@ export function Library(props: { app: App; state: AppState; kind: Kind }) {
       </div>
       {browse.busy ? <div class="center" style={{ height: "12rem" }}><Spinner /></div> : null}
       <MoreWhenNear app={app} kind={kind} count={browse.items.length} more={browse.total > browse.items.length && !browse.busy} />
-    </div>
-  );
-}
-
-/** One of a list, or all of them: a genre or a decade. */
-function Chooser(props: { title: string; options: plex.PlexGenre[]; chosen: plex.PlexGenre | null; onChoose: (g: plex.PlexGenre | null) => void; onClose: () => void }) {
-  useEffect(() => onKeys((a) => { if (a === "back") { props.onClose(); return true; } return false; }), []);
-  useRescue([]);
-  useReturnFocus();
-  return (
-    <div class="layer" data-layer>
-      <div class="panel chooser">
-        <h1 class="big">{props.title}</h1>
-        <div class="toolbar flush centered">
-          <Pill label="All" on={!props.chosen} autofocus={!props.chosen} onPress={() => props.onChoose(null)} />
-          {props.options.map((g) => (
-            <Pill key={g.id} label={g.title} on={props.chosen?.id === g.id} autofocus={props.chosen?.id === g.id} onPress={() => props.onChoose(g)} />
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

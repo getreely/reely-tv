@@ -51,13 +51,13 @@ const SECTIONS: Array<[SectionId, string]> = [
 ];
 
 /** One of the values a setting can take, with a line on what it does if it needs one. */
-interface Option<T> {
+export interface Option<T> {
   value: T;
   label: string;
   note?: string | null;
 }
 
-interface ChoiceRequest {
+export interface ChoiceRequest {
   title: string;
   options: Array<Option<unknown>>;
   selected: number;
@@ -143,7 +143,7 @@ function Choice<T>(props: { kit: Kit; title: string; note?: string | null; optio
 }
 
 /** The list itself, from the right like every menu here; Back leaves the setting as it was. */
-function ChoicePanel(props: { request: ChoiceRequest; onClose: () => void }) {
+export function ChoicePanel(props: { request: ChoiceRequest; onClose: () => void }) {
   const { request } = props;
   useEffect(() => onKeys((a) => { if (a === "back") { props.onClose(); return true; } return false; }), []);
   useRescue([]);
