@@ -99,6 +99,16 @@ export function move(direction: "up" | "down" | "left" | "right"): boolean {
     const within = others.filter((el) => page.contains(el));
     if (nextIndex(from, within.map((el) => el.getBoundingClientRect()), direction) >= 0) pool = within;
   }
+  // A page in columns (Settings: the sections, and their rows) marks each data-column: up and
+  // down stay in the one the cursor's in, past a group's heading too, and never cross into
+  // the other; off its top, the tabs.
+  const column = active.closest("[data-column]");
+  if (column && (direction === "up" || direction === "down")) {
+    const same = pool.filter((el) => column.contains(el));
+    pool = nextIndex(from, same.map((el) => el.getBoundingClientRect()), direction) >= 0
+      ? same
+      : others.filter((el) => !el.closest("[data-column]"));
+  }
   const at = nextIndex(from, pool.map((el) => el.getBoundingClientRect()), direction);
   if (at < 0) return false;
   let target = pool[at];

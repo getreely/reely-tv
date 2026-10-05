@@ -191,6 +191,15 @@ test("Search finds by name and people; Settings keeps a playback choice", async 
   await expect(page.locator(".choice-panel")).toHaveCount(0);
   // Back on the setting that opened it, showing the new value.
   await expect(page.locator(".setting:focus .setting-value")).toHaveText("Always convert");
+  // Down goes through every row of the section, past each group's heading, and no further:
+  // never across into the sections on the left.
+  const rowTitles = await page.locator(".settings-page .setting .setting-title").allTextContents();
+  for (const title of rowTitles.slice(1)) {
+    await press(page, "ArrowDown");
+    await expect(page.locator(".setting:focus .setting-title")).toHaveText(title);
+  }
+  await press(page, "ArrowDown");
+  await expect(page.locator(".setting:focus .setting-title")).toHaveText(rowTitles[rowTitles.length - 1]);
   // Left goes back to its section, not whichever sits level with it.
   await press(page, "ArrowLeft");
   await expect(page.locator(".section-tab:focus")).toHaveText("Playback");

@@ -212,7 +212,7 @@ export function Settings(props: { app: App; state: AppState; onProfiles: () => v
 
   return (
     <div class="settings">
-      <nav class="settings-rail">
+      <nav class="settings-rail" data-column>
         <h1>Settings</h1>
         {SECTIONS.map(([id, label]) => (
           <button
@@ -228,7 +228,7 @@ export function Settings(props: { app: App; state: AppState; onProfiles: () => v
           </button>
         ))}
       </nav>
-      <div class="settings-page" key={section}>
+      <div class="settings-page" data-column key={section}>
         {section === "playback" ? <Playback kit={kit} />
           : section === "home" ? <HomeSection kit={kit} />
           : section === "theme" ? <ThemeSection kit={kit} />

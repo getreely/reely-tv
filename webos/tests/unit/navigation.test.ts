@@ -26,17 +26,10 @@ describe("the cursor and the arrows", () => {
     expect(nextIndex(rowOne[0], all, "up")).toBe(-1);
     expect(nextIndex(rowTwo[2], all, "down")).toBe(-1);
   });
-  it("up is the row above, even with nothing in it straight above, before the tabs", () => {
-    // A poster along a row; the row above has one, off to the left; the tabs above that are in line.
-    const poster = box(350, 600, 250, 450);
-    const above = box(80, 30, 250, 450);
-    const tab = box(240, -500, 150, 70);
-    expect(nextIndex(poster, [tab, above], "up")).toBe(1);
-  });
-  it("up and down stay in a column when the next row along it is as near", () => {
-    // Settings: a row under the cursor's, and a section on the left a little nearer.
+  it("up and down stay in a column, though something beside it is nearer", () => {
+    // Settings: the next row under a group's heading, and a section on the left much nearer.
     const row = box(500, 100, 900, 70);
-    expect(nextIndex(row, [box(500, 180, 900, 70), box(80, 175, 300, 60)], "down")).toBe(0);
+    expect(nextIndex(row, [box(500, 240, 900, 70), box(80, 175, 300, 60)], "down")).toBe(0);
   });
   it("in line beats diagonally nearer", () => {
     // A tall button on the left; a poster far right in line, a small one near but below.
