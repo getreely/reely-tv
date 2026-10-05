@@ -314,6 +314,16 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .programme-slot { margin-top: 0.15rem; font-size: 0.95rem; color: rgba(242, 244, 247, 0.45); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .programme:focus { background: var(--accent-glow); box-shadow: inset 0 0 0 0.14rem var(--accent); }
 .programme:focus .programme-title { color: var(--chalk); font-weight: 600; }
+/* The guide over a channel, as on the Fire TV: along the bottom, the channel still playing
+   above it, nothing opaque but a deepening shade. */
+.guide-overlay { position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 6; display: flex; flex-direction: column; justify-content: flex-end;
+  background: linear-gradient(180deg, rgba(8, 9, 11, 0) 25%, rgba(8, 9, 11, 0.82) 55%, rgba(8, 9, 11, 0.94) 100%); }
+.guide-overlay .guide { padding: 0 3rem 1.6rem; }
+.guide-overlay .guide-about { min-height: 0; margin-bottom: 0.6rem; }
+.guide-overlay .guide-grid { max-height: 19.5rem; }
+.guide-overlay .guide-head { position: sticky; top: 0; z-index: 2; }
+.guide-cats { padding: 0.6rem 3rem 0.8rem; }
+.guide-menu { z-index: 7; }
 /* "Starting now": a card at the bottom right, over whatever's on screen. */
 .notice-layer { background: transparent; align-content: end; justify-content: end; padding: 3rem; z-index: 40; }
 .notice { width: 34rem; padding: 1.4rem 1.8rem; border-radius: 1.2rem; background: var(--raised); border: 0.06rem solid var(--line); }

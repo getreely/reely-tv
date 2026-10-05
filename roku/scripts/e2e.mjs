@@ -520,6 +520,62 @@ try {
   await key("Back");
   await until("the menu closed", () => output.includes("TRACE live menu hidden"), 5000).catch(() => undefined);
   await wait(500);
+  // Down: the guide over the channel, which plays on behind it, as on the Fire TV; the cursor
+  // on what's on now, on the channel playing.
+  const times = (text) => output.split(text).length - 1;
+  await key("Down");
+  await until("the guide over the channel", () => output.includes("TRACE live guide shown"), 6000).catch(() => undefined);
+  expect("down opens the guide over the channel", output.includes("TRACE live guide shown"));
+  // (On the channel playing. A Roku also puts it at the time now; the simulator's TimeGrid
+  // takes jumpToTime as a date in words rather than seconds, so here it's the row's first.)
+  await until("the guide's cursor", () => (lastSaid("TRACE over guide on") ?? "").endsWith("News"), 8000).catch(() => undefined);
+  await wait(1500);
+  expect("the guide opens on the channel playing", (lastSaid("TRACE over guide on") ?? "").endsWith("News"));
+  await moveTo("TRACE over guide on", "Evening News", "Right");
+  await wait(800);
+  await snap("roku-live-guide-over");
+  // Down a channel and OK: that one plays, and the guide goes.
+  await moveTo("TRACE over guide on", "Evening Match", "Down");
+  const tuned102 = times("TRACE tuned 102");
+  await key("Select");
+  await until("the channel from the guide", () => times("TRACE tuned 102") > tuned102, 6000).catch(() => undefined);
+  expect("OK in the guide watches that channel", times("TRACE tuned 102") > tuned102 && output.includes("TRACE live guide hidden"));
+  await wait(1000);
+  // ✱ on what's to come: the channel's menu, and a reminder from it.
+  const guideShown = times("TRACE live guide shown");
+  await key("Down");
+  await until("the guide again", () => times("TRACE live guide shown") > guideShown, 6000).catch(() => undefined);
+  await wait(1200);
+  await moveTo("TRACE over guide on", "Late Match", "Right");
+  await key("Info");
+  await until("the guide's channel menu", () => output.includes("TRACE over guide menu shown"), 5000).catch(() => undefined);
+  await wait(800);
+  await snap("roku-live-guide-over-menu");
+  expect("✱ in the guide: the channel's menu", output.includes("TRACE over guide menu shown"));
+  await key("Down"); await wait(500);
+  await key("Select");
+  await until("a reminder from the guide", () => output.includes("TRACE reminder on Late Match"), 5000).catch(() => undefined);
+  expect("a reminder from the guide's menu", output.includes("TRACE reminder on Late Match"));
+  await wait(800);
+  // Another category, from ✱ (two channels here, so up from the first goes round, as a
+  // Roku's grid does): its channels browsed while this one plays on.
+  const menus = times("TRACE over guide menu shown");
+  await key("Info");
+  await until("the guide's menu again", () => times("TRACE over guide menu shown") > menus, 5000).catch(() => undefined);
+  await wait(800);
+  await moveTo("PILL", "Another category", "Down");
+  await key("Select"); await wait(1000);
+  await moveTo("PILL", "Sport", "Down");
+  await key("Select");
+  await until("Sport's channels", () => output.includes("TRACE over guide category 2"), 5000).catch(() => undefined);
+  expect("the guide browses another category", output.includes("TRACE over guide category 2"));
+  await wait(1200);
+  // Back puts the guide away; the channel is still on; Back again leaves it.
+  const guideHidden = times("TRACE live guide hidden");
+  await key("Back");
+  await until("the guide put away", () => times("TRACE live guide hidden") > guideHidden, 5000).catch(() => undefined);
+  expect("Back puts the guide away", times("TRACE live guide hidden") > guideHidden && !output.slice(output.lastIndexOf("TRACE live guide hidden")).includes("TRACE live stopped"));
+  await wait(800);
   await key("Back");
   await until("off the channel", () => output.includes("TRACE live stopped"), 5000).catch(() => undefined);
   expect("Back closes the menu, then leaves the channel", output.includes("TRACE live stopped"));

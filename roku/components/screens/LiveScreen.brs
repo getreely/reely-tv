@@ -418,7 +418,9 @@ sub watch(index as integer, catchUp as dynamic)
     s.recent = recent
     stopPreview()
     m.top.go = { name: "live", live: s }
-    m.top.watch = { channels: m.channels, index: index, catchUp: catchUp, guide: m.guide, table: m.table }
+    playlist = invalid
+    if m.playlist <> invalid then playlist = m.playlist.channels
+    m.top.watch = { channels: m.channels, index: index, catchUp: catchUp, guide: m.guide, table: m.table, cats: m.cats, categoryId: m.categoryId, playlist: playlist }
 end sub
 
 sub toggleFavorite(ch as object)

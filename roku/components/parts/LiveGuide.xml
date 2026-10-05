@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The guide over a channel that keeps playing behind it, as on the Fire TV: down from the
+     channel. Along the bottom, nothing opaque but a deepening shade: the categories in a
+     row (up from the first channel), what's under the cursor, and the grid. OK watches (what's
+     over, from the archive); ✱ has the channel's menu; Back puts it away. -->
+<component name="LiveGuide" extends="Group">
+  <interface>
+    <!-- { channels, index, guide, table, cats, categoryId, playlist }: opens on the channel playing. -->
+    <field id="request" type="assocarray" onChange="open" />
+    <!-- Chosen: { channels, index, catchUp, guide, table, categoryId }. -->
+    <field id="picked" type="assocarray" alwaysNotify="true" />
+    <field id="closed" type="boolean" alwaysNotify="true" />
+    <!-- Favorites and reminders changed, for the scene to keep. -->
+    <field id="go" type="assocarray" alwaysNotify="true" />
+    <field id="takeFocus" type="boolean" alwaysNotify="true" onChange="takeFocus" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/parts/LiveGuide.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/xtream.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/ScreenKit.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/Oops.brs" />
+  <children>
+    <Poster uri="pkg:/images/fade_bottom.png" width="1920" height="1080" />
+    <Rectangle translation="[0, 560]" width="1920" height="520" color="0x08090BD6" />
+    <PillRow id="cats" translation="[96, 400]" fontSize="26" visibleWidth="1728" />
+    <Label id="aboutCategory" translation="[96, 486]" width="1700" color="0x7F8792FF" />
+    <Label id="about" translation="[96, 516]" width="1700" color="0xF2F4F7FF" />
+    <Label id="aboutFacts" translation="[96, 572]" width="1700" color="0xB3BAC4FF" />
+    <Label id="note" translation="[96, 700]" width="1700" color="0xB3BAC4FF" />
+    <TimeGrid id="grid" translation="[96, 620]" numRows="3" duration="9000" channelInfoWidth="240" infoGridGap="12"
+      rowHeight="[96]" itemSpacing="[0, 12]" channelInfoAlignment="center"
+      channelInfoBackgroundBitmapUri="pkg:/images/guide_channel.9.png"
+      programBackgroundBitmapUri="pkg:/images/guide_cell.9.png" focusBitmapUri="pkg:/images/guide_focus.9.png"
+      programTitleColor="0xF2F4F7FF" programTitleFocusedColor="0x08090BFF" channelInfoTextColor="0xF2F4F7FF"
+      timeLabelColor="0x7F8792FF" nowBarBitmapUri="pkg:/images/white.png" nowBarBlendColor="0xF2F4F7CC" nowBarWidth="3"
+      programHorizMargin="20" />
+  </children>
+</component>

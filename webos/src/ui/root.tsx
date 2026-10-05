@@ -147,7 +147,7 @@ export function Root(props: { app: App }) {
   if (saver && !state.playing && state.live.watching == null) return <Screensaver slides={slidesFrom(app, state)} onWake={() => setSaver(false)} />;
   if (state.playing) return <Player app={app} playing={state.playing} />;
   const watching = state.live.watching != null ? state.live.channels[state.live.watching] : null;
-  if (watching) return <LivePlayer app={app} state={state} channel={watching} onGuide={() => { setGuide(true); app.stopLive(); }} />;
+  if (watching) return <LivePlayer app={app} state={state} channel={watching} />;
 
   const connected = isConnected(state);
   const route = state.route;

@@ -15,6 +15,10 @@ sub init()
     m.menuList.observeField("itemSelected", "onMenu")
     m.top.findNode("bannerTimer").observeField("fire", "hideBanner")
     m.top.findNode("ticker").observeField("fire", "paintBanner")
+    m.guideView = m.top.findNode("guideView")
+    m.guideView.observeField("picked", "onGuidePicked")
+    m.guideView.observeField("closed", "hideGuide")
+    m.guideView.observeField("go", "onGuideGo")
 end sub
 
 sub takeFocus()
@@ -29,7 +33,11 @@ sub start()
     m.table = r.table
     if m.guide = invalid then m.guide = {}
     if m.table = invalid then m.table = {}
+    m.cats = Arr_(r.cats)
+    m.categoryId = Str_(r.categoryId)
+    m.playlist = r.playlist
     m.leaving = false
+    hideGuide()
     tune(r.catchUp)
     m.top.findNode("ticker").control = "start"
 end sub
@@ -133,7 +141,7 @@ sub paintBanner()
     if m.catchUp <> invalid then
         hint = "Left and right skip  ·  ✱ for more  ·  Back to the channels"
     else
-        hint = "Left and right change channel  ·  ✱ for Favorites and Start over  ·  Back to the channels"
+        hint = "Left and right change channel  ·  Down for the guide  ·  ✱ for Favorites and Start over"
     end if
     m.top.findNode("hint").text = hint
 end sub
@@ -216,6 +224,43 @@ sub startOver()
     tune({ start: p.start, ends: p.ends, title: p.title })
 end sub
 
+' ------------------------------------------------------------------ The guide over the channel
+
+sub showGuide()
+    m.banner.visible = false
+    ' Under the guide, only the channel: what's said over it would be under the guide's words.
+    m.top.findNode("wait").visible = false
+    ' On screen first: a grid that isn't yet doesn't go where it's told.
+    m.guideView.visible = true
+    m.guideView.request = { channels: m.channels, index: m.index, guide: m.guide, table: m.table, cats: m.cats, categoryId: m.categoryId, playlist: m.playlist }
+    m.guideView.takeFocus = true
+end sub
+
+sub hideGuide()
+    if not m.guideView.visible then return
+    m.guideView.visible = false
+    m.top.findNode("wait").visible = true
+    m.video.setFocus(true)
+    Trace_("live guide hidden")
+end sub
+
+' A channel from the guide, perhaps from another category: that list is the one stepped through now.
+sub onGuidePicked()
+    p = m.guideView.picked
+    m.channels = p.channels
+    m.index = p.index
+    m.guide = p.guide
+    m.table = p.table
+    m.categoryId = Str_(p.categoryId)
+    hideGuide()
+    tune(p.catchUp)
+end sub
+
+sub onGuideGo()
+    m.top.go = m.guideView.go
+    paintBanner()
+end sub
+
 sub finish()
     if m.leaving then return
     m.leaving = true
@@ -227,6 +272,7 @@ end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press then return false
+    if m.guideView.visible then return true
     if m.menu.visible then
         if key = "back" or key = "left" then hideMenu()
         return true
@@ -255,7 +301,9 @@ function onKeyEvent(key as string, press as boolean) as boolean
         if m.catchUp <> invalid then
             if m.video.state = "paused" then m.video.control = "resume" else m.video.control = "pause"
         end if
-    else if key = "up" or key = "OK" or key = "down" then
+    else if key = "down" then
+        showGuide()
+    else if key = "up" or key = "OK" then
         if m.banner.visible then hideBanner() else showBanner()
     end if
     return true

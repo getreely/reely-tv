@@ -1635,18 +1635,40 @@ export class App {
     if (!c) return;
     this.setLive({ category, channels: [], busy: true, error: null });
     try {
-      const recent = this.current.live.recent;
-      const channels = category.id === FAVORITES.id
-        ? (await xtream.liveChannels(c)).filter((ch) => this.current.live.favorites.includes(ch.streamId))
-        : category.id === RECENT.id
-          ? stableSort((await xtream.liveChannels(c)).filter((ch) => recent.includes(ch.streamId)), (a, b) => recent.indexOf(a.streamId) - recent.indexOf(b.streamId))
-          : await xtream.liveChannels(c, category.id);
+      const channels = await this.channelsOf(category);
       if (this.current.live.category !== category) return;
       this.setLive({ channels, busy: false });
       void this.loadGuide(channels.slice(0, 40));
     } catch (error) {
       this.setLive({ busy: false, error: readable(error) });
     }
+  }
+
+  /** A category's channels, without opening it: the guide over a channel browses them. */
+  async channelsOf(category: XtreamCategory): Promise<XtreamChannel[]> {
+    const c = this.current.live.credentials;
+    if (!c) return [];
+    const recent = this.current.live.recent;
+    return category.id === FAVORITES.id
+      ? (await xtream.liveChannels(c)).filter((ch) => this.current.live.favorites.includes(ch.streamId))
+      : category.id === RECENT.id
+        ? stableSort((await xtream.liveChannels(c)).filter((ch) => recent.includes(ch.streamId)), (a, b) => recent.indexOf(a.streamId) - recent.indexOf(b.streamId))
+        : await xtream.liveChannels(c, category.id);
+  }
+
+  /**
+   * A channel picked in the guide over another: from the category browsed there, which
+   * becomes the one open, all at once, so what's playing never points into the wrong list.
+   * A programme that's over plays from the archive.
+   */
+  watchIn(category: XtreamCategory, channels: XtreamChannel[], index: number, programme: Programme | null = null) {
+    const live = this.current.live;
+    const channel = channels[index];
+    const c = live.credentials;
+    if (!channel || !c) return;
+    const url = programme ? xtream.catchUpUrl(c, channel, programme.start, programme.stop, live.account?.timezone ?? null) : null;
+    this.noteWatched(channel);
+    this.setLive({ category, channels, watching: index, catchUp: programme && url ? { programme, url } : null });
   }
 
   closeCategory() {

@@ -43,6 +43,7 @@ app (Amazon's Vega SDK, React Native), which can reuse the LG app's TypeScript c
 | Xtream login and M3U playlists | ✅ | ✅ | ✅ | 🟡 (Xtream tested; M3U parsing unit-tested) | ⬜ |
 | Categories, favorites, recently watched | ✅ | ✅ | ✅ | ✅ | ⬜ |
 | Guide (grid on TV, list on phone), now and next | ✅ | ✅ | ✅ (grid) | ✅ (grid; a playlist's own XMLTV guide not yet) | ⬜ |
+| Down while watching a channel: the guide over it, the channel playing on; categories above, OK to watch (or from the archive), a channel menu with a reminder and Favorites, Back to put it away | ✅ | ⬜ (no touch way to it yet: the guide is a separate page) | ✅ | ✅ (the menu on ✱, as everywhere on a Roku; categories in it as well as above, as a Roku's grid goes round from the first channel) | ⬜ |
 | Catch-up, start over, rewind and Go live | ✅ | ✅ | ✅ (coloured keys) | ✅ (catch-up tested; Start over and Go live on ✱) | ⬜ |
 | Reminders | ✅ | ✅ | ✅ | ✅ (set in the guide; when they're due, unit-tested) | ⬜ |
 | Channel up/down, numbers on the remote | ✅ | ✅ (swipe) | ✅ | ✅ (left and right; Roku remotes have no number keys) | ⬜ |

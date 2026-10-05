@@ -612,10 +612,52 @@ test("Live TV: sign in to a provider, pick a category, watch, change channel, fa
   // The green key (404) favorites it; Back goes to the list, and Favorites is offered.
   await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { keyCode: 404, bubbles: true } as KeyboardEventInit)));
   await expect(page.locator(".player-title")).toContainText("♥");
-  // Down: the guide, as on the Fire TV.
+  // Down: the guide over the channel, which plays on behind it, as on the Fire TV; the
+  // cursor on what's on now, on the channel playing.
   await press(page, "ArrowDown");
-  await expect(page.locator(".guide")).toBeVisible();
-  await page.getByRole("button", { name: "Channels" }).click();
+  await expect(page.locator(".guide-overlay")).toBeVisible();
+  await expect(page.locator(".player > video")).toHaveAttribute("src", /\/102\.m3u8$/);
+  await expect(page.locator('.guide-overlay .guide-row[data-channel="102"] .programme.now:focus')).toHaveCount(1);
+  await expect(page.locator(".guide-overlay .guide-about")).toContainText("OK to watch  ·  hold OK for more");
+  await page.screenshot({ path: "shots/lg-live-guide-over.png" });
+  // Up a channel and OK: that one plays, and the guide goes.
+  const back = page.waitForRequest((r) => r.url().includes("/live/me/secret/101.m3u8"));
+  await press(page, "ArrowUp");
+  await expect(page.locator('.guide-overlay .guide-row[data-channel="101"] .programme.now:focus')).toHaveCount(1);
+  await press(page, "Enter");
+  await back;
+  await expect(page.locator(".guide-overlay")).toHaveCount(0);
+  await expect(page.locator(".player-title")).toContainText("News 24");
+  // Up from the first channel: the categories. Another's channels are browsed while this one plays on.
+  await press(page, "ArrowDown");
+  await expect(page.locator(".guide-overlay")).toBeVisible();
+  await press(page, "ArrowUp");
+  await expect(page.locator(".guide-cats .pill:focus")).toHaveCount(1);
+  const sport = page.waitForRequest((r) => r.url().includes("action=get_live_streams") && r.url().includes("category_id=2"));
+  await page.locator(".guide-cats .pill", { hasText: "Sport" }).focus();
+  await press(page, "Enter");
+  await sport;
+  await expect(page.locator(".guide-overlay .guide-category")).toHaveText("Sport");
+  await expect(page.locator(".guide-overlay .programme:focus")).toHaveCount(1);
+  await expect(page.locator(".player > video")).toHaveAttribute("src", /\/101\.m3u8$/);
+  // A held OK on what's to come: the channel's menu, with a reminder; Back puts it away.
+  await page.locator('.guide-overlay .guide-row[data-channel="102"] .programme', { hasText: "Late Edition" }).focus();
+  await page.keyboard.down("Enter");
+  await page.waitForTimeout(550);
+  await page.keyboard.down("Enter");
+  await page.keyboard.up("Enter");
+  await expect(page.locator(".guide-menu")).toContainText("World Report");
+  await expect(page.locator(".guide-menu .option:focus")).toHaveText("Watch this channel");
+  await page.locator(".guide-menu .option", { hasText: "Remind me" }).focus();
+  await press(page, "Enter");
+  await expect(page.locator(".guide-menu")).toHaveCount(0);
+  await expect(page.locator('.guide-overlay .guide-row[data-channel="102"] .programme.reminded')).toContainText("Late Edition");
+  // Back closes the guide; the channel is still on; Back again leaves it.
+  await press(page, "Escape");
+  await expect(page.locator(".guide-overlay")).toHaveCount(0);
+  await expect(page.locator(".player-title")).toContainText("News 24");
+  await press(page, "Escape");
+  // Off the channel: its category's list; Back again, the categories, Favorites offered.
   await expect(page.locator(".channel").first()).toBeVisible();
   await press(page, "Escape");
   await expect(page.getByRole("button", { name: "Favorites" })).toBeVisible();
@@ -631,7 +673,7 @@ test("Live TV: sign in to a provider, pick a category, watch, change channel, fa
   // The highlighted channel plays beside the grid, a moment after the cursor stops.
   await expect(page.locator(".guide-preview video")).toHaveAttribute("src", /\/live\/me\/secret\/101\.m3u8$/);
   await press(page, "Enter");
-  await expect(page.locator(".programme.reminded")).toContainText("Late Edition");
+  await expect(page.locator('.guide-row[data-channel="101"] .programme.reminded')).toContainText("Late Edition");
   await page.screenshot({ path: "shots/lg-guide.png" });
   const archive = page.waitForRequest((r) => /\/timeshift\/me\/secret\/\d+\/[\d:-]+\/101\.ts$/.test(r.url()));
   await page.locator(".programme", { hasText: "Morning Briefing" }).first().focus();
