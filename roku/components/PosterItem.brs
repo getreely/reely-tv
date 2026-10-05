@@ -1,5 +1,6 @@
 sub init()
     m.ring = m.top.findNode("ring")
+    m.ringRound = m.top.findNode("ringRound")
     m.frame = m.top.findNode("frame")
     m.art = m.top.findNode("art")
     m.mask = m.top.findNode("mask")
@@ -35,34 +36,45 @@ sub layout__()
     pic = h - 64
     c = m.top.itemContent
     round = c <> invalid and c.round = true
+    m.round = round
+    ' The cursor's ring goes round the picture inside the slot, the picture drawn that much
+    ' in from its edges: a list draws nothing of an item outside the slot, and a ring
+    ' outside it lost its top, and its left at the start of a row.
+    pad = RING_()
+    if round then pic = w
+    inner = w - pad * 2
+    innerH = pic - pad * 2
+    m.picW = inner
     if round then
         ' A person: a circle the width of the slot, the name under it.
-        pic = w
         m.mask.maskUri = "pkg:/images/circle.png"
-        m.mask.maskSize = [w, w]
+        m.mask.maskSize = [inner, inner]
         m.frame.visible = false
     else
         m.mask.maskUri = ""
         m.frame.visible = true
     end if
-    m.ring.translation = [-5, -5]
-    m.ring.width = w + 10
-    m.ring.height = pic + 10
-    m.frame.width = w
-    m.frame.height = pic
-    m.art.width = w
-    m.art.height = pic
-    m.tagBack.translation = [8, 8]
-    m.tag.translation = [8, 8]
-    m.tick.translation = [w - 38, 8]
-    m.tickMark.translation = [w - 38, 8]
-    m.track.translation = [0, pic - 6]
-    m.track.width = w
+    m.ring.width = w
+    m.ring.height = pic
+    m.ringRound.width = w
+    m.ringRound.height = w
+    m.frame.translation = [pad, pad]
+    m.frame.width = inner
+    m.frame.height = innerH
+    m.mask.translation = [pad, pad]
+    m.art.width = inner
+    m.art.height = innerH
+    m.tagBack.translation = [pad + 8, pad + 8]
+    m.tag.translation = [pad + 8, pad + 8]
+    m.tick.translation = [w - pad - 38, pad + 8]
+    m.tickMark.translation = [w - pad - 38, pad + 8]
+    m.track.translation = [pad, pic - pad - 6]
+    m.track.width = inner
     m.track.height = 6
-    m.progress.translation = [0, pic - 6]
+    m.progress.translation = [pad, pic - pad - 6]
     m.progress.height = 6
-    m.badge.translation = [w - 52, 8]
-    m.countLabel.translation = [w - 52, 8]
+    m.badge.translation = [w - pad - 52, pad + 8]
+    m.countLabel.translation = [w - pad - 52, pad + 8]
     m.title.translation = [0, pic + 8]
     m.title.width = w
     m.sub.translation = [0, pic + 34]
@@ -112,10 +124,10 @@ sub show__()
         m.countLabel.visible = false
     end if
     f = c.progress
-    if f <> invalid and f > 0 and m.top.width > 0 then
+    if f <> invalid and f > 0 and m.picW <> invalid and m.picW > 0 then
         m.track.visible = true
         m.progress.visible = true
-        m.progress.width = m.top.width * f
+        m.progress.width = m.picW * f
     else
         m.track.visible = false
         m.progress.visible = false
@@ -135,10 +147,16 @@ sub focusChanged__()
     ' Told many times a second while the cursor glides: only a change is drawn.
     if m.focused = focused then return
     m.focused = focused
-    m.ring.visible = focused
+    m.ring.visible = focused and m.round <> true
+    m.ringRound.visible = focused and m.round = true
     if focused then
         m.title.color = "0xF2F4F7FF"
     else
         m.title.color = "0xB3BAC4FF"
     end if
 end sub
+
+' How thick the cursor's ring is, inside the slot.
+function RING_() as integer
+    return 5
+end function

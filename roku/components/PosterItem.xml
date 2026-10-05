@@ -18,8 +18,10 @@
   <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/Oops.brs" />
   <children>
-    <!-- The cursor: an outline round the picture alone, so the name below stays readable. -->
+    <!-- The cursor: an outline round the picture alone, so the name below stays readable;
+         a person's round. -->
     <Rectangle id="ring" color="0xF2F4F7FF" visible="false" />
+    <Poster id="ringRound" uri="pkg:/images/circle.png" blendColor="0xF2F4F7FF" visible="false" />
     <Rectangle id="frame" color="0x1F2329FF" />
     <!-- A person's photo is round; a title's picture square-cornered. -->
     <MaskGroup id="mask">

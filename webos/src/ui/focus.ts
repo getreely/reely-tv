@@ -80,10 +80,23 @@ export function move(direction: "up" | "down" | "left" | "right"): boolean {
     rescue();
     return true;
   }
-  const others = all.filter((el) => el !== active);
-  const at = nextIndex(active.getBoundingClientRect(), others.map((el) => el.getBoundingClientRect()), direction);
+  // Not what's scrolled out of sight in something the cursor isn't in: up from the tabs
+  // isn't into a row scrolled away above the page. Within the rows, a row scrolled away is
+  // the next one all the same, and comes into sight.
+  const others = all.filter((el) => el !== active && !hiddenFrom(el, active));
+  const from = active.getBoundingClientRect();
+  // Up and down stay in the page while it has anything that way, and only then go to the
+  // tabs, as on the Fire TV: a row still sliding into place under the tabs (the rows
+  // scroll smoothly) left the tabs looking nearer than the row above, and up skipped it.
+  let pool = others;
+  const page = active.closest("[data-content]");
+  if (page && (direction === "up" || direction === "down")) {
+    const within = others.filter((el) => page.contains(el));
+    if (nextIndex(from, within.map((el) => el.getBoundingClientRect()), direction) >= 0) pool = within;
+  }
+  const at = nextIndex(from, pool.map((el) => el.getBoundingClientRect()), direction);
   if (at < 0) return false;
-  let target = others[at];
+  let target = pool[at];
   // Up into the tabs lands on the tab that's open, as on the Fire TV, not whichever is
   // nearest: otherwise going up would open another one.
   if (target.classList.contains("tab") && !active.classList.contains("tab")) {
@@ -94,6 +107,19 @@ export function move(direction: "up" | "down" | "left" | "right"): boolean {
   movedTo = target;
   focus(target);
   return true;
+}
+
+/** Whether [el] is scrolled wholly out of sight in a scrolling box [from] isn't in. */
+function hiddenFrom(el: HTMLElement, from: HTMLElement): boolean {
+  const r = el.getBoundingClientRect();
+  for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+    if (a.contains(from)) return false;
+    const style = getComputedStyle(a);
+    if (style.overflowX === "visible" && style.overflowY === "visible") continue;
+    const box = a.getBoundingClientRect();
+    if (r.bottom <= box.top || r.top >= box.bottom || r.right <= box.left || r.left >= box.right) return true;
+  }
+  return false;
 }
 
 /** How long OK is held before it's a hold rather than a press, as on the Fire TV. */

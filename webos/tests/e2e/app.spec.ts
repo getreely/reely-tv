@@ -393,6 +393,45 @@ test("the remote's tour comes up once, after signing in, and steps through to th
   await expect(page.locator(".tour")).toHaveCount(0);
 });
 
+// The sides of the cursor's ring that something it sits in cuts off: a row that scrolls
+// clips whatever reaches outside it, and a ring drawn round a poster grown under the cursor
+// lost its top that way (as it did on the Roku). Nothing cut off is [].
+async function ringCutOff(page: Page): Promise<string[]> {
+  await page.waitForTimeout(400); // the grow on focus is animated
+  return page.evaluate(() => {
+    const el = document.activeElement as HTMLElement | null;
+    if (!el) return ["nothing has the cursor"];
+    const target = (el.querySelector(".art, .avatar, .disc") as HTMLElement | null) ?? el;
+    // The widest ring drawn outside it (an inset one is inside, and can't be cut off).
+    let spread = 0;
+    const shadow = getComputedStyle(target).boxShadow;
+    if (shadow && shadow !== "none") {
+      for (const part of shadow.split(/,(?![^(]*\))/)) {
+        if (part.includes("inset")) continue;
+        const lengths = (part.replace(/rgba?\([^)]*\)/g, "").match(/-?[\d.]+px/g) ?? []).map(parseFloat);
+        if (lengths.length >= 4 && lengths[0] === 0 && lengths[1] === 0) spread = Math.max(spread, lengths[3]);
+      }
+    }
+    const r = target.getBoundingClientRect();
+    const ring = { top: r.top - spread, bottom: r.bottom + spread, left: r.left - spread, right: r.right + spread };
+    const cut = new Set<string>();
+    for (let a = target.parentElement; a && a !== document.body; a = a.parentElement) {
+      const style = getComputedStyle(a);
+      const box = a.getBoundingClientRect();
+      const inner = { top: box.top + a.clientTop, left: box.left + a.clientLeft, bottom: box.top + a.clientTop + a.clientHeight, right: box.left + a.clientLeft + a.clientWidth };
+      if (style.overflowY !== "visible") {
+        if (ring.top < inner.top - 0.5) cut.add("top");
+        if (ring.bottom > inner.bottom + 0.5) cut.add("bottom");
+      }
+      if (style.overflowX !== "visible") {
+        if (ring.left < inner.left - 0.5) cut.add("left");
+        if (ring.right > inner.right + 0.5) cut.add("right");
+      }
+    }
+    return [...cut];
+  });
+}
+
 test("arrows move along a row and down to the next; Back from a tab goes Home", async ({ page }) => {
   await fakePlex(page);
   await page.goto("/");
@@ -400,14 +439,23 @@ test("arrows move along a row and down to the next; Back from a tab goes Home", 
   await expect(page.getByText("Recently Added Movies")).toBeVisible({ timeout: 10_000 });
   await press(page, "ArrowDown");
   await expect(page.locator(".card:focus .title")).toHaveText("Northbound");
+  // The ring round the poster under the cursor is whole, at the start of a row too.
+  expect(await ringCutOff(page)).toEqual([]);
   await press(page, "ArrowDown");
   await expect(page.locator(".card:focus .title")).toHaveText("Low Orbit");
+  expect(await ringCutOff(page)).toEqual([]);
   await press(page, "ArrowRight");
   await expect(page.locator(".card:focus .title")).toHaveText("Glasshouse");
-  // Up and up again reaches the tabs; along to Movies and in.
-  // Up into the tabs lands on the one that's open; moving along opens each, as on the Fire TV.
-  await press(page, "ArrowUp", 3);
+  expect(await ringCutOff(page)).toEqual([]);
+  // Up goes a row at a time, to the nearest in the row above, then into the tabs on the
+  // one that's open.
+  await press(page, "ArrowUp");
+  await expect(page.locator(".card:focus .title")).toHaveText("Northbound");
+  await press(page, "ArrowUp");
+  await expect(page.locator(".card:focus .title")).toHaveText("Northbound");
+  await press(page, "ArrowUp");
   await expect(page.locator(".tab:focus")).toHaveText("Home");
+  // Moving along the tabs opens each, as on the Fire TV.
   await press(page, "ArrowRight");
   await expect(page.locator(".tab:focus")).toHaveText("Movies");
   // The tab's own home, as on the Fire TV; All has the whole library.
@@ -416,6 +464,9 @@ test("arrows move along a row and down to the next; Back from a tab goes Home", 
   await page.screenshot({ path: "shots/lg-movies-home.png" });
   await page.getByRole("button", { name: "All", exact: true }).click();
   await expect(page.locator(".grid .card").first()).toBeVisible();
+  // The grid's first poster under the cursor, its ring whole at the top of the page.
+  await page.locator(".grid .card").first().focus();
+  expect(await ringCutOff(page)).toEqual([]);
   // Sort, the watched filter, the decade and the genres in a row, as on the Fire TV.
   await expect(page.locator(".toolbar.chips .pill")).toHaveText(["Sort · A–Z", "Unwatched", "All decades", "All genres", "Drama", "Thriller"]);
   await page.screenshot({ path: "shots/lg-movies-all.png" });
