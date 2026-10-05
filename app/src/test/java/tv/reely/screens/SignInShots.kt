@@ -42,7 +42,7 @@ class SignInShots {
                     TopBar(
                         current = Route.Live, onNavigate = {}, onActivate = {}, onTabFocused = {},
                         onTabPositioned = { _, _ -> }, tabFocus = tabFocus, settingsFocus = settingsFocus,
-                        canSelectOnFocus = { false }, serverName = "Living Room",
+                        canSelectOnFocus = { false },
                     )
                     Box(Modifier.fillMaxWidth().weight(1f)) {
                         XtreamSignInPanel(live = live, onSignIn = { _, _, _ -> }, onSignInPlaylist = { _, _ -> }, onDismissError = {}, modifier = Modifier.fillMaxSize())
@@ -64,7 +64,7 @@ class SignInShots {
                     TopBar(
                         current = Route.Home, onNavigate = {}, onActivate = {}, onTabFocused = {},
                         onTabPositioned = { _, _ -> }, tabFocus = tabFocus, settingsFocus = settingsFocus,
-                        canSelectOnFocus = { false }, serverName = null,
+                        canSelectOnFocus = { false },
                     )
                     Box(Modifier.fillMaxWidth().weight(1f)) {
                         tv.reely.ui.screens.PlexSignInPanel(

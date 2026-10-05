@@ -385,7 +385,7 @@ class PageShots {
                     tv.reely.ui.TopBar(
                         current = tv.reely.ui.Route.Home, onNavigate = {}, onActivate = {}, onTabFocused = {},
                         onTabPositioned = { _, _ -> }, tabFocus = tabFocus, settingsFocus = settingsFocus,
-                        canSelectOnFocus = { false }, serverName = "Living Room",
+                        canSelectOnFocus = { false },
                     )
                     DetailScreen(
                         modifier = Modifier.weight(1f).testTag("page"),

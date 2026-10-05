@@ -62,7 +62,7 @@ class IptvShots {
                     TopBar(
                         current = Route.Library(LibraryKind.MOVIES, view), onNavigate = {}, onActivate = {},
                         onTabFocused = {}, onTabPositioned = { _, _ -> }, tabFocus = tabFocus,
-                        settingsFocus = settingsFocus, canSelectOnFocus = { false }, serverName = "Living Room",
+                        settingsFocus = settingsFocus, canSelectOnFocus = { false },
                     )
                     Box(Modifier.fillMaxWidth().weight(1f)) {
                         tv.reely.ui.screens.LibraryScreen(

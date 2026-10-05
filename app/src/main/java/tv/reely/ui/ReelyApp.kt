@@ -484,7 +484,6 @@ fun ReelyApp(viewModel: ReelyViewModel = viewModel()) {
             tabFocus = tabFocus,
             settingsFocus = settingsFocus,
             canSelectOnFocus = { arrivedByDirectionKey.also { arrivedByDirectionKey = false } },
-            serverName = state.plex.serverName,
             profile = state.plex.user,
             onProfile = if (state.plex.canSwitchUser) ({ pickingProfile = true }) else null,
         )
@@ -1006,8 +1005,7 @@ internal fun TopBar(
     tabFocus: List<FocusRequester>,
     settingsFocus: FocusRequester,
     canSelectOnFocus: () -> Boolean,
-    serverName: String?,
-    /** Whose profile is in use, shown in place of the server's name when known. */
+    /** Whose profile is in use, by the gear. The server's name isn't shown: the profile covered it. */
     profile: tv.reely.plex.PlexHomeUser? = null,
     /** Opens "Who's watching?"; null when there is nobody else to switch to. */
     onProfile: (() -> Unit)? = null,
@@ -1054,14 +1052,6 @@ internal fun TopBar(
                 onClick = onProfile,
                 onFocused = onTabFocused,
                 modifier = Modifier.padding(end = 6.dp),
-            )
-        } else if (serverName != null) {
-            Text(
-                text = serverName,
-                color = Faint,
-                fontSize = 14.sp,
-                lineHeight = 18.sp,
-                modifier = Modifier.padding(end = 12.dp),
             )
         }
 

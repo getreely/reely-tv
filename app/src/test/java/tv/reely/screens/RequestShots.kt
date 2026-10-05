@@ -57,7 +57,7 @@ class RequestShots {
                     TopBar(
                         current = Route.Requests, onNavigate = {}, onActivate = {}, onTabFocused = {},
                         onTabPositioned = { _, _ -> }, tabFocus = tabFocus, settingsFocus = settingsFocus,
-                        canSelectOnFocus = { false }, serverName = "Living Room",
+                        canSelectOnFocus = { false },
                     )
                     Box(Modifier.fillMaxWidth().weight(1f)) { content() }
                 }

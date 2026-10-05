@@ -80,7 +80,6 @@ class HomeShot {
                         current = Route.Home, onNavigate = {}, onActivate = {}, onTabFocused = {},
                         onTabPositioned = { _, _ -> }, tabFocus = tabFocus,
                         settingsFocus = settingsFocus, canSelectOnFocus = { false },
-                        serverName = "Living Room",
                     )
                     Box(Modifier.fillMaxWidth().weight(1f)) {
                         HomeScreen(
@@ -174,7 +173,6 @@ class HomeShot {
                         current = Route.Library(tv.reely.ui.LibraryKind.SHOWS), onNavigate = {}, onActivate = {},
                         onTabFocused = {}, onTabPositioned = { _, _ -> }, tabFocus = tabFocus,
                         settingsFocus = settingsFocus, canSelectOnFocus = { false },
-                        serverName = "Living Room",
                     )
                     Box(Modifier.fillMaxWidth().weight(1f)) {
                     tv.reely.ui.screens.LibraryScreen(
@@ -215,7 +213,6 @@ class HomeShot {
                         current = Route.Library(tv.reely.ui.LibraryKind.MOVIES), onNavigate = {}, onActivate = {},
                         onTabFocused = {}, onTabPositioned = { _, _ -> }, tabFocus = tabFocus,
                         settingsFocus = settingsFocus, canSelectOnFocus = { false },
-                        serverName = "Living Room",
                     )
                     Box(Modifier.fillMaxWidth().weight(1f)) {
                         tv.reely.ui.screens.LibraryScreen(
