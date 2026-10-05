@@ -9,6 +9,35 @@ function Session_() as object
     return s
 end function
 
+'' A library, the same on every start: its server and its key there.
+function LibraryId_(l as object) as string
+    return Str_(l.base) + "|" + Str_(l.key)
+end function
+
+' The libraries switched on in Settings, as on the Fire TV: the only ones on Home, searched,
+' and counted as in the library. None switched on, or none of those found, is all of them.
+' Of one [kind] ("movie", "show"; "" for any): each kind falls back to all of its own.
+function ShownLibraries_(kind as string) as object
+    all = []
+    for each l in Arr_(Session_().libraries)
+        if kind = "" or l.type = kind then all.Push(l)
+    end for
+    pinned = {}
+    p = m.global.prefs
+    if p <> invalid then
+        for each id in Arr_(p.pinnedLibraries)
+            pinned[Str_(id)] = true
+        end for
+    end if
+    if pinned.Count() = 0 then return all
+    shown = []
+    for each l in all
+        if pinned.DoesExist(LibraryId_(l)) then shown.Push(l)
+    end for
+    if shown.Count() = 0 then return all
+    return shown
+end function
+
 ' The token for the server at [base].
 function TokenFor_(base as dynamic) as string
     s = Session_()

@@ -69,7 +69,7 @@ end sub
 ' The settings kept on this Roku, with the Fire TV's defaults.
 function Prefs_() as object
     p = ReadJson_("prefs", {})
-    defaults = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], streamFormat: "m3u8", iptvLibrary: false, iptvWins: false, screensaver: true, tourSeen: false, subtitlesAtStart: "plex", accent: "blue", iptvInMenus: true, themeMusic: false, guidePreview: true }
+    defaults = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], pinnedLibraries: [], streamFormat: "m3u8", iptvLibrary: false, iptvWins: false, screensaver: true, tourSeen: false, subtitlesAtStart: "plex", accent: "blue", iptvInMenus: true, themeMusic: false, guidePreview: true }
     for each k in defaults
         if p[k] = invalid then p[k] = defaults[k]
     end for
@@ -295,13 +295,13 @@ end sub
 sub loadHome()
     s = m.global.session
     if not signedIn() then return
-    Ask_("home", { libraries: s.libraries })
+    Ask_("home", { libraries: ShownLibraries_("") })
     loadWatchlist()
 end sub
 
 sub loadWatchlist()
     s = m.global.session
-    if signedIn() then Ask_("watchlist", { token: s.token, libraries: s.libraries })
+    if signedIn() then Ask_("watchlist", { token: s.token, libraries: ShownLibraries_("") })
 end sub
 
 sub onHome(a as object)
@@ -358,7 +358,7 @@ sub loadIptv(refresh as boolean)
     p = m.global.prefs
     creds = m.global.live.credentials
     if not Bool_(p.iptvLibrary) or not signedIn() or creds = invalid or Str_(creds.base) = "" or Str_(creds.playlistUrl) <> "" then return
-    Ask_("iptvLoad", { libraries: m.global.session.libraries, refresh: refresh })
+    Ask_("iptvLoad", { libraries: ShownLibraries_(""), refresh: refresh })
 end sub
 
 sub onIptvState()
@@ -507,6 +507,8 @@ sub onGo(event as object)
         else if Bool_(route.prefs.iptvWins) <> Bool_(before.iptvWins) then
             showHome()
         end if
+        ' Other libraries switched on: Home from those, read afresh.
+        if FormatJson(Arr_(route.prefs.pinnedLibraries)) <> FormatJson(Arr_(before.pinnedLibraries)) then loadHome()
     else if route.name = "tour" then
         showTour()
     else if route.name = "iptvRefresh" then
@@ -517,7 +519,7 @@ sub onGo(event as object)
     else if route.name = "watchReady" then
         dismissReady(route.title)
         m.readyTitle = route.title
-        Ask_("search", { libraries: m.global.session.libraries, query: route.title.title, id: "ready" })
+        Ask_("search", { libraries: ShownLibraries_(""), query: route.title.title, id: "ready" })
     else if route.name = "dismissReady" then
         dismissReady(route.title)
     else if route.name = "profiles" then

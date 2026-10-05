@@ -13,7 +13,7 @@ sub open()
     m.top.findNode("title").text = r.title
     m.top.findNode("count").text = "Loading…"
     if r.kind = "person" then
-        Ask_("person", { libraries: Session_().libraries, personId: r.person.id, serverBase: Str_(r.person.serverBase) })
+        Ask_("person", { libraries: ShownLibraries_(""), personId: r.person.id, serverBase: Str_(r.person.serverBase) })
     else
         item = r.item
         base = item.serverBase

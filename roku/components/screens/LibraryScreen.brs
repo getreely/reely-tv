@@ -46,10 +46,7 @@ end sub
 sub open__()
     r = m.top.route
     m.kind = r.kind
-    m.libraries = []
-    for each l in Session_().libraries
-        if l.type = m.kind then m.libraries.Push(l)
-    end for
+    m.libraries = ShownLibraries_(m.kind)
     ' The provider's, after Plex's, while its films and series are on, unless taken out of
     ' the menus in Settings.
     inMenus = m.global.prefs.iptvInMenus = invalid or Bool_(m.global.prefs.iptvInMenus)

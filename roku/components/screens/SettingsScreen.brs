@@ -95,6 +95,11 @@ function Row_(title as string, note as string, value as string, key as string) a
     return { title: title, note: note, value: value, switch: invalid, key: key, options: invalid, selected: 0 }
 end function
 
+'' A library as it's kept switched on: its server and its key there (as ScreenKit's LibraryId_).
+function LibId_(l as object) as string
+    return Str_(l.base) + "|" + Str_(l.key)
+end function
+
 function Switch_(title as string, note as string, on as boolean, key as string) as object
     r = Row_(title, note, "", key)
     r.switch = on
@@ -288,9 +293,27 @@ function Plex_(p as object) as object
     end if
     out.Push(Group_("Profile", [Row_(who, role, Iif_(canSwitch, "Switch", ""), Iif_(canSwitch, "profile", ""))], Iif_(canSwitch, "Each profile in your Plex Home has its own libraries, watch history and Continue Watching.", "")))
     out.Push(Group_("Server", [Row_("Server", "", Str_(s.serverName), ""), Row_("Connection", "", ConnectionKind_(Str_(s.base)), "")]))
+    ' A switch for each library, as on the Fire TV; IPTV in or out of the menus.
+    libs = Arr_(s.libraries)
+    rows = []
+    if libs.Count() > 1 then
+        pinned = {}
+        for each id in Arr_(p.pinnedLibraries)
+            pinned[Str_(id)] = true
+        end for
+        for i = 0 to libs.Count() - 1
+            l = libs[i]
+            title = Str_(l.title)
+            if Arr_(s.servers).Count() > 1 then title = title + " · " + Str_(l.serverName)
+            rows.Push(Switch_(title, "", pinned.DoesExist(LibId_(l)), "lib:" + i.ToStr()))
+        end for
+    end if
     if Bool_(p.iptvLibrary) then
         inMenus = p.iptvInMenus = invalid or Bool_(p.iptvInMenus)
-        out.Push(Group_("Libraries", [Switch_("IPTV", "In the Movies and TV Shows menus.", inMenus, "iptvInMenus")], "IPTV is shown in the Movies and TV Shows menus unless switched off here."))
+        rows.Push(Switch_("IPTV", "In the Movies and TV Shows menus.", inMenus, "iptvInMenus"))
+    end if
+    if rows.Count() > 0 then
+        out.Push(Group_("Libraries", rows, "Switched on, a library is one of the only ones in the Movies and TV Shows menus and on Home. With none switched on, all of them are." + Iif_(Bool_(p.iptvLibrary), " IPTV is shown unless switched off here.", "")))
     end if
     servers = Arr_(s.servers)
     if servers.Count() > 1 then
@@ -767,6 +790,19 @@ sub apply(key as string, i as integer)
         p.screensaver = i = 0
     else if key = "iptvLibrary" then
         p.iptvLibrary = not Bool_(p.iptvLibrary)
+    else if Left(key, 4) = "lib:" then
+        libs = Arr_(m.global.session.libraries)
+        at = Int(Val(Mid(key, 5)))
+        if at >= 0 and at < libs.Count() then
+            id = LibId_(libs[at])
+            list = []
+            found = false
+            for each x in Arr_(p.pinnedLibraries)
+                if x = id then found = true else list.Push(x)
+            end for
+            if not found then list.Push(id)
+            p.pinnedLibraries = list
+        end if
     else if key = "iptvInMenus" then
         p.iptvInMenus = not (p.iptvInMenus = invalid or Bool_(p.iptvInMenus))
     else if key = "iptvWins" then

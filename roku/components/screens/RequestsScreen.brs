@@ -157,7 +157,7 @@ end sub
 sub load()
     if Str_(Reely_().base) = "" then return
     if m.home = invalid then m.note.text = "Loading…"
-    Ask_("reelyHome", { reely: Asking_(), libraries: Session_().libraries })
+    Ask_("reelyHome", { reely: Asking_(), libraries: ShownLibraries_("") })
 end sub
 
 ' Your requests, then Reely's rows less what's in the library; or what a search found.
