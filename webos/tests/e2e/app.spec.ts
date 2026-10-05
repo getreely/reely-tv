@@ -211,7 +211,7 @@ const scriptedVideo = () => {
   const proto = HTMLMediaElement.prototype;
   type S = { t: number; d: number; paused: boolean; src: string; timer?: ReturnType<typeof setInterval> };
   const all = new WeakMap<HTMLMediaElement, S>();
-  const st = (v: HTMLMediaElement) => { let s = all.get(v); if (!s) { s = { t: 0, d: 12, paused: true, src: "" }; all.set(v, s); } return s; };
+  const st = (v: HTMLMediaElement) => { let s = all.get(v); if (!s) { s = { t: 0, d: (window as any).__videoSeconds ?? 12, paused: true, src: "" }; all.set(v, s); } return s; };
   const fire = (v: HTMLMediaElement, e: string) => v.dispatchEvent(new Event(e));
   (window as any).__videoSources = [] as string[];
   Object.defineProperty(proto, "src", { configurable: true, get() { return st(this).src; }, set(v: string) { st(this).src = v; (window as any).__videoSources.push(v); } });
@@ -237,14 +237,17 @@ const scriptedVideo = () => {
 
 test("the player: Skip Intro, another sound track kept with Plex, Up Next on to the next episode", async ({ page }) => {
   const plex = await fakePlex(page);
+  // Long enough that the credits don't come while the panels are being tried; it's taken
+  // to them when they're wanted.
+  await page.addInitScript(() => { (window as any).__videoSeconds = 60; });
   await page.addInitScript(scriptedVideo);
   // This episode as a file the TV plays: an intro, two sound tracks, subtitles, credits.
   await page.route(`${SERVER}/library/streams/21*`, (route) =>
     route.fulfill({ status: 200, contentType: "text/plain", headers: { "Access-Control-Allow-Origin": "*" }, body: "1\n00:00:00,000 --> 00:01:00,000\nHello from the subtitles\n" }));
   await page.route(`${SERVER}/library/metadata/e2*`, (route) =>
     route.fulfill({ status: 200, contentType: "application/json", headers: { "Access-Control-Allow-Origin": "*" }, body: JSON.stringify({ MediaContainer: { Metadata: [{
-      ratingKey: "e2", type: "episode", title: "Episode 2", index: 2, parentIndex: 1, grandparentRatingKey: "show1", grandparentTitle: "Northbound", duration: 12_000,
-      Marker: [{ type: "intro", startTimeOffset: 0, endTimeOffset: 4_000 }, { type: "credits", startTimeOffset: 8_000, endTimeOffset: 12_000 }],
+      ratingKey: "e2", type: "episode", title: "Episode 2", index: 2, parentIndex: 1, grandparentRatingKey: "show1", grandparentTitle: "Northbound", duration: 60_000,
+      Marker: [{ type: "intro", startTimeOffset: 0, endTimeOffset: 4_000 }, { type: "credits", startTimeOffset: 54_000, endTimeOffset: 60_000 }],
       Media: [{ container: "mp4", videoCodec: "h264", audioCodec: "aac", Part: [{ id: 5, key: "/library/parts/5/file.mp4", Stream: [
         { id: 11, streamType: 2, displayTitle: "English (AAC Stereo)", selected: 1 }, { id: 12, streamType: 2, displayTitle: "Commentary" },
         { id: 21, streamType: 3, displayTitle: "English (SRT)", key: "/library/streams/21", codec: "srt" },
@@ -300,6 +303,7 @@ test("the player: Skip Intro, another sound track kept with Plex, Up Next on to 
   await page.screenshot({ path: "shots/lg-player-subtitles.png" });
 
   // The credits: Up Next over the screen, the credits in the corner; OK plays it now.
+  await page.evaluate(() => { document.querySelector("video")!.currentTime = 54.5; });
   await expect(page.locator(".post-play")).toContainText("Season 1  ·  Episode 3", { timeout: 15_000 });
   await expect(page.locator(".post-play .post-title")).toHaveText("Episode 3");
   await expect(page.locator(".video")).toHaveClass(/windowed/);
@@ -314,12 +318,19 @@ test("the player: Skip Intro, another sound track kept with Plex, Up Next on to 
 
 /** The cursor along the player's buttons to the one named, bringing the controls up first. */
 async function toControl(page: Page, label: string) {
-  if (!(await page.locator(".ctl:focus").count())) await press(page, "ArrowDown");
-  for (const way of ["ArrowRight", "ArrowLeft"]) {
-    for (let i = 0; i < 9; i++) {
-      if ((await page.locator(".ctl:focus").getAttribute("aria-label")) === label) return;
-      await press(page, way);
-    }
+  const on = async () => (await page.locator(".ctl:focus").count()) ? page.locator(".ctl:focus").getAttribute("aria-label") : null;
+  if (!(await on())) {
+    await press(page, "ArrowDown");
+    await expect(page.locator(".ctl:focus")).toHaveCount(1);
+  }
+  // Which way, and how far, along the row; each press landed before the next.
+  const labels = await page.locator(".ctl:not([aria-disabled])").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")));
+  const from = labels.indexOf(await on());
+  const to = labels.indexOf(label);
+  for (let i = 0; i < Math.abs(to - from); i++) {
+    const was = await on();
+    await press(page, to > from ? "ArrowRight" : "ArrowLeft");
+    await expect.poll(on).not.toBe(was);
   }
   await expect(page.locator(".ctl:focus")).toHaveAttribute("aria-label", label);
 }
@@ -550,7 +561,7 @@ test("Live TV: sign in to a provider, pick a category, watch, change channel, fa
   await page.locator(".programme", { hasText: "Late Edition" }).first().focus();
   await expect(page.locator(".guide-about")).toContainText("OK to be reminded when it starts");
   // The highlighted channel plays beside the grid, a moment after the cursor stops.
-  await expect(page.locator(".guide-preview")).toHaveAttribute("src", /\/live\/me\/secret\/101\.m3u8$/);
+  await expect(page.locator(".guide-preview video")).toHaveAttribute("src", /\/live\/me\/secret\/101\.m3u8$/);
   await press(page, "Enter");
   await expect(page.locator(".programme.reminded")).toContainText("Late Edition");
   await page.screenshot({ path: "shots/lg-guide.png" });

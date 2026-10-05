@@ -75,7 +75,7 @@ screenshots:
 | Title page: backdrop, logo, ratings, round buttons, episodes as a row of pictures | ✅ | ✅ |
 | Settings: sections down the left, a row opens its choices | ✅ | ⬜ one long list of pills |
 | Player: a panel for each of sound, subtitles, chapters; full-screen Up Next with picture | ✅ | ⬜ one list; Up Next card |
-| Guide: channel tiles, the programme's details above | 🟡 small grid, no tiles | 🟡 plain text grid |
+| Guide: channel tiles, the programme's details above | ✅ | 🟡 plain text grid |
 | Library: views and sort in the tab's menu, filter chips | 🟡 pills | 🟡 pills |
 | Poster menu: side sheet with the title's picture | ✅ | 🟡 no icons |
 

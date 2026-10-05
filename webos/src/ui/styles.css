@@ -277,21 +277,35 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 /* The live guide: channels down, time across; the programme in focus above. */
 .page-title.inline { margin: 0 1.2rem 0.6rem 0; }
-.guide { padding: 0 3rem 2rem; }
-.guide-about { min-height: 6.5rem; padding: 0.4rem 0 0.8rem; }
-.guide-about .name { font-size: 1.4rem; font-weight: 700; }
-.about-text { max-width: 60rem; margin-top: 0.3rem; overflow: hidden; max-height: 2.9em; }
-.guide-head { position: relative; height: 1.8rem; color: var(--muted); font-size: 0.95rem; }
-.guide-head span { position: absolute; top: 0; }
-.guide-now { position: absolute; top: 1.4rem; width: 0.15rem; height: 0.4rem; background: var(--accent); }
-.guide-row { display: flex; align-items: stretch; height: 3.6rem; margin-bottom: 0.3rem; }
-.guide-channel { flex: none; width: 12rem; margin-right: 1rem; display: flex; align-items: center; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.guide { position: relative; padding: 0 3rem 2rem; }
+.guide-top { display: flex; align-items: flex-start; margin-bottom: 0.8rem; }
+.guide-about { flex: 1; min-width: 0; min-height: 9rem; padding: 0.2rem 1.3rem 0 0; }
+.guide-category { font-size: 0.85rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); min-height: 1.2rem; }
+.guide-about .name { font-size: 1.75rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.guide-about .toolbar.flush { padding-top: 0.7rem; }
+.about-text { max-width: 50rem; margin-top: 0.3rem; overflow: hidden; max-height: 2.9em; }
+.guide-preview { flex: none; width: 18rem; height: 10.1rem; border-radius: 0.7rem; overflow: hidden; background: #000; box-shadow: inset 0 0 0 0.07rem var(--line); }
+.guide-preview video { width: 100%; height: 100%; object-fit: cover; }
+.guide-grid { position: relative; overflow: hidden; }
+.guide-head { position: relative; height: 1.6rem; color: var(--faint); font-size: 0.95rem; }
+.guide-head span { position: absolute; top: 0; padding-left: 0.5rem; }
+.guide-now { position: absolute; top: 1.6rem; bottom: 0; width: 0.14rem; margin-left: -0.07rem; background: rgba(242, 244, 247, 0.8); z-index: 1; pointer-events: none; }
+.guide-now::before { content: ""; position: absolute; top: 0; left: -0.29rem; width: 0.72rem; height: 0.72rem; border-radius: 50%; background: var(--chalk); }
+.guide-row { display: flex; align-items: stretch; height: 5.2rem; margin-bottom: 0.45rem; }
+.guide-channel { position: relative; flex: none; width: 9.5rem; margin-right: 0.5rem; border-radius: 1rem; display: flex; align-items: center; justify-content: center; opacity: 0.75; overflow: hidden; }
+.guide-row.current .guide-channel { opacity: 1; box-shadow: inset 0 0 0 0.14rem var(--chalk); }
+.guide-channel img { max-width: 4rem; max-height: 4rem; object-fit: contain; border-radius: 0.5rem; }
+.guide-channel span { padding: 0 0.6rem; font-size: 0.95rem; font-weight: 700; text-align: center; line-height: 1.2; max-height: 2.4em; overflow: hidden; }
+.guide-fav { position: absolute; top: 0.35rem; right: 0.5rem; font-size: 0.9rem; color: var(--accent); }
 .guide-line { position: relative; flex: 1; }
-.programme { position: absolute; top: 0; bottom: 0; padding: 0 0.8rem; border-radius: 0.6rem; background: var(--raised); text-align: left; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 1rem; }
-.programme.now { background: var(--high); }
-.programme.past { color: var(--muted); }
-.programme.reminded { box-shadow: inset 0 0 0 0.1rem var(--accent); }
-.programme:focus { background: var(--chalk); color: var(--ink); }
+.programme { position: absolute; top: 0; bottom: 0; padding: 0 1rem; border-radius: 1rem; background: rgba(242, 244, 247, 0.1); color: var(--chalk); text-align: left; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: center; }
+.programme.past, .programme.empty { background: rgba(242, 244, 247, 0.05); }
+.programme.past .programme-title { color: rgba(242, 244, 247, 0.55); font-weight: 400; }
+.programme-title { font-size: 1.1rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.programme-slot { margin-top: 0.15rem; font-size: 0.95rem; color: rgba(242, 244, 247, 0.45); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.programme:focus { background: var(--accent-glow); box-shadow: inset 0 0 0 0.14rem var(--accent); }
+.programme:focus .programme-title { color: var(--chalk); font-weight: 600; }
 /* "Starting now": a card at the bottom right, over whatever's on screen. */
 .notice-layer { background: transparent; align-content: end; justify-content: end; padding: 3rem; z-index: 40; }
 .notice { width: 34rem; padding: 1.4rem 1.8rem; border-radius: 1.2rem; background: var(--raised); border: 0.06rem solid var(--line); }
@@ -328,10 +342,6 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .subtitle-line.boxed { text-shadow: none; }
 .subtitle-line.boxed span { background: rgba(0, 0, 0, 0.78); padding: 0.05em 0.4em; border-radius: 0.2em; }
 
-/* The guide's preview of the highlighted channel, top right, above the grid. */
-.guide { position: relative; }
-.guide-preview { position: absolute; top: 0; right: 3rem; width: 16rem; height: 9rem; background: #000; border-radius: 0.6rem; object-fit: cover; }
-.guide-about { padding-right: 20rem; }
 
 /* Home and the tabs' homes, as on the Fire TV: the hero stays put and the rows move under it. */
 .content.heroed { overflow: hidden; padding: 0; }

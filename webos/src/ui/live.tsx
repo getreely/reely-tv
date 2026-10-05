@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import type { Programme, XtreamChannel } from "../api/xtream";
 import { isOnAt, progressAt } from "../api/xtream";
 import type { App, AppState } from "../app/store";
-import { onKeys } from "./focus";
+import { focus, onKeys } from "./focus";
 import { Pill, Spinner, useRescue, useReturnFocus } from "./parts";
 
 const time = (epoch: number) => new Date(epoch * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -110,11 +110,30 @@ export function Live(props: { app: App; state: AppState; guide?: boolean; onGuid
   );
 }
 
-/** The guide's window: from the half hour before the last one, three and a half hours. */
+/** The guide's window: from the half hour before the last one, two and a half hours: as much as fits. */
 const WINDOW_BEFORE = 30 * 60;
-const WINDOW = 210 * 60;
-/** How wide a minute is in the grid. */
-const REM_PER_MINUTE = 0.46;
+const WINDOW = 150 * 60;
+/** How wide a minute is in the grid, as on the Fire TV. */
+const REM_PER_MINUTE = 0.36;
+/** The channels' column, tiles and the gap after them. */
+const CHANNEL_REM = 10;
+
+/** A channel's own color behind its logo, the same each time, as the Fire TV picks it. */
+export function channelTint(id: string): string {
+  const palette = ["#2C3563", "#7A3B42", "#2F5E52", "#6A4E2A", "#473469", "#2B5066", "#6B3559", "#3F5A2E"];
+  let hash = 7;
+  for (const c of id) hash = (Math.imul(hash, 31) + c.charCodeAt(0)) | 0;
+  return palette[((hash % palette.length) + palette.length) % palette.length];
+}
+
+/**
+ * A channel's name to stand in for its logo: the name itself, without a provider's region
+ * or group prefix ("UK | ", "US: ", "[DE] ").
+ */
+export function channelLabel(name: string): string {
+  const trimmed = name.trim();
+  return trimmed.replace(/^(\[[^\]]{1,6}\]|[A-Z0-9]{2,4}\s*[|:\-])\s*/, "") || trimmed;
+}
 
 /**
  * The guide as a grid, as on the Fire TV: channels down, time across. OK on what's on
@@ -147,48 +166,75 @@ function GuideGrid(props: { app: App; state: AppState; now: number }) {
     return () => clearTimeout(t);
   }, [focused?.channel.streamId, state.prefs.guidePreview]);
   const previewUrl = state.prefs.guidePreview && previewing ? app.channelUrl(previewing) : null;
+  const current = focused?.channel.streamId;
+  const nowFirst = () => {
+    const row = document.querySelector<HTMLElement>(`.guide-row[data-channel="${current ?? shown[0]?.streamId}"] .programme.now`)
+      ?? document.querySelector<HTMLElement>(".guide .programme.now");
+    if (row) focus(row);
+  };
   return (
     <div class="guide">
-      {previewUrl ? <video class="guide-preview" src={previewUrl} autoPlay playsInline /> : null}
-      <div class="guide-about">
-        {focused ? (
-          <>
-            <div class="name">{focused.programme?.title ?? focused.channel.name}</div>
-            <div class="facts">
-              {[focused.channel.name, focused.programme ? `${time(focused.programme.start)}–${time(focused.programme.stop)}` : null, hint(focused.channel, focused.programme)].filter(Boolean).join("  ·  ")}
-            </div>
-            {focused.programme?.description ? <div class="facts about-text">{focused.programme.description}</div> : null}
-          </>
-        ) : <div class="facts">Loading the guide…</div>}
-      </div>
-      <div class="guide-head">
-        {slots.map((t) => <span key={t} style={{ left: `${x(t) + 13}rem` }}>{time(t)}</span>)}
-        <i class="guide-now" style={{ left: `${x(now) + 13}rem` }} />
-      </div>
-      {shown.map((ch, index) => {
-        const listing = (live.table[ch.streamId] ?? live.guide[ch.streamId] ?? []).filter((p) => p.stop > start && p.start < end);
-        return (
-          <div key={ch.streamId} class="guide-row">
-            <div class="guide-channel">{[ch.number > 0 ? ch.number : null, ch.name].filter(Boolean).join("  ")}</div>
-            <div class="guide-line">
-              {listing.length ? listing.map((p) => (
-                <button key={p.start} data-focus data-autofocus={index === 0 && isOnAt(p, now) ? "" : undefined}
-                  class={"programme" + (isOnAt(p, now) ? " now" : p.stop <= now ? " past" : "") + (app.hasReminder(ch, p) ? " reminded" : "")}
-                  style={{ left: `${x(p.start)}rem`, width: `${Math.max(0.6, x(p.stop) - x(p.start) - 0.2)}rem` }}
-                  onFocus={() => setFocused({ channel: ch, programme: p })}
-                  onClick={() => press(index, ch, p)}>
-                  {app.hasReminder(ch, p) ? "⏰ " : ""}{p.title}
-                </button>
-              )) : (
-                <button data-focus data-autofocus={index === 0 ? "" : undefined} class="programme now" style={{ left: "0rem", width: `${x(end) - 0.2}rem` }}
-                  onFocus={() => setFocused({ channel: ch, programme: null })} onClick={() => press(index, ch, null)}>
-                  {ch.name}
-                </button>
-              )}
-            </div>
+      <div class="guide-top">
+        <div class="guide-about">
+          <div class="guide-category">{live.category?.name ?? ""}</div>
+          {focused ? (
+            <>
+              <div class="name">{focused.programme?.title ?? focused.channel.name}</div>
+              <div class="facts">
+                {[focused.channel.name, focused.programme ? `${time(focused.programme.start)} – ${time(focused.programme.stop)}` : null, hint(focused.channel, focused.programme)].filter(Boolean).join("  ·  ")}
+              </div>
+              {focused.programme?.description ? <div class="facts about-text">{focused.programme.description}</div> : null}
+            </>
+          ) : <div class="facts">Loading the guide…</div>}
+          <div class="toolbar flush">
+            <Pill label="Now" onPress={nowFirst} />
+            <Pill label={live.busy ? "Loading…" : "Refresh"} onPress={() => void app.refreshGuide()} />
           </div>
-        );
-      })}
+        </div>
+        {state.prefs.guidePreview ? (
+          <div class="guide-preview">{previewUrl ? <video src={previewUrl} autoPlay playsInline /> : null}</div>
+        ) : null}
+      </div>
+      <div class="guide-grid">
+        <div class="guide-head">
+          {slots.filter((t) => t < end).map((t) => <span key={t} style={{ left: `${x(t) + CHANNEL_REM}rem` }}>{time(t)}</span>)}
+        </div>
+        <i class="guide-now" style={{ left: `${x(now) + CHANNEL_REM}rem` }} />
+        {shown.map((ch, index) => {
+          const listing = (live.table[ch.streamId] ?? live.guide[ch.streamId] ?? []).filter((p) => p.stop > start && p.start < end);
+          const fav = live.favorites.includes(ch.streamId);
+          return (
+            <div key={ch.streamId} class={"guide-row" + (current === ch.streamId ? " current" : "")} data-channel={ch.streamId}>
+              <div class="guide-channel" style={{ background: channelTint(String(ch.streamId)) }}>
+                {ch.icon ? <img src={ch.icon} alt={ch.name} /> : <span>{channelLabel(ch.name)}</span>}
+                {fav ? <b class="guide-fav">♥</b> : null}
+              </div>
+              <div class="guide-line">
+                {listing.length ? listing.map((p) => {
+                  const replay = p.stop <= now && app.canCatchUp(ch, p, now);
+                  const reminded = app.hasReminder(ch, p);
+                  const slot = `${time(p.start)} – ${time(p.stop)}`;
+                  return (
+                    <button key={p.start} data-focus data-autofocus={index === 0 && isOnAt(p, now) ? "" : undefined}
+                      class={"programme" + (isOnAt(p, now) ? " now" : p.stop <= now ? (replay ? " replay" : " past") : "") + (reminded ? " reminded" : "")}
+                      style={{ left: `${x(p.start)}rem`, width: `${Math.max(0.6, x(p.stop) - x(p.start) - 0.3)}rem` }}
+                      onFocus={() => setFocused({ channel: ch, programme: p })}
+                      onClick={() => press(index, ch, p)}>
+                      <span class="programme-title">{p.title}</span>
+                      <span class="programme-slot">{replay ? `Watch again  ·  ${slot}` : reminded ? `Reminder set  ·  ${slot}` : slot}</span>
+                    </button>
+                  );
+                }) : (
+                  <button data-focus data-autofocus={index === 0 ? "" : undefined} class="programme now empty" style={{ left: "0rem", width: `${x(end) - 0.3}rem` }}
+                    onFocus={() => setFocused({ channel: ch, programme: null })} onClick={() => press(index, ch, null)}>
+                    <span class="programme-title">No guide data</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
