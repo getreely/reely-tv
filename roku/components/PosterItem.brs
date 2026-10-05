@@ -21,6 +21,14 @@ sub init()
 end sub
 
 sub layout()
+    try
+        layout__()
+    catch e
+        Oops_("poster", e)
+    end try
+end sub
+
+sub layout__()
     w = m.top.width
     h = m.top.height
     if w <= 0 or h <= 0 then return
@@ -65,6 +73,14 @@ sub layout()
 end sub
 
 sub show()
+    try
+        show__()
+    catch e
+        Oops_("poster", e)
+    end try
+end sub
+
+sub show__()
     c = m.top.itemContent
     if c = invalid then return
     m.art.uri = c.HDPOSTERURL
@@ -107,6 +123,14 @@ sub show()
 end sub
 
 sub focusChanged()
+    try
+        focusChanged__()
+    catch e
+        Oops_("poster: focus", e)
+    end try
+end sub
+
+sub focusChanged__()
     focused = m.top.focusPercent > 0.5 and (m.top.rowListHasFocus or m.top.gridHasFocus)
     ' Told many times a second while the cursor glides: only a change is drawn.
     if m.focused = focused then return

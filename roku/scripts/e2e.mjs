@@ -1,7 +1,7 @@
 // The Roku app end to end in the BrightScript simulator: a debug build pointed at a
 // stand-in plex.tv and Plex server, driven with Roku's own remote protocol (ECP), with
 // screenshots along the way. Fails on anything the server wasn't asked, or a crash.
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync, copyFileSync, existsSync, statSync } from "node:fs";
+import { appendFileSync, cpSync, mkdirSync, readFileSync, rmSync, writeFileSync, copyFileSync, existsSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import http from "node:http";
 import { spawn } from "node:child_process";
@@ -194,6 +194,8 @@ let output = "";
 // What was said before the screensaver's run started output afresh.
 let fullOutput = "";
 sim.stdout.on("data", (d) => { output += d.toString(); });
+// Everything the app said, kept in a file too when asked (E2E_LOG=path), to read afterwards.
+if (process.env.E2E_LOG) sim.stdout.on("data", (d) => appendFileSync(process.env.E2E_LOG, d));
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (what, test, ms = 20000) => {
   const end = Date.now() + ms;
@@ -696,7 +698,7 @@ try {
   expect("an IPTV series' page with its episodes", lastSaid("TRACE iptv page") === "Tidewater 2");
   await wait(1500);
   await snap("roku-iptv-series");
-  expect("no crash", !/BRIGHTSCRIPT_CRASH|Runtime Error|Syntax Error/i.test(output));
+  expect("no crash", !/BRIGHTSCRIPT_CRASH|Runtime Error|Syntax Error|^OOPS /im.test(output));
   // The screensaver, as the Roku starts it: on its own, with the pictures the app kept.
   sim.kill("SIGKILL");
   await wait(2000);
@@ -704,6 +706,7 @@ try {
   output = "";
   sim = launch("screensaver=1");
   sim.stdout.on("data", (d) => { output += d.toString(); });
+  if (process.env.E2E_LOG) sim.stdout.on("data", (d) => appendFileSync(process.env.E2E_LOG, d));
   await until("the screensaver", () => output.includes("TRACE saver slide "), 30000).catch(() => undefined);
   const count = Number(lastSaid("TRACE saver slides") ?? 0);
   expect("the screensaver shows Home's artwork", count > 0 && !!lastSaid("TRACE saver slide"));

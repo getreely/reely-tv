@@ -55,6 +55,14 @@ sub build()
 end sub
 
 sub paint()
+    try
+        paint__()
+    catch e
+        Oops_("buttons: draw", e)
+    end try
+end sub
+
+sub paint__()
     focused = m.top.hasFocus()
     for i = 0 to m.discs.Count() - 1
         here = focused and i = m.top.focusIndex

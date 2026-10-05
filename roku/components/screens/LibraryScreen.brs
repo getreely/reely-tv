@@ -35,6 +35,15 @@ sub init()
 end sub
 
 sub open()
+    Crumb_("library: open")
+    try
+        open__()
+    catch e
+        Oops_("library: open", e)
+    end try
+end sub
+
+sub open__()
     r = m.top.route
     m.kind = r.kind
     m.libraries = []
@@ -190,6 +199,15 @@ sub paintTools()
 end sub
 
 sub paint()
+    Crumb_("library: draw")
+    try
+        paint__()
+    catch e
+        Oops_("library: draw", e)
+    end try
+end sub
+
+sub paint__()
     grid = m.view = "grid"
     m.tools.visible = grid
     m.letters.visible = grid and m.sort = "titleSort:asc" and m.meta.letters.Count() > 1
@@ -224,8 +242,17 @@ sub paint()
     end if
 end sub
 
-' The tab's own home: Continue Watching of this kind, what's newly added and released.
 sub paintHome()
+    Crumb_("library: home")
+    try
+        paintHome__()
+    catch e
+        Oops_("library: home", e)
+    end try
+end sub
+
+' The tab's own home: Continue Watching of this kind, what's newly added and released.
+sub paintHome__()
     if Gone_() then return
     if m.view <> "home" or m.library = invalid then return
     h = m.global.home
@@ -251,8 +278,17 @@ sub paintHome()
     showHero()
 end sub
 
-' The hero: the title with the cursor in the rows, else the first title on the page.
 sub showHero()
+    Crumb_("library: hero")
+    try
+        showHero__()
+    catch e
+        Oops_("library: hero", e)
+    end try
+end sub
+
+' The hero: the title with the cursor in the rows, else the first title on the page.
+sub showHero__()
     if m.view <> "home" then return
     item = invalid
     if m.rows.isInFocusChain() then item = FocusedRowItem_(m.rows)
@@ -378,6 +414,15 @@ sub jumpWhenLoaded()
 end sub
 
 sub onGridFocused()
+    Crumb_("library: cursor")
+    try
+        onGridFocused__()
+    catch e
+        Oops_("library: cursor", e)
+    end try
+end sub
+
+sub onGridFocused__()
     if m.view = "grid" and m.grid.itemFocused >= m.items.Count() - 24 and m.total > m.items.Count() then loadPage()
 end sub
 
@@ -394,6 +439,15 @@ sub onRowPicked()
 end sub
 
 sub focusIn()
+    Crumb_("library: cursor in")
+    try
+        focusIn__()
+    catch e
+        Oops_("library: cursor in", e)
+    end try
+end sub
+
+sub focusIn__()
     controls = controlsInOrder()
     if controls.Count() = 0 then return
     m.at = controls[0]
@@ -423,6 +477,16 @@ function nodeOf(name as string) as object
 end function
 
 function onKeyEvent(key as string, press as boolean) as boolean
+    if press then Crumb_("library " + key)
+    try
+        return onKeyEvent__(key, press)
+    catch e
+        Oops_("library " + key, e)
+    end try
+    return true
+end function
+
+function onKeyEvent__(key as string, press as boolean) as boolean
     if not press then return false
     controls = controlsInOrder()
     at = -1

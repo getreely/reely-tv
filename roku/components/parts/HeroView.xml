@@ -13,6 +13,7 @@
   <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/ScreenKit.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/Oops.brs" />
   <children>
     <!-- The whole screen, the tabs' strip included: the screens sit 130 down. -->
     <!-- Fetched and decoded at half size: a full-size picture each time the cursor moved

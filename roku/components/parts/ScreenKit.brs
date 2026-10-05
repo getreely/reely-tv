@@ -63,6 +63,15 @@ function IptvReady_() as boolean
 end function
 
 sub onAnswer_(event as object)
+    Crumb_("answer")
+    try
+        onAnswer___(event)
+    catch e
+        Oops_("answer", e)
+    end try
+end sub
+
+sub onAnswer___(event as object)
     task = event.getRoSGNode()
     if task <> invalid and m.tasks_ <> invalid then m.tasks_.Delete(task.key_)
     answered(event.getData())

@@ -43,6 +43,14 @@ sub build()
 end sub
 
 sub paint()
+    try
+        paint__()
+    catch e
+        Oops_("pills: draw", e)
+    end try
+end sub
+
+sub paint__()
     focused = m.top.hasFocus()
     slide()
     on = m.top.on

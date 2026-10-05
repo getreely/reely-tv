@@ -18,6 +18,7 @@
   <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/Listen.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/ScreenKit.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/Oops.brs" />
   <children>
     <!-- As the Fire TV's: the title's picture behind the whole screen, fading into the black
          at the left and the bottom; the screens sit 130 down, under the tabs. -->

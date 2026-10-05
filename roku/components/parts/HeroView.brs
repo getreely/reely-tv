@@ -14,10 +14,28 @@ sub init()
 end sub
 
 sub showArt()
+    Crumb_("hero: picture")
+    try
+        showArt__()
+    catch e
+        Oops_("hero: picture", e)
+    end try
+end sub
+
+sub showArt__()
     if m.art.uri <> m.artUri then m.art.uri = m.artUri
 end sub
 
 sub show()
+    Crumb_("hero")
+    try
+        show__()
+    catch e
+        Oops_("hero", e)
+    end try
+end sub
+
+sub show__()
     i = m.top.item
     ' The same title again, as a page is drawn again while it loads: nothing to do, and the
     ' picture isn't fetched again.

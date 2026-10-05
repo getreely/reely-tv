@@ -19,6 +19,15 @@ sub init()
 end sub
 
 sub render()
+    Crumb_("Home: rows")
+    try
+        render__()
+    catch e
+        Oops_("Home: rows", e)
+    end try
+end sub
+
+sub render__()
     if Gone_() then return
     h = m.global.home
     if h = invalid then return
@@ -67,8 +76,17 @@ sub render()
     showHero()
 end sub
 
-' The hero: the title with the cursor in the rows, else the first title on the page.
 sub onFocused()
+    Crumb_("Home: cursor")
+    try
+        onFocused__()
+    catch e
+        Oops_("Home: cursor", e)
+    end try
+end sub
+
+' The hero: the title with the cursor in the rows, else the first title on the page.
+sub onFocused__()
     showHero()
 end sub
 
@@ -84,6 +102,15 @@ sub showHero()
 end sub
 
 sub focusIn()
+    Crumb_("Home: cursor in")
+    try
+        focusIn__()
+    catch e
+        Oops_("Home: cursor in", e)
+    end try
+end sub
+
+sub focusIn__()
     ' A Roku won't give the cursor to a list with nothing in it: until the rows come, the
     ' page itself holds it, so it isn't lost (the remote's arrows then went nowhere).
     if m.rows.content <> invalid and m.rows.content.getChildCount() > 0 then
@@ -93,8 +120,17 @@ sub focusIn()
     end if
 end sub
 
-' "Ready to watch": the first of what's arrived, and how many after it.
 sub paintReady()
+    Crumb_("Home: ready")
+    try
+        paintReady__()
+    catch e
+        Oops_("Home: ready", e)
+    end try
+end sub
+
+' "Ready to watch": the first of what's arrived, and how many after it.
+sub paintReady__()
     if Gone_() then return
     list = Arr_(m.global.ready)
     had = m.readyGroup.visible
@@ -121,6 +157,15 @@ sub onReady()
 end sub
 
 sub onSelected()
+    Crumb_("Home: OK")
+    try
+        onSelected__()
+    catch e
+        Oops_("Home: OK", e)
+    end try
+end sub
+
+sub onSelected__()
     item = SelectedRowItem_(m.rows)
     if item <> invalid then m.top.go = RouteFor_(item)
 end sub
@@ -129,6 +174,16 @@ sub answered(r as object)
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
+    if press then Crumb_("Home " + key)
+    try
+        return onKeyEvent__(key, press)
+    catch e
+        Oops_("Home " + key, e)
+    end try
+    return true
+end function
+
+function onKeyEvent__(key as string, press as boolean) as boolean
     if not press then return false
     ' The Options key: the poster's menu, as holding OK is on the Fire TV.
     if key = "up" and m.rows.hasFocus() and m.readyGroup.visible and m.rows.rowItemFocused[0] = 0 then

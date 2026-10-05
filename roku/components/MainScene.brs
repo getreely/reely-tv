@@ -2,6 +2,13 @@
 ' the poster menu and the player. Each page is its own component in components/screens.
 
 sub init()
+    ' Watching from its own thread for the app being held up (see Watchdog.brs).
+    m.dog = CreateObject("roSGNode", "Watchdog")
+    m.global.addFields({ watchdog: m.dog })
+    m.dog.control = "run"
+    m.beats = 0
+    m.top.findNode("beatTimer").observeField("fire", "beat")
+    m.top.findNode("beatTimer").control = "start"
     m.store = CreateObject("roRegistrySection", "reely")
     clientId = m.store.Read("clientId")
     if clientId = "" then
@@ -52,6 +59,50 @@ sub init()
     else
         startSignIn()
     end if
+end sub
+
+sub beat()
+    m.beats = m.beats + 1
+    m.dog.beat = m.beats
+end sub
+
+' What went wrong last time, or held the app up, said along the bottom once, for a while:
+' a sideloaded app has nowhere else to say it. Settings keeps the report under About.
+sub sayLastProblem()
+    said = m.store.Read("problemSaid")
+    words = ""
+    newest = said
+    raw = m.store.Read("problem")
+    if raw <> "" then
+        p = ParseJson(raw)
+        if type(p) = "roAssociativeArray" and Str_(p.at) <> said and Num_(p.at) > Num_(said) then
+            words = "Last time something went wrong: " + Str_(p.message) + " (" + Str_(p.what) + Iif_(Arr_(p.lines).Count() > 0, ", " + Join_(Arr_(p.lines), " < ").Replace("pkg:/components/", "").Replace("pkg:/source/", ""), "") + ")"
+            newest = Str_(p.at)
+        end if
+    end if
+    raw = m.store.Read("stall")
+    if raw <> "" then
+        st = ParseJson(raw)
+        if type(st) = "roAssociativeArray" and Num_(st.at) > Num_(said) and Num_(st.at) >= Num_(newest) then
+            line = "Last time the app was held up for " + Str_(st.seconds) + "s, at: " + Iif_(Str_(st.crumb) = "", "starting", Str_(st.crumb))
+            words = Join_([words, line], Chr(10))
+            newest = Str_(st.at)
+        end if
+    end if
+    if words = "" then return
+    m.store.Write("problemSaid", newest)
+    m.store.Flush()
+    ' Up a little, for the two lines it may take.
+    m.status.translation = [96, 900]
+    m.status.text = words
+    t = m.top.findNode("saidTimer")
+    t.observeField("fire", "unsayProblem")
+    t.control = "start"
+end sub
+
+sub unsayProblem()
+    say("")
+    m.status.translation = [96, 1010]
 end sub
 
 ' The settings kept on this Roku, with the Fire TV's defaults.
@@ -271,6 +322,7 @@ sub onConnected(a as object)
     loadProfiles()
     if m.stack.Count() = 0 then
         showShell()
+        sayLastProblem()
         openTab("home")
         ' At start the cursor is in Home's rows, as on the other apps.
         intoScreen()
@@ -368,8 +420,17 @@ sub showOnly(view as object)
     say("")
 end sub
 
-' A tab: its page, alone on the stack.
 sub onTab()
+    Crumb_("open tab")
+    try
+        onTab__()
+    catch e
+        Oops_("open tab", e)
+    end try
+end sub
+
+' A tab: its page, alone on the stack.
+sub onTab__()
     openTab(m.nav.chosen)
 end sub
 
@@ -431,6 +492,15 @@ function topScreen() as dynamic
 end function
 
 sub intoScreen()
+    Crumb_("into page")
+    try
+        intoScreen__()
+    catch e
+        Oops_("into page", e)
+    end try
+end sub
+
+sub intoScreen__()
     c = topScreen()
     if c <> invalid then c.focusIn = true
 end sub
@@ -874,6 +944,16 @@ end sub
 ' ------------------------------------------------------------------ The remote
 
 function onKeyEvent(key as string, press as boolean) as boolean
+    if press then Crumb_("scene " + key)
+    try
+        return onKeyEvent__(key, press)
+    catch e
+        Oops_("scene " + key, e)
+    end try
+    return true
+end function
+
+function onKeyEvent__(key as string, press as boolean) as boolean
     if not press then return false
     if m.page = "signIn" and key = "OK" and m.top.findNode("code").text = "" then
         startSignIn()

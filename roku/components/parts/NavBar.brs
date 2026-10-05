@@ -71,6 +71,15 @@ function Iif3_(test as boolean, yes as string, no as string) as string
 end function
 
 sub takeFocus()
+    Crumb_("tabs: cursor in")
+    try
+        takeFocus__()
+    catch e
+        Oops_("tabs: cursor in", e)
+    end try
+end sub
+
+sub takeFocus__()
     ' Into the tabs on the one that's open, as on the Fire TV.
     for i = 0 to m.ids.Count() - 1
         if m.ids[i] = m.top.current then m.at = i
@@ -81,6 +90,14 @@ sub takeFocus()
 end sub
 
 sub focusChanged()
+    try
+        focusChanged__()
+    catch e
+        Oops_("tabs: focus", e)
+    end try
+end sub
+
+sub focusChanged__()
     focused = m.top.hasFocus()
     if focused = m.focused then return
     m.focused = focused
@@ -88,6 +105,14 @@ sub focusChanged()
 end sub
 
 sub paint()
+    try
+        paint__()
+    catch e
+        Oops_("tabs: draw", e)
+    end try
+end sub
+
+sub paint__()
     for i = 0 to m.ids.Count() - 1
         open = m.ids[i] = m.top.current
         here = m.focused and i = m.at
@@ -117,6 +142,16 @@ sub Tint_(node as object, color as string)
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
+    if press then Crumb_("tabs " + key)
+    try
+        return onKeyEvent__(key, press)
+    catch e
+        Oops_("tabs " + key, e)
+    end try
+    return true
+end function
+
+function onKeyEvent__(key as string, press as boolean) as boolean
     if not press then return false
     if key = "left" and m.at > 0 then
         m.at = m.at - 1
@@ -156,6 +191,15 @@ sub arrive()
 end sub
 
 sub openPending()
+    Crumb_("tabs: open")
+    try
+        openPending__()
+    catch e
+        Oops_("tabs: open", e)
+    end try
+end sub
+
+sub openPending__()
     m.settle.control = "stop"
     id = m.pending
     m.pending = ""

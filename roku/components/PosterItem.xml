@@ -16,6 +16,7 @@
   <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
   <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/Oops.brs" />
   <children>
     <!-- The cursor: an outline round the picture alone, so the name below stays readable. -->
     <Rectangle id="ring" color="0xF2F4F7FF" visible="false" />

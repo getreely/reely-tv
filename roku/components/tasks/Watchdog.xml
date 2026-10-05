@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Keeps an eye on the app from its own thread: the scene says it's alive every half second,
+     and what it's doing. Held up for longer than a moment, that's kept on the Roku and said
+     at the next start. -->
+<component name="Watchdog" extends="Task">
+  <interface>
+    <field id="beat" type="integer" alwaysNotify="true" />
+    <field id="crumb" type="string" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/tasks/Watchdog.brs" />
+</component>

@@ -384,6 +384,15 @@ sub onRowPicked()
 end sub
 
 sub focusIn()
+    Crumb_("title page: cursor in")
+    try
+        focusIn__()
+    catch e
+        Oops_("title page: cursor in", e)
+    end try
+end sub
+
+sub focusIn__()
     m.actions.setFocus(true)
 end sub
 
@@ -398,6 +407,16 @@ sub scrollTo(lower as boolean)
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
+    if press then Crumb_("title page " + key)
+    try
+        return onKeyEvent__(key, press)
+    catch e
+        Oops_("title page " + key, e)
+    end try
+    return true
+end function
+
+function onKeyEvent__(key as string, press as boolean) as boolean
     if not press then return false
     ' Down the page in order: the buttons, a film's copies, a show's seasons and then its
     ' episodes, then the cast and more like it. Up comes back the same way.
