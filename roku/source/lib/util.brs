@@ -76,8 +76,11 @@ function StableSort_(list as object, before as function) as object
     return out
 end function
 
+' As roUrlTransfer's Escape does it (all but letters, digits and - _ . ~), without making one:
+' a Roku can't make one on the scene's thread, where every picture's address is put
+' together, and each try held up the remote before it failed.
 function UrlEncode_(s as string) as string
-    return CreateObject("roUrlTransfer").Escape(s)
+    return s.EncodeUriComponent().Replace("!", "%21").Replace("'", "%27").Replace("(", "%28").Replace(")", "%29").Replace("*", "%2A")
 end function
 
 function Join_(parts as object, sep as string) as string

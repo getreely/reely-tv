@@ -8,8 +8,11 @@ sub watch()
     port = CreateObject("roMessagePort")
     m.top.observeField("beat", port)
     m.top.observeField("crumb", port)
-    store = CreateObject("roRegistrySection", "reely")
+    m.store = CreateObject("roRegistrySection", "reely")
     since = CreateObject("roTimespan")
+    clock = CreateObject("roTimespan")
+    ' The last few things the scene said, each with when, oldest first.
+    m.trail = []
     crumb = ""
     ' What the scene said last before it was held up, and what it said first after: what it
     ' was doing can come only once it's done.
@@ -22,11 +25,15 @@ sub watch()
         if type(msg) = "roSGNodeEvent" then
             if msg.getField() = "crumb" then
                 crumb = msg.getData()
+                m.trail.Push({ ms: clock.TotalMilliseconds(), what: crumb })
+                if m.trail.Count() > 12 then m.trail.Shift()
                 if kept > 0 and during = "" then
                     during = crumb
-                    keep(store, kept, before, during)
+                    keep(kept, before, during, false)
                 end if
             else
+                ' Going again: said so, with how long it was held up in all.
+                if kept > 0 then keep(Int(held / 1000), before, during, true)
                 since.Mark()
                 held = 0
                 kept = 0
@@ -40,16 +47,20 @@ sub watch()
             seconds = Int(held / 1000)
             if seconds > kept then
                 kept = seconds
-                keep(store, kept, before, during)
+                keep(kept, before, during, false)
             end if
         end if
     end while
 end sub
 
-sub keep(store as object, seconds as integer, before as string, during as string)
+sub keep(seconds as integer, before as string, during as string, ended as boolean)
     at = during
     if at = "" then at = before
-    stall = { at: CreateObject("roDateTime").AsSeconds(), seconds: seconds, crumb: at, before: before }
-    store.Write("stall", FormatJson(stall))
-    store.Flush()
+    trail = []
+    for each c in m.trail
+        trail.Push(c.what)
+    end for
+    stall = { at: CreateObject("roDateTime").AsSeconds(), seconds: seconds, crumb: at, before: before, trail: trail, ended: ended }
+    m.store.Write("stall", FormatJson(stall))
+    m.store.Flush()
 end sub

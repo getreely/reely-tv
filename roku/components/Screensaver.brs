@@ -1,4 +1,7 @@
 sub init()
+    store = CreateObject("roRegistrySection", "reely")
+    store.Write("saverAt", CreateObject("roDateTime").AsSeconds().ToStr())
+    store.Flush()
     m.top.backgroundColor = "0x08090BFF"
     m.top.backgroundUri = ""
     m.top.findNode("title").font = Bold_(52)

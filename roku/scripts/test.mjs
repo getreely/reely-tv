@@ -27,5 +27,19 @@ for (const file of readdirSync("tests").filter((f) => f.endsWith(".test.brs"))) 
   }
   if (!out.includes("Finished")) { failed++; console.error(`${file}: didn't finish\n${out}`); }
 }
+// What a Roku won't make on the scene's thread (the simulator will): roUrlTransfer, in any
+// script a component other than a Task runs. Made there, it comes back invalid, after a long
+// wait each time.
+const offThread = /CreateObject\("(roUrlTransfer|roSocketAddress|roStreamSocket|roDataGramSocket)"\)/;
+const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => e.isDirectory() ? walk(`${dir}/${e.name}`) : [`${dir}/${e.name}`]);
+for (const xml of walk("components").filter((f) => f.endsWith(".xml"))) {
+  const text = readFileSync(xml, "utf8");
+  if (/extends="Task"/.test(text)) continue;
+  for (const [, uri] of text.matchAll(/<script [^>]*uri="pkg:\/([^"]+)"/g)) {
+    const source = readFileSync(uri, "utf8").split("\n").filter((l) => !l.trim().startsWith("'")).join("\n");
+    if (offThread.test(source)) { failed++; console.error(`${xml}: ${uri} makes ${source.match(offThread)[1]}, which a Roku won't on the scene's thread`); }
+    else passed++;
+  }
+}
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -11,6 +11,7 @@
   <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
   <script type="text/brightscript" uri="pkg:/source/lib/extras.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/Oops.brs" />
   <children>
     <Rectangle width="1920" height="1080" color="0x08090BE6" />
     <Poster uri="pkg:/images/card.9.png" blendColor="0x15171BFF" translation="[460, 250]" width="1000" height="580" />

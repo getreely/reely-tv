@@ -73,8 +73,12 @@ end sub
 
 sub onAnswer___(event as object)
     task = event.getRoSGNode()
-    if task <> invalid and m.tasks_ <> invalid then m.tasks_.Delete(task.key_)
+    key = ""
+    if task <> invalid then key = Str_(task.key_)
+    Crumb_("answer " + key)
+    if task <> invalid and m.tasks_ <> invalid then m.tasks_.Delete(key)
     answered(event.getData())
+    Crumb_("answered " + key)
 end sub
 
 ' A poster's content: its picture, words, count and how far through it is.

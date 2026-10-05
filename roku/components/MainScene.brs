@@ -291,6 +291,7 @@ sub answered(r as object)
 end sub
 
 sub onConnected(a as object)
+    Crumb_("server found")
     if a.signedOut = true then
         ' Signed out elsewhere: sign in again.
         m.store.Delete("plexToken")
@@ -344,6 +345,7 @@ sub loadWatchlist()
 end sub
 
 sub onHome(a as object)
+    Crumb_("Home read")
     if a = invalid then return
     old = m.global.home
     if not a.answered then
@@ -374,6 +376,7 @@ end sub
 
 ' Home as shown, and its artwork kept for the screensaver, which runs on its own.
 sub setHome(h as object)
+    Crumb_("Home kept")
     m.global.home = h
     slides = []
     for each s in Saver_Slides(h, 12)
@@ -399,6 +402,7 @@ sub loadIptv(refresh as boolean)
 end sub
 
 sub onIptvState()
+    Crumb_("IPTV state")
     s = m.iptv.catalogState
     was = m.global.iptvState
     m.global.iptvState = s
@@ -718,6 +722,7 @@ end sub
 
 ' The first look takes in what was ready already without saying so: that isn't news.
 sub onReady(a as object)
+    Crumb_("requests ready")
     if a = invalid or a.problem <> "" then return
     r = m.global.reely
     if a.cookie <> "" and a.cookie <> Str_(r.cookie) then
@@ -770,6 +775,7 @@ sub loadProfiles()
 end sub
 
 sub showProfiles()
+    Crumb_("profiles shown")
     profile = m.global.profile
     if profile = invalid or Arr_(profile.homeUsers).Count() < 2 or m.profiles <> invalid then return
     m.profiles = CreateObject("roSGNode", "ProfilesView")
@@ -800,6 +806,7 @@ sub maybeTour()
 end sub
 
 sub showTour()
+    Crumb_("tour shown")
     if m.tour <> invalid or m.profiles <> invalid or m.page = "player" then return
     m.tour = CreateObject("roSGNode", "TourView")
     m.tour.observeField("done", "onTourDone")
@@ -808,6 +815,7 @@ sub showTour()
 end sub
 
 sub onTourDone()
+    Crumb_("tour put away")
     ' Every tour there is goes, not only the one this remembers.
     for i = m.overlays.getChildCount() - 1 to 0 step -1
         child = m.overlays.getChild(i)
@@ -831,6 +839,7 @@ sub onTourDone()
 end sub
 
 sub onProfileChosen()
+    Crumb_("profile chosen")
     chosen = m.profiles.chosen
     if chosen.close = true then
         closeProfiles()
@@ -849,6 +858,7 @@ end sub
 
 ' Another profile: its own token, and everything on screen, the last profile's, read again.
 sub onSwitched(a as object)
+    Crumb_("profile switched")
     if m.profiles = invalid then return
     if a = invalid or a.token = invalid then
         m.profiles.busy = ""
@@ -914,6 +924,7 @@ sub checkReminders()
 end sub
 
 sub showReminder(r as object)
+    Crumb_("reminder shown")
     m.notice = CreateObject("roSGNode", "ReminderNotice")
     m.notice.reminder = r
     m.notice.observeField("chosen", "onReminderChosen")

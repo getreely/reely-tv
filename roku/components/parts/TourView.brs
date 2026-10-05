@@ -134,6 +134,7 @@ end sub
 
 ' Every key is the tour's while it's up: along the buttons, OK on one, Back a step.
 function onKeyEvent(key as string, press as boolean) as boolean
+    if press then Crumb_("tour " + key)
     if not press or m.finished then return true
     if key = "back" then
         if m.step = 0 then
