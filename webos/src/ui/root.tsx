@@ -183,6 +183,7 @@ export function Root(props: { app: App }) {
                 {state.plex.user?.title ?? "Profiles"}
               </button>
             ) : null}
+            {state.plex.serverName ? <span class="server-name">{state.plex.serverName}</span> : null}
             <button class={"tab icon" + (route.name === "settings" ? " on" : "")} data-focus aria-label="Settings" onClick={() => app.navigate({ name: "settings" })}>
               <GearGlyph />
             </button>

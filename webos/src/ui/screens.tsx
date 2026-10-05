@@ -128,11 +128,11 @@ export function Home(props: { app: App; state: AppState }) {
             <Card
               key={plex.listKey(i)}
               item={i} onFocus={seen(i)}
-              wide
               autofocus={auto()}
               title={plex.rowTitle(i)}
               sub={episodeLine(i)}
-              image={img(i, 480, 270, i.art ?? i.thumb)}
+              // A poster, as the Fire TV's Continue Watching is: the show's, for an episode.
+              image={img(i, 300, 450, i.type === "episode" ? i.grandparentThumb ?? i.thumb : i.thumb)}
               progress={plex.resumeFraction(i)}
               onPress={() => open(app, i)}
             />

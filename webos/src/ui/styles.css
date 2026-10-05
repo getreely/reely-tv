@@ -17,8 +17,11 @@
   /* What's written on the blue, and errors' own red, so a problem never looks like a highlight. */
   --on-accent: #ffffff;
   --danger: #ff6b6b;
-  /* 16px on a 1920 screen, in step on a 1280 one. */
-  font-size: calc(100vw / 120);
+  /* The Fire TV's scale: it lays out on 960 x 540 points, two pixels each on a 1920
+     screen, and its margins, posters and lettering measure about 1.75 of this app's
+     units. So a unit is 1920 / 70 = 27.4 pixels on a 1920 screen, in step on a 1280
+     one. At 16 pixels, everything here was drawn at half the Fire TV's size. */
+  font-size: calc(100vw / 70);
 }
 
 * { box-sizing: border-box; }
@@ -29,10 +32,14 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 .app { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column; }
 /* The tabs on the left, Search and Settings at the far end; margins, as Chromium 68 has no flex gap. */
-.tabs { position: relative; z-index: 1; display: flex; align-items: center; padding: 1.5rem 3rem 0.5rem; }
+/* A solid band, as the Fire TV's: the picture behind a page starts under it. */
+.tabs { position: relative; z-index: 1; display: flex; align-items: center; padding: 1.5rem 3rem 0.5rem; background: var(--ink); }
 .tabs > * { margin-right: 0.5rem; }
 .tab { padding: 0.55rem 1.1rem; border-radius: 999px; color: var(--muted); font-size: 1.1rem; font-weight: 500; }
-.tab.on { color: var(--chalk); font-weight: 600; }
+.tab.on { position: relative; color: var(--chalk); font-weight: 600; }
+/* The tab that's open is underlined in the accent, as on the Fire TV. */
+.tab.on:not(.icon)::after { content: ""; position: absolute; left: 50%; bottom: 0.05rem; width: 1.3rem; height: 0.18rem; margin-left: -0.65rem; border-radius: 999px; background: var(--accent); }
+.server-name { align-self: center; color: var(--muted); font-size: 1rem; margin-right: 1.2rem; }
 .tab:focus { background: var(--chalk); color: var(--ink); }
 .tab.icon { display: flex; align-items: center; padding: 0.55rem 0.75rem; }
 .glyph { width: 1.4rem; height: 1.4rem; display: block; }
@@ -47,15 +54,15 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .strip::-webkit-scrollbar { display: none; }
 
 .card { flex: none; width: 9rem; text-align: left; border-radius: 0.9rem; transition: transform 140ms ease; }
-.card.wide { width: 18rem; }
+.card.wide { width: 15rem; }
 .card:focus { transform: scale(1.06); }
 .art { position: relative; width: 100%; padding-top: 150%; border-radius: 0.9rem; overflow: hidden; background: var(--high); }
 .wide .art { padding-top: 56.25%; }
 .art img { position: absolute; top: 0; right: 0; bottom: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
 .card:focus .art { box-shadow: 0 0 0 0.22rem var(--chalk), 0 0.6rem 2rem var(--accent-glow); }
-.card .title { margin-top: 0.55rem; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+.card .title { margin-top: 0.55rem; font-size: 1.05rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
 .card:focus .title { color: var(--chalk); font-weight: 600; }
-.card .sub { font-size: 0.8rem; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .sub { font-size: 0.9rem; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .progress { position: absolute; left: 0; right: 0; bottom: 0; height: 0.3rem; background: rgba(8, 9, 11, 0.6); }
 .progress > i { display: block; height: 100%; background: var(--accent); }
 /* The count stays in a circle of one size; a long number is drawn smaller, never wrapped. */
@@ -244,7 +251,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .content.heroed { overflow: hidden; padding: 0; }
 /* Its own layer, so the backdrop sits behind the page but over the black of the body; the tabs stay above it. */
 .with-hero { position: relative; z-index: 0; display: flex; flex-direction: column; height: 100%; }
-.home-hero { flex: none; height: 17rem; padding: 0.6rem 3rem 0; display: flex; flex-direction: column; justify-content: flex-end; }
+.home-hero { flex: none; height: 12rem; padding: 0.4rem 3rem 0; display: flex; flex-direction: column; justify-content: flex-start; }
 .home-hero h1 { margin: 0 0 0.5rem; font-size: 2.8rem; font-weight: 700; letter-spacing: -0.02em; max-width: 50rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .home-hero .hero-logo { display: block; max-width: 24rem; max-height: 6rem; object-fit: contain; object-position: left bottom; margin-bottom: 0.7rem; }
 .home-hero .facts { display: flex; align-items: center; font-size: 1.15rem; color: var(--muted); margin-bottom: 0.5rem; }
