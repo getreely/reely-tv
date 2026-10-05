@@ -310,17 +310,32 @@ function About_() as object
         Group_("Help", [Row_("Take the tour", "How to get around with the remote.", "", "tour")]),
         Group_("Licenses", [Row_("Geist", "The typeface.", "SIL Open Font License", "")])
     ]
-    ' What went wrong last, kept on this Roku only.
-    raw = CreateObject("roRegistrySection", "reely").Read("problem")
+    ' What went wrong last, and the last time the app was held up, kept on this Roku only.
+    store = CreateObject("roRegistrySection", "reely")
+    rows = []
+    raw = store.Read("problem")
     problem = invalid
     if raw <> "" then problem = ParseJson(raw)
     if problem <> invalid and type(problem) = "roAssociativeArray" then
         note = DateOf_(Num_(problem.at)) + "  ·  " + Str_(problem.message)
         if m.reading = true then note = Problem_Detail(problem)
-        out.Push(Group_("Problem report", [
-            Row_("Something went wrong", note, Iif_(m.reading = true, "Hide", "View"), "problemView"),
-            Row_("Clear the report", "", "", "problemClear")
-        ], "Kept on this Roku only. Nothing is sent anywhere."))
+        rows.Push(Row_("Something went wrong", note, Iif_(m.reading = true, "Hide", "View"), "problemView"))
+    end if
+    raw = store.Read("stall")
+    stall = invalid
+    if raw <> "" then stall = ParseJson(raw)
+    if stall <> invalid and type(stall) = "roAssociativeArray" and not HeldBySaver_(stall, Num_(store.Read("saverAt"))) then
+        note = DateOf_(Num_(stall.at)) + "  ·  For " + Str_(stall.seconds) + " seconds"
+        if m.reading = true then
+            note = note + Chr(10) + "While: " + Iif_(Str_(stall.crumb) = "", "starting", Str_(stall.crumb))
+            if Arr_(stall.trail).Count() > 0 then note = note + Chr(10) + "Before that: " + Join_(Arr_(stall.trail), " › ")
+            if stall.ended = true then note = note + Chr(10) + "It went on again afterwards."
+        end if
+        rows.Push(Row_("The app was held up", note, Iif_(m.reading = true, "Hide", "View"), "problemView"))
+    end if
+    if rows.Count() > 0 then
+        rows.Push(Row_("Clear the report", "", "", "problemClear"))
+        out.Push(Group_("Problem report", rows, "Kept on this Roku only. Nothing is sent anywhere."))
     end if
     return out
 end function
@@ -348,6 +363,13 @@ function HostOf_(address as string) as string
     login = Instr(1, rest, "@")
     if login > 0 then rest = Mid(rest, login + 1)
     return rest
+end function
+
+' Held up while the Roku's screensaver was on: the app was only waiting, not stuck.
+function HeldBySaver_(stall as object, saverAt as dynamic) as boolean
+    ends = Num_(stall.at)
+    starts = ends - Num_(stall.seconds)
+    return saverAt >= starts and saverAt <= ends
 end function
 
 function DateOf_(epoch as dynamic) as string
@@ -759,6 +781,7 @@ sub apply(key as string, i as integer)
     else if key = "problemClear" then
         store = CreateObject("roRegistrySection", "reely")
         store.Delete("problem")
+        store.Delete("stall")
         store.Flush()
         m.reading = false
         build()

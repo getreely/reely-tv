@@ -66,45 +66,6 @@ sub beat()
     m.dog.beat = m.beats
 end sub
 
-' What went wrong last time, or held the app up, said along the bottom once, for a while:
-' a sideloaded app has nowhere else to say it. Settings keeps the report under About.
-sub sayLastProblem()
-    said = m.store.Read("problemSaid")
-    words = ""
-    newest = said
-    raw = m.store.Read("problem")
-    if raw <> "" then
-        p = ParseJson(raw)
-        if type(p) = "roAssociativeArray" and Str_(p.at) <> said and Num_(p.at) > Num_(said) then
-            words = "Last time something went wrong: " + Str_(p.message) + " (" + Str_(p.what) + Iif_(Arr_(p.lines).Count() > 0, ", " + Join_(Arr_(p.lines), " < ").Replace("pkg:/components/", "").Replace("pkg:/source/", ""), "") + ")"
-            newest = Str_(p.at)
-        end if
-    end if
-    raw = m.store.Read("stall")
-    if raw <> "" then
-        st = ParseJson(raw)
-        if type(st) = "roAssociativeArray" and Num_(st.at) > Num_(said) and Num_(st.at) >= Num_(newest) then
-            line = "Last time the app was held up for " + Str_(st.seconds) + "s, at: " + Iif_(Str_(st.crumb) = "", "starting", Str_(st.crumb))
-            words = Join_([words, line], Chr(10))
-            newest = Str_(st.at)
-        end if
-    end if
-    if words = "" then return
-    m.store.Write("problemSaid", newest)
-    m.store.Flush()
-    ' Up a little, for the two lines it may take.
-    m.status.translation = [96, 900]
-    m.status.text = words
-    t = m.top.findNode("saidTimer")
-    t.observeField("fire", "unsayProblem")
-    t.control = "start"
-end sub
-
-sub unsayProblem()
-    say("")
-    m.status.translation = [96, 1010]
-end sub
-
 ' The settings kept on this Roku, with the Fire TV's defaults.
 function Prefs_() as object
     p = ReadJson_("prefs", {})
@@ -323,7 +284,6 @@ sub onConnected(a as object)
     loadProfiles()
     if m.stack.Count() = 0 then
         showShell()
-        sayLastProblem()
         openTab("home")
         ' At start the cursor is in Home's rows, as on the other apps.
         intoScreen()

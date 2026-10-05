@@ -32,13 +32,11 @@
     <PlayerView id="player" visible="false" />
     <LiveView id="liveView" visible="false" />
     <Group id="overlays" />
-    <Label id="status" translation="[96, 1010]" width="1700" color="0xFF6B6BFF" wrap="true" />
+    <Label id="status" translation="[96, 1010]" width="1700" color="0xFF6B6BFF" />
     <Timer id="claimTimer" duration="2" repeat="true" />
     <Timer id="retryTimer" duration="30" repeat="false" />
     <Timer id="reminderTimer" duration="30" repeat="true" />
     <!-- The scene saying it's alive, to the watchdog. -->
     <Timer id="beatTimer" duration="0.5" repeat="true" />
-    <!-- How long what went wrong last time is said for. -->
-    <Timer id="saidTimer" duration="45" repeat="false" />
   </children>
 </component>
