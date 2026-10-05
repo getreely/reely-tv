@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "preact/hooks";
-import type { PlexItem } from "../api/plex";
+import type { PlexChapter, PlexItem, PlexStream } from "../api/plex";
 import type { App, Playing, Prefs } from "../app/store";
 import { browserCanPlay, plan, REPORT_EVERY_MS, SKIP_MS } from "../app/playback";
 import { focus, onKeys } from "./focus";
@@ -41,8 +41,14 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
   const [waiting, setWaiting] = useState(true);
   const [controls, setControls] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [panel, setPanel] = useState(false);
-  const [upNext, setUpNext] = useState<{ next: PlexItem; endsAt: number | null } | null>(null);
+  const [panel, setPanel] = useState<Panel | null>(null);
+  // Up Next over the screen, the credits in a window in the corner. Held: any press but
+  // Play next stops the countdown, as on the Fire TV: somebody reaching for the remote is
+  // making up their mind.
+  const [upNext, setUpNext] = useState<{ next: PlexItem; endsAt: number | null; held: boolean } | null>(null);
+  // Where the cursor is among the controls: the bar, a button by its place in the row, or
+  // nowhere (the controls hidden, or only the bar shown by a skip).
+  const [cursor, setCursor] = useState<"bar" | number | null>(null);
   const [, tick] = useState(0);
   const [sleep, setSleep] = useState<Sleep>(null);
   const hideAt = useRef(0);
@@ -134,7 +140,12 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
       ["waiting", wait], ["playing", ready], ["canplay", ready], ["error", fail], ["ended", ended]];
     on.forEach(([e, f]) => v.addEventListener(e, f));
     const report = setInterval(() => { if (!v.paused && !leaving.current) void app.report(now(), total(), "playing"); }, REPORT_EVERY_MS);
-    const hide = setInterval(() => { if (Date.now() > hideAt.current && !v.paused) setControls(false); }, 500);
+    const hide = setInterval(() => {
+      if (Date.now() > hideAt.current && !v.paused) {
+        setControls(false);
+        setCursor(null);
+      }
+    }, 500);
     nudge();
     return () => {
       on.forEach(([e, f]) => v.removeEventListener(e, f));
@@ -164,16 +175,42 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
     creditsOffered.current = key;
     if (sleepRef.current?.endOfEpisode) return;
     if (prefs.skipCredits) playNext(next);
-    else setUpNext({ next, endsAt: prefs.upNextSeconds > 0 ? Date.now() + prefs.upNextSeconds * 1000 : null });
+    else setUpNext({ next, endsAt: prefs.upNextSeconds > 0 ? Date.now() + prefs.upNextSeconds * 1000 : null, held: false });
   }, [inCredits]);
   useEffect(() => {
-    if (!upNext?.endsAt) return;
+    if (!upNext?.endsAt || upNext.held) return;
     const t = setInterval(() => {
       if (Date.now() >= upNext.endsAt!) playNext(upNext.next);
       else tick((n) => n + 1);
     }, 250);
     return () => clearInterval(t);
   }, [upNext]);
+
+  // The row of buttons under the bar, in order: the episodes either side and play in the
+  // middle, then a panel each for chapters, subtitles, sound, the sleep timer and what's playing.
+  const queueAt = playing.queue.findIndex((q) => q.ratingKey === key);
+  const previous = queueAt > 0 ? playing.queue[queueAt - 1] : null;
+  const episodes = playing.item.type === "episode" && playing.queue.length > 1;
+  const buttons: ControlButton[] = [
+    ...(episodes ? [{ id: "previous", label: "Previous episode", glyph: "previous" as const, disabled: !previous, onPress: () => previous && playNext(previous) }] : []),
+    { id: "play", label: paused ? "Play" : "Pause", glyph: paused ? "play" as const : "pause" as const, primary: true, onPress: () => togglePlay() },
+    ...(episodes ? [{ id: "next", label: "Next episode", glyph: "next" as const, disabled: !next, onPress: () => next && playNext(next) }] : []),
+    ...(playing.playback.chapters.length ? [{ id: "chapters", label: "Chapters", glyph: "chapters" as const, onPress: () => setPanel("chapters") }] : []),
+    { id: "subtitles", label: "Subtitles", glyph: "subtitles" as const, onPress: () => setPanel("subtitles") },
+    { id: "audio", label: "Audio", glyph: "audio" as const, onPress: () => setPanel("audio") },
+    { id: "sleep", label: "Sleep timer", glyph: "sleep" as const, on: !!sleep, onPress: () => setPanel("sleep") },
+    { id: "info", label: "Playback info", glyph: "info" as const, onPress: () => setPanel("info") },
+  ];
+  const playAt = buttons.findIndex((b) => b.id === "play");
+  const togglePlay = () => {
+    const v = video.current;
+    if (v) { if (v.paused) void v.play(); else v.pause(); }
+  };
+  /** One along the row from [from], past any that can't be pressed. */
+  const along = (from: number, step: 1 | -1) => {
+    for (let i = from + step; i >= 0 && i < buttons.length; i += step) if (!buttons[i].disabled) return i;
+    return from;
+  };
 
   useEffect(
     () =>
@@ -187,24 +224,41 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
         }
         if (panel) {
           // The panel's own cursor moves and presses; Back closes it.
-          if (a === "back") { setPanel(false); return true; }
+          if (a === "back") { setPanel(null); return true; }
           return !(a === "up" || a === "down" || a === "left" || a === "right" || a === "ok");
         }
         if (upNext) {
-          if (a === "ok") { playNext(upNext.next); return true; }
+          const onPlay = (document.activeElement as HTMLElement | null)?.classList.contains("play-next");
+          if (!(a === "ok" && onPlay) && !upNext.held) setUpNext({ ...upNext, held: true });
           if (a === "back") { setUpNext(null); return true; }
+          // Its two buttons: the cursor moves between them and OK presses.
+          return !(a === "left" || a === "right" || a === "ok");
+        }
+        if (a === "stop") { stop(); return true; }
+        // In the controls: along the row, up to the bar, OK presses; Back puts them away.
+        if (cursor !== null) {
+          if (a === "back") { setCursor(null); setControls(false); return true; }
+          if (cursor === "bar") {
+            if (a === "down") { setCursor(playAt); return true; }
+            if (a === "ok") { togglePlay(); return true; }
+            if (a !== "left" && a !== "right" && a !== "rewind" && a !== "forward") return true;
+          } else {
+            if (a === "left" || a === "right") { setCursor(along(cursor, a === "left" ? -1 : 1)); return true; }
+            if (a === "up") { setCursor("bar"); return true; }
+            if (a === "ok") { buttons[cursor]?.onPress(); return true; }
+            if (a === "down") return true;
+          }
         }
         switch (a) {
           case "back":
-          case "stop":
             stop();
             return true;
           case "ok":
             if (inIntro && intro) { introSkipped.current = key; v.currentTime = intro.endMs / 1000; return true; }
-            if (v.paused) void v.play(); else v.pause();
+            togglePlay();
             return true;
           case "playPause":
-            if (v.paused) void v.play(); else v.pause();
+            togglePlay();
             return true;
           case "play":
             void v.play();
@@ -229,20 +283,39 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
           case "down":
           case "up":
           case "info":
-            setPanel(true);
+            // The controls, the cursor on play.
+            setCursor(playAt);
             return true;
         }
         return true;
       }),
-    [playing.url, panel, upNext, inIntro, !!finding],
+    [playing.url, panel, upNext, inIntro, !!finding, cursor, paused, buttons.length],
   );
 
+  // Up Next arriving: the cursor on Play next.
+  useEffect(() => {
+    if (upNext) focus(document.querySelector<HTMLElement>(".play-next"));
+  }, [!!upNext]);
+
+  // The cursor follows: onto the button it's on, back to it when a panel closes.
+  const controlsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (panel || finding || upNext) return;
+    const root = controlsRef.current;
+    if (!root) return;
+    if (cursor === null) {
+      if (root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
+      return;
+    }
+    focus(root.querySelector<HTMLElement>(cursor === "bar" ? ".scrub-focus" : `[data-at="${cursor}"]`));
+  }, [cursor, panel, !!finding, !!upNext, buttons.length]);
+
   const choose = (audio: string | undefined, subtitle: string | undefined) => {
-    setPanel(false);
+    setPanel(null);
     void app.chooseStreams(audio, subtitle, now(), (p) => playDirect(video.current ?? document.createElement("video"), p));
   };
   const find = async () => {
-    setPanel(false);
+    setPanel(null);
     setFinding({ language: "", results: null, error: null, adding: null });
     const found = await app.findSubtitles();
     setFinding((f) => f && { ...f, language: found.language, results: found.results, error: found.error });
@@ -255,7 +328,7 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
     else setFinding(null);
   };
   const setSleepFor = (minutes: number) => {
-    setPanel(false);
+    setPanel(null);
     setSleep(minutes === 0 ? null : minutes === END_OF_EPISODE ? { atMs: null, endOfEpisode: true } : { atMs: Date.now() + minutes * 60_000, endOfEpisode: false });
   };
 
@@ -271,138 +344,273 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
   const previewUrl = preview && playing.playback.previewUrl ? playing.playback.previewUrl.replace("{ms}", String(preview.ms)) : null;
   const words = textSub ? cueAt(cues, position) : null;
   const seconds = upNext?.endsAt ? Math.max(0, Math.ceil((upNext.endsAt - Date.now()) / 1000)) : null;
+  const upNextArt = upNext ? app.image(upNext.next.serverBase, upNext.next.thumb ?? upNext.next.art, 1280, 720) : null;
+  const upNextLogo = upNext && upNext.next.logo ? app.image(upNext.next.serverBase, upNext.next.logo, 600, 240) : null;
+  const countdown = upNext?.endsAt && !upNext.held && prefs.upNextSeconds > 0
+    ? { left: seconds ?? 0, fraction: Math.min(1, 1 - (upNext.endsAt - Date.now()) / (prefs.upNextSeconds * 1000)) }
+    : null;
   return (
     <div class="player" data-layer>
-      <video ref={video} class="video" playsInline />
-      {waiting && !error ? <div class="player-wait"><Spinner /></div> : null}
+      <video ref={video} class={"video" + (upNext ? " windowed" : "")} playsInline />
+      {waiting && !error && !upNext ? <div class="player-wait"><Spinner /></div> : null}
       {error ? <div class="player-wait"><p class="note error">{error}</p></div> : null}
-      {words ? (
+      {words && !upNext ? (
         <div class={"subtitle-line" + (prefs.subtitleBackground ? " boxed" : "")} style={{ fontSize: `${2.2 * prefs.subtitleScale}rem` }}>
           {words.split("\n").map((l, i) => <span key={i}>{l}</span>)}
         </div>
       ) : null}
-      {inIntro && !upNext && !panel ? <div class="skip-prompt">Skip Intro</div> : null}
+      {/* Over the intro, OK skips it: low in the corner, or above the bar while the controls are up. */}
+      {inIntro && !upNext && !panel ? <div class={"skip-prompt" + (controls || paused || cursor !== null ? " raised" : "")}>Skip Intro</div> : null}
       {upNext ? (
-        <div class="up-next">
-          <div class="facts">Up next</div>
-          <div class="player-title">{episodeLine(upNext.next)}</div>
-          <div class="facts">{seconds != null ? `Playing in ${seconds}  ·  OK to play now  ·  Back to keep watching` : "OK to play  ·  Back to keep watching"}</div>
+        <div class="post-play">
+          {upNextArt ? <div class="post-art" style={{ backgroundImage: `url("${upNextArt}")` }} /> : null}
+          <div class="post-shade" />
+          <div class="post-window" />
+          <div class="post-now">{`Credits  ·  ${title}`}</div>
+          <div class="post-text">
+            <div class="post-label">Up next</div>
+            {upNextLogo ? <img class="title-logo" src={upNextLogo} alt={upNext.next.grandparentTitle ?? upNext.next.title} />
+              : <div class="title-name">{upNext.next.grandparentTitle ?? upNext.next.title}</div>}
+            {upNextLine(upNext.next) ? <div class="facts">{upNextLine(upNext.next)}</div> : null}
+            {upNext.next.grandparentTitle ? <div class="post-title">{upNext.next.title}</div> : null}
+            {upNext.next.summary ? <div class="summary">{upNext.next.summary}</div> : null}
+            <div class="post-actions">
+              <button class="pill primary play-next" data-focus data-autofocus onClick={() => playNext(upNext.next)}>
+                {countdown ? <i class="countdown" style={{ width: `${countdown.fraction * 100}%` }} /> : null}
+                <span>{countdown ? `Play next  ·  ${countdown.left}` : "Play next"}</span>
+              </button>
+              <button class="pill" data-focus onClick={() => setUpNext(null)}>Watch credits</button>
+            </div>
+          </div>
         </div>
       ) : null}
-      <div class={"player-bar" + (controls || paused ? " on" : "")}>
-        <div class="player-title">{title}</div>
-        {sub ? <div class="facts">{sub}</div> : null}
-        {preview ? (
-          <div class="preview" style={{ left: `${Math.min(92, Math.max(8, (duration > 0 ? preview.ms / duration : 0) * 100))}%` }}>
-            {previewUrl ? <img src={previewUrl} alt="" /> : null}
-            <span>{clock(preview.ms)}</span>
+      <div ref={controlsRef} class={"player-bar" + ((controls || paused || cursor !== null) && !upNext ? " on" : "")}>
+        <div class={"scrub-focus" + (cursor === "bar" ? " on" : "")} data-focus={cursor !== null ? "" : undefined} tabIndex={-1}>
+          {preview ? (
+            <div class="preview" style={{ left: `${Math.min(92, Math.max(8, (duration > 0 ? preview.ms / duration : 0) * 100))}%` }}>
+              {previewUrl ? <img src={previewUrl} alt="" /> : null}
+              <span>{clock(preview.ms)}</span>
+            </div>
+          ) : null}
+          <div class="scrub"><i style={{ width: `${fraction * 100}%` }} /></div>
+          <div class="player-times">
+            <span>{paused ? "Paused  ·  " : ""}{clock(position)}{sleepNote ? `  ·  ${sleepNote}` : ""}</span>
+            <span>−{clock(Math.max(0, duration - position))}</span>
           </div>
-        ) : null}
-        <div class="scrub"><i style={{ width: `${fraction * 100}%` }} /></div>
-        <div class="player-times">
-          <span>{paused ? "Paused  ·  " : ""}{clock(position)}{sleepNote ? `  ·  ${sleepNote}` : ""}</span>
-          <span>−{clock(Math.max(0, duration - position))}</span>
+        </div>
+        <div class="player-row">
+          <div class="player-what">
+            <div class="player-title">{title}</div>
+            {sub ? <div class="facts">{sub}</div> : null}
+          </div>
+          <div class="transport">
+            {buttons.map((b, i) => (b.id === "previous" || b.id === "play" || b.id === "next") ? (
+              <ControlKey key={b.id} button={b} at={i} active={cursor !== null} />
+            ) : null)}
+          </div>
+          <div class="player-options">
+            {buttons.map((b, i) => (b.id === "previous" || b.id === "play" || b.id === "next") ? null : (
+              <ControlKey key={b.id} button={b} at={i} active={cursor !== null} />
+            ))}
+          </div>
         </div>
       </div>
-      {panel ? (
-        <Options
+      {panel ? <div class="menu-shade player-shade" /> : null}
+      {panel === "audio" ? (
+        <TrackPanel title="Audio" empty="There's only one audio track." streams={playing.playback.audioStreams} off={false}
+          onPick={(id) => choose(id, undefined)} />
+      ) : null}
+      {panel === "subtitles" ? (
+        <SubtitlesPanel
           playing={playing}
-          sleep={sleep}
-          onSound={(id) => choose(id, undefined)}
-          onSubtitles={(id) => choose(undefined, id)}
-          onChapter={(ms) => { setPanel(false); if (video.current) video.current.currentTime = ms / 1000; }}
-          onSleep={setSleepFor}
-          onFind={playing.base !== "iptv:" ? () => void find() : null}
           prefs={prefs}
+          onPick={(id) => choose(undefined, id)}
+          onFind={playing.base !== "iptv:" ? () => void find() : null}
           onSize={(step) => app.nudgeSubtitleScale(step)}
           onBackground={() => app.setSubtitleBackground(!prefs.subtitleBackground)}
         />
       ) : null}
+      {panel === "chapters" ? (
+        <ChaptersPanel chapters={playing.playback.chapters} positionMs={position}
+          onPick={(ms) => { setPanel(null); if (video.current) video.current.currentTime = ms / 1000; }} />
+      ) : null}
+      {panel === "sleep" ? <SleepPanel sleep={sleep} episode={playing.item.type === "episode"} onPick={setSleepFor} /> : null}
+      {panel === "info" ? <InfoPanel playing={playing} /> : null}
       {finding ? <FindSubtitles finding={finding} onAdd={(s) => void add(s)} onClose={() => setFinding(null)} /> : null}
     </div>
   );
 }
 
-/** Sound, subtitles, chapters and the sleep timer, down the right of the picture. */
-function Options(props: {
-  playing: Playing;
-  sleep: Sleep;
-  onSound: (id: string) => void;
-  onSubtitles: (id: string) => void;
-  onChapter: (ms: number) => void;
-  onSleep: (minutes: number) => void;
-  onFind: (() => void) | null;
-  prefs: Prefs;
-  onSize: (step: 1 | -1) => void;
-  onBackground: () => void;
-}) {
-  const p = props.playing.playback;
+type Panel = "subtitles" | "audio" | "chapters" | "sleep" | "info";
+type ControlGlyph = "previous" | "play" | "pause" | "next" | "chapters" | "subtitles" | "audio" | "sleep" | "info";
+
+interface ControlButton {
+  id: string;
+  label: string;
+  glyph: ControlGlyph;
+  primary?: boolean;
+  /** Lit: a sleep timer is set. */
+  on?: boolean;
+  disabled?: boolean;
+  onPress: () => void;
+}
+
+/** "Season 2  ·  Episode 6  ·  44 min", from whichever of those the item has. */
+const upNextLine = (i: PlexItem) =>
+  [i.parentIndex != null ? `Season ${i.parentIndex}` : null, i.index != null ? `Episode ${i.index}` : null,
+    i.durationMs > 0 ? `${Math.max(1, Math.round(i.durationMs / 60_000))} min` : null].filter(Boolean).join("  ·  ");
+
+/** One of the round buttons under the bar. Only takes the cursor while the controls have it. */
+function ControlKey(props: { button: ControlButton; at: number; active: boolean }) {
+  const b = props.button;
+  return (
+    <button
+      class={"ctl" + (b.primary ? " primary" : "") + (b.on ? " on" : "")}
+      data-focus={props.active && !b.disabled ? "" : undefined}
+      data-at={props.at}
+      aria-label={b.label}
+      aria-disabled={b.disabled ? "true" : undefined}
+      tabIndex={-1}
+      onClick={() => { if (!b.disabled) b.onPress(); }}
+    >
+      <ControlIcon glyph={b.glyph} />
+    </button>
+  );
+}
+
+function ControlIcon(props: { glyph: ControlGlyph }) {
+  const stroke = { fill: "none", stroke: "currentColor", "stroke-width": 8, "stroke-linecap": "round" as const, "stroke-linejoin": "round" as const };
+  const svg = (children: preact.ComponentChildren) => <svg class="glyph" viewBox="0 0 100 100" aria-hidden="true">{children}</svg>;
+  switch (props.glyph) {
+    case "play": return svg(<path d="M34 22 L78 50 L34 78 Z" fill="currentColor" />);
+    case "pause": return svg(<><rect x="28" y="24" width="14" height="52" rx="3" fill="currentColor" /><rect x="58" y="24" width="14" height="52" rx="3" fill="currentColor" /></>);
+    case "previous": return svg(<><path d="M72 26 L36 50 L72 74 Z" fill="currentColor" /><rect x="24" y="26" width="9" height="48" rx="3" fill="currentColor" /></>);
+    case "next": return svg(<><path d="M28 26 L64 50 L28 74 Z" fill="currentColor" /><rect x="67" y="26" width="9" height="48" rx="3" fill="currentColor" /></>);
+    case "chapters": return svg(<><path d="M26 30 H74 M26 50 H74 M26 70 H56" {...stroke} /></>);
+    case "subtitles": return svg(<><rect x="16" y="24" width="68" height="52" rx="10" {...stroke} /><path d="M30 58 H46 M54 58 H70 M30 44 H58" {...stroke} /></>);
+    case "audio": return svg(<><path d="M22 40 H36 L54 24 V76 L36 60 H22 Z" fill="currentColor" /><path d="M66 36 Q76 50 66 64 M74 26 Q92 50 74 74" {...stroke} /></>);
+    case "sleep": return svg(<path d="M64 20 A32 32 0 1 0 80 62 A26 26 0 0 1 64 20 Z" fill="currentColor" />);
+    case "info": return svg(<><circle cx="50" cy="50" r="32" {...stroke} /><path d="M50 46 V68" {...stroke} /><circle cx="50" cy="33" r="5" fill="currentColor" /></>);
+  }
+}
+
+/** A panel down the right, as every menu here: its heading, then its choices. */
+function SidePanel(props: { title: string; children: preact.ComponentChildren }) {
   const panel = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const first = panel.current?.querySelector<HTMLElement>("[data-autofocus]") ?? panel.current?.querySelector<HTMLElement>("[data-focus]");
     focus(first);
   }, []);
-  const subtitlesOn = p.subtitleStreams.find((s) => s.selected) ?? null;
-  const chosen = (key: string, on: boolean, label: string, onPress: () => void, auto = false) => (
-    <button key={key} class={"option" + (on ? " on" : "")} data-focus data-autofocus={auto ? "" : undefined} onClick={onPress}>
-      <span class="tick">{on ? "✓" : ""}</span>
-      {label}
+  return (
+    <div class="options player-panel" data-layer ref={panel}>
+      <div class="panel-title">{props.title}</div>
+      {props.children}
+    </div>
+  );
+}
+
+function Choice(props: { label: string; on?: boolean; detail?: string | null; value?: string | null; icon?: string; autofocus?: boolean; onPress: () => void }) {
+  return (
+    <button class={"option" + (props.on ? " on" : "")} data-focus data-autofocus={props.autofocus ? "" : undefined} onClick={props.onPress}>
+      <span class="tick">{props.on ? "✓" : props.icon ?? ""}</span>
+      <span class="option-text">
+        {props.label}
+        {props.detail ? <span class="option-note">{props.detail}</span> : null}
+      </span>
+      {props.value ? <span class="facts">{props.value}</span> : null}
     </button>
   );
-  const sleepLabel = (m: number) => (m === 0 ? "Off" : m === END_OF_EPISODE ? "End of this episode" : `${m} minutes`);
-  const sleepOn = (m: number) => (m === 0 ? !props.sleep : m === END_OF_EPISODE ? !!props.sleep?.endOfEpisode : false);
+}
+
+function TrackPanel(props: { title: string; empty: string; streams: PlexStream[]; off: boolean; onPick: (id: string) => void }) {
+  const chosen = props.streams.find((s) => s.selected) ?? props.streams[0];
   return (
-    <div class="options" data-layer ref={panel}>
-      {p.audioStreams.length > 1 ? (
-        <section>
-          <h3>Sound</h3>
-          {p.audioStreams.map((s, i) => chosen(`a${s.id}`, s.selected || (!p.audioStreams.some((x) => x.selected) && i === 0), s.label, () => props.onSound(s.id), i === 0))}
-        </section>
-      ) : null}
-      {p.subtitleStreams.length ? (
-        <section>
-          <h3>Subtitles</h3>
-          {chosen("s-off", !subtitlesOn, "Off", () => props.onSubtitles("0"), p.audioStreams.length <= 1)}
-          {p.subtitleStreams.map((s) => chosen(`s${s.id}`, s.selected, s.label, () => props.onSubtitles(s.id)))}
-          {props.onFind ? chosen("s-find", false, "Find subtitles online", props.onFind) : null}
-        </section>
-      ) : props.onFind ? (
-        <section>
-          <h3>Subtitles</h3>
-          {chosen("s-find", false, "Find subtitles online", props.onFind, p.audioStreams.length <= 1)}
-        </section>
-      ) : null}
-      {props.playing.textSubtitle ? (
-        <section>
-          {/* The size it is now heads the two that change it, rather than sitting on one of them. */}
-          <h3>Size  ·  {Math.round(props.prefs.subtitleScale * 100)}%</h3>
-          <button key="size-up" class="option" data-focus onClick={() => props.onSize(1)}><span class="tick">+</span>Increase size</button>
-          <button key="size-down" class="option" data-focus onClick={() => props.onSize(-1)}><span class="tick">−</span>Decrease size</button>
-          <h3>Appearance</h3>
-          <button key="background" class="option" data-focus onClick={props.onBackground}>
-            <span class="tick" />
-            Background  <span class="facts">{props.prefs.subtitleBackground ? "On" : "Off"}</span>
-          </button>
-        </section>
-      ) : null}
-      {p.chapters.length ? (
-        <section>
-          <h3>Chapters</h3>
-          {p.chapters.map((c) => (
-            <button key={c.startMs} class="option" data-focus onClick={() => props.onChapter(c.startMs)}>
-              <span class="tick" />
-              {c.title}  <span class="facts">{clock(c.startMs)}</span>
-            </button>
-          ))}
-        </section>
-      ) : null}
-      <section>
-        <h3>Sleep timer</h3>
-        {SLEEP_CHOICES.filter((m) => m !== END_OF_EPISODE || props.playing.item.type === "episode").map((m) =>
-          chosen(`z${m}`, sleepOn(m), sleepLabel(m), () => props.onSleep(m), !p.audioStreams.length && !p.subtitleStreams.length && m === 0),
-        )}
-      </section>
-    </div>
+    <SidePanel title={props.title}>
+      {props.streams.length <= 1 ? <p class="note panel-note">{props.empty}</p> : null}
+      {props.streams.map((s) => (
+        <Choice key={s.id} label={s.label} on={s === chosen} autofocus={s === chosen} onPress={() => props.onPick(s.id)} />
+      ))}
+    </SidePanel>
+  );
+}
+
+function SubtitlesPanel(props: {
+  playing: Playing;
+  prefs: Prefs;
+  onPick: (id: string) => void;
+  onFind: (() => void) | null;
+  onSize: (step: 1 | -1) => void;
+  onBackground: () => void;
+}) {
+  const streams = props.playing.playback.subtitleStreams;
+  const on = streams.find((s) => s.selected) ?? null;
+  return (
+    <SidePanel title="Subtitles">
+      {!streams.length ? <p class="note panel-note">No subtitles are available for this video.</p> : null}
+      {streams.length ? <Choice label="Off" on={!on} autofocus={!on} onPress={() => props.onPick("0")} /> : null}
+      {streams.map((s) => <Choice key={s.id} label={s.label} on={s === on} autofocus={s === on} onPress={() => props.onPick(s.id)} />)}
+      {props.onFind ? <Choice label="Find subtitles online" icon="⌕" onPress={props.onFind} /> : null}
+      {/* The size it is now heads the two that change it, rather than sitting on one of them. */}
+      <h3>Size  ·  {Math.round(props.prefs.subtitleScale * 100)}%</h3>
+      <Choice label="Increase size" icon="+" onPress={() => props.onSize(1)} />
+      <Choice label="Decrease size" icon="−" onPress={() => props.onSize(-1)} />
+      <h3>Appearance</h3>
+      <Choice label="Background" value={props.prefs.subtitleBackground ? "On" : "Off"} onPress={props.onBackground} />
+    </SidePanel>
+  );
+}
+
+/** The chapters, each with its picture where Plex has one; opens on the one playing. */
+function ChaptersPanel(props: { chapters: PlexChapter[]; positionMs: number; onPick: (ms: number) => void }) {
+  const now = props.chapters.reduce((at, c, i) => (c.startMs <= props.positionMs ? i : at), 0);
+  return (
+    <SidePanel title="Chapters">
+      {props.chapters.map((c, i) => (
+        <button key={c.startMs} class={"option chapter" + (i === now ? " on" : "")} data-focus data-autofocus={i === now ? "" : undefined} onClick={() => props.onPick(c.startMs)}>
+          {c.thumbUrl ? <img class="chapter-thumb" src={c.thumbUrl} alt="" /> : <span class="chapter-thumb" />}
+          <span class="option-text">
+            {c.title}
+            <span class="option-note">{clock(c.startMs)}</span>
+          </span>
+        </button>
+      ))}
+    </SidePanel>
+  );
+}
+
+function SleepPanel(props: { sleep: Sleep; episode: boolean; onPick: (minutes: number) => void }) {
+  const label = (m: number) => (m === 0 ? "Off" : m === END_OF_EPISODE ? "End of this episode" : `${m} minutes`);
+  const on = (m: number) => (m === 0 ? !props.sleep : m === END_OF_EPISODE ? !!props.sleep?.endOfEpisode : false);
+  const left = props.sleep?.atMs ? Math.max(1, Math.ceil((props.sleep.atMs - Date.now()) / 60_000)) : null;
+  return (
+    <SidePanel title="Sleep timer">
+      {left ? <p class="note panel-note">Stops in {left} min.</p> : null}
+      {SLEEP_CHOICES.filter((m) => m !== END_OF_EPISODE || props.episode).map((m) => (
+        <Choice key={m} label={label(m)} on={on(m)} autofocus={m === 0} onPress={() => props.onPick(m)} />
+      ))}
+    </SidePanel>
+  );
+}
+
+/** What's playing and how: the file as it is, or Plex converting it. */
+function InfoPanel(props: { playing: Playing }) {
+  const p = props.playing.playback;
+  const audio = p.audioStreams.find((s) => s.selected) ?? p.audioStreams[0];
+  const rows: Array<[string, string | null]> = [
+    ["Playing", props.playing.direct ? "The original file" : "Converted by Plex"],
+    ["Video", p.videoCodec ? p.videoCodec.toUpperCase() : null],
+    ["Audio", audio?.label ?? (p.audioCodec ? `${p.audioCodec.toUpperCase()}${p.audioChannels ? ` · ${p.audioChannels} channels` : ""}` : null)],
+    ["File", p.container ? p.container.toUpperCase() : null],
+    ["Subtitles", props.playing.textSubtitle ? "Drawn by Reely" : p.subtitleStreams.some((s) => s.selected) ? "Burned in by Plex" : "Off"],
+  ];
+  return (
+    <SidePanel title="Playback info">
+      <div class="info-rows">
+        {rows.filter(([, v]) => v).map(([k, v]) => (
+          <div key={k} class="info-row"><span class="facts">{k}</span><span>{v}</span></div>
+        ))}
+      </div>
+    </SidePanel>
   );
 }
 

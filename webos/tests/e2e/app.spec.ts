@@ -267,13 +267,18 @@ test("the player: Skip Intro, another sound track kept with Plex, Up Next on to 
   await press(page, "ArrowLeft");
   await expect(page.locator(".preview img")).toHaveAttribute("src", /\/library\/parts\/5\/indexes\/sd\/\d+\?X-Plex-Token=server-token/);
 
-  // Down: sound, subtitles, sleep timer. The commentary, kept with Plex and converted.
+  // Down: the controls, the cursor on play; along to Audio, whose panel opens on the track playing.
   await press(page, "ArrowDown");
-  await expect(page.locator(".options")).toBeVisible();
+  await expect(page.locator(".ctl:focus")).toHaveAttribute("aria-label", "Pause");
+  await page.screenshot({ path: "shots/lg-player-controls.png" });
+  await toControl(page, "Audio");
+  await press(page, "Enter");
+  await expect(page.locator(".player-panel .panel-title")).toHaveText("Audio");
   await expect(page.locator(".option:focus")).toContainText("English (AAC Stereo)");
   await page.screenshot({ path: "shots/lg-player-options.png" });
   const sources = () => page.evaluate(() => (window as any).__videoSources as string[]);
   expect((await sources()).pop()).toContain("/library/parts/5/file.mp4");
+  // The commentary, kept with Plex and converted.
   await press(page, "ArrowDown");
   await expect(page.locator(".option:focus")).toContainText("Commentary");
   await press(page, "Enter");
@@ -281,16 +286,24 @@ test("the player: Skip Intro, another sound track kept with Plex, Up Next on to 
   await expect(page.locator(".options")).toHaveCount(0);
   await expect.poll(() => plex.timeline).toContain("choose?audioStreamID=12");
 
-  // Its own SRT subtitles: drawn by the app over the picture, Plex asked not to burn them in.
+  // Its own SRT subtitles, from the Subtitles panel: drawn by the app over the picture,
+  // Plex asked not to burn them in.
+  await toControl(page, "Subtitles");
+  await press(page, "Enter");
+  await expect(page.locator(".player-panel .panel-title")).toHaveText("Subtitles");
+  await expect(page.locator(".option:focus")).toContainText("Off");
   await press(page, "ArrowDown");
-  await page.locator(".option", { hasText: "English (SRT)" }).focus();
+  await expect(page.locator(".option:focus")).toContainText("English (SRT)");
   await press(page, "Enter");
   await expect(page.locator(".subtitle-line")).toHaveText("Hello from the subtitles");
   expect((await sources()).pop()).toContain("subtitles=none");
   await page.screenshot({ path: "shots/lg-player-subtitles.png" });
 
-  // The credits: Up Next, and OK plays it now.
-  await expect(page.locator(".up-next")).toContainText("S1 · E3 · Episode 3", { timeout: 15_000 });
+  // The credits: Up Next over the screen, the credits in the corner; OK plays it now.
+  await expect(page.locator(".post-play")).toContainText("Season 1  ·  Episode 3", { timeout: 15_000 });
+  await expect(page.locator(".post-play .post-title")).toHaveText("Episode 3");
+  await expect(page.locator(".video")).toHaveClass(/windowed/);
+  await expect(page.locator(".play-next:focus")).toBeVisible();
   await page.screenshot({ path: "shots/lg-player-up-next.png" });
   const nextFile = page.waitForRequest((r) => r.url().includes("/library/metadata/e3"));
   await press(page, "Enter");
@@ -298,6 +311,18 @@ test("the player: Skip Intro, another sound track kept with Plex, Up Next on to 
   await expect.poll(() => plex.timeline).toContain("stopped@e2");
   await expect(page.locator(".player-bar .facts").first()).toHaveText("S1 · E3 · Episode 3");
 });
+
+/** The cursor along the player's buttons to the one named, bringing the controls up first. */
+async function toControl(page: Page, label: string) {
+  if (!(await page.locator(".ctl:focus").count())) await press(page, "ArrowDown");
+  for (const way of ["ArrowRight", "ArrowLeft"]) {
+    for (let i = 0; i < 9; i++) {
+      if ((await page.locator(".ctl:focus").getAttribute("aria-label")) === label) return;
+      await press(page, way);
+    }
+  }
+  await expect(page.locator(".ctl:focus")).toHaveAttribute("aria-label", label);
+}
 
 test("holding OK on a poster opens its menu; a Home row can be switched off", async ({ page }) => {
   const plex = await fakePlex(page);

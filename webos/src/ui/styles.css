@@ -132,6 +132,63 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .scrub { height: 0.35rem; border-radius: 999px; background: rgba(245,242,240,0.25); overflow: hidden; margin-top: 0.6rem; }
 .scrub > i { display: block; height: 100%; background: var(--accent); }
 .player-times { display: flex; justify-content: space-between; color: var(--muted); font-size: 1rem; }
+/* The player's controls, as the Fire TV's: the bar, then what's playing on the left, the
+   transport in the middle and a round button for each panel on the right. */
+.video.windowed { top: 2rem; left: auto; right: 3.5rem; width: 24.5rem; height: 13.8rem; z-index: 3; border-radius: 0.3rem; }
+.scrub-focus { position: relative; padding: 0.5rem 0.6rem 0.2rem; margin: 0 -0.6rem; border-radius: 0.8rem; outline: none; }
+.scrub-focus .scrub { margin-top: 0; }
+.scrub-focus:focus .scrub { height: 0.55rem; background: rgba(245,242,240,0.4); }
+.scrub-focus:focus .player-times { color: var(--chalk); }
+.scrub-focus .preview { bottom: 3rem; }
+.player-row { display: flex; align-items: center; margin-top: 0.4rem; }
+.player-what { flex: 1; min-width: 0; padding-right: 1.2rem; }
+.player-row .player-title { font-size: 1.35rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-row .facts { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.transport { display: flex; align-items: center; }
+.transport .ctl { margin: 0 0.6rem; }
+.player-options { flex: 1; display: flex; justify-content: flex-end; align-items: center; }
+.player-options .ctl { margin-left: 0.75rem; }
+.ctl { width: 2.65rem; height: 2.65rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  background: rgba(242, 244, 247, 0.14); color: var(--chalk); outline: none; transition: transform 140ms ease; }
+.ctl .glyph { width: 1.15rem; height: 1.15rem; }
+.ctl.primary { width: 3.25rem; height: 3.25rem; background: var(--chalk); color: var(--ink); }
+.ctl.primary .glyph { width: 1.45rem; height: 1.45rem; }
+.ctl.on { background: var(--accent); color: var(--on-accent); }
+.ctl[aria-disabled="true"] { opacity: 0.35; }
+.ctl:focus { background: var(--chalk); color: var(--ink); transform: scale(1.12); box-shadow: 0 0 0 0.14rem var(--chalk), 0 0 1.2rem var(--accent-glow); }
+.ctl.primary:focus { background: var(--accent); color: var(--on-accent); box-shadow: 0 0 0 0.16rem var(--chalk), 0 0 1.4rem var(--accent-glow); }
+.skip-prompt { z-index: 2; transition: bottom 200ms ease; }
+.skip-prompt.raised { bottom: 12.5rem; }
+.player-shade { position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 4; }
+.player-panel { z-index: 5; background: var(--raised); }
+.panel-title { font-size: 1.6rem; font-weight: 700; margin: 0 0 1rem 0.8rem; }
+.panel-note { margin: 0 0 0.8rem 0.8rem; font-size: 1rem; }
+.player-panel h3 { margin: 1.2rem 0 0.5rem 0.8rem; font-size: 0.85rem; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--faint); }
+.option.chapter { padding: 0.5rem 0.8rem 0.5rem 0.5rem; }
+.chapter-thumb { width: 6.4rem; height: 3.6rem; flex-shrink: 0; margin-right: 0.9rem; border-radius: 0.4rem; object-fit: cover; background: var(--high); }
+.option.chapter.on { box-shadow: inset 0 0 0 0.1rem var(--line); }
+.info-rows { display: grid; grid-gap: 0.7rem; padding: 0 0.8rem; }
+.info-row { display: flex; justify-content: space-between; font-size: 1.05rem; }
+.info-row .facts { margin-right: 1rem; }
+
+/* Up Next over the screen, the credits going on in a window in the corner. */
+.post-play { position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 2; background: var(--ink); }
+.post-art { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background-size: cover; background-position: center; }
+.post-shade { position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+  background: linear-gradient(90deg, rgba(8,9,11,0.9) 0%, rgba(8,9,11,0.55) 50%, rgba(8,9,11,0.1) 100%), linear-gradient(180deg, transparent 50%, rgba(8,9,11,0.85) 100%); }
+.post-window { position: absolute; top: 1.85rem; right: 3.35rem; width: 24.8rem; height: 14.1rem; border-radius: 0.4rem; background: rgba(242,244,247,0.22); }
+.post-now { position: absolute; top: 16.6rem; right: 3.5rem; width: 24.5rem; color: var(--muted); font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.post-text { position: absolute; left: 3.5rem; bottom: 2.2rem; max-width: 40rem; }
+.post-label { color: var(--accent); font-size: 0.95rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.7rem; }
+.post-text .facts { margin-top: 0.3rem; font-size: 1.1rem; }
+.post-title { margin-top: 0.5rem; font-size: 1.8rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.post-text .summary { margin-top: 0.6rem; }
+.post-actions { display: flex; margin-top: 1.4rem; }
+.post-actions .pill { position: relative; overflow: hidden; margin-right: 0.9rem; padding: 0.8rem 1.8rem; font-size: 1.1rem; }
+.post-actions .pill.primary { background: var(--high); color: var(--chalk); }
+.post-actions .pill:focus { background: var(--chalk); color: var(--ink); }
+.post-actions .pill span { position: relative; }
+.countdown { position: absolute; top: 0; left: 0; bottom: 0; background: var(--accent); opacity: 0.4; transition: width 250ms linear; }
 .field { width: 36rem; max-width: 100%; padding: 0.8rem 1.2rem; border-radius: 999px; border: 0.1rem solid var(--line); background: var(--raised);
   color: var(--chalk); font: inherit; font-size: 1.1rem; }
 .field:focus { border-color: var(--chalk); }
