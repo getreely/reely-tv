@@ -57,6 +57,34 @@ function providerWins() as boolean
     return p <> invalid and Bool_(p.iptvWins)
 end function
 
+' The playlist's guide by channel id, read when there's none yet, it's another, or it's six hours
+' old; a failure is tried again after five minutes, not on every channel moved to.
+function playlistGuide(a as object) as object
+    url = Str_(a.guideUrl)
+    now = clockNow()
+    if url = "" then
+        m.top.guideState = { kind: "none" }
+        return {}
+    end if
+    held = m.xmltv
+    if held <> invalid and held.url = url and not Bool_(a.fresh) then
+        if held.byChannel <> invalid and now - held.at < 6 * 3600 then return held.byChannel
+        if held.byChannel = invalid and now - held.at < 300 then return {}
+    end if
+    m.top.guideState = { kind: "updating" }
+    known = a.known
+    if known <> invalid and known.Count() = 0 then known = invalid
+    got = XtreamApi_PlaylistGuide(url, known, now)
+    if got.byChannel = invalid then
+        m.xmltv = { url: url, at: now, byChannel: invalid }
+        m.top.guideState = { kind: "failed", message: Str_(got.error) }
+        return {}
+    end if
+    m.xmltv = { url: url, at: now, byChannel: got.byChannel }
+    m.top.guideState = { kind: "ready", at: now }
+    return got.byChannel
+end function
+
 function clockNow() as integer
     return CreateObject("roDateTime").AsSeconds()
 end function
@@ -70,6 +98,8 @@ sub answerOp(op as string, a as object, out as object)
         m.series = {}
         m.seriesOrder = []
         m.top.catalogState = {}
+        m.xmltv = invalid
+        m.top.guideState = {}
     else if op = "iptvMeta" then
         movies = a.kind = "movie"
         sorted = gridOf(movies, "titleSort:asc", Str_(a.categoryId), Bool_(a.unwatched))
@@ -110,6 +140,22 @@ sub answerOp(op as string, a as object, out as object)
         Vod_Forget(m.marks, Str_(a.ratingKey))
         saveMarks(true)
         out.ok = true
+    else if op = "iptvGuideStale" then
+        if m.xmltv <> invalid then m.xmltv.at = 0
+    else if op = "liveEpg" or op = "liveTable" then
+        ' A playlist's guide: what's on from the XMLTV it names, read whole once and kept.
+        byChannel = playlistGuide(a)
+        now = clockNow()
+        found = {}
+        epg = a.epg
+        if epg = invalid then epg = {}
+        for each id in Arr_(a.streamIds)
+            key = Str_(id)
+            listing = Xtream_PlaylistListing(byChannel, key, Str_(epg[key]))
+            if op = "liveEpg" then found[key] = Xtream_NowAndNext(listing, now) else found[key] = listing
+        end for
+        if op = "liveEpg" then out.guide = found else out.table = found
+        out.guideState = m.top.guideState
     end if
 end sub
 

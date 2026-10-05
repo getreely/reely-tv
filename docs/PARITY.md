@@ -16,6 +16,7 @@ app (Amazon's Vega SDK, React Native), which can reuse the LG app's TypeScript c
 | Signed in, no server: says so, keeps looking, Try again | ✅ | ✅ | ✅ | 🟡 (says so, keeps looking, OK tries again) | ⬜ |
 | Plex Home profiles, PINs, "Who's watching?" after sign-in | ✅ | ✅ | ✅ | ✅ | ⬜ |
 | Several servers, libraries from all of them | ✅ | ✅ | ✅ | 🟡 (built; simulator test to come) | ⬜ |
+| A switch for each library in Settings: those switched on are the only ones on Home, in search and in the menus | ✅ | ✅ | ✅ | ✅ | ⬜ |
 | Home: Continue Watching, recent episodes and movies, Watchlist, playlists | ✅ | ✅ | ✅ | ✅ | ⬜ |
 | Home rows switched on and off | ✅ | ✅ | ✅ | 🟡 (built; simulator test to come) | ⬜ |
 | Movies / TV Shows: tab home, library grid, collections | ✅ | ✅ | ✅ | 🟡 (tab home tested; grid and collections built) | ⬜ |
@@ -40,9 +41,10 @@ app (Amazon's Vega SDK, React Native), which can reuse the LG app's TypeScript c
 | Choose where sound plays (Bluetooth headphones) | ✅ | ✅ | — | — | ⬜ |
 | Touch: tap, double-tap skip, drag the bar | — | ✅ | — | — | ⬜ |
 | **Live TV** | | | | | |
-| Xtream login and M3U playlists | ✅ | ✅ | ✅ | 🟡 (Xtream tested; M3U parsing unit-tested) | ⬜ |
+| Xtream login and M3U playlists | ✅ | ✅ | ✅ | ✅ (Xtream signed in in the simulator; a playlist's channels and guide there too) | ⬜ |
 | Categories, favorites, recently watched | ✅ | ✅ | ✅ | ✅ | ⬜ |
-| Guide (grid on TV, list on phone), now and next | ✅ | ✅ | ✅ (grid) | ✅ (grid; a playlist's own XMLTV guide not yet) | ⬜ |
+| Guide (grid on TV, list on phone), now and next | ✅ | ✅ | ✅ (grid) | ✅ (grid) | ⬜ |
+| A playlist's own XMLTV guide (named in it or entered at sign-in), read whole and kept; "TV guide: None" in Settings when there isn't one | ✅ | ✅ | ✅ (a gzipped guide opens on 2022 TVs and later, webOS 22 on; older ones say they can't) | ✅ (six hours back to a day and a half ahead; a gzipped guide can't be opened on a Roku, and it says so) | ⬜ |
 | Down while watching a channel: the guide over it, the channel playing on; categories above, OK to watch (or from the archive), a channel menu with a reminder and Favorites, Back to put it away | ✅ | ⬜ (no touch way to it yet: the guide is a separate page) | ✅ | ✅ (the menu on ✱, as everywhere on a Roku; categories in it as well as above, as a Roku's grid goes round from the first channel) | ⬜ |
 | Catch-up, start over, rewind and Go live | ✅ | ✅ | ✅ (coloured keys) | ✅ (catch-up tested; Start over and Go live on ✱) | ⬜ |
 | Reminders | ✅ | ✅ | ✅ | ✅ (set in the guide; when they're due, unit-tested) | ⬜ |

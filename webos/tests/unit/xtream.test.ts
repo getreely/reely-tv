@@ -194,3 +194,78 @@ describe("XMLTV odd corners", () => {
     expect(got[0].description).toBe("Fish &amp; chips");
   });
 });
+
+describe("a playlist's own guide", () => {
+  const now = 1_705_329_000;
+  const at = (s: number) => new Date(s * 1000).toISOString().replace(/[-:T]/g, "").slice(0, 14) + " +0000";
+  const show = (channel: string, start: number, stop: number, title: string) =>
+    `<programme start="${at(start)}" stop="${at(stop)}" channel="${channel}"><title>${title}</title></programme>`;
+  const xml = `<?xml version="1.0"?><tv>` +
+    show("BBCOne.uk", now - 3 * 86_400, now - 3 * 86_400 + 1800, "Long gone") +
+    show("BBCOne.uk", now + 1800, now + 3600, "Next") +
+    show("BBCOne.uk", now - 1800, now + 1800, "On now") +
+    show("BBCOne.uk", now - 1800, now + 1800, "On now") +
+    show("someone.else", now - 1800, now + 1800, "Not ours") +
+    `</tv>`;
+  const list = (header: string) => `#EXTM3U${header}\n#EXTINF:-1 tvg-id="BBCOne.uk",BBC One\nhttp://line.example.tv/live/1.ts\n`;
+
+  async function withServer(files: Record<string, string | Uint8Array>, run: () => Promise<void>) {
+    const http = await import("../../src/core/http");
+    const before = http.fetcher;
+    const asked: string[] = [];
+    http.useFetcher((async (input: string) => {
+      asked.push(String(input));
+      const body = files[String(input)];
+      return body == null ? new Response("", { status: 404 }) : new Response(body as BodyInit);
+    }) as typeof fetch);
+    try {
+      await run();
+    } finally {
+      http.useFetcher(before);
+    }
+    return asked;
+  }
+
+  it("is read whole once, kept for its own channels, in order, each programme once", async () => {
+    const xt = await import("../../src/api/xtream");
+    xt.forgetPlaylistGuide();
+    const c: XtreamCredentials = { base: "", username: "", password: "", playlistUrl: "http://example.tv/a.m3u" };
+    const asked = await withServer({ "http://example.tv/a.m3u": list(' url-tvg="http://example.tv/a.xml"'), "http://example.tv/a.xml": xml }, async () => {
+      const byChannel = await xt.playlistGuide(c, false, now);
+      expect([...byChannel.keys()]).toEqual(["bbcone.uk"]);
+      const channel = xt.parseM3u(list("")).channels[0];
+      const listing = xt.playlistListing(byChannel, channel);
+      expect(listing.map((p) => p.title)).toEqual(["On now", "Next"]);
+      expect(listing[0].channelId).toBe(String(channel.streamId));
+      expect(xt.nowAndNext(listing, now, 1).map((p) => p.title)).toEqual(["On now"]);
+      expect(xt.playlistGuideAt(c)).toBe(now);
+      expect(xt.guideNamed(c)).toBe(true);
+      // Kept: asked again, it isn't downloaded again.
+      await xt.playlistGuide(c, false, now + 60);
+    });
+    expect(asked.filter((u) => u.endsWith(".xml"))).toHaveLength(1);
+  });
+
+  it("a gzipped guide is opened", async () => {
+    const xt = await import("../../src/api/xtream");
+    xt.forgetPlaylistGuide();
+    const gz = new Uint8Array(await new Response(new Blob([xml]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer());
+    const c: XtreamCredentials = { base: "", username: "", password: "", playlistUrl: "http://example.tv/b.m3u", guideUrl: "http://example.tv/b.xml.gz" };
+    await withServer({ "http://example.tv/b.m3u": list(""), "http://example.tv/b.xml.gz": gz }, async () => {
+      const byChannel = await xt.playlistGuide(c, false, now);
+      expect(byChannel.get("bbcone.uk")?.map((p) => p.title)).toEqual(["On now", "Next"]);
+    });
+  });
+
+  it("a playlist that names no guide has none, and says so", async () => {
+    const xt = await import("../../src/api/xtream");
+    xt.forgetPlaylistGuide();
+    const c: XtreamCredentials = { base: "", username: "", password: "", playlistUrl: "http://example.tv/c.m3u" };
+    const asked = await withServer({ "http://example.tv/c.m3u": list("") }, async () => {
+      expect((await xt.playlistGuide(c, false, now)).size).toBe(0);
+      expect(xt.guideNamed(c)).toBe(false);
+      expect(xt.playlistGuideAt(c)).toBeNull();
+    });
+    expect(asked).toEqual(["http://example.tv/c.m3u"]);
+  });
+});

@@ -618,6 +618,75 @@ test("Requests: connect, rows without what's in the library, and ask for a show"
   expect(asked).toEqual([expect.objectContaining({ kind: "show", tmdbId: 1399, seasons: [1], libraryId: 3 })]);
 });
 
+test("Live TV from an M3U playlist: its own XMLTV guide is read, as on the Fire TV", async ({ page }) => {
+  await fakePlex(page);
+  const cors = { "Access-Control-Allow-Origin": "*" };
+  const now = Math.floor(Date.now() / 1000);
+  const at = (s: number) => new Date(s * 1000).toISOString().replace(/[-:T]/g, "").slice(0, 14) + " +0000";
+  let guides = 0;
+  await page.route("http://lists.example/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/tv.m3u") {
+      return route.fulfill({ status: 200, headers: cors, body: [
+        '#EXTM3U url-tvg="http://lists.example/guide.xml"',
+        '#EXTINF:-1 tvg-id="news.example" group-title="News",News 24',
+        "http://lists.example/live/1.m3u8",
+      ].join("\n") });
+    }
+    if (url.pathname === "/guide.xml") {
+      guides++;
+      return route.fulfill({ status: 200, headers: cors, body: `<?xml version="1.0"?><tv>` +
+        `<programme start="${at(now - 600)}" stop="${at(now + 1200)}" channel="News.Example"><title>Playlist Evening News</title></programme>` +
+        `<programme start="${at(now + 1200)}" stop="${at(now + 4800)}" channel="news.example"><title>Playlist Late Show</title></programme>` +
+        `</tv>` });
+    }
+    return route.fulfill({ status: 404, headers: cors });
+  });
+  await page.goto("/");
+  await press(page, "Enter");
+  await expect(page.getByText("Recently Added Movies")).toBeVisible({ timeout: 10_000 });
+  await page.getByRole("button", { name: "Live TV" }).click();
+  await page.getByRole("button", { name: "M3U playlist" }).click();
+  await page.getByPlaceholder("Playlist address").fill("http://lists.example/tv.m3u");
+  await page.getByRole("button", { name: "Add playlist" }).click();
+  await page.getByRole("button", { name: "News", exact: true }).click();
+  await expect(page.locator(".channel").first()).toContainText("Playlist Evening News");
+  await page.getByRole("button", { name: "Guide" }).click();
+  await expect(page.getByText("Playlist Late Show")).toBeVisible();
+  // Read once, whole, and kept.
+  expect(guides).toBe(1);
+  await page.getByRole("button", { name: "Settings" }).focus();
+  await press(page, "Enter");
+  await page.locator(".section-tab", { hasText: "Live TV" }).focus();
+  await press(page, "Enter");
+  await expect(page.locator(".setting", { hasText: "Refresh TV guide" })).toContainText("Updated");
+});
+
+test("Live TV from an M3U playlist without a guide: Settings says there's none, as on the Fire TV", async ({ page }) => {
+  await fakePlex(page);
+  const cors = { "Access-Control-Allow-Origin": "*" };
+  await page.route("http://lists.example/**", (route) => route.fulfill({ status: 200, headers: cors, body: '#EXTM3U\n#EXTINF:-1 group-title="News",News 24\nhttp://lists.example/live/1.m3u8\n' }));
+  await page.goto("/");
+  await press(page, "Enter");
+  await expect(page.getByText("Recently Added Movies")).toBeVisible({ timeout: 10_000 });
+  await page.getByRole("button", { name: "Live TV" }).click();
+  await page.getByRole("button", { name: "M3U playlist" }).click();
+  await page.getByPlaceholder("Playlist address").fill("http://lists.example/tv.m3u");
+  await page.getByRole("button", { name: "Add playlist" }).click();
+  // The cursor onto the categories first, so it isn't taken there from Settings.
+  await expect(page.getByRole("button", { name: "News", exact: true })).toBeVisible();
+  await expect(page.locator(".pill:focus, button:focus")).toHaveCount(1);
+  await page.waitForTimeout(300);
+  await page.getByRole("button", { name: "Settings" }).focus();
+  await press(page, "Enter");
+  await page.locator(".section-tab", { hasText: "Live TV" }).focus();
+  await press(page, "Enter");
+  const row = page.locator(".setting", { hasText: "TV guide" });
+  await expect(row).toContainText("None");
+  await expect(row).toContainText("Your playlist doesn't name one.");
+  await expect(page.getByText("Refresh TV guide")).toHaveCount(0);
+});
+
 test("Live TV: sign in to a provider, pick a category, watch, change channel, favorite", async ({ page }) => {
   await fakePlex(page);
   const PANEL = "http://panel.example:8080";

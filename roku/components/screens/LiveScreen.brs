@@ -222,6 +222,8 @@ sub onSignedIn(a as object)
     if a.playlist <> invalid then m.playlist = a.playlist
     kept = LiveState_()
     live = { credentials: m.signingIn, account: a.account, favorites: Arr_(kept.favorites), recent: Arr_(kept.recent), reminders: Arr_(kept.reminders) }
+    ' The guide a playlist names in its own header, when none was entered with it.
+    if a.playlist <> invalid then live.listGuide = Str_(a.playlist.guideUrl)
     Trace_("live signed in")
     ' Saved by MainScene; the page follows from onLiveChanged.
     m.top.go = { name: "live", live: live }
@@ -386,7 +388,7 @@ end sub
 ' What's on for the channels around [at], each asked once.
 sub askGuide(at as integer)
     c = LiveState_().credentials
-    if c = invalid or Xtream_IsPlaylist(c) then return
+    if c = invalid then return
     ids = []
     first = at - 3
     if first < 0 then first = 0
@@ -399,8 +401,13 @@ sub askGuide(at as integer)
             end if
         end if
     end for
-    if ids.Count() > 0 then Ask_("liveEpg", { credentials: c, streamIds: ids })
+    if ids.Count() > 0 then Ask_("liveEpg", Xtream_GuideArgs(c, Str_(LiveState_().listGuide), m.channels, ids, playlistChannels()))
 end sub
+
+function playlistChannels() as dynamic
+    if m.playlist = invalid then return invalid
+    return m.playlist.channels
+end function
 
 sub onChannelSelected()
     watch(m.channelList.itemSelected, invalid)
@@ -503,7 +510,7 @@ sub paintGuide()
             prog.PLAYSTART = start
             prog.PLAYDURATION = 3 * 3600
         end if
-        if not m.table.DoesExist(ch.streamId.ToStr()) and ids.Count() < 30 and not Xtream_IsPlaylist(c) then ids.Push(ch.streamId)
+        if not m.table.DoesExist(ch.streamId.ToStr()) and ids.Count() < 30 then ids.Push(ch.streamId)
     end for
     m.grid.content = content
     ' The cursor on what's on now, as the other apps open the guide; on a repaint, where it was.
@@ -511,7 +518,7 @@ sub paintGuide()
     m.grid.jumpToTime = m.guideAt
     if ids.Count() > 0 and m.askedTable <> m.categoryId then
         m.askedTable = m.categoryId
-        Ask_("liveTable", { credentials: c, streamIds: ids })
+        Ask_("liveTable", Xtream_GuideArgs(c, Str_(LiveState_().listGuide), m.channels, ids, playlistChannels()))
     end if
 end sub
 
@@ -606,6 +613,11 @@ sub answered(r as object)
             if a <> invalid and a.ok and a.playlist <> invalid then
                 m.playlist = a.playlist
                 m.note.text = ""
+                s = LiveState_()
+                if s.listGuide = invalid or Str_(s.listGuide) <> Str_(a.playlist.guideUrl) then
+                    s.listGuide = Str_(a.playlist.guideUrl)
+                    m.top.go = { name: "live", live: s }
+                end if
                 loadCategories()
             else
                 m.note.text = "Couldn't download the playlist. Try again in a moment."
@@ -632,6 +644,7 @@ sub answered(r as object)
     else if r.op = "liveEpg" then
         for each k in r.guide
             m.guide[k] = r.guide[k]
+            if Arr_(r.guide[k]).Count() > 0 then Trace_("live on now " + r.guide[k][0].title)
         end for
         paintChannels()
         if m.view = "guide" then paintGuide()

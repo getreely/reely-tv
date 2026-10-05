@@ -345,3 +345,219 @@ end function
 function Xtream_ReminderKey(r as object) as string
     return r.channel.streamId.ToStr() + ":" + r.start.ToStr()
 end function
+
+' ------------------------------------------------------------------ A playlist's own guide
+
+' What a guide request carries: the channels' guide ids, the guide's address, and every guide
+' id the playlist has, so reading the whole guide keeps only those.
+function Xtream_GuideArgs(c as object, listGuide as string, channels as object, ids as object, playlist as dynamic) as object
+    out = { credentials: c, streamIds: ids }
+    if not Xtream_IsPlaylist(c) then return out
+    out.guideUrl = Str_(c.guideUrl)
+    if out.guideUrl = "" then out.guideUrl = listGuide
+    wanted = {}
+    for each id in ids
+        wanted[Str_(id)] = true
+    end for
+    epg = {}
+    for each ch in channels
+        key = Str_(ch.streamId)
+        if wanted.DoesExist(key) and Str_(ch.epgChannelId) <> "" then epg[key] = LCase(Str_(ch.epgChannelId))
+    end for
+    out.epg = epg
+    known = {}
+    for each ch in Arr_(playlist)
+        if Str_(ch.epgChannelId) <> "" then known[LCase(Str_(ch.epgChannelId))] = true
+    end for
+    out.known = known
+    return out
+end function
+
+' Reads an XMLTV guide a piece at a time, keeping the programmes of [known] channels (all, when
+' invalid) between [from] and [upTo]: by channel id, in no order yet.
+function Xtream_XmltvReader(known as dynamic, from as integer, upTo as integer) as object
+    return { buffer: "", known: known, from: from, upTo: upTo, byChannel: {}, count: 0, clock: CreateObject("roDateTime") }
+end function
+
+sub Xtream_XmltvPush(r as object, chunk as string)
+    r.buffer = r.buffer + chunk
+    closing = "</programme>"
+    while true
+        ends = Instr(1, r.buffer, closing)
+        if ends = 0 then exit while
+        block = Left(r.buffer, ends - 1)
+        r.buffer = Mid(r.buffer, ends + Len(closing))
+        starts = Xtream_LastInstr(block, "<programme")
+        if starts > 0 then Xtream_XmltvKeep(r, Mid(block, starts))
+    end while
+    ' Nothing worth keeping before the programme that's begun.
+    begun = Xtream_LastInstr(r.buffer, "<programme")
+    if begun > 1 then
+        r.buffer = Mid(r.buffer, begun)
+    else if begun = 0 and Len(r.buffer) > 4096 then
+        r.buffer = Right(r.buffer, 4096)
+    end if
+end sub
+
+function Xtream_LastInstr(text as string, part as string) as integer
+    at = 0
+    while true
+        n = Instr(at + 1, text, part)
+        if n = 0 then return at
+        at = n
+    end while
+    return at
+end function
+
+sub Xtream_XmltvKeep(r as object, block as string)
+    tagEnd = Instr(1, block, ">")
+    if tagEnd = 0 then return
+    tag = Left(block, tagEnd)
+    channel = LCase(Xtream_XmlAttr(tag, "channel"))
+    if channel = "" then return
+    if r.known <> invalid and not r.known.DoesExist(channel) then return
+    begins = Xtream_ParseXmltvTime(Xtream_XmlAttr(tag, "start"), r.clock)
+    ends = Xtream_ParseXmltvTime(Xtream_XmlAttr(tag, "stop"), r.clock)
+    if begins <= 0 or ends <= begins or ends <= r.from or begins >= r.upTo then return
+    title = Xtream_XmlText(Xtream_XmlElement(block, "title")).Trim()
+    if title = "" then title = "Untitled"
+    description = Xtream_XmlText(Xtream_XmlElement(block, "desc")).Trim()
+    if Len(description) > 400 then description = Left(description, 397) + "…"
+    list = r.byChannel[channel]
+    if list = invalid then
+        list = []
+        r.byChannel[channel] = list
+    end if
+    list.Push({ channelId: channel, start: begins, ends: ends, title: title, description: description })
+    r.count = r.count + 1
+end sub
+
+' The programmes kept, each channel's in order and each start once.
+function Xtream_XmltvDone(r as object) as object
+    out = {}
+    for each id in r.byChannel
+        seen = {}
+        list = []
+        sorted = StableSort_(r.byChannel[id], function(a as object, b as object) as boolean
+            return a.start < b.start
+        end function)
+        for each p in sorted
+            if not seen.DoesExist(p.start.ToStr()) then
+                seen[p.start.ToStr()] = true
+                list.Push(p)
+            end if
+        end for
+        out[id] = list
+    end for
+    return out
+end function
+
+' A whole attribute: "start" isn't the end of "catchup-start".
+function Xtream_XmlAttr(tag as string, name as string) as string
+    for each lead in [" ", Chr(9), Chr(10), Chr(13)]
+        at = Instr(1, tag, lead + name + "=" + Chr(34))
+        if at > 0 then
+            from = at + Len(lead + name) + 2
+            ends = Instr(from, tag, Chr(34))
+            if ends = 0 then return ""
+            return Mid(tag, from, ends - from)
+        end if
+    end for
+    return ""
+end function
+
+' The first <name ...>…</name> in [block], as written.
+function Xtream_XmlElement(block as string, name as string) as string
+    at = 0
+    while true
+        at = Instr(at + 1, block, "<" + name)
+        if at = 0 then return ""
+        after = Mid(block, at + Len(name) + 1, 1)
+        if after = ">" or after = " " or after = Chr(9) or after = Chr(10) or after = Chr(13) then exit while
+    end while
+    opens = Instr(at, block, ">")
+    if opens = 0 or Mid(block, opens - 1, 1) = "/" then return ""
+    closes = Instr(opens, block, "</" + name + ">")
+    if closes = 0 then return ""
+    return Mid(block, opens + 1, closes - opens - 1)
+end function
+
+' Text from XML: CDATA as written, entities undone outside it.
+function Xtream_XmlText(text as string) as string
+    out = ""
+    rest = text
+    while true
+        at = Instr(1, rest, "<![CDATA[")
+        if at = 0 then exit while
+        out = out + Xtream_XmlEntities(Left(rest, at - 1))
+        ends = Instr(at + 9, rest, "]]>")
+        if ends = 0 then
+            out = out + Mid(rest, at + 9)
+            return out
+        end if
+        out = out + Mid(rest, at + 9, ends - at - 9)
+        rest = Mid(rest, ends + 3)
+    end while
+    return out + Xtream_XmlEntities(rest)
+end function
+
+function Xtream_XmlEntities(text as string) as string
+    if Instr(1, text, "&") = 0 then return text
+    t = text.Replace("&lt;", "<").Replace("&gt;", ">").Replace("&quot;", Chr(34)).Replace("&apos;", "'")
+    out = ""
+    while true
+        at = Instr(1, t, "&#")
+        if at = 0 then exit while
+        ends = Instr(at, t, ";")
+        if ends = 0 or ends - at > 10 then
+            out = out + Left(t, at + 1)
+            t = Mid(t, at + 2)
+        else
+            code = Mid(t, at + 2, ends - at - 2)
+            n = 0
+            if LCase(Left(code, 1)) = "x" then n = Val(Mid(code, 2), 16) else n = Val(code, 10)
+            out = out + Left(t, at - 1)
+            if n > 0 and n <= 1114111 then out = out + Chr(n)
+            t = Mid(t, ends + 1)
+        end if
+    end while
+    return (out + t).Replace("&amp;", "&")
+end function
+
+' "20240115143000 +0100" in epoch seconds; 0 when it isn't one.
+function Xtream_ParseXmltvTime(raw as string, clock = invalid as dynamic) as integer
+    t = raw.Trim()
+    if Len(t) < 14 then return 0
+    digits = Left(t, 14)
+    for i = 1 to 14
+        c = Asc(Mid(digits, i, 1))
+        if c < 48 or c > 57 then return 0
+    end for
+    if clock = invalid then clock = CreateObject("roDateTime")
+    clock.FromISO8601String(Left(digits, 4) + "-" + Mid(digits, 5, 2) + "-" + Mid(digits, 7, 2) + "T" + Mid(digits, 9, 2) + ":" + Mid(digits, 11, 2) + ":" + Mid(digits, 13, 2) + "Z")
+    seconds = clock.AsSeconds()
+    zone = Mid(t, 15).Trim()
+    if Len(zone) = 5 and (Left(zone, 1) = "+" or Left(zone, 1) = "-") then
+        shift = Val(Mid(zone, 2, 2), 10) * 3600 + Val(Mid(zone, 4, 2), 10) * 60
+        if Left(zone, 1) = "+" then seconds = seconds - shift else seconds = seconds + shift
+    end if
+    return seconds
+end function
+
+' A channel's programmes from the playlist's guide, under its stream id as the panel's are.
+function Xtream_PlaylistListing(byChannel as object, streamId as string, epgId as string) as object
+    out = []
+    for each p in Arr_(byChannel[epgId])
+        out.Push({ channelId: streamId, start: p.start, ends: p.ends, title: p.title, description: p.description })
+    end for
+    return out
+end function
+
+' What's on and what's next, as the panel's short guide gives them.
+function Xtream_NowAndNext(list as object, now as integer, count = 4 as integer) as object
+    out = []
+    for each p in list
+        if p.ends > now and out.Count() < count then out.Push(p)
+    end for
+    return out
+end function

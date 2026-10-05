@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
 import type { Programme, XtreamCategory, XtreamChannel } from "../api/xtream";
 import { isOnAt, progressAt } from "../api/xtream";
 import type { App, AppState } from "../app/store";
@@ -306,7 +306,8 @@ function GuideOverlay(props: { app: App; state: AppState; playing: XtreamChannel
       ?? document.querySelector<HTMLElement>(".guide-overlay .programme");
     if (el) focus(el);
   };
-  useEffect(() => { landOn(playing.streamId); }, []);
+  // Before it's drawn: a press as soon as it's up finds the cursor already there.
+  useLayoutEffect(() => { landOn(playing.streamId); }, []);
 
   const choose = async (category: XtreamCategory) => {
     if (category.id === browse.category?.id) return;

@@ -1,5 +1,6 @@
 import type { ComponentChildren } from "preact";
-import type { App, AppState, PlaybackMode } from "../app/store";
+import type { App, AppState, GuideStatus, PlaybackMode } from "../app/store";
+import * as xtream from "../api/xtream";
 import { useEffect, useState } from "preact/hooks";
 import { ACCENTS, BITRATE_CHOICES, HOME_ROWS, SCREENSAVER_CHOICES, SUBTITLE_SIZES, THEME_LEVELS, UP_NEXT_CHOICES } from "../app/store";
 import { clearProblem, lastProblem } from "../core/crash";
@@ -347,6 +348,17 @@ function ThemeSection({ kit }: { kit: Kit }) {
   );
 }
 
+/** How the playlist's guide stands, as the Fire TV says it. */
+function guideValue(status: GuideStatus): string {
+  switch (status.kind) {
+    case "updating": return "Updating…";
+    case "ready": return `Updated ${new Date(status.at * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+    case "failed": return "Couldn't update";
+    case "none": return "None";
+    default: return "Not loaded";
+  }
+}
+
 function LiveSection({ kit }: { kit: Kit }) {
   const { app, state } = kit;
   const { prefs, live } = state;
@@ -363,7 +375,15 @@ function LiveSection({ kit }: { kit: Kit }) {
     <>
       <Group title="Channels and guide">
         <Setting title="Refresh channels" value={live.busy ? "Refreshing…" : `${live.categories.length} categories`} onPress={() => void app.refreshChannels()} />
-        <Setting title="Refresh TV guide" note="What's on, asked for again." onPress={() => void app.refreshGuide()} />
+        {xtream.guideNamed(credentials) === false ? (
+          <Setting
+            title="TV guide"
+            value="None"
+            note="Your playlist doesn't name one. To add one, sign out and sign in again with a TV guide address."
+          />
+        ) : (
+          <Setting title="Refresh TV guide" value={playlist ? guideValue(live.guideStatus) : undefined} note={live.guideStatus.kind === "failed" ? live.guideStatus.message : "What's on, asked for again."} onPress={() => void app.refreshGuide()} />
+        )}
       </Group>
       <Group title="Watching">
         {!playlist ? (

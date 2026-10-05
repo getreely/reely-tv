@@ -104,7 +104,7 @@ sub paint(channel as integer)
             prog.PLAYDURATION = 3 * 3600
         end if
         key = ch.streamId.ToStr()
-        if not m.table.DoesExist(key) and not m.askedTable.DoesExist(key) and ids.Count() < 30 and not Xtream_IsPlaylist(c) then
+        if not m.table.DoesExist(key) and not m.askedTable.DoesExist(key) and ids.Count() < 30 then
             m.askedTable[key] = true
             ids.Push(ch.streamId)
         end if
@@ -114,7 +114,7 @@ sub paint(channel as integer)
     m.lastChannel = channel
     if channel >= 0 and channel < m.shown.Count() then m.grid.jumpToChannel = channel
     m.grid.jumpToTime = m.guideAt
-    if ids.Count() > 0 then Ask_("liveTable", { credentials: c, streamIds: ids })
+    if ids.Count() > 0 then Ask_("liveTable", Xtream_GuideArgs(c, Str_(m.global.live.listGuide), m.shown, ids, m.playlist))
 end sub
 
 ' The programme at the grid's cursor, or invalid for a channel with nothing known.

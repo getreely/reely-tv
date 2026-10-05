@@ -203,9 +203,32 @@ function Live_(p as object) as object
     playlist = Str_(creds.playlistUrl) <> ""
     out = []
     ' Read afresh each time the Live TV tab opens: these go there.
+    guideRow = Row_("Refresh TV guide", "", "", "goLive")
+    if playlist then
+        listGuide = live.listGuide
+        if Str_(creds.guideUrl) = "" and listGuide <> invalid and Str_(listGuide) = "" then
+            ' As the Fire TV says it: a playlist that names no guide has none to refresh.
+            guideRow = Row_("TV guide", "Your playlist doesn't name one. To add one, sign out and sign in again with a TV guide address.", "None", "")
+        else
+            state = invalid
+            if m.global.iptv <> invalid then state = m.global.iptv.guideState
+            if state = invalid then state = {}
+            value = "Not loaded"
+            note = ""
+            if state.kind = "updating" then
+                value = "Updating…"
+            else if state.kind = "ready" then
+                value = "Updated " + GuideClock_(Int(Num_(state.at)))
+            else if state.kind = "failed" then
+                value = "Couldn't update"
+                note = Str_(state.message)
+            end if
+            guideRow = Row_("Refresh TV guide", note, value, "guideRefresh")
+        end if
+    end if
     out.Push(Group_("Channels and guide", [
         Row_("Refresh channels", "", "", "goLive"),
-        Row_("Refresh TV guide", "", "", "goLive")
+        guideRow
     ], "Channels and the guide are read again each time the Live TV tab opens."))
     watching = []
     if not playlist then
@@ -393,6 +416,14 @@ function HeldBySaver_(stall as object, saverAt as dynamic) as boolean
     ends = Num_(stall.at)
     starts = ends - Num_(stall.seconds)
     return saverAt >= starts and saverAt <= ends
+end function
+
+function GuideClock_(epoch as integer) as string
+    d = CreateObject("roDateTime")
+    d.FromSeconds(epoch)
+    d.ToLocalTime()
+    minutes = d.GetMinutes()
+    return d.GetHours().ToStr() + ":" + Iif_(minutes < 10, "0", "") + minutes.ToStr()
 end function
 
 function DateOf_(epoch as dynamic) as string
@@ -837,6 +868,11 @@ sub apply(key as string, i as integer)
         m.top.go = { name: "tab", tab: "requests" }
         return
     else if key = "goLive" then
+        m.top.go = { name: "tab", tab: "live" }
+        return
+    else if key = "guideRefresh" then
+        ' The playlist's guide read again whole the next time it's asked for: on the Live TV tab.
+        if m.global.iptv <> invalid then m.global.iptv.request = { op: "iptvGuideStale", args: {} }
         m.top.go = { name: "tab", tab: "live" }
         return
     else if key = "profile" then

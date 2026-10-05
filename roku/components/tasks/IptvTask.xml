@@ -8,6 +8,8 @@
     <field id="request" type="assocarray" alwaysNotify="true" />
     <!-- { loading, ready, error, movies, shows }: what Settings and the tabs show. -->
     <field id="catalogState" type="assocarray" />
+    <!-- A playlist's own guide: { kind: updating | ready (at) | failed (message) | none }. -->
+    <field id="guideState" type="assocarray" />
   </interface>
   <script type="text/brightscript" uri="pkg:/components/tasks/IptvTask.brs" />
   <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
@@ -16,6 +18,7 @@
   <script type="text/brightscript" uri="pkg:/source/lib/http.brs" />
   <script type="text/brightscript" uri="pkg:/source/lib/plexapi.brs" />
   <script type="text/brightscript" uri="pkg:/source/lib/xtream.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/xtreamapi.brs" />
   <script type="text/brightscript" uri="pkg:/source/lib/vod.brs" />
   <script type="text/brightscript" uri="pkg:/source/lib/vodapi.brs" />
 </component>

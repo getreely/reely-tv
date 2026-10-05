@@ -57,3 +57,56 @@ function XtreamApi_Table(c as object, streamIds as object) as object
     end for
     return out
 end function
+
+' A playlist's whole XMLTV guide, downloaded to a file and read from it a piece at a time:
+' a provider's runs to tens of megabytes, and only the playlist's own channels, from six hours
+' back to a day and a half ahead, are kept. { byChannel } or { error }.
+function XtreamApi_PlaylistGuide(url as string, known as dynamic, now as integer) as object
+    path = "tmp:/reely-guide.xml"
+    fs = CreateObject("roFileSystem")
+    if fs.Exists(path) then fs.Delete(path)
+    t = Http_Transfer(url, "GET", invalid)
+    port = CreateObject("roMessagePort")
+    t.SetMessagePort(port)
+    if not t.AsyncGetToFile(path) then return { error: "Couldn't download the TV guide." }
+    msg = Wait(180000, port)
+    if type(msg) <> "roUrlEvent" then
+        t.AsyncCancel()
+        return { error: "Couldn't download the TV guide." }
+    end if
+    code = msg.GetResponseCode()
+    if code < 200 or code > 299 then return { error: "Couldn't download the TV guide." }
+    stat = fs.Stat(path)
+    size = 0
+    if stat <> invalid and stat.size <> invalid then size = stat.size
+    bytes = CreateObject("roByteArray")
+    if size >= 2 and bytes.ReadFile(path, 0, 2) and bytes[0] = 31 and bytes[1] = 139 then
+        fs.Delete(path)
+        return { error: "This Roku can't open the TV guide: it's compressed. Ask your provider for an uncompressed address." }
+    end if
+    reader = Xtream_XmltvReader(known, now - 6 * 3600, now + 36 * 3600)
+    piece = 262144
+    at = 0
+    while at < size
+        bytes = CreateObject("roByteArray")
+        if not bytes.ReadFile(path, at, piece) or bytes.Count() = 0 then exit while
+        n = bytes.Count()
+        ' Cut after the last ">": never in the middle of a character.
+        if at + n < size then
+            keep = n
+            while keep > 0 and bytes[keep - 1] <> 62
+                keep = keep - 1
+            end while
+            if keep > 0 then
+                while bytes.Count() > keep
+                    bytes.Pop()
+                end while
+                n = keep
+            end if
+        end if
+        Xtream_XmltvPush(reader, bytes.ToAsciiString())
+        at = at + n
+    end while
+    fs.Delete(path)
+    return { byChannel: Xtream_XmltvDone(reader) }
+end function

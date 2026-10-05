@@ -1,4 +1,4 @@
-import { ask, askJson } from "../core/http";
+import { ask, askJson, HttpError } from "../core/http";
 import { stableSort } from "../core/sort";
 
 /*
@@ -408,6 +408,131 @@ export class XmltvReader {
     const desc = unescapeXml(/<desc\b[^>]*>([\s\S]*?)<\/desc>/.exec(block)?.[1] ?? "").trim() || null;
     this.emit({ channelId: channel, start, stop, title, description: desc });
   }
+}
+
+/** A playlist's guide, read once and kept for a while: each channel's programmes, by its tvg-id. */
+let playlistGuideHeld: { url: string; at: number; byChannel: Map<string, Programme[]> } | null = null;
+let playlistGuideReading: { url: string; done: Promise<Map<string, Programme[]>> } | null = null;
+
+/** How long a playlist's guide is kept before it's read again. */
+export const PLAYLIST_GUIDE_KEEP_SECONDS = 6 * 3600;
+
+/** When the playlist's guide was last read, in epoch seconds; null before it has been. */
+export function playlistGuideAt(c: XtreamCredentials): number | null {
+  const url = xmltvUrl(c);
+  return url && playlistGuideHeld?.url === url ? playlistGuideHeld.at : null;
+}
+
+/**
+ * The playlist's whole XMLTV guide, for its own channels and a day either side of now to
+ * three days ahead, as the Fire TV keeps it. Read as it arrives; a provider's runs to tens of
+ * megabytes, and only what's kept is held.
+ */
+export async function playlistGuide(c: XtreamCredentials, fresh = false, now = Math.floor(Date.now() / 1000)): Promise<Map<string, Programme[]>> {
+  if (!isPlaylist(c)) return new Map();
+  const list = await playlistFor(c);
+  const url = xmltvUrl(c);
+  if (!url) return new Map();
+  if (!fresh && playlistGuideHeld?.url === url && now - playlistGuideHeld.at < PLAYLIST_GUIDE_KEEP_SECONDS) return playlistGuideHeld.byChannel;
+  if (playlistGuideReading?.url === url) return playlistGuideReading.done;
+  const done = (async () => {
+    const ids = new Set(list.channels.map((ch) => ch.epgChannelId?.toLowerCase()).filter((id): id is string => !!id));
+    const byChannel = new Map<string, Programme[]>();
+    const from = now - 86_400;
+    const to = now + 3 * 86_400;
+    const reader = new XmltvReader((p) => {
+      if (p.stop <= from || p.start >= to) return;
+      const list = byChannel.get(p.channelId);
+      if (list) list.push(p);
+      else byChannel.set(p.channelId, [p]);
+    }, (id) => ids.has(id));
+    await readXmltv(url, (text) => reader.push(text));
+    // In order, and each start once: some guides list a programme twice.
+    for (const [id, list] of byChannel) {
+      const seen = new Set<number>();
+      byChannel.set(id, stableSort(list, (a: Programme, b: Programme) => a.start - b.start).filter((p) => !seen.has(p.start) && !!seen.add(p.start)));
+    }
+    playlistGuideHeld = { url, at: now, byChannel };
+    return byChannel;
+  })();
+  playlistGuideReading = { url, done };
+  try {
+    return await done;
+  } finally {
+    if (playlistGuideReading?.done === done) playlistGuideReading = null;
+  }
+}
+
+/** Whether the playlist names a guide: null until the playlist has been read and that's known. */
+export function guideNamed(c: XtreamCredentials): boolean | null {
+  if (!isPlaylist(c)) return true;
+  if (c.guideUrl) return true;
+  const held = playlist;
+  return held && held.url === c.playlistUrl ? !!held.list.guideUrl : null;
+}
+
+/** The kept guide forgotten, as when signing out. */
+export function forgetPlaylistGuide() {
+  playlistGuideHeld = null;
+  playlistGuideReading = null;
+}
+
+/** A channel's programmes from the playlist's guide, under the channel's stream id as the panel's are. */
+export function playlistListing(byChannel: Map<string, Programme[]>, channel: XtreamChannel): Programme[] {
+  const id = channel.epgChannelId?.toLowerCase();
+  const list = id ? byChannel.get(id) : undefined;
+  return list ? list.map((p) => ({ ...p, channelId: String(channel.streamId) })) : [];
+}
+
+/** Now and what's next from a listing, as the panel's short guide gives them. */
+export function nowAndNext(list: Programme[], now: number, count = 2): Programme[] {
+  const at = list.findIndex((p) => p.stop > now);
+  return at < 0 ? [] : list.slice(at, at + count);
+}
+
+/** The guide's text a piece at a time; a gzipped file opened where the TV can. */
+async function readXmltv(url: string, push: (text: string) => void) {
+  const response = await ask(url, { timeoutMs: 120_000, failure: "Couldn't download the TV guide." });
+  const decoder = new TextDecoder("utf-8");
+  const body = response.body;
+  if (!body || typeof body.getReader !== "function") {
+    push(await response.text());
+    return;
+  }
+  const raw = body.getReader();
+  const first = await raw.read();
+  if (first.done || !first.value) return;
+  const gzip = first.value[0] === 0x1f && first.value[1] === 0x8b;
+  let reader: ReadableStreamDefaultReader<Uint8Array> = raw;
+  let head: Uint8Array | null = first.value;
+  if (gzip) {
+    if (typeof DecompressionStream === "undefined") {
+      void raw.cancel();
+      throw new HttpError("This TV can't open the TV guide: it's compressed. Ask your provider for an uncompressed address.", 0);
+    }
+    const replay = new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(first.value!); },
+      async pull(controller) {
+        const next = await raw.read();
+        if (next.done) controller.close();
+        else controller.enqueue(next.value);
+      },
+      cancel() { void raw.cancel(); },
+    });
+    reader = replay.pipeThrough(new DecompressionStream("gzip") as unknown as ReadableWritablePair<Uint8Array, Uint8Array>).getReader();
+    head = null;
+  }
+  try {
+    if (head) push(decoder.decode(head, { stream: true }));
+    for (;;) {
+      const next = await reader.read();
+      if (next.done) break;
+      push(decoder.decode(next.value, { stream: true }));
+    }
+  } catch {
+    throw new HttpError("The TV guide stopped partway. Try again.", 0);
+  }
+  push(decoder.decode());
 }
 
 function unescapeXml(text: string): string {

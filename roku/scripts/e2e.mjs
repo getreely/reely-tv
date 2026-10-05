@@ -110,6 +110,18 @@ const server = http.createServer((req, res) => {
   const send = (v) => { res.writeHead(200, { "Content-Type": "application/json" }); res.end(JSON.stringify(v)); };
   const meta = (Metadata) => send({ MediaContainer: { Metadata } });
   if (url.pathname === "/player_api.php") return panel(url, send);
+  // A playlist that names its own XMLTV guide in its header.
+  if (url.pathname === "/tv.m3u") {
+    res.writeHead(200, { "Content-Type": "audio/x-mpegurl" });
+    return res.end(`#EXTM3U url-tvg="http://127.0.0.1:${port}/guide.xml"\n#EXTINF:-1 tvg-id="News.Example" group-title="News",News 24\nhttp://127.0.0.1:${port}/live/1.m3u8\n`);
+  }
+  if (url.pathname === "/guide.xml") {
+    const at = (s) => new Date(s * 1000).toISOString().replace(/[-:T]/g, "").slice(0, 14) + " +0000";
+    res.writeHead(200, { "Content-Type": "application/xml" });
+    return res.end(`<?xml version="1.0"?><tv><channel id="news.example"><display-name>News 24</display-name></channel>` +
+      `<programme start="${at(schedule)}" stop="${at(schedule + 3600)}" channel="news.example"><title>Playlist Evening News</title><desc>From the playlist&apos;s guide.</desc></programme>` +
+      `<programme start="${at(schedule + 3600)}" stop="${at(schedule + 7200)}" channel="news.example"><title>Playlist Late Show</title></programme></tv>`);
+  }
   if (url.pathname.startsWith("/api/v1/")) return reelyApi(req, res, url);
   switch (url.pathname) {
     case "/api/v2/pins": return send({ id: 1, code: "R0KU" });
@@ -769,6 +781,32 @@ try {
   await wait(2500);
   await snap("roku-screensaver");
   expect("the screensaver runs without a crash", !/BRIGHTSCRIPT_CRASH|Runtime Error|Syntax Error/i.test(output));
+  // Live TV from an M3U playlist that names its own guide: read whole, once, on its channels.
+  sim.kill("SIGKILL");
+  await wait(2000);
+  fullOutput += output;
+  output = "";
+  const registry = `${simData}/brs-cli/registry.json`;
+  const entries = JSON.parse(readFileSync(registry, "utf8"));
+  const prefix = entries.find(([k]) => k.endsWith(".reely.clientId"))[0].replace(/clientId$/, "");
+  const playlistLive = JSON.stringify({ credentials: { base: "", username: "", password: "", playlistUrl: `http://127.0.0.1:${port}/tv.m3u`, guideUrl: "" },
+    account: { status: "Active" }, favorites: [], recent: [], reminders: [] });
+  const kept = entries.filter(([k]) => k !== `${prefix}live`);
+  kept.push([`${prefix}live`, playlistLive]);
+  writeFileSync(registry, JSON.stringify(kept));
+  sim = launch(`plexTv=http://127.0.0.1:${port},discover=http://127.0.0.1:${port}`);
+  sim.stdout.on("data", (d) => { output += d.toString(); });
+  if (process.env.E2E_LOG) sim.stdout.on("data", (d) => appendFileSync(process.env.E2E_LOG, d));
+  await until("Home again", () => output.includes("TRACE home rows"), 30000).catch(() => undefined);
+  await wait(1500);
+  await toTabs();
+  await moveTo("TAB", "live", "Right");
+  await until("the playlist's guide", () => output.includes("TRACE live on now Playlist Evening News"), 20000).catch(() => undefined);
+  expect("a playlist's own XMLTV guide gives its channels what's on", output.includes("TRACE live on now Playlist Evening News"));
+  expect("the playlist's guide is downloaded once", asked.filter((p) => p === "/guide.xml").length === 1);
+  await wait(1500);
+  await snap("roku-live-playlist-guide");
+  expect("a playlist's guide without a crash", !/BRIGHTSCRIPT_CRASH|Runtime Error|Syntax Error|^OOPS /im.test(output));
 } catch (error) {
   failures.push(String(error.message ?? error));
   console.error(error.message ?? error);

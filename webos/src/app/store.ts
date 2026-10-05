@@ -145,10 +145,19 @@ export interface LiveState {
   catchUp: { programme: Programme; url: string } | null;
   /** The guide's listings, what's been as well as what's coming, by stream id. */
   table: Record<number, Programme[]>;
+  /** A playlist's own guide: being read, read when, or what went wrong; "none" when it names none. */
+  guideStatus: GuideStatus;
   reminders: Reminder[];
   /** A reminder whose programme is starting: up on screen until it's answered. */
   due: Reminder | null;
 }
+
+export type GuideStatus =
+  | { kind: "idle" }
+  | { kind: "updating" }
+  | { kind: "ready"; at: number }
+  | { kind: "none" }
+  | { kind: "failed"; message: string };
 
 /** "Starting now", asked for from the guide. */
 export interface Reminder {
@@ -419,7 +428,7 @@ const emptySearch = (recent: string[]): SearchState => ({
 
 const emptyLive = (): LiveState => ({
   credentials: null, account: null, categories: [], category: null, channels: [], guide: {}, favorites: [], busy: false, error: null, watching: null,
-  recent: [], catchUp: null, table: {}, reminders: [], due: null,
+  recent: [], catchUp: null, table: {}, guideStatus: { kind: "idle" }, reminders: [], due: null,
 });
 
 const emptyRequests = (): RequestsState => ({
@@ -1412,7 +1421,37 @@ export class App {
     // What was watched shows as watched, and where it was left, on the way back.
     void this.refreshHome();
     const page = this.current.detail;
-    if (page?.detail) void this.openDetail(page.detail.ratingKey, page.serverBase, p.item.type === "episode" ? p.item.ratingKey : null);
+    if (page?.detail) void this.refreshDetail(p.item);
+  }
+
+  /**
+   * The page open, read again where it stands after watching: what was watched shows so,
+   * without the page going back to nothing first and the cursor with it to Play. Another
+   * season's episode (Up Next went on into it) has the page opened afresh on that one.
+   */
+  private async refreshDetail(watched: PlexItem) {
+    const page = this.current.detail;
+    if (!page?.detail) return;
+    const episodeKey = watched.type === "episode" ? watched.ratingKey : null;
+    const base = page.serverBase;
+    const token = this.tokenFor(base);
+    const otherSeason = episodeKey != null && page.season != null && watched.parentRatingKey != null && watched.parentRatingKey !== page.season.ratingKey;
+    if (base === IPTV_SOURCE || !base || !token || otherSeason) {
+      void this.openDetail(page.detail.ratingKey, base, episodeKey);
+      return;
+    }
+    const { key, season } = page;
+    try {
+      const detail = await plex.detail(base, token, page.detail.ratingKey);
+      if (detail) this.setDetail(key, { detail });
+      if (season) {
+        const episodes = (await plex.children(base, token, season.ratingKey)).filter((e) => e.type === "episode");
+        const focused = episodes.find((e) => e.ratingKey === episodeKey) ?? plex.nextEpisode(episodes);
+        this.setDetail(key, { episodes, focused });
+      }
+    } catch {
+      // Left as it was: it's only a little behind.
+    }
   }
 
   /** The episode after this one in its season, if there is one. */
@@ -1626,6 +1665,7 @@ export class App {
     try {
       const account = await xtream.login(credentials);
       this.allChannels = null;
+      xtream.forgetPlaylistGuide();
       this.store.setJson("xtream", credentials);
       this.setLive({ credentials, account, busy: false });
       // Another provider's catalogue isn't this one's.
@@ -1640,6 +1680,7 @@ export class App {
 
   signOutLive() {
     this.allChannels = null;
+    xtream.forgetPlaylistGuide();
     this.iptv.setCatalog(vod.emptyCatalog());
     this.set((s) => ({ ...s, iptv: { loading: false, error: null, ready: false } }));
     this.leaveIptvTabs();
@@ -1714,6 +1755,7 @@ export class App {
   async loadTable(channels: XtreamChannel[]) {
     const c = this.current.live.credentials;
     if (!c) return;
+    if (xtream.isPlaylist(c)) return this.fromPlaylistGuide(channels);
     const wanted = channels.filter((ch) => !this.current.live.table[ch.streamId]);
     for (let i = 0; i < wanted.length; i += 4) {
       const batch = wanted.slice(i, i + 4);
@@ -1813,6 +1855,7 @@ export class App {
   async loadGuide(channels: XtreamChannel[]) {
     const c = this.current.live.credentials;
     if (!c) return;
+    if (xtream.isPlaylist(c)) return this.fromPlaylistGuide(channels);
     for (let i = 0; i < channels.length; i += 6) {
       const batch = channels.slice(i, i + 6);
       const found = await Promise.all(batch.map((ch) => xtream.shortEpg(c, ch.streamId, 2).catch(() => [] as Programme[])));
@@ -2137,11 +2180,41 @@ export class App {
     await this.loadLive();
   }
 
-  /** The guide asked for afresh, for the channels on screen. */
+  /** The guide asked for afresh, for the channels on screen; a playlist's read again whole. */
   async refreshGuide() {
+    const c = this.current.live.credentials;
     const channels = this.current.live.channels;
+    if (c && xtream.isPlaylist(c)) return this.fromPlaylistGuide(channels, true);
     this.setLive({ guide: {}, table: {} });
     await this.loadGuide(channels.slice(0, 40));
+  }
+
+  /**
+   * A playlist's channels' listings, from the XMLTV guide it names: read once, whole, as the
+   * Fire TV does, then kept for a while. A playlist that names none has none to show.
+   */
+  private async fromPlaylistGuide(channels: XtreamChannel[], fresh = false) {
+    const c = this.current.live.credentials;
+    if (!c || !xtream.isPlaylist(c)) return;
+    const at = xtream.playlistGuideAt(c);
+    const now = Math.floor(Date.now() / 1000);
+    if (fresh || at == null || now - at >= xtream.PLAYLIST_GUIDE_KEEP_SECONDS) this.setLive({ guideStatus: { kind: "updating" } });
+    try {
+      const byChannel = await xtream.playlistGuide(c, fresh);
+      if (this.current.live.credentials !== c) return;
+      const read = xtream.playlistGuideAt(c);
+      const guide = { ...this.current.live.guide };
+      const table = { ...this.current.live.table };
+      for (const ch of channels) {
+        const list = xtream.playlistListing(byChannel, ch);
+        table[ch.streamId] = list;
+        guide[ch.streamId] = xtream.nowAndNext(list, now, 4);
+      }
+      this.setLive({ guide, table, guideStatus: read == null ? { kind: "none" } : { kind: "ready", at: read } });
+    } catch (error) {
+      if (this.current.live.credentials !== c) return;
+      this.setLive({ guideStatus: { kind: "failed", message: readable(error) } });
+    }
   }
 
   /** The provider's movies and shows asked for afresh. */

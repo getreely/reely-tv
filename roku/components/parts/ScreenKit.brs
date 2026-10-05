@@ -63,7 +63,9 @@ sub Ask_(op as string, args as object)
     if m.askSeq_ = invalid then m.askSeq_ = 0
     m.askSeq_ = m.askSeq_ + 1
     key = op + ":" + m.askSeq_.ToStr()
-    if Left(op, 4) = "iptv" then
+    ' A playlist's guide is read whole and kept, so it's asked of the task that stays.
+    playlistGuide = (op = "liveEpg" or op = "liveTable") and args.credentials <> invalid and Str_(args.credentials.playlistUrl) <> ""
+    if Left(op, 4) = "iptv" or playlistGuide then
         server = m.global.iptv
         if server = invalid then return
         ' The answer comes back in a node of this page's own, so only this page hears it.
