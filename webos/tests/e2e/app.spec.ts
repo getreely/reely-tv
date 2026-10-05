@@ -63,7 +63,9 @@ async function fakePlex(page: Page, options: { tour?: boolean } = {}) {
       const all = Array.from({ length: 333 }, (_, i) => episode(`n${i}`, i + 1));
       return meta(route, all.slice(start, start + size));
     }
-    if (path === "/library/metadata/show1") return meta(route, [{ ratingKey: "show1", type: "show", title: "Northbound", year: 2024, summary: "A long-haul driver." }]);
+    if (path === "/library/metadata/show1") return meta(route, [{ ratingKey: "show1", type: "show", title: "Northbound", year: 2024, art: "/art/show1", thumb: "/thumb/show1",
+      rating: 8.1, audienceRating: 8.6, contentRating: "TV-14", studio: "Harbourside", childCount: 1,
+      summary: "A long-haul driver takes the jobs nobody else will, on roads that don't appear on any map, and starts to notice who keeps booking her." }]);
     if (path === "/library/metadata/show1/children") return meta(route, [{ ratingKey: "s1", type: "season", title: "Season 1", index: 1 }]);
     if (path === "/library/metadata/s1/children") return meta(route, [episode("e1", 1, true), episode("e2", 2), episode("e3", 3)]);
     if (path === "/library/metadata/show1/related") return json(route, { MediaContainer: {} });
@@ -126,7 +128,7 @@ test("signs in with a code, browses with the remote, plays and comes back", asyn
   await press(page, "Enter");
   await expect(page.getByRole("heading", { name: "Northbound" })).toBeVisible();
   await expect(page.getByText("Up next  ·  S1 · E2  ·  Episode 2")).toBeVisible();
-  await expect(page.locator(".pill:focus")).toHaveText("Play");
+  await expect(page.locator(".round:focus .label")).toHaveText("Play");
   await page.screenshot({ path: "shots/lg-show.png" });
 
   // Play: DTS sound the TV can't play, so Plex converts it.
@@ -233,7 +235,7 @@ test("the player: Skip Intro, another sound track kept with Plex, Up Next on to 
   await press(page, "Enter");
   await expect(page.getByText("Continue Watching")).toBeVisible({ timeout: 10_000 });
   await press(page, "Enter");
-  await expect(page.locator(".pill:focus")).toHaveText("Play");
+  await expect(page.locator(".round:focus .label")).toHaveText("Play");
   await press(page, "Enter");
   await expect(page.locator(".player")).toBeVisible();
 

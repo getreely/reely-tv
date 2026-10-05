@@ -382,28 +382,41 @@ export function Detail(props: { app: App; state: AppState; onPlay: (item: PlexIt
   const backdrop = app.image(page.serverBase, d.art ?? d.thumb, 1920, 1080);
   const level = state.prefs.themeLevel;
   const theme = show && level >= 0 ? app.mediaUrl(page.serverBase, d.theme) : null;
+  const logo = d.logo ? app.image(page.serverBase, d.logo, 900, 320) : null;
+  const watchedNow = target ? plex.isWatched(target) : d.viewCount > 0;
+  const play = (resume: boolean) => { const i = playItem(); if (i) props.onPlay(i, resume); };
   return (
-    <div>
+    // As the Fire TV's: the title's picture behind the whole page, its name or logo, scores,
+    // details and quality, what it's about, round buttons, then the season's episodes as pictures.
+    <div class="title-page">
       {theme ? <ThemeMusic url={theme} volume={THEME_LEVELS[level][1]} /> : null}
-      <div class="hero">
-        <div class="backdrop" style={backdrop ? { backgroundImage: `url("${backdrop}")` } : undefined} />
-        <h1>{d.title}</h1>
-        <div class="facts">{[plex.facts(d), d.qualities.join(" · ")].filter(Boolean).join("  ·  ")}</div>
+      <div class="screen-backdrop" style={backdrop ? { backgroundImage: `url("${backdrop}")` } : undefined} />
+      <div class="title-hero">
+        {logo ? <img class="title-logo" src={logo} alt={d.title} /> : <h1 class="title-name">{d.title}</h1>}
+        <div class="title-facts">
+          {d.rating != null ? <span class="score critic">★ {d.rating.toFixed(1)}</span> : null}
+          {d.audienceRating != null ? <span class="score audience">{Math.round(d.audienceRating * 10)}%</span> : null}
+          {d.contentRating ? <span class="score">{d.contentRating}</span> : null}
+          {titleFacts(d, show).map((f) => <span key={f}>{f}</span>)}
+          {d.qualities.map((q) => <span key={q} class="quality">{q}</span>)}
+        </div>
         {target ? (
-          <div class="facts" style={{ color: "var(--chalk)" }}>
+          <div class="title-next">
             {[resumeFrom > 0 ? "Continue" : "Up next", [target.parentIndex != null ? `S${target.parentIndex}` : null, target.index != null ? `E${target.index}` : null].filter(Boolean).join(" · "), target.title]
               .filter(Boolean)
               .join("  ·  ")}
           </div>
         ) : null}
+        {d.summary ? <div class="summary">{d.summary}</div> : null}
+        {page.error ? <p class="note error">{page.error}</p> : null}
         {d.type !== "collection" ? (
-          <div class="actions">
-            <Pill label={resumeFrom > 0 ? "Resume" : "Play"} primary autofocus onPress={() => { const i = playItem(); if (i) props.onPlay(i, true); }} />
-            {resumeFrom > 0 ? <Pill label="Restart" onPress={() => { const i = playItem(); if (i) props.onPlay(i, false); }} /> : null}
-            {!show || target ? <Pill label={(target ? plex.isWatched(target) : d.viewCount > 0) ? "Unwatch" : "Watched"} onPress={() => void app.toggleWatched()} /> : null}
-            {d.guid ? <Pill label="Watchlist" on={state.plex.watchlist.has(d.guid)} onPress={() => void app.toggleWatchlist()} /> : null}
+          <div class="round-actions">
+            <RoundButton label={resumeFrom > 0 ? "Resume" : "Play"} glyph="play" primary autofocus onPress={() => play(true)} />
+            {resumeFrom > 0 ? <RoundButton label="Restart" glyph="restart" onPress={() => play(false)} /> : null}
+            {!show || target ? <RoundButton label={watchedNow ? "Unwatch" : "Watched"} glyph="check" on={watchedNow} onPress={() => void app.toggleWatched()} /> : null}
+            {d.guid ? <RoundButton label="Watchlist" glyph={state.plex.watchlist.has(d.guid) ? "saved" : "save"} on={state.plex.watchlist.has(d.guid)} onPress={() => void app.toggleWatchlist()} /> : null}
             {page.trailers.length ? (
-              <Pill label="Trailer" onPress={() => {
+              <RoundButton label="Trailer" glyph="film" onPress={() => {
                 const t = page.trailers[0];
                 props.onPlay({ ...emptyItem(t.ratingKey, t.title, "clip"), serverBase: page.serverBase, durationMs: t.durationMs }, false);
               }} />
@@ -415,8 +428,6 @@ export function Detail(props: { app: App; state: AppState; onPlay: (item: PlexIt
             {d.versions.map((v, i) => <Pill key={i} label={v.label} on={page.versionIndex === i} onPress={() => app.chooseVersion(i)} />)}
           </div>
         ) : null}
-        {page.error ? <p class="note error">{page.error}</p> : null}
-        {d.summary ? <div class="summary">{d.summary}</div> : null}
       </div>
       {page.seasons.length > 1 ? (
         <div class="toolbar">
@@ -425,23 +436,22 @@ export function Detail(props: { app: App; state: AppState; onPlay: (item: PlexIt
           ))}
         </div>
       ) : null}
-      {show ? (
-        <div class="episodes">
+      {show && page.episodes.length ? (
+        <Row title={page.season?.title ?? "Episodes"}>
           {page.episodes.map((e) => (
-            <button key={e.ratingKey} class="episode" data-focus onClick={() => props.onPlay(e, true)}>
-              <div class="art">
-                {app.image(e.serverBase ?? page.serverBase, e.thumb, 400, 225) ? <img src={app.image(e.serverBase ?? page.serverBase, e.thumb, 400, 225)!} alt="" /> : null}
-                {plex.isWatched(e) ? <span class="check">✓</span> : null}
-                {plex.resumeFraction(e) && !plex.isWatched(e) ? <span class="progress"><i style={{ width: `${Math.round(plex.resumeFraction(e)! * 100)}%` }} /></span> : null}
-              </div>
-              <div>
-                <div class="name">{[e.index != null ? `${e.index}.` : null, e.title].filter(Boolean).join(" ")}</div>
-                <div class="facts">{formatDuration(e.durationMs)}</div>
-                {e.summary ? <div class="about">{e.summary}</div> : null}
-              </div>
-            </button>
+            <Card
+              key={e.ratingKey}
+              item={e}
+              wide
+              title={[e.index != null ? `${e.index}.` : null, e.title].filter(Boolean).join(" ")}
+              sub={formatDuration(e.durationMs) || null}
+              image={app.image(e.serverBase ?? page.serverBase, e.thumb, 480, 270)}
+              progress={plex.resumeFraction(e)}
+              watched={plex.isWatched(e)}
+              onPress={() => props.onPlay(e, true)}
+            />
           ))}
-        </div>
+        </Row>
       ) : null}
       {d.roles.length ? (
         <section class="row">
@@ -599,4 +609,43 @@ export function HomeHero(props: { app: App; item: PlexItem | null; fallback: str
       {item.summary ? <p class="summary">{item.summary}</p> : null}
     </div>
   );
+}
+
+/** The details after the scores: the year, then a show's seasons or a film's running time, and the studio. */
+function titleFacts(d: plex.PlexDetail, show: boolean): string[] {
+  const minutes = d.durationMs > 0 ? Math.floor(d.durationMs / 60_000) : 0;
+  const length = show
+    ? (d.childCount > 0 ? (d.childCount === 1 ? "1 season" : `${d.childCount} seasons`) : null)
+    : (minutes > 0 ? (minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : `${minutes}m`) : null);
+  return [d.year != null ? String(d.year) : null, length, d.studio].filter((f): f is string => !!f);
+}
+
+type Glyph = "play" | "restart" | "check" | "save" | "saved" | "film";
+
+/** A round button with its name under it, as the Fire TV's title page has them. */
+function RoundButton(props: { label: string; glyph: Glyph; primary?: boolean; on?: boolean; autofocus?: boolean; onPress: () => void }) {
+  return (
+    <button class={"round" + (props.primary ? " primary" : "") + (props.on ? " on" : "")} data-focus data-autofocus={props.autofocus ? "" : undefined} aria-label={props.label} onClick={props.onPress}>
+      <span class="disc"><RoundGlyph glyph={props.glyph} /></span>
+      <span class="label">{props.label}</span>
+    </button>
+  );
+}
+
+function RoundGlyph(props: { glyph: Glyph }) {
+  const stroke = { fill: "none", stroke: "currentColor", "stroke-width": 9, "stroke-linecap": "round" as const, "stroke-linejoin": "round" as const };
+  switch (props.glyph) {
+    case "play":
+      return <svg class="glyph" viewBox="0 0 100 100" aria-hidden="true"><path d="M34 22 L78 50 L34 78 Z" fill="currentColor" /></svg>;
+    case "restart":
+      return <svg class="glyph" viewBox="0 0 100 100" aria-hidden="true"><path d="M30 34 A28 28 0 1 1 26 62" {...stroke} /><path d="M22 20 L30 36 L46 30" {...stroke} /></svg>;
+    case "check":
+      return <svg class="glyph" viewBox="0 0 100 100" aria-hidden="true"><path d="M24 52 L42 70 L76 32" {...stroke} /></svg>;
+    case "save":
+      return <svg class="glyph" viewBox="0 0 100 100" aria-hidden="true"><path d="M50 24 V76 M24 50 H76" {...stroke} /></svg>;
+    case "saved":
+      return <svg class="glyph" viewBox="0 0 100 100" aria-hidden="true"><path d="M30 22 H70 V80 L50 66 L30 80 Z" fill="currentColor" /></svg>;
+    case "film":
+      return <svg class="glyph" viewBox="0 0 100 100" aria-hidden="true"><rect x="20" y="26" width="60" height="48" rx="8" {...stroke} /><path d="M44 40 L60 50 L44 60 Z" fill="currentColor" /></svg>;
+  }
 }

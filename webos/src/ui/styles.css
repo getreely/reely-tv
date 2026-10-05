@@ -254,10 +254,32 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .home-hero h1 { margin: 0 0 0.5rem; font-size: 2.8rem; font-weight: 700; letter-spacing: -0.02em; max-width: 50rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .home-hero .hero-logo { display: block; max-width: 24rem; max-height: 6rem; object-fit: contain; object-position: left bottom; margin-bottom: 0.7rem; }
 .home-hero .facts { display: flex; align-items: center; font-size: 1.15rem; color: var(--muted); margin-bottom: 0.5rem; }
-.home-hero .quality { margin-left: 0.6rem; padding: 0.1rem 0.5rem; border-radius: 0.4rem; background: rgba(242, 244, 247, 0.14); color: var(--chalk); font-size: 0.95rem; font-weight: 600; }
+.home-hero .quality { margin-left: 0.6rem; }
 .home-hero .summary { margin: 0; max-width: 46rem; }
 /* The picture behind the whole screen, fading into the black at the left and the bottom. */
 .screen-backdrop { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: -1; background-size: cover; background-position: center top; transition: background-image 0.4s ease; }
 .screen-backdrop::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; left: 0;
   background: linear-gradient(90deg, var(--ink) 0%, rgba(8, 9, 11, 0.72) 35%, rgba(8, 9, 11, 0.08) 100%), linear-gradient(0deg, var(--ink) 5%, rgba(8, 9, 11, 0.35) 50%, rgba(8, 9, 11, 0.15) 100%); }
 .hero-rows { flex: 1; overflow-y: auto; overflow-x: hidden; padding-bottom: 3rem; scroll-behavior: smooth; }
+
+/* A title's page, as on the Fire TV. */
+.title-page { position: relative; z-index: 0; }
+.title-hero { padding: 1.2rem 3rem 0.4rem; display: flex; flex-direction: column; align-items: flex-start; }
+.title-name { margin: 0 0 0.6rem; font-size: 2.8rem; font-weight: 700; letter-spacing: -0.02em; max-width: 54rem; }
+.title-logo { display: block; max-width: 26rem; max-height: 7rem; object-fit: contain; object-position: left bottom; margin-bottom: 0.8rem; }
+.title-facts { display: flex; flex-wrap: wrap; align-items: center; font-size: 1.2rem; color: var(--chalk); margin-bottom: 0.7rem; }
+.title-facts > * { margin-right: 0.8rem; }
+.score { padding: 0.05rem 0.55rem; border-radius: 0.45rem; border: 0.08rem solid rgba(242, 244, 247, 0.55); font-size: 1.05rem; }
+.score.critic { border-color: var(--accent); background: var(--accent-glow); }
+.score.audience { border-color: #8cbe6e; }
+.quality { padding: 0.1rem 0.55rem; border-radius: 0.45rem; background: rgba(242, 244, 247, 0.14); color: var(--chalk); font-size: 1rem; font-weight: 600; }
+.title-next { font-size: 1.1rem; color: var(--chalk); margin-bottom: 0.5rem; }
+.title-hero .summary { font-size: 1.2rem; max-width: 46rem; margin-bottom: 0.4rem; }
+.round-actions { display: flex; margin-top: 1.2rem; }
+.round { display: flex; flex-direction: column; align-items: center; margin-right: 1.4rem; }
+.round .disc { width: 3.2rem; height: 3.2rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: rgba(21, 23, 27, 0.85); box-shadow: inset 0 0 0 0.08rem var(--line); color: var(--chalk); transition: transform 140ms ease; }
+.round .disc .glyph { width: 1.35rem; height: 1.35rem; }
+.round.primary .disc { background: var(--accent); box-shadow: none; color: var(--on-accent); }
+.round:focus .disc { background: var(--chalk); color: var(--ink); transform: scale(1.08); box-shadow: 0 0 0 0.16rem var(--chalk); }
+.round .label { margin-top: 0.55rem; font-size: 1rem; color: var(--muted); }
+.round:focus .label { color: var(--chalk); font-weight: 600; }
