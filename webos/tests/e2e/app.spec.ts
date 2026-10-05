@@ -144,6 +144,11 @@ test("signs in with a code, browses with the remote, plays and comes back", asyn
   await press(page, "Escape");
   await expect(page.getByRole("heading", { name: "Northbound" })).toBeVisible();
   await expect.poll(() => plex.timeline).toContain("stopped@e2");
+  // Down to the episodes: the one under the cursor whole, its length too, the page scrolled
+  // far enough for it grown.
+  for (let i = 0; i < 6 && !(await page.locator(".card.wide:focus").count()); i++) await press(page, "ArrowDown");
+  await expect(page.locator(".card.wide:focus")).toHaveCount(1);
+  expect(await ringCutOff(page)).toEqual([]);
 });
 
 test("Search finds by name and people; Settings keeps a playback choice", async ({ page }) => {
@@ -213,6 +218,41 @@ test("Search finds by name and people; Settings keeps a playback choice", async 
   await page.getByRole("button", { name: "Settings" }).focus();
   await press(page, "Enter");
   await expect(page.locator(".setting", { hasText: "Playback mode" }).locator(".setting-value")).toHaveText("Always convert");
+});
+
+test("Settings: the libraries switched on are the only ones on Home and in the menus, as on the Fire TV", async ({ page }) => {
+  await fakePlex(page);
+  await page.goto("/");
+  await press(page, "Enter");
+  await expect(page.getByText("Recently Added Movies")).toBeVisible({ timeout: 10_000 });
+  await page.getByRole("button", { name: "Settings" }).focus();
+  await press(page, "Enter");
+  await page.locator(".section-tab", { hasText: "Plex" }).focus();
+  await press(page, "Enter");
+  // A switch for each library, all off: none switched on is every one of them.
+  await expect(page.locator(".setting-group", { hasText: "Libraries" }).locator(".setting .setting-title")).toHaveText(["Movies", "TV Shows"]);
+  await expect(page.locator(".setting", { hasText: "TV Shows" }).locator(".switch.on")).toHaveCount(0);
+  await page.screenshot({ path: "shots/lg-settings-libraries.png" });
+  // TV Shows alone: Home is from it only, so no films; Movies' menu still has its own.
+  await page.locator(".setting", { hasText: "TV Shows" }).focus();
+  await press(page, "Enter");
+  await expect(page.locator(".setting", { hasText: "TV Shows" }).locator(".switch.on")).toHaveCount(1);
+  await page.locator(".tab", { hasText: "Home" }).click();
+  await expect(page.getByText("Continue Watching")).toBeVisible();
+  await expect(page.getByText("Recently Added Movies")).toHaveCount(0);
+  // Kept: the same after starting again.
+  await page.reload();
+  await expect(page.getByText("Continue Watching")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText("Recently Added Movies")).toHaveCount(0);
+  // Switched off again: every library, the films back.
+  await page.getByRole("button", { name: "Settings" }).focus();
+  await press(page, "Enter");
+  await page.locator(".section-tab", { hasText: "Plex" }).focus();
+  await press(page, "Enter");
+  await page.locator(".setting", { hasText: "TV Shows" }).focus();
+  await press(page, "Enter");
+  await page.locator(".tab", { hasText: "Home" }).click();
+  await expect(page.getByText("Recently Added Movies")).toBeVisible();
 });
 
 /**
@@ -422,7 +462,12 @@ async function ringCutOff(page: Page): Promise<string[]> {
       }
     }
     const r = target.getBoundingClientRect();
-    const ring = { top: r.top - spread, bottom: r.bottom + spread, left: r.left - spread, right: r.right + spread };
+    // The ring round the picture, and the whole of what has the cursor: its name and length too.
+    const whole = el.getBoundingClientRect();
+    const ring = {
+      top: Math.min(r.top - spread, whole.top), bottom: Math.max(r.bottom + spread, whole.bottom),
+      left: Math.min(r.left - spread, whole.left), right: Math.max(r.right + spread, whole.right),
+    };
     const cut = new Set<string>();
     for (let a = target.parentElement; a && a !== document.body; a = a.parentElement) {
       const style = getComputedStyle(a);

@@ -441,6 +441,12 @@ describe("playing a file as it is, or converted", () => {
   it("what the TV says no to is converted", () => {
     expect(plan({ container: "mp4", videoCodec: "av1", audioCodec: "aac" }, tv).direct).toBe(false);
   });
+  it("an MKV the TV's web player won't name is tried as it is when the TV plays what's in it", () => {
+    // As webOS answers: no to Matroska by name; HEVC and AAC yes, or (an older TV) HEVC no.
+    const lg = (hevc: boolean) => (mime: string) => !mime.includes("matroska") && (hevc || !mime.includes("hev1"));
+    expect(plan({ container: "mkv", videoCodec: "hevc", audioCodec: "aac" }, lg(true))).toEqual({ direct: true, reason: null });
+    expect(plan({ container: "mkv", videoCodec: "hevc", audioCodec: "aac" }, lg(false))).toEqual({ direct: false, reason: "The TV can't play this file as it is" });
+  });
 });
 
 describe("telling Plex where playback got to", () => {

@@ -36,7 +36,12 @@ export function plan(p: Pick<PlexPlayback, "container" | "videoCodec" | "audioCo
   if (p.audioCodec && !audio) return { direct: false, reason: `The TV can't play ${p.audioCodec.toUpperCase()} sound` };
   const codecs = [video, audio].filter(Boolean).join(", ");
   const mime = codecs ? `${container}; codecs="${codecs}"` : container;
-  return canPlay(mime) ? { direct: true, reason: null } : { direct: false, reason: "The TV can't play this file as it is" };
+  if (canPlay(mime)) return { direct: true, reason: null };
+  // An MKV: the TV's web player won't say yes to Matroska, though the TV opens it. What's
+  // in it is asked about instead, as it would be in an MP4; the TV says yes to that, and
+  // it's tried as it is. Should it not play after all, the player has Plex convert it then.
+  if (container === CONTAINERS.mkv && codecs && canPlay(`video/mp4; codecs="${codecs}"`)) return { direct: true, reason: null };
+  return { direct: false, reason: "The TV can't play this file as it is" };
 }
 
 /** What the browser's own player says it can do: "probably" and "maybe" both count. */

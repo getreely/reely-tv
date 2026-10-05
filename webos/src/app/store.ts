@@ -235,6 +235,11 @@ export interface Prefs {
   hiddenRows: HomeRowId[];
   /** The IPTV provider's movies and shows in the tabs, on Home and in search. */
   iptvLibrary: boolean;
+  /**
+   * The libraries switched on in Settings, by libraryId, as on the Fire TV: the only ones in
+   * the Movies and TV Shows menus, on Home, and searched. None switched on is all of them.
+   */
+  pinnedLibraries: string[];
   /** A title in both: the provider's copy shown rather than Plex's. */
   iptvWins: boolean;
   /** Minutes without a button before the screensaver; 0 for none. */
@@ -309,7 +314,7 @@ export const ACCENTS: Array<{ id: string; label: string; color: string; on: stri
 export const accentOf = (id: string | undefined) => ACCENTS.find((a) => a.id === id) ?? ACCENTS[0];
 
 export const UP_NEXT_CHOICES = [0, 5, 10, 12, 15, 20, 30];
-const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], iptvLibrary: false, iptvWins: false, screensaverMinutes: 3, tourSeen: false, subtitleScale: 0.9, subtitleBackground: false, subtitlesAtStart: "plex", accent: "blue", iptvInMenus: true, themeLevel: -1, guidePreview: true, streamFormat: "m3u8" };
+const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], iptvLibrary: false, pinnedLibraries: [], iptvWins: false, screensaverMinutes: 3, tourSeen: false, subtitleScale: 0.9, subtitleBackground: false, subtitlesAtStart: "plex", accent: "blue", iptvInMenus: true, themeLevel: -1, guidePreview: true, streamFormat: "m3u8" };
 
 /** As the Fire TV offers them. */
 export const BITRATE_CHOICES = [0, 20_000, 12_000, 8_000, 4_000, 2_000];
@@ -544,6 +549,7 @@ export class App {
         upNextSeconds: typeof prefs.upNextSeconds === "number" ? Math.max(0, Math.min(30, prefs.upNextSeconds)) : DEFAULT_PREFS.upNextSeconds,
         hiddenRows: Array.isArray(prefs.hiddenRows) ? prefs.hiddenRows.filter((r) => HOME_ROWS.some(([id]) => id === r)) : [],
         iptvLibrary: prefs.iptvLibrary === true,
+        pinnedLibraries: Array.isArray(prefs.pinnedLibraries) ? prefs.pinnedLibraries.filter((id) => typeof id === "string") : [],
         iptvWins: prefs.iptvWins === true,
         screensaverMinutes: SCREENSAVER_CHOICES.includes(prefs.screensaverMinutes ?? -1) ? prefs.screensaverMinutes! : DEFAULT_PREFS.screensaverMinutes,
         tourSeen: prefs.tourSeen === true,
@@ -709,7 +715,7 @@ export class App {
   // ---------------------------------------------------------------- Home
 
   async refreshHome() {
-    const libraries = this.current.plex.libraries;
+    const libraries = this.shownLibraries();
     if (!libraries.length) return;
     const run = ++this.homeRun;
     this.set((s) => ({ ...s, homeBusy: true, homeError: null }));
@@ -770,7 +776,7 @@ export class App {
   async openReady(title: RequestTitle) {
     this.dismissReady(title);
     const kind = title.kind === "show" ? "show" : "movie";
-    const servers = this.current.plex.libraries
+    const servers = this.shownLibraries()
       .map((l) => [l.baseUrl, l.token] as const)
       .filter(([base], i, all) => all.findIndex(([b]) => b === base) === i);
     for (const [base, token] of servers) {
@@ -829,7 +835,7 @@ export class App {
     this.set((s) => ({ ...s, iptv: { ...s.iptv, loading: true, error: null } }));
     try {
       if (!this.current.iptv.ready) this.iptv.setCatalog(await vod.catalog(c));
-      const libraries = this.current.plex.libraries;
+      const libraries = this.shownLibraries();
       const entries = async (type: Kind) =>
         (await Promise.all(
           libraries.filter((l) => l.section.type === type).map((l) =>
@@ -885,7 +891,7 @@ export class App {
     }
     if (this.current.plex.token !== token) return;
     if (this.watchlistEdits === edits) this.setPlex({ watchlist: new Set(guids) });
-    const servers = this.current.plex.libraries
+    const servers = this.shownLibraries()
       .map((l) => [l.baseUrl, l.token] as const)
       .filter(([base], i, all) => all.findIndex(([b]) => b === base) === i);
     const found: PlexItem[] = [];
@@ -975,8 +981,37 @@ export class App {
 
   // ---------------------------------------------------------------- Libraries
 
+  /** A library, the same on every start: its server and its key there. */
+  libraryId(l: LibraryChoice): string {
+    return `${l.baseUrl}|${l.section.key}`;
+  }
+
+  /** The libraries switched on in Settings; all of them when none are, or none of those are found. */
+  shownLibraries(): LibraryChoice[] {
+    const all = this.current.plex.libraries;
+    const pinned = this.current.prefs.pinnedLibraries;
+    if (!pinned.length) return all;
+    const shown = all.filter((l) => pinned.includes(this.libraryId(l)));
+    return shown.length ? shown : all;
+  }
+
+  /** A library on or off: Home is put together again from those on, and a tab showing one switched off goes back to the first. */
+  togglePinnedLibrary(l: LibraryChoice) {
+    const id = this.libraryId(l);
+    const pinned = this.current.prefs.pinnedLibraries;
+    this.setPrefs({ pinnedLibraries: pinned.includes(id) ? pinned.filter((p) => p !== id) : [...pinned, id] });
+    for (const kind of ["movie", "show"] as Kind[]) {
+      const choice = this.current.browse[kind].choice;
+      if (choice && !isIptvChoice(choice) && !this.librariesOf(kind).some((c) => c === choice)) this.setBrowse(kind, { ...emptyBrowse() });
+    }
+    void this.refreshHome();
+  }
+
   librariesOf(kind: Kind): LibraryChoice[] {
-    const plexOnes = this.current.plex.libraries.filter((l) => l.section.type === kind);
+    // The ones of this kind switched on; all of this kind when none of them are, as on the Fire TV.
+    const all = this.current.plex.libraries.filter((l) => l.section.type === kind);
+    const pinnedHere = all.filter((l) => this.current.prefs.pinnedLibraries.includes(this.libraryId(l)));
+    const plexOnes = pinnedHere.length ? pinnedHere : all;
     // The provider's, after Plex's: one choice, the same object each time, so it reads as chosen.
     // Unless taken out of the menus in Settings.
     return this.iptvOn() && this.current.prefs.iptvInMenus ? [...plexOnes, this.iptvChoices[kind]] : plexOnes;
@@ -1251,7 +1286,7 @@ export class App {
       // is; picture ones (PGS) only Plex's conversion can put in.
       const { text, burn } = subtitlePlan(playback);
       const asIs = mode === "direct" ? true : mode === "transcode" || burn ? false : direct(playback);
-      const url = asIs ? playback.url : this.converted(base, token, item.ratingKey, sessionId, mediaIndex, text ? "none" : "burn");
+      const url = asIs ? playback.url : this.converted(base, token, item.ratingKey, sessionId, mediaIndex, text ? "none" : "burn", playback.videoCodec);
       const startMs = resume && item.viewOffsetMs > 0 && !(item.durationMs > 0 && item.viewOffsetMs >= item.durationMs * 0.95) ? item.viewOffsetMs : 0;
       this.set((s) => ({ ...s, playError: null, playing: { item, base, token, playback, url, direct: asIs, startMs, sessionId, queue, mediaIndex, textSubtitle: text } }));
     } catch (error) {
@@ -1282,16 +1317,16 @@ export class App {
     const p = this.current.playing;
     // The provider's files have no Plex to convert them.
     if (!p || !p.direct || p.base === IPTV_SOURCE) return false;
-    const url = this.converted(p.base, p.token, p.item.ratingKey, p.sessionId, p.mediaIndex, p.textSubtitle ? "none" : "burn");
+    const url = this.converted(p.base, p.token, p.item.ratingKey, p.sessionId, p.mediaIndex, p.textSubtitle ? "none" : "burn", p.playback.videoCodec);
     this.set((s) => ({ ...s, playing: { ...p, url, direct: false, startMs: positionMs } }));
     return true;
   }
 
   /** Plex's conversion, at the quality chosen in Settings. */
-  private converted(base: string, token: string, ratingKey: string, sessionId: string, mediaIndex = 0, subtitles: "burn" | "none" = "burn") {
+  private converted(base: string, token: string, ratingKey: string, sessionId: string, mediaIndex: number, subtitles: "burn" | "none", videoCodec: string | null) {
     const kbps = this.current.prefs.maxBitrateKbps;
     const resolution = kbps >= 20_000 ? "3840x2160" : kbps === 0 || kbps >= 8_000 ? "1920x1080" : "1280x720";
-    return plex.transcodeUrl(base, token, ratingKey, sessionId, kbps, resolution, mediaIndex, subtitles, Math.round(this.current.prefs.subtitleScale * 100));
+    return plex.transcodeUrl(base, token, ratingKey, sessionId, kbps, resolution, mediaIndex, subtitles, Math.round(this.current.prefs.subtitleScale * 100), videoCodec);
   }
 
   /**
@@ -1321,7 +1356,7 @@ export class App {
       this.set((s) => ({ ...s, playing: { ...p, playback, textSubtitle: text } }));
       return;
     }
-    const url = asIs ? playback.url : this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, text ? "none" : "burn");
+    const url = asIs ? playback.url : this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, text ? "none" : "burn", playback.videoCodec);
     this.set((s) => ({ ...s, playing: { ...p, playback, url, direct: asIs, startMs: positionMs, sessionId, textSubtitle: text } }));
   }
 
@@ -1462,7 +1497,7 @@ export class App {
   }
 
   private async plexHoldings(): Promise<{ movies: Set<string>; shows: Set<string> } | null> {
-    const libraries = this.current.plex.libraries;
+    const libraries = this.shownLibraries();
     if (!libraries.length) return null;
     const of = async (type: "movie" | "show") => {
       const sets = await Promise.all(
@@ -1840,7 +1875,7 @@ export class App {
     await this.wait(400);
     if (run !== this.queryRun) return;
     const p = this.current.plex;
-    const servers = p.libraries
+    const servers = this.shownLibraries()
       .map((l) => [l.baseUrl, l.token] as const)
       .filter(([base], i, all) => all.findIndex(([b]) => b === base) === i);
     if (!servers.length && p.baseUrl && p.serverToken) servers.push([p.baseUrl, p.serverToken]);
@@ -1921,7 +1956,7 @@ export class App {
     const key = `person:${person.serverBase ?? ""}|${person.id}`;
     const run = ++this.listRun;
     this.set((s) => ({ ...s, list: { key, items: [], busy: true, error: null } }));
-    const libraries = this.current.plex.libraries.filter((l) => !person.serverBase || l.baseUrl === person.serverBase);
+    const libraries = this.shownLibraries().filter((l) => !person.serverBase || l.baseUrl === person.serverBase);
     const found = await Promise.all(
       libraries.map((l) =>
         plex.withActor(l.baseUrl, l.token, l.section.key, l.section.type === "movie" ? plex.TYPE_MOVIE : plex.TYPE_SHOW, person.id).catch(() => null),

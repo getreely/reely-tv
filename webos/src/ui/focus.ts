@@ -40,7 +40,30 @@ export function focus(el: HTMLElement | null | undefined) {
   // before it wholly out of sight rather than its names showing under the hero.
   const rows = el.closest<HTMLElement>(".hero-rows");
   const row = el.closest<HTMLElement>(".row");
-  if (rows && row) rows.scrollTop += row.getBoundingClientRect().top - rows.getBoundingClientRect().top;
+  if (rows && row) {
+    rows.scrollTop += row.getBoundingClientRect().top - rows.getBoundingClientRect().top;
+    return;
+  }
+  // Far enough for it as it's drawn with the cursor on it, grown and ringed, with a little
+  // room: "nearest" goes by its size before, and left the last line of an episode's name
+  // and length off the bottom of the page.
+  const page = scroller(el);
+  if (!page) return;
+  const r = el.getBoundingClientRect();
+  const box = page.getBoundingClientRect();
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  const room = r.height * 0.04 + rem * 1.2;
+  if (r.bottom + room > box.bottom) page.scrollTop += r.bottom + room - box.bottom;
+  else if (r.top - room < box.top) page.scrollTop -= box.top - (r.top - room);
+}
+
+/** The box [el] scrolls up and down in, if any. */
+function scroller(el: HTMLElement): HTMLElement | null {
+  for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+    const y = getComputedStyle(a).overflowY;
+    if (y === "auto" || y === "scroll") return a;
+  }
+  return null;
 }
 
 let pressedAt = Date.now();

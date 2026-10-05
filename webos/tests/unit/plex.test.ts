@@ -188,4 +188,11 @@ describe("transcode address", () => {
     expect(params.get("fastSeek")).toBe("1");
     expect(params.get("path")).toBe("/library/metadata/1");
   });
+  it("H.264 is passed through as it is; HEVC and the rest are made H.264 for the TV", () => {
+    const stream = (codec: string | null) => new URL(transcodeUrl("http://s:32400", "t", "1", "s", 0, "1920x1080", 0, "burn", 100, codec)).searchParams.get("directStream");
+    expect(stream("h264")).toBe("1");
+    expect(stream(null)).toBe("1");
+    expect(stream("hevc")).toBe("0");
+    expect(stream("mpeg2video")).toBe("0");
+  });
 });

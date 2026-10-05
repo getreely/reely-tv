@@ -764,11 +764,18 @@ export function transcodeUrl(
   subtitles: "burn" | "none" = "burn",
   /** The size burned subtitles are drawn at, in percent. */
   subtitleSize = 100,
+  /**
+   * The file's video codec. Only H.264 is passed through as it is: anything else (HEVC,
+   * say) Plex makes H.264 of, as the TV's own player can't play it from Plex's stream, and
+   * playback failed with the file's HEVC copied into it.
+   */
+  videoCodec: string | null = null,
 ): string {
   const bitrate = maxBitrateKbps > 0 ? `&maxVideoBitrate=${maxBitrateKbps}` : "";
+  const copyVideo = !videoCodec || videoCodec.toLowerCase() === "h264";
   return (
     `${base}/video/:/transcode/universal/start.m3u8?path=${enc(`/library/metadata/${ratingKey}`)}&mediaIndex=${mediaIndex}&partIndex=0` +
-    `&protocol=hls&fastSeek=1&directPlay=0&directStream=1&subtitles=${subtitles}&subtitleSize=${subtitleSize}&audioBoost=100&videoQuality=100` +
+    `&protocol=hls&fastSeek=1&directPlay=0&directStream=${copyVideo ? 1 : 0}&subtitles=${subtitles}&subtitleSize=${subtitleSize}&audioBoost=100&videoQuality=100` +
     `&videoResolution=${resolution}${bitrate}&session=${sessionId}` +
     `&X-Plex-Client-Identifier=${enc(identity.clientId)}&X-Plex-Platform=${enc(identity.platform)}&X-Plex-Product=${enc(PRODUCT)}&X-Plex-Token=${token}`
   );

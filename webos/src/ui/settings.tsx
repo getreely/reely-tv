@@ -478,9 +478,17 @@ function PlexSection({ kit }: { kit: Kit }) {
         <Setting title="Server" value={plex.serverName ?? "—"} />
         <Setting title="Connection" value={connectionKind(plex.baseUrl)} />
       </Group>
-      {iptvLibrary ? (
-        <Group title="Libraries" note="IPTV is shown in the Movies and TV Shows menus unless switched off here.">
-          <Setting title="IPTV" note="In the Movies and TV Shows menus." on={prefs.iptvInMenus} onPress={() => app.setIptvInMenus(!prefs.iptvInMenus)} />
+      {plex.libraries.length > 1 || iptvLibrary ? (
+        <Group title="Libraries" note={"Switched on, a library is one of the only ones in the Movies and TV Shows menus and on Home. With none switched on, all of them are." + (iptvLibrary ? " IPTV is shown unless switched off here." : "")}>
+          {plex.libraries.length > 1 ? plex.libraries.map((l) => (
+            <Setting
+              key={app.libraryId(l)}
+              title={plex.servers.length > 1 ? `${l.section.title} · ${l.serverName}` : l.section.title}
+              on={prefs.pinnedLibraries.includes(app.libraryId(l))}
+              onPress={() => app.togglePinnedLibrary(l)}
+            />
+          )) : null}
+          {iptvLibrary ? <Setting title="IPTV" note="In the Movies and TV Shows menus." on={prefs.iptvInMenus} onPress={() => app.setIptvInMenus(!prefs.iptvInMenus)} /> : null}
         </Group>
       ) : null}
       {plex.servers.length > 1 ? (
