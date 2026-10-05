@@ -247,6 +247,8 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .option:focus .option-note { color: rgba(8, 9, 11, 0.7); }
 .choice-panel { z-index: 1; background: var(--raised); }
 .choice-panel .menu-list { margin-top: 1rem; }
+.menu-icon { display: block; width: 1.05rem; height: 1.05rem; color: var(--muted); }
+.option:focus .menu-icon { color: var(--ink); }
 .toolbar.flush { padding: 0.7rem 0 0; }
 
 /* The player's prompts and its options panel. */
