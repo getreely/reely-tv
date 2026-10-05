@@ -20,7 +20,7 @@ sub init()
     m.rows.observeField("rowItemFocused", "showHero")
     m.grid.observeField("itemSelected", "onGridPicked")
     m.grid.observeField("itemFocused", "onGridFocused")
-    m.global.observeField("home", "paintHome")
+    Listen_("home", "paintHome")
     m.sorts = [["titleSort:asc", "A–Z"], ["addedAt:desc", "Recently added"], ["originallyAvailableAt:desc", "Newest releases"], ["rating:desc", "Critic rating"]]
     m.view = "home"
     m.sort = "titleSort:asc"
@@ -220,6 +220,7 @@ end sub
 
 ' The tab's own home: Continue Watching of this kind, what's newly added and released.
 sub paintHome()
+    if Gone_() then return
     if m.view <> "home" or m.library = invalid then return
     h = m.global.home
     resumable = []

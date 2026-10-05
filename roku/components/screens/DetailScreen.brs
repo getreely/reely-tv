@@ -6,24 +6,19 @@ sub init()
     m.episodes = m.top.findNode("episodes")
     m.rows = m.top.findNode("rows")
     m.note = m.top.findNode("note")
-    m.top.findNode("title").font = Bold_(64)
-    for each id in ["facts", "summary"]
-        m.top.findNode(id).font = Regular_(30)
-    end for
-    m.top.findNode("upNext").font = Semibold_(30)
+    m.top.findNode("title").font = Bold_(72)
+    m.top.findNode("summary").font = Regular_(30)
+    m.top.findNode("upNext").font = Semibold_(28)
     m.note.font = Regular_(28)
     m.rows.rowLabelFont = Bold_(32)
-    for each list in [m.seasons, m.episodes]
-        list.font = Regular_(30)
-        list.focusedFont = Semibold_(30)
-    end for
+    m.episodes.rowLabelFont = Bold_(32)
     m.actions.observeField("pressed", "onAction")
     m.versions.observeField("pressed", "onVersion")
-    m.seasons.observeField("itemFocused", "onSeasonFocused")
-    m.episodes.observeField("itemSelected", "onEpisodePicked")
-    m.episodes.observeField("itemFocused", "onEpisodeFocused")
+    m.seasons.observeField("pressed", "onSeasonPicked")
+    m.episodes.observeField("rowItemSelected", "onEpisodePicked")
+    m.episodes.observeField("rowItemFocused", "onEpisodeFocused")
     m.rows.observeField("rowItemSelected", "onRowPicked")
-    m.global.observeField("watchlist", "paintActions")
+    Listen_("watchlist", "paintActions")
     m.detail = invalid
     m.versionIndex = 0
 end sub
@@ -98,26 +93,23 @@ end sub
 sub paint()
     d = m.detail
     m.top.findNode("title").text = d.title
-    m.top.findNode("facts").text = Plex_Facts(d)
+    paintFacts(d)
     m.top.findNode("summary").text = d.summary
     m.top.findNode("backdrop").uri = Image_(m.base, Iif_(d.art <> "", d.art, d.thumb), 1920, 1080)
     show = d.type = "show"
-    m.seasons.visible = show
     m.episodes.visible = show
+    ' The seasons as chips, the one shown outlined, when there's more than one.
+    m.seasons.visible = show and m.seasonList.Count() > 1
+    m.episodes.translation = Iif_(m.seasons.visible, [96, 570], [96, 490])
     if show then
-        content = CreateObject("roSGNode", "ContentNode")
-        start = 0
-        for i = 0 to m.seasonList.Count() - 1
-            c = content.createChild("ContentNode")
-            c.title = m.seasonList[i].title
-        end for
-        m.seasons.content = content
         m.seasonKey = ""
         if m.episodeList.Count() > 0 then m.seasonKey = m.episodeList[0].parentRatingKey
-        for i = 0 to m.seasonList.Count() - 1
-            if m.seasonList[i].ratingKey = m.seasonKey then start = i
+        labels = []
+        for each season in m.seasonList
+            labels.Push(season.title)
         end for
-        m.seasons.jumpToItem = start
+        m.seasons.labels = labels
+        paintSeasons()
         paintEpisodes()
     end if
     versions = []
@@ -135,27 +127,90 @@ sub paint()
         person.serverBase = m.base
     end for
     ShowRows_(m.rows, rows)
-    m.rows.translation = Iif_(show, [96, 940], Iif_(m.versions.visible, [96, 520], [96, 450]))
+    m.rows.translation = Iif_(show, [96, m.episodes.translation[1] + 420], Iif_(m.versions.visible, [96, 570], [96, 500]))
     m.rows.visible = m.rows.content.getChildCount() > 0
     paintActions()
 end sub
 
+' The season's episodes as pictures, as the Fire TV shows them: "3. Dead Air", how long,
+' what's watched and how far through.
 sub paintEpisodes()
-    content = CreateObject("roSGNode", "ContentNode")
+    root = CreateObject("roSGNode", "ContentNode")
+    row = root.createChild("ContentNode")
+    row.title = "Episodes"
+    for each season in m.seasonList
+        if season.ratingKey = m.seasonKey then row.title = season.title
+    end for
     focus = 0
     for i = 0 to m.episodeList.Count() - 1
         e = m.episodeList[i]
-        c = content.createChild("ContentNode")
-        mark = ""
-        if Plex_IsWatched(e) then mark = "✓  "
         index = ""
         if e.index <> invalid then index = e.index.ToStr()
-        c.title = mark + Join_([index, e.title], ". ")
+        progress = invalid
+        if not Plex_IsWatched(e) then progress = Plex_ResumeFraction(e)
+        art = e.thumb
+        if art = "" then art = e.art
+        c = PosterContent_(row, Join_([index, e.title], ". "), Plex_Duration(e.durationMs), Image_(Iif_(Str_(e.serverBase) <> "", e.serverBase, m.base), art, 480, 270), invalid, progress)
+        if Plex_IsWatched(e) then c.addFields({ watched: true })
         if m.target <> invalid and e.ratingKey = m.target.ratingKey then focus = i
     end for
-    m.episodes.content = content
-    m.episodes.jumpToItem = focus
+    m.episodes.content = root
+    if m.episodeList.Count() > 0 then m.episodes.jumpToRowItem = [0, focus]
 end sub
+
+' The seasons' chips: the one shown outlined.
+sub paintSeasons()
+    on = []
+    for each season in m.seasonList
+        on.Push(season.ratingKey = m.seasonKey)
+    end for
+    m.seasons.on = on
+end sub
+
+' The scores as outlined badges, the details, then the quality badges, as the Fire TV's.
+sub paintFacts(d as object)
+    row = m.top.findNode("facts")
+    row.removeChildrenIndex(row.getChildCount(), 0)
+    x = 0
+    if d.rating <> invalid then x = Badge_(row, x, "★ " + Plex_OneDecimal(d.rating), "outline", Accent_())
+    if d.audienceRating <> invalid then x = Badge_(row, x, Int(d.audienceRating * 10 + 0.5).ToStr() + "%", "outline", "0x8CBE6EFF")
+    if Str_(d.contentRating) <> "" then x = Badge_(row, x, d.contentRating, "outline", "0xF2F4F78C")
+    for each f in Plex_TitleFacts(d)
+        x = Badge_(row, x, f, "plain", "")
+    end for
+    for each q in Arr_(d.qualities)
+        x = Badge_(row, x, q, "fill", "")
+    end for
+end sub
+
+' One badge at [x]: an outline in [color], a translucent fill, or plain words. The next one's place back.
+function Badge_(row as object, x as integer, text as string, kind as string, color as string) as integer
+    size = 28
+    ' Wide enough for figures, which run wider than letters.
+    w = Int(Len(text) * size * 0.6) + 4
+    pad = 0
+    if kind <> "plain" then pad = 14
+    if kind <> "plain" then
+        back = CreateObject("roSGNode", "Poster")
+        back.uri = Iif_(kind = "outline", "pkg:/images/ring.9.png", "pkg:/images/card.9.png")
+        back.blendColor = Iif_(kind = "outline", color, "0xF2F4F724")
+        back.width = w + pad * 2
+        back.height = 44
+        back.translation = [x, 0]
+        row.appendChild(back)
+    end if
+    label = CreateObject("roSGNode", "Label")
+    label.text = text
+    label.font = Iif_(kind = "fill", Semibold_(size - 2), Regular_(size))
+    label.color = "0xF2F4F7FF"
+    label.width = w + pad * 2
+    label.height = 44
+    label.horizAlign = "center"
+    label.vertAlign = "center"
+    label.translation = [x, 0]
+    row.appendChild(label)
+    return x + w + pad * 2 + 16
+end function
 
 sub paintVersions()
     on = []
@@ -167,6 +222,7 @@ end sub
 
 ' Play or Resume, Restart, Watched, Watchlist, Trailer: as the Fire TV's buttons.
 sub paintActions()
+    if Gone_() then return
     d = m.detail
     if d = invalid then return
     show = d.type = "show"
@@ -175,15 +231,19 @@ sub paintActions()
     labels = []
     m.actionIds = []
     resume = t <> invalid and t.viewOffsetMs > 0 and not Plex_IsWatched(t)
+    glyphs = []
     if t <> invalid then
         labels.Push(Iif_(resume, "Resume", "Play"))
         m.actionIds.Push("play")
+        glyphs.Push("play")
         if resume then
             labels.Push("Restart")
             m.actionIds.Push("restart")
+            glyphs.Push("restart")
         end if
         labels.Push(Iif_(Plex_IsWatched(t), "Unwatch", "Watched"))
         m.actionIds.Push("watched")
+        glyphs.Push("check")
     end if
     on = []
     for each x in labels
@@ -193,12 +253,15 @@ sub paintActions()
         labels.Push("Watchlist")
         m.actionIds.Push("watchlist")
         on.Push(Watchlisted_(d.guid))
+        glyphs.Push(Iif_(Watchlisted_(d.guid), "saved", "plus"))
     end if
     if m.trailer <> invalid then
         labels.Push("Trailer")
         m.actionIds.Push("trailer")
         on.Push(false)
+        glyphs.Push("film")
     end if
+    m.actions.glyphs = glyphs
     m.actions.labels = labels
     m.actions.on = on
     upNext = m.top.findNode("upNext")
@@ -242,12 +305,13 @@ sub onVersion()
     paintVersions()
 end sub
 
-sub onSeasonFocused()
-    i = m.seasons.itemFocused
+sub onSeasonPicked()
+    i = m.seasons.pressed
     if i < 0 or i >= m.seasonList.Count() then return
     s = m.seasonList[i]
     if s.ratingKey = m.seasonKey then return
     m.seasonKey = s.ratingKey
+    paintSeasons()
     if m.base = "iptv:" then
         Ask_("iptvSeason", { seasonKey: s.ratingKey })
     else
@@ -256,15 +320,19 @@ sub onSeasonFocused()
 end sub
 
 sub onEpisodeFocused()
-    i = m.episodes.itemFocused
-    if i >= 0 and i < m.episodeList.Count() and m.episodes.hasFocus() then
+    at = m.episodes.rowItemFocused
+    if at = invalid or at.Count() < 2 then return
+    i = at[1]
+    if i >= 0 and i < m.episodeList.Count() and m.episodes.isInFocusChain() then
         m.target = m.episodeList[i]
         paintActions()
     end if
 end sub
 
 sub onEpisodePicked()
-    i = m.episodes.itemSelected
+    at = m.episodes.rowItemSelected
+    if at = invalid or at.Count() < 2 then return
+    i = at[1]
     if i >= 0 and i < m.episodeList.Count() then m.top.play = { item: m.episodeList[i], resume: true, queue: m.episodeList, mediaIndex: 0 }
 end sub
 
@@ -295,41 +363,26 @@ end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press then return false
-    show = m.detail <> invalid and m.detail.type = "show"
-    if key = "down" then
-        if m.actions.hasFocus() then
-            if m.versions.visible then
-                m.versions.setFocus(true)
-            else if show and m.seasonList.Count() > 0 then
-                m.episodes.setFocus(true)
-            else if m.rows.visible then
-                m.rows.setFocus(true)
-                scrollTo(true)
-            end if
-            return true
-        else if m.versions.hasFocus() and m.rows.visible then
-            m.rows.setFocus(true)
-            scrollTo(true)
-            return true
-        else if (m.episodes.hasFocus() or m.seasons.hasFocus()) and m.rows.visible then
-            m.rows.setFocus(true)
-            scrollTo(true)
-            return true
-        end if
-    else if key = "up" then
-        if m.rows.isInFocusChain() then
-            scrollTo(false)
-            if show and m.seasonList.Count() > 0 then m.episodes.setFocus(true) else m.actions.setFocus(true)
-            return true
-        else if m.versions.hasFocus() or m.episodes.hasFocus() or m.seasons.hasFocus() then
-            m.actions.setFocus(true)
-            return true
-        end if
-    else if key = "left" and m.episodes.hasFocus() then
-        m.seasons.setFocus(true)
+    ' Down the page in order: the buttons, a film's copies, a show's seasons and then its
+    ' episodes, then the cast and more like it. Up comes back the same way.
+    order = [m.actions]
+    if m.versions.visible then order.Push(m.versions)
+    if m.seasons.visible then order.Push(m.seasons)
+    if m.episodes.visible and m.episodeList <> invalid and m.episodeList.Count() > 0 then order.Push(m.episodes)
+    if m.rows.visible then order.Push(m.rows)
+    at = -1
+    for i = 0 to order.Count() - 1
+        if order[i].isInFocusChain() then at = i
+    end for
+    if key = "down" and at >= 0 and at < order.Count() - 1 then
+        target = order[at + 1]
+        target.setFocus(true)
+        scrollTo(target.isSameNode(m.rows))
         return true
-    else if key = "right" and m.seasons.hasFocus() then
-        m.episodes.setFocus(true)
+    else if key = "up" and at > 0 then
+        target = order[at - 1]
+        target.setFocus(true)
+        scrollTo(false)
         return true
     else if key = "options" and m.rows.isInFocusChain() then
         item = FocusedRowItem_(m.rows)

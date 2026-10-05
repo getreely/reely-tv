@@ -106,7 +106,7 @@ sub show()
 end sub
 
 sub focusChanged()
-    focused = m.top.focusPercent > 0.5
+    focused = m.top.focusPercent > 0.5 and (m.top.rowListHasFocus or m.top.gridHasFocus)
     m.ring.visible = focused
     if focused then
         m.title.color = "0xF2F4F7FF"

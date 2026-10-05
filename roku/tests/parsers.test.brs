@@ -15,6 +15,19 @@ sub Main()
     Expect("a running time", Plex_Duration(8280000), "2h 18m")
     Expect("a short one", Plex_Duration(2520000), "42m")
 
+    ' The title page's scores, details and badges, as the Fire TV shows them.
+    s = Plex_ParseDetail({
+        ratingKey: "show1", type: "show", title: "Northbound", year: 2024, studio: "Harbourside", childCount: 3,
+        rating: 8.1, audienceRating: 8.6,
+        Media: [{ videoResolution: "4k", audioChannels: 6, Part: [{ Stream: [{ streamType: 1, DOVIPresent: true }] }] }]
+    }, "http://a")
+    Expect("the scores", [s.rating, s.audienceRating], [8.1, 8.6])
+    Expect("a score to one place", [Plex_OneDecimal(8.14), Plex_OneDecimal(7)], ["8.1", "7.0"])
+    Expect("the details after them", Plex_TitleFacts(s), ["2024", "3 seasons", "Harbourside"])
+    Expect("the badges", s.qualities, ["4K", "Dolby Vision", "5.1"])
+    Expect("no scores is none", Plex_ParseDetail({ ratingKey: "m", type: "movie", title: "M" }, "http://a").rating = invalid, true)
+    Expect("HDR10 and stereo", Plex_Qualities([{ videoResolution: "1080", audioChannels: 2, Part: [{ Stream: [{ streamType: 1, colorTrc: "smpte2084" }] }] }]), ["HD", "HDR10", "Stereo"])
+
     ' Search: Plex's hubs read once each; what matches by name first.
     hubs = [
         { type: "movie", Metadata: [{ ratingKey: "x1", type: "movie", title: "Gravity" }, { ratingKey: "m1", type: "movie", title: "Low Orbit" }] },

@@ -173,3 +173,4 @@ function RouteFor_(i as object) as object
     if i.type = "playlist" then return { name: "list", kind: "playlist", item: i, title: i.title }
     return { name: "detail", item: i }
 end function
+

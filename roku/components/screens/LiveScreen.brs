@@ -51,7 +51,7 @@ sub init()
     m.asked = {}
     m.playlist = invalid
     m.categoryId = ""
-    m.global.observeField("live", "onLiveChanged")
+    Listen_("live", "onLiveChanged")
 end sub
 
 function LiveState_() as object
@@ -70,6 +70,7 @@ sub open()
 end sub
 
 sub onLiveChanged()
+    if Gone_() then return
     ' Signed in or out elsewhere (Settings): this page as it now is.
     if SignedIn_() <> m.live.visible then render()
 end sub

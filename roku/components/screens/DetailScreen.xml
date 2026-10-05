@@ -16,21 +16,28 @@
   <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
   <script type="text/brightscript" uri="pkg:/source/lib/plex.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/Listen.brs" />
   <script type="text/brightscript" uri="pkg:/components/parts/ScreenKit.brs" />
   <children>
-    <Poster id="backdrop" translation="[0, -130]" width="1920" height="1080" loadDisplayMode="scaleToZoom" opacity="0.35" />
+    <!-- As the Fire TV's: the title's picture behind the whole screen, fading into the black
+         at the left and the bottom; the screens sit 130 down, under the tabs. -->
+    <Poster id="backdrop" translation="[0, -130]" width="1920" height="1080" loadDisplayMode="scaleToZoom" />
+    <Poster uri="pkg:/images/fade_left.png" translation="[0, -130]" width="1920" height="1080" />
+    <Poster uri="pkg:/images/fade_bottom.png" translation="[0, -130]" width="1920" height="1080" />
     <Group id="page">
-      <Label id="title" translation="[96, 10]" width="1500" color="0xF2F4F7FF" />
-      <Label id="facts" translation="[96, 100]" width="1500" color="0xB3BAC4FF" />
-      <Label id="upNext" translation="[96, 150]" width="1500" color="0xF2F4F7FF" />
-      <Label id="summary" translation="[96, 200]" width="1100" height="130" wrap="true" maxLines="3" color="0xB3BAC4FF" />
-      <PillRow id="actions" translation="[96, 350]" fontSize="28" />
-      <PillRow id="versions" translation="[96, 430]" fontSize="22" visible="false" />
-      <Label id="note" translation="[96, 430]" width="1500" color="0xFF6B6BFF" />
-      <LabelList id="seasons" translation="[96, 490]" itemSize="[300, 56]" numRows="7" vertFocusAnimationStyle="floatingFocus"
-        focusBitmapUri="pkg:/images/pill.9.png" color="0xB3BAC4FF" focusedColor="0x08090BFF" />
-      <LabelList id="episodes" translation="[440, 490]" itemSize="[1300, 56]" numRows="7" vertFocusAnimationStyle="floatingFocus"
-        focusBitmapUri="pkg:/images/pill.9.png" color="0xB3BAC4FF" focusedColor="0x08090BFF" />
+      <Label id="title" translation="[96, 0]" width="1500" color="0xF2F4F7FF" />
+      <!-- The scores as outlined badges, the details, then the quality badges. -->
+      <Group id="facts" translation="[96, 96]" />
+      <Label id="upNext" translation="[96, 152]" width="1500" color="0xF2F4F7FF" />
+      <Label id="summary" translation="[96, 198]" width="1150" wrap="true" maxLines="3" lineSpacing="6" color="0xB3BAC4FF" />
+      <RoundRow id="actions" translation="[70, 330]" />
+      <PillRow id="versions" translation="[96, 490]" fontSize="22" visible="false" />
+      <Label id="note" translation="[96, 490]" width="1500" color="0xFF6B6BFF" />
+      <PillRow id="seasons" translation="[96, 490]" fontSize="24" visible="false" />
+      <!-- The season's episodes as a row of pictures. -->
+      <RowList id="episodes" translation="[96, 560]" itemComponentName="PosterItem" numRows="1"
+        itemSize="[1728, 380]" rowItemSize="[[427, 304]]" rowItemSpacing="[[24, 0]]" showRowLabel="[true]" rowLabelColor="0xF2F4F7FF"
+        rowLabelOffset="[[0, 14]]" rowFocusAnimationStyle="floatingFocus" drawFocusFeedback="false" visible="false" />
       <RowList id="rows" translation="[96, 980]" itemComponentName="PosterItem" numRows="2"
         rowItemSpacing="[[24, 0]]" itemSpacing="[0, 44]" showRowLabel="[true]" rowLabelColor="0xF2F4F7FF"
         rowLabelOffset="[[0, 14]]" rowFocusAnimationStyle="floatingFocus" drawFocusFeedback="false" />

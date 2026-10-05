@@ -72,7 +72,7 @@ screenshots:
 |---|---|---|
 | Home and the tabs' homes: hero with picture, title, details | ✅ | ✅ |
 | Overall size of text and spacing | ✅ | ✅ |
-| Title page: backdrop, logo, ratings, round buttons, episodes as a row of pictures | ✅ | ⬜ no backdrop, episodes as a text list |
+| Title page: backdrop, logo, ratings, round buttons, episodes as a row of pictures | ✅ | ✅ |
 | Settings: sections down the left, a row opens its choices | ✅ | ⬜ one long list of pills |
 | Player: a panel for each of sound, subtitles, chapters; full-screen Up Next with picture | ✅ | ⬜ one list; Up Next card |
 | Guide: channel tiles, the programme's details above | 🟡 small grid, no tiles | 🟡 plain text grid |

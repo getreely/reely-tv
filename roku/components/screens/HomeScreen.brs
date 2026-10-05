@@ -6,9 +6,9 @@ sub init()
     m.rows.observeField("rowItemSelected", "onSelected")
     m.hero = m.top.findNode("hero")
     m.rows.observeField("rowItemFocused", "onFocused")
-    m.global.observeField("home", "render")
-    m.global.observeField("prefs", "render")
-    m.global.observeField("ready", "paintReady")
+    Listen_("home", "render")
+    Listen_("prefs", "render")
+    Listen_("ready", "paintReady")
     m.readyGroup = m.top.findNode("ready")
     m.readyActions = m.top.findNode("readyActions")
     m.readyActions.labels = ["Watch", "Dismiss"]
@@ -19,6 +19,7 @@ sub init()
 end sub
 
 sub render()
+    if Gone_() then return
     h = m.global.home
     if h = invalid then return
     hidden = {}
@@ -86,6 +87,7 @@ end sub
 
 ' "Ready to watch": the first of what's arrived, and how many after it.
 sub paintReady()
+    if Gone_() then return
     list = Arr_(m.global.ready)
     had = m.readyGroup.visible
     m.readyGroup.visible = list.Count() > 0

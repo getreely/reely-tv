@@ -7,6 +7,10 @@
     <field id="width" type="float" onChange="layout" />
     <field id="height" type="float" onChange="layout" />
     <field id="focusPercent" type="float" onChange="focusChanged" />
+    <!-- Whether the list itself has the cursor: the poster it would land on isn't ringed
+         while the cursor is somewhere else on the page (a title page's buttons, say). -->
+    <field id="rowListHasFocus" type="boolean" onChange="focusChanged" />
+    <field id="gridHasFocus" type="boolean" onChange="focusChanged" />
   </interface>
   <script type="text/brightscript" uri="pkg:/components/PosterItem.brs" />
   <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />

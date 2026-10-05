@@ -324,6 +324,14 @@ function Plex_ParseDetail(e as object, base as dynamic) as object
     d = Plex_ParseItem(e, base)
     d.contentRating = Str_(e.contentRating)
     d.studio = Str_(e.studio)
+    ' The scores, as the Fire TV shows them: the critics' out of ten, the audience's as a
+    ' percentage. Invalid when Plex has none.
+    d.rating = invalid
+    if e.rating <> invalid then d.rating = Num_(e.rating)
+    d.audienceRating = invalid
+    if e.audienceRating <> invalid then d.audienceRating = Num_(e.audienceRating)
+    d.childCount = Int(Num_(e.childCount))
+    d.qualities = Plex_Qualities(Arr_(e.Media))
     d.tagline = Str_(e.tagline)
     d.theme = Str_(e.theme)
     d.genres = Plex_Tags(e.Genre)
@@ -379,6 +387,69 @@ function Plex_VersionLabel(resolution as string, codec as string) as string
 end function
 
 ' "2024 · PG-13 · Drama": the facts under a title.
+' What the first copy of a title is: "4K", "Dolby Vision" or "HDR10", and "5.1", as the
+' badges on the Fire TV's title page.
+function Plex_Qualities(media as object) as object
+    out = []
+    if media.Count() = 0 then return out
+    md = media[0]
+    res = LCase(Str_(md.videoResolution))
+    if res = "4k" then
+        out.Push("4K")
+    else if res = "1080" or res = "720" then
+        out.Push("HD")
+    else if res = "sd" or res = "480" or res = "576" then
+        out.Push("SD")
+    end if
+    video = invalid
+    for each p in Arr_(md.Part)
+        for each s in Arr_(p.Stream)
+            if video = invalid and Int(Num_(s.streamType)) = 1 then video = s
+        end for
+    end for
+    if video <> invalid then
+        trc = LCase(Str_(video.colorTrc))
+        if Bool_(video.DOVIPresent) then
+            out.Push("Dolby Vision")
+        else if trc = "smpte2084" then
+            out.Push("HDR10")
+        else if trc = "arib-std-b67" then
+            out.Push("HLG")
+        end if
+    end if
+    ch = Int(Num_(md.audioChannels))
+    if ch = 8 then
+        out.Push("7.1")
+    else if ch = 6 then
+        out.Push("5.1")
+    else if ch = 2 then
+        out.Push("Stereo")
+    end if
+    return out
+end function
+
+'' A score to one decimal place: 8.1 as "8.1", 7 as "7.0".
+function Plex_OneDecimal(n as dynamic) as string
+    t = Int(Num_(n) * 10 + 0.5)
+    return (t \ 10).ToStr() + "." + (t mod 10).ToStr()
+end function
+
+' The details after the scores on a title's page: the year, a show's seasons or a film's
+' running time, and the studio.
+function Plex_TitleFacts(d as object) as object
+    out = []
+    if d.year <> invalid then out.Push(d.year.ToStr())
+    if d.type = "show" then
+        n = Int(Num_(d.childCount))
+        if n = 1 then out.Push("1 season")
+        if n > 1 then out.Push(n.ToStr() + " seasons")
+    else if d.durationMs > 0 then
+        out.Push(Plex_Duration(d.durationMs))
+    end if
+    if Str_(d.studio) <> "" then out.Push(d.studio)
+    return out
+end function
+
 function Plex_Facts(d as object) as string
     parts = []
     if d.year <> invalid then parts.Push(d.year.ToStr())

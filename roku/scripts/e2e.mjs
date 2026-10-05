@@ -136,7 +136,10 @@ const server = http.createServer((req, res) => {
       const all = Array.from({ length: 333 }, (_, i) => episode(`n${i}`, i + 1));
       return meta(all.slice(start, start + 200));
     }
-    case "/library/metadata/show1": return meta([{ ratingKey: "show1", type: "show", title: "Northbound", year: 2024, summary: "A long-haul driver.", OnDeck: { Metadata: [{ ratingKey: "e2" }] } }]);
+    case "/library/metadata/show1": return meta([{ ratingKey: "show1", type: "show", title: "Northbound", year: 2024, art: "/art/show1", thumb: "/thumb/show1",
+      rating: 8.1, audienceRating: 8.6, contentRating: "TV-14", studio: "Harbourside", childCount: 1,
+      summary: "A long-haul driver takes the jobs nobody else will, on roads that don't appear on any map, and starts to notice who keeps booking her.",
+      OnDeck: { Metadata: [{ ratingKey: "e2" }] } }]);
     case "/library/metadata/show1/related": return send({ MediaContainer: { Hub: [{ Metadata: [{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025, addedAt: 9, art: "/library/metadata/m1/art" }] }] } });
     case "/library/metadata/show1/extras": return meta([]);
     case "/playlists": return meta([{ ratingKey: "p1", type: "playlist", title: "Road Trip", leafCount: 2 }]);
@@ -188,6 +191,8 @@ const launch = (links) => spawn("script", ["-qfc", `npx brs-cli -e -y -s ${shot}
   { stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, XDG_DATA_HOME: simData } });
 let sim = launch(`plexTv=http://127.0.0.1:${port},discover=http://127.0.0.1:${port}`);
 let output = "";
+// What was said before the screensaver's run started output afresh.
+let fullOutput = "";
 sim.stdout.on("data", (d) => { output += d.toString(); });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (what, test, ms = 20000) => {
@@ -641,6 +646,7 @@ try {
   // The screensaver, as the Roku starts it: on its own, with the pictures the app kept.
   sim.kill("SIGKILL");
   await wait(2000);
+  fullOutput += output;
   output = "";
   sim = launch("screensaver=1");
   sim.stdout.on("data", (d) => { output += d.toString(); });
@@ -657,6 +663,8 @@ try {
   sim.kill("SIGKILL");
   server.close();
 }
+// Everything the app said, for looking into a failure: E2E_LOG=path npm run e2e.
+if (process.env.E2E_LOG) writeFileSync(process.env.E2E_LOG, fullOutput + output);
 if (failures.length) console.log("Last traces:\n" + (output.match(/^TRACE .*$/gm) ?? []).slice(-25).join("\n"));
 console.log(failures.length ? `${failures.length} failed` : "all passed");
 process.exit(failures.length ? 1 : 0);

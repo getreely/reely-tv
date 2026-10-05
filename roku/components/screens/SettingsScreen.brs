@@ -5,12 +5,12 @@ sub init()
     m.body = m.top.findNode("body")
     m.rows = []
     m.at = 0
-    m.global.observeField("prefs", "build")
-    m.global.observeField("session", "build")
-    m.global.observeField("live", "build")
-    m.global.observeField("reely", "build")
-    m.global.observeField("profile", "build")
-    m.global.observeField("iptvState", "build")
+    Listen_("prefs", "build")
+    Listen_("session", "build")
+    Listen_("live", "build")
+    Listen_("reely", "build")
+    Listen_("profile", "build")
+    Listen_("iptvState", "build")
 end sub
 
 function Modes_() as object
@@ -260,6 +260,7 @@ end function
 
 ' Laid out again after any change, the cursor kept where it was.
 sub build()
+    if Gone_() then return
     if m.top.route = invalid then return
     keepFocus = m.top.isInFocusChain()
     keepIndex = 0

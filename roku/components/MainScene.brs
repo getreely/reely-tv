@@ -395,8 +395,14 @@ end sub
 
 sub clearScreens()
     while m.screens.getChildCount() > 0
+        release(m.screens.getChild(0))
         m.screens.removeChildIndex(0)
     end while
+end sub
+
+' A page taken away stops listening to the scene's shared fields (see Listen.brs).
+sub release(node as object)
+    if node <> invalid and node.hasField("gone") then node.gone = true
 end sub
 
 function screenFor(route as object) as object
@@ -515,6 +521,7 @@ end sub
 function goBack() as boolean
     if m.stack.Count() > 1 then
         top = m.stack.Pop()
+        release(top.node)
         m.screens.removeChild(top.node)
         under = m.stack[m.stack.Count() - 1].node
         under.visible = true

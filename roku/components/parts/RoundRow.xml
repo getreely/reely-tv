@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Round buttons with their names under them, as the Fire TV's title page has: white under
+     the cursor, the first in the accent. Left and right move along; OK presses. -->
+<component name="RoundRow" extends="Group">
+  <interface>
+    <field id="labels" type="array" onChange="build" />
+    <!-- Each button's picture, by name: play, restart, check, plus, saved, film. -->
+    <field id="glyphs" type="array" onChange="build" />
+    <!-- Which are on (Watched, on the Watchlist), by index. -->
+    <field id="on" type="array" onChange="paint" />
+    <field id="focusIndex" type="integer" value="0" onChange="paint" />
+    <field id="pressed" type="integer" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/parts/RoundRow.brs" />
+  <script type="text/brightscript" uri="pkg:/components/parts/Fonts.brs" />
+  <script type="text/brightscript" uri="pkg:/source/lib/util.brs" />
+  <children>
+    <Group id="buttons" />
+  </children>
+</component>
