@@ -19,7 +19,9 @@
     <Poster id="keyBack" uri="pkg:/images/pill.9.png" blendColor="0x2E6BFFFF" translation="[540, 440]" height="56" />
     <Label id="key" translation="[540, 440]" height="56" horizAlign="center" vertAlign="center" color="0xFFFFFFFF" />
     <Label id="body" translation="[540, 530]" width="840" color="0xB3BAC4FF" wrap="true" lineSpacing="8" />
-    <PillRow id="actions" translation="[540, 730]" fontSize="26" />
+    <!-- Next, Back and Skip tour: drawn and answered by the tour itself, so a press can't
+         go astray between a row of buttons and the tour. -->
+    <Group id="buttons" translation="[540, 730]" />
     <Timer id="keeper" duration="0.4" repeat="true" />
   </children>
 </component>

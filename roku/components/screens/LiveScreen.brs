@@ -113,6 +113,8 @@ sub focusIn()
     else
         m.categories.setFocus(true)
     end if
+    ' Nothing there to take it yet (a guide still empty): the page holds the cursor.
+    if not m.top.isInFocusChain() then m.top.setFocus(true)
 end sub
 
 ' ------------------------------------------------------------------ Signing in
@@ -318,6 +320,7 @@ sub showChannels(list as object, empty as string)
     paintChannels()
     if m.view = "guide" then paintGuide()
     askGuide(0)
+    if m.top.hasFocus() then focusIn()
 end sub
 
 sub paintChannels()

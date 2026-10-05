@@ -3,14 +3,13 @@ sub init()
     m.top.findNode("key").color = AccentOn_()
     m.steps = Tour_Steps()
     m.step = 0
+    m.at = 0
     m.finished = false
-    m.actions = m.top.findNode("actions")
+    m.buttons = m.top.findNode("buttons")
     m.top.findNode("count").font = Regular_(24)
     m.top.findNode("title").font = Bold_(52)
     m.top.findNode("key").font = Semibold_(26)
     m.top.findNode("body").font = Regular_(30)
-    m.actions.observeField("pressed", "onAction")
-    m.top.observeField("focusedChild", "onFocus")
     ' Whatever else takes the cursor while the tour is up (Home arriving behind it, say),
     ' the tour takes it back: otherwise it sits on screen with nothing able to answer it.
     m.keeper = m.top.findNode("keeper")
@@ -36,23 +35,61 @@ sub paint()
     width = 56 + Len(s.key) * 18
     key.width = width
     keyBack.width = width
-    labels = [Iif_(last, "Done", "Next")]
+    m.labels = [Iif_(last, "Done", "Next")]
     m.ids = ["next"]
     if m.step > 0 then
-        labels.Push("Back")
+        m.labels.Push("Back")
         m.ids.Push("back")
     end if
     if not last then
-        labels.Push("Skip tour")
+        m.labels.Push("Skip tour")
         m.ids.Push("skip")
     end if
-    m.actions.labels = labels
-    m.actions.focusIndex = 0
+    m.at = 0
+    drawButtons()
     Trace_("tour step " + (m.step + 1).ToStr())
 end sub
 
-sub onFocus()
-    if m.top.hasFocus() then m.actions.setFocus(true)
+sub drawButtons()
+    m.buttons.removeChildrenIndex(m.buttons.getChildCount(), 0)
+    m.fills = []
+    m.texts = []
+    font = Semibold_(26)
+    x = 0
+    for each text in m.labels
+        w = Int(Len(text) * 26 * 0.56 + 42)
+        fill = CreateObject("roSGNode", "Poster")
+        fill.uri = "pkg:/images/pill.9.png"
+        fill.width = w
+        fill.height = 56
+        fill.translation = [x, 0]
+        label = CreateObject("roSGNode", "Label")
+        label.text = text
+        label.font = font
+        label.width = w
+        label.height = 56
+        label.horizAlign = "center"
+        label.vertAlign = "center"
+        label.translation = [x, 0]
+        m.buttons.appendChild(fill)
+        m.buttons.appendChild(label)
+        m.fills.Push(fill)
+        m.texts.Push(label)
+        x = x + w + 12
+    end for
+    paintButtons()
+end sub
+
+sub paintButtons()
+    for i = 0 to m.fills.Count() - 1
+        on = i = m.at
+        m.fills[i].blendColor = Iif_(on, "0xF2F4F7FF", "0x1F2329FF")
+        m.texts[i].color = Iif_(on, "0x08090BFF", "0xF2F4F7FF")
+    end for
+    #if DEBUG
+        ' Where the cursor is, for the end-to-end test to follow.
+        print "PILL "; m.labels[m.at]
+    #end if
 end sub
 
 sub keepFocus()
@@ -62,14 +99,10 @@ sub keepFocus()
     if parent <> invalid and parent.getChildCount() > 0 then
         if not parent.getChild(parent.getChildCount() - 1).isSameNode(m.top) then return
     end if
-    if not m.top.isInFocusChain() then
+    if not m.top.hasFocus() then
         Trace_("tour took the cursor back")
-        m.actions.setFocus(true)
+        m.top.setFocus(true)
     end if
-end sub
-
-sub onAction()
-    act(m.ids[m.actions.pressed])
 end sub
 
 sub act(id as string)
@@ -99,6 +132,7 @@ sub finish()
     m.top.done = true
 end sub
 
+' Every key is the tour's while it's up: along the buttons, OK on one, Back a step.
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press or m.finished then return true
     if key = "back" then
@@ -108,19 +142,15 @@ function onKeyEvent(key as string, press as boolean) as boolean
             m.step = m.step - 1
             paint()
         end if
-        return true
+    else if key = "left" and m.at > 0 then
+        m.at = m.at - 1
+        paintButtons()
+    else if key = "right" and m.at < m.ids.Count() - 1 then
+        m.at = m.at + 1
+        paintButtons()
+    else if key = "OK" or key = "play" then
+        act(m.ids[m.at])
     end if
-    ' The buttons answer for themselves when they have the cursor; if a press reaches here
-    ' instead, the tour answers it, so it can always be stepped through or skipped.
-    i = m.actions.focusIndex
-    if key = "left" and i > 0 then
-        m.actions.focusIndex = i - 1
-    else if key = "right" and i < m.ids.Count() - 1 then
-        m.actions.focusIndex = i + 1
-    else if key = "OK" and i >= 0 and i < m.ids.Count() then
-        act(m.ids[i])
-    end if
-    if not m.finished then m.actions.setFocus(true)
     ' Nothing under the tour moves while it's up.
     return true
 end function

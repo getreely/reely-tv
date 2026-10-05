@@ -61,7 +61,9 @@ sub render()
     if m.note.text <> "" then top = top + 60
     m.note.translation = [96, top - 50]
     m.rows.translation = [96, top]
-    if not had and m.top.isInFocusChain() then m.rows.setFocus(true)
+    ' The page held the cursor while there was nothing to put it on: the rows have it now.
+    hasRows = m.rows.content <> invalid and m.rows.content.getChildCount() > 0
+    if hasRows and (m.top.hasFocus() or (not had and m.top.isInFocusChain() and not m.readyActions.isInFocusChain())) then m.rows.setFocus(true)
     showHero()
 end sub
 
@@ -82,7 +84,13 @@ sub showHero()
 end sub
 
 sub focusIn()
-    m.rows.setFocus(true)
+    ' A Roku won't give the cursor to a list with nothing in it: until the rows come, the
+    ' page itself holds it, so it isn't lost (the remote's arrows then went nowhere).
+    if m.rows.content <> invalid and m.rows.content.getChildCount() > 0 then
+        m.rows.setFocus(true)
+    else
+        m.top.setFocus(true)
+    end if
 end sub
 
 ' "Ready to watch": the first of what's arrived, and how many after it.
