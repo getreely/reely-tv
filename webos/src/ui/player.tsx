@@ -102,9 +102,13 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
     void app.report(now(), total(), "stopped").then(() => app.play(item, false, (p) => playDirect(video.current ?? document.createElement("video"), p), playing.queue));
   };
 
+  // Another episode: whatever was offered for the last one goes. The same one again (a
+  // sound track or subtitles chosen, which reloads it) keeps Up Next if it's up.
+  const shownKey = useRef(key);
   useEffect(() => {
     leaving.current = false;
-    setUpNext(null);
+    if (shownKey.current !== key) setUpNext(null);
+    shownKey.current = key;
     const v = video.current;
     if (!v) return;
     v.src = playing.url;
