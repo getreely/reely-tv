@@ -447,6 +447,14 @@ test("arrows move along a row and down to the next; Back from a tab goes Home", 
   await press(page, "ArrowRight");
   await expect(page.locator(".card:focus .title")).toHaveText("Glasshouse");
   expect(await ringCutOff(page)).toEqual([]);
+  // Under the hero, the row with the cursor at the top of the rows, the one before it out of
+  // sight; and no scrollbar drawn beside them.
+  const rowsAt = await page.evaluate(() => {
+    const rows = document.querySelector<HTMLElement>(".hero-rows")!;
+    const row = document.activeElement!.closest<HTMLElement>(".row")!;
+    return { gap: Math.round(row.getBoundingClientRect().top - rows.getBoundingClientRect().top), bar: rows.offsetWidth - rows.clientWidth };
+  });
+  expect(rowsAt).toEqual({ gap: 0, bar: 0 });
   // Up goes a row at a time, to the nearest in the row above, then into the tabs on the
   // one that's open.
   await press(page, "ArrowUp");

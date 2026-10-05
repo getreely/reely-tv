@@ -54,7 +54,8 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 /* Room above and below for the poster under the cursor, grown and ringed: a row that scrolls
    cuts off whatever reaches outside it. The margins take the room back from the page. */
 .strip { display: grid; grid-auto-flow: column; grid-auto-columns: max-content; justify-content: start; gap: 1rem; padding: 1.4rem 3rem; margin: -0.8rem 0; overflow-x: auto; overflow-y: hidden; }
-.strip::-webkit-scrollbar { display: none; }
+/* No scrollbars anywhere: the remote moves the cursor, and webOS draws one on every box that scrolls. */
+::-webkit-scrollbar { display: none; width: 0; height: 0; }
 
 .card { flex: none; width: 9rem; text-align: left; border-radius: 0.9rem; transition: transform 140ms ease; }
 .card.wide { width: 15rem; }
@@ -365,7 +366,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .content.heroed { overflow: hidden; padding: 0; }
 /* Its own layer, so the backdrop sits behind the page but over the black of the body; the tabs stay above it. */
 .with-hero { position: relative; z-index: 0; display: flex; flex-direction: column; height: 100%; }
-.home-hero { flex: none; height: 12rem; padding: 0.4rem 3rem 0; display: flex; flex-direction: column; justify-content: flex-start; }
+.home-hero { flex: none; height: 12rem; padding: 0.4rem 3rem 0; display: flex; flex-direction: column; justify-content: flex-start; overflow: hidden; }
 .home-hero h1 { margin: 0 0 0.5rem; font-size: 2.8rem; font-weight: 700; letter-spacing: -0.02em; max-width: 50rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .home-hero .hero-logo { display: block; max-width: 24rem; max-height: 6rem; object-fit: contain; object-position: left bottom; margin-bottom: 0.7rem; }
 .home-hero .facts { display: flex; align-items: center; font-size: 1.15rem; color: var(--muted); margin-bottom: 0.5rem; }

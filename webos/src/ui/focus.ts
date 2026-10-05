@@ -36,6 +36,11 @@ export function focus(el: HTMLElement | null | undefined) {
   el.focus({ preventScroll: true });
   // Chromium 68 takes the options form; "nearest" keeps rows from jumping about.
   el.scrollIntoView({ block: "nearest", inline: "nearest" });
+  // Under a hero, as on the Fire TV: the row with the cursor at the top of the rows, the one
+  // before it wholly out of sight rather than its names showing under the hero.
+  const rows = el.closest<HTMLElement>(".hero-rows");
+  const row = el.closest<HTMLElement>(".row");
+  if (rows && row) rows.scrollTop += row.getBoundingClientRect().top - rows.getBoundingClientRect().top;
 }
 
 let pressedAt = Date.now();
