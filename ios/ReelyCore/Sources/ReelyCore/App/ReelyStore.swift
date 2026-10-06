@@ -88,14 +88,17 @@ public final class ReelyStore {
     public private(set) var stack: [Route] = [.home]
 
     public let api: PlexAPI
+    public let xtream: XtreamClient
+    public internal(set) var live = LiveState()
     let store: KeyValueStore
-    private let secrets: KeyValueStore
+    let secrets: KeyValueStore
     private var linkTask: Task<Void, Never>?
     private var homeRun = 0
     private var relocating: Task<Bool, Never>?
 
     public init(api: PlexAPI, store: KeyValueStore, secrets: KeyValueStore) {
         self.api = api
+        self.xtream = XtreamClient(http: api.http)
         self.store = store
         self.secrets = secrets
         self.prefs = store.json("prefs", as: Prefs.self) ?? Prefs()
@@ -103,6 +106,7 @@ public final class ReelyStore {
         plex.accountToken = secrets.string("plexAccountToken") ?? plex.token
         plex.user = store.json("plexUser", as: PlexHomeUser.self)
         search.recent = store.json("recentSearches", as: [String].self) ?? []
+        loadLiveState()
     }
 
     /// A client id kept for good: plex.tv knows each device by it.
