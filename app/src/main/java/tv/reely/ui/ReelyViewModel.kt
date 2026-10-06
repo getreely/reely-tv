@@ -404,8 +404,16 @@ data class PlexState(
     /** Switching profiles: the one being switched to while it happens. */
     val switchingTo: PlexHomeUser? = null,
     val switchError: String? = null,
+    /**
+     * Addresses a server stopped answering at, and where it answers now. What's already on
+     * screen was read from the old one and still names it; this is how it reaches the new.
+     */
+    val moved: Map<String, String> = emptyMap(),
 ) {
     val isConnected: Boolean get() = baseUrl != null && serverToken != null
+
+    /** Where a server is now, by an address it was read from. Null means the one connected. */
+    fun baseFor(base: String?): String? = base?.let { moved[it] ?: it } ?: baseUrl
 
     /** Whether there is anybody else to switch to. */
     val canSwitchUser: Boolean get() = homeUsers.size > 1
@@ -413,9 +421,12 @@ data class PlexState(
     fun sectionsFor(kind: LibraryKind): List<PlexSection> = sections.filter { it.type == kind.plexType }
 
     /** The token for a server, by its address. Null base means the one connected. */
-    fun tokenFor(base: String?): String? = when {
-        base == null || base == baseUrl -> serverToken
-        else -> libraryChoices.firstOrNull { it.baseUrl == base }?.token
+    fun tokenFor(base: String?): String? {
+        val now = base?.let { moved[it] ?: it }
+        return when {
+            now == null || now == baseUrl -> serverToken
+            else -> libraryChoices.firstOrNull { it.baseUrl == now }?.token
+        }
     }
 
     /**
@@ -648,6 +659,9 @@ private const val IPTV_CATALOG_MS = 12L * 60 * 60 * 1000
 /** How soon Home is asked for again while the server isn't answering. */
 private const val HOME_RETRY_MS = 30_000L
 
+/** Away this long (asleep, the screensaver, another app) and the servers are looked for again on the way back. */
+private const val CAME_BACK_RECHECK_MS = 5 * 60_000L
+
 /** How far in Plex counts something as watched, by its default setting. */
 private const val WATCHED_FRACTION = 0.9
 
@@ -754,7 +768,28 @@ internal fun ReelyState.forgetAccount(): ReelyState = copy(
 )
 
 /** Two ways of naming a server the same: no server given is the one connected. */
-internal fun ReelyState.sameServer(a: String?, b: String?): Boolean = (a ?: plex.baseUrl) == (b ?: plex.baseUrl)
+/**
+ * Servers found at other addresses, or with other tokens: [moves] is from the address each
+ * was used at to where it answers now and its token. The one connected and every library
+ * follow, and the old addresses are kept as aliases so what's on screen still reaches them.
+ */
+internal fun PlexState.afterMoves(moves: Map<String, Pair<String, String>>): PlexState {
+    val newBase = baseUrl?.let { moves[it]?.first } ?: baseUrl
+    val newToken = baseUrl?.let { moves[it]?.second } ?: serverToken
+    // Older moves follow on to where the server is now.
+    val aliases = moved.mapValues { (_, to) -> moves[to]?.first ?: to } +
+        moves.filter { (from, to) -> from != to.first }.mapValues { it.value.first }
+    return copy(
+        baseUrl = newBase,
+        serverToken = newToken,
+        moved = aliases,
+        libraryChoices = libraryChoices.map { choice ->
+            moves[choice.baseUrl]?.let { (b, t) -> choice.copy(baseUrl = b, token = t) } ?: choice
+        },
+    )
+}
+
+internal fun ReelyState.sameServer(a: String?, b: String?): Boolean = plex.baseFor(a) == plex.baseFor(b)
 
 /**
  * The same title: the same number on the same server. A number is only a server's own,
@@ -1416,7 +1451,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun loadPlaylist(route: Route.Playlist) {
         val plex = _state.value.plex
-        val base = route.serverBase ?: plex.baseUrl ?: return
+        val base = plex.baseFor(route.serverBase) ?: return
         val token = plex.tokenFor(route.serverBase) ?: return
         _state.update { it.copy(playlist = PlaylistState(route)) }
         viewModelScope.launch {
@@ -1448,7 +1483,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun loadPerson(route: Route.Person) {
         val plex = _state.value.plex
-        val base = route.serverBase ?: plex.baseUrl ?: return
+        val base = plex.baseFor(route.serverBase) ?: return
         val token = plex.tokenFor(route.serverBase) ?: return
         _state.update { it.copy(person = PersonState(route)) }
         viewModelScope.launch {
@@ -1808,6 +1843,72 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         return true
     }
 
+    private var relocating: kotlinx.coroutines.Deferred<Boolean>? = null
+
+    /**
+     * The servers in use, looked for again where they are now, without starting over.
+     *
+     * An address can stop working while the app stays open: a friend's server, or one
+     * reached through Plex's relay, is given another, and a router can hand a server a new
+     * one overnight. Everything kept asking the old one, so after the television had slept
+     * nothing would play until the app was restarted, which is what looks again. Now
+     * plex.tv is asked where each server is (and for its current token), the address in
+     * use is tried, and one that doesn't answer is swapped for one that does. What's on
+     * screen keeps working, through [PlexState.moved]. True when anything moved.
+     *
+     * One look at a time: a press of Play and Home's refresh failing together share it.
+     */
+    private suspend fun relocateServers(): Boolean {
+        relocating?.takeIf { it.isActive }?.let { return it.await() }
+        val look = viewModelScope.async { lookForServers() }
+        relocating = look
+        return look.await()
+    }
+
+    private suspend fun lookForServers(): Boolean {
+        val plex = _state.value.plex
+        val account = plex.token ?: return false
+        val servers = runCatching { PlexApi.servers(clientId, account) }.getOrNull() ?: return false
+        updatePlex { it.copy(servers = servers) }
+        // Each server in use, by the address and token it's used with now.
+        val inUse = buildMap {
+            plex.libraryChoices.forEach { put(it.serverName, it.baseUrl to it.token) }
+            val name = plex.serverName
+            val base = plex.baseUrl
+            val token = plex.serverToken
+            if (name != null && base != null && token != null) put(name, base to token)
+        }
+        val moves = mutableMapOf<String, Pair<String, String>>()
+        for ((name, used) in inUse) {
+            val (base, token) = used
+            val server = servers.firstOrNull { it.name == name }
+                ?: servers.firstOrNull { it.accessToken == token }
+                ?: continue
+            val answers = PlexApi.reachable(server, base)
+            if (answers && server.accessToken == token) continue
+            val now = if (answers) base else PlexApi.firstReachable(server) ?: continue
+            if (now != base || server.accessToken != token) moves[base] = now to server.accessToken
+        }
+        if (moves.isEmpty()) return false
+        _state.update { it.copy(plex = it.plex.afterMoves(moves)) }
+        _state.value.plex.let { now ->
+            now.baseUrl?.let { store.put(SecureStore.PLEX_SERVER_URI, it) }
+            now.serverToken?.let { store.put(SecureStore.PLEX_SERVER_TOKEN, it) }
+        }
+        return true
+    }
+
+    /**
+     * Back after the television has been asleep or off for a while: the servers looked for
+     * again first, then whatever is on screen read again from wherever they are now.
+     */
+    fun cameBack(awayMs: Long) {
+        viewModelScope.launch {
+            if (awayMs >= CAME_BACK_RECHECK_MS) relocateServers()
+            refreshVisible()
+        }
+    }
+
     private suspend fun loadSections() {
         val plex = _state.value.plex
         val base = plex.baseUrl ?: return
@@ -1871,7 +1972,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         // The provider's pictures are whole addresses of their own.
         if (isIptvSource(serverBase)) return path?.takeIf { it.startsWith("http") }
         val plex = _state.value.plex
-        val base = serverBase ?: plex.baseUrl ?: return null
+        val base = plex.baseFor(serverBase) ?: return null
         val token = plex.tokenFor(serverBase) ?: return null
         return PlexApi.imageUrl(base, token, path, width, height)
     }
@@ -1994,6 +2095,11 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
             if (generation != homeGeneration) return@launch
             if (!answered) {
+                // Perhaps it's somewhere else now: looked for, and if so, asked there.
+                if (relocateServers()) {
+                    refreshHome()
+                    return@launch
+                }
                 _state.update {
                     it.copy(home = it.home.copy(busy = false, error = "Couldn't reach your Plex server. Trying again…"))
                 }
@@ -2096,7 +2202,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     fun plexLogoUrl(serverBase: String?, path: String?): String? {
         if (path == null || isIptvSource(serverBase)) return null
         val plex = _state.value.plex
-        val base = serverBase ?: plex.baseUrl ?: return null
+        val base = plex.baseFor(serverBase) ?: return null
         val token = plex.tokenFor(serverBase) ?: return null
         return PlexApi.logoUrl(base, token, path)
     }
@@ -2418,7 +2524,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         }
         val ratingKey = route.ratingKey
         val plex = _state.value.plex
-        val base = route.serverBase ?: plex.baseUrl ?: return
+        val base = plex.baseFor(route.serverBase) ?: return
         val token = plex.tokenFor(route.serverBase) ?: return
 
         _state.update {
@@ -2514,7 +2620,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         }
         val plex = _state.value.plex
         val on = season.serverBase ?: _state.value.detail?.serverBase
-        val base = on ?: plex.baseUrl ?: return
+        val base = plex.baseFor(on) ?: return
         val token = plex.tokenFor(on) ?: return
         val page = _state.value.detail ?: return
         // The season chosen last is the one whose episodes show. Moving along the seasons
@@ -2571,7 +2677,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         val plex = _state.value.plex
-        val base = item.serverBase ?: plex.baseUrl ?: return
+        val base = plex.baseFor(item.serverBase) ?: return
         val token = plex.tokenFor(item.serverBase) ?: return
         viewModelScope.launch {
             val episodes = runCatching { PlexApi.episodesOf(base, token, item.ratingKey) }
@@ -2685,11 +2791,22 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         if (item.isIptv) return playIptv(item, queue, resume)
         val plex = _state.value.plex
         val on = item.serverBase
-        val base = on ?: plex.baseUrl ?: return null
-        val token = plex.tokenFor(on) ?: return null
+        val startBase = plex.baseFor(on) ?: return null
+        val startToken = plex.tokenFor(on) ?: return null
 
         return viewModelScope.launch {
+            var base = startBase
+            var token = startToken
             val resolved = runCatching { PlexApi.playback(base, token, item.ratingKey, mediaIndex) }
+                .recoverCatching { failure ->
+                    // The server not answering where it was: looked for, and asked again
+                    // wherever it is now, rather than nothing playing until a restart.
+                    if (!relocateServers()) throw failure
+                    val now = _state.value.plex
+                    base = now.baseFor(on) ?: throw failure
+                    token = now.tokenFor(on) ?: throw failure
+                    PlexApi.playback(base, token, item.ratingKey, mediaIndex)
+                }
                 .getOrElse { failure ->
                     reportPlaybackProblem(failure.readable())
                     return@launch
@@ -2812,7 +2929,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     /** Started from Continue Watching, so the season's other episodes are not loaded yet. */
     private fun primeQueue(item: PlexItem) {
         val plex = _state.value.plex
-        val base = item.serverBase ?: plex.baseUrl ?: return
+        val base = plex.baseFor(item.serverBase) ?: return
         val token = plex.tokenFor(item.serverBase) ?: return
         val seasonKey = item.parentRatingKey ?: return
         viewModelScope.launch {
@@ -2931,7 +3048,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         // A playlist ends where it does.
         if (playback.playlist) return null
         if (playback.fromIptv) return firstOfNextIptvSeason(playback)
-        val base = playback.serverBase ?: plex.baseUrl ?: return null
+        val base = plex.baseFor(playback.serverBase) ?: return null
         val token = plex.tokenFor(playback.serverBase) ?: return null
         val current = playback.queue.getOrNull(playback.queueIndex)
             ?: playback.queue.lastOrNull()
@@ -3054,7 +3171,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val playback = _state.value.playback ?: return
         val ratingKey = playback.ratingKey ?: return
         val plex = _state.value.plex
-        val base = playback.serverBase ?: plex.baseUrl ?: return
+        val base = plex.baseFor(playback.serverBase) ?: return
         val token = plex.tokenFor(playback.serverBase) ?: return
         val language = java.util.Locale.getDefault().language.ifBlank { "en" }
         _state.update { it.copy(subtitleSearch = SubtitleSearch(language)) }
@@ -3084,7 +3201,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val ratingKey = playback.ratingKey ?: return
         val search = _state.value.subtitleSearch ?: return
         val plex = _state.value.plex
-        val base = playback.serverBase ?: plex.baseUrl ?: return
+        val base = plex.baseFor(playback.serverBase) ?: return
         val token = plex.tokenFor(playback.serverBase) ?: return
         _state.update { it.copy(subtitleSearch = search.copy(adding = subtitle.key, error = null)) }
         viewModelScope.launch {
@@ -3144,7 +3261,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         val plex = _state.value.plex
-        val base = playback.serverBase ?: plex.baseUrl ?: return
+        val base = plex.baseFor(playback.serverBase) ?: return
         val token = plex.tokenFor(playback.serverBase) ?: return
         val session = sessionFor(playback)
         lastPosition = titleOf(playback) to positionMs
@@ -3172,7 +3289,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val playback = _state.value.playback ?: return
         val partId = playback.partId ?: return
         val plex = _state.value.plex
-        val base = playback.serverBase ?: plex.baseUrl ?: return
+        val base = plex.baseFor(playback.serverBase) ?: return
         val token = plex.tokenFor(playback.serverBase) ?: return
         viewModelScope.launch {
             writes.withLock { runCatching { PlexApi.selectStream(base, token, partId, audioStreamId, subtitleStreamId) } }
@@ -3191,7 +3308,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
     /** What's playing, told apart from the same number on another server. */
     private fun titleOf(playback: Playback): String =
-        (playback.serverBase ?: _state.value.plex.baseUrl).orEmpty() + "|" + playback.ratingKey.orEmpty()
+        _state.value.plex.baseFor(playback.serverBase).orEmpty() + "|" + playback.ratingKey.orEmpty()
 
     /**
      * The device could not decode the file. Ask the server to do the work instead and
@@ -3203,7 +3320,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         if (_state.value.prefs.playbackMode == Settings.MODE_DIRECT) return
         val ratingKey = playback.ratingKey ?: return
         val plex = _state.value.plex
-        val base = playback.serverBase ?: plex.baseUrl ?: return
+        val base = plex.baseFor(playback.serverBase) ?: return
         val token = plex.tokenFor(playback.serverBase) ?: return
 
         val session = UUID.randomUUID().toString()
@@ -3245,7 +3362,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         if (playback.transcoding || playback.isLive) return
         val ratingKey = playback.ratingKey ?: return
         val plex = _state.value.plex
-        val base = playback.serverBase ?: plex.baseUrl ?: return
+        val base = plex.baseFor(playback.serverBase) ?: return
         val token = plex.tokenFor(playback.serverBase) ?: return
 
         val session = UUID.randomUUID().toString()
@@ -3274,7 +3391,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val playback = _state.value.playback ?: return
         val session = playback.transcodeSession ?: return
         val plex = _state.value.plex
-        val base = playback.serverBase ?: plex.baseUrl ?: return
+        val base = plex.baseFor(playback.serverBase) ?: return
         val token = plex.tokenFor(playback.serverBase) ?: return
         viewModelScope.launch { PlexApi.stopTranscode(base, token, session) }
     }
@@ -3342,7 +3459,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         }
         keepProgress(ratingKey, positionMs, playback.durationMs, playback.serverBase)
         val plex = _state.value.plex
-        val base = playback.serverBase ?: plex.baseUrl ?: return
+        val base = plex.baseFor(playback.serverBase) ?: return
         val token = plex.tokenFor(playback.serverBase) ?: return
         val session = sessionFor(playback)
         val earlier = timelineJob
@@ -3591,7 +3708,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         val plex = _state.value.plex
-        val base = item.serverBase ?: plex.baseUrl ?: return
+        val base = plex.baseFor(item.serverBase) ?: return
         val token = plex.tokenFor(item.serverBase) ?: return
         val watched = !item.isWatched
 
@@ -3616,7 +3733,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         val plex = _state.value.plex
-        val base = item.serverBase ?: plex.baseUrl ?: return
+        val base = plex.baseFor(item.serverBase) ?: return
         val token = plex.tokenFor(item.serverBase) ?: return
         val before = _state.value.home.continueWatching
         _state.update { it.copy(home = it.home.copy(continueWatching = before.filterNot { entry -> entry.listKey == item.listKey })) }
@@ -3647,7 +3764,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
     fun playTrailer() {
         val plex = _state.value.plex
         val detail = _state.value.detail ?: return
-        val base = detail.serverBase ?: plex.baseUrl ?: return
+        val base = plex.baseFor(detail.serverBase) ?: return
         val token = plex.tokenFor(detail.serverBase) ?: return
         val trailer = detail.trailers.firstOrNull() ?: return
         val title = detail.detail?.title ?: "Trailer"
@@ -5018,7 +5135,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val detail = _state.value.detail ?: return
         val theme = detail.detail?.theme ?: return
         val plex = _state.value.plex
-        val base = detail.serverBase ?: plex.baseUrl ?: return
+        val base = plex.baseFor(detail.serverBase) ?: return
         val token = plex.tokenFor(detail.serverBase) ?: return
         themeJob = viewModelScope.launch {
             delay(THEME_DELAY_MS)

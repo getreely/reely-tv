@@ -110,16 +110,19 @@ fun TouchApp(
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         var wasStopped = false
+        var stoppedAt = 0L
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
                 viewModel.silenceTheme()
                 viewModel.livePlayer.park()
                 wasStopped = true
+                stoppedAt = android.os.SystemClock.elapsedRealtime()
             }
             if (event == Lifecycle.Event.ON_START && wasStopped) {
                 viewModel.livePlayer.unpark()
                 viewModel.dropStaleReminder()
-                viewModel.refreshVisible()
+                // After a long sleep the servers may be somewhere else: see cameBack.
+                viewModel.cameBack(android.os.SystemClock.elapsedRealtime() - stoppedAt)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)

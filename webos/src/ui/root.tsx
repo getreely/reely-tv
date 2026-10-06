@@ -60,6 +60,14 @@ function Clock() {
 
 const sameTab = (a: Route, b: Route) => a.name === b.name && (a.name !== "library" || (b.name === "library" && a.kind === b.kind));
 
+/**
+ * The tab a page belongs to: the one it was opened from, as on the Fire TV. A show's page
+ * from TV Shows is under TV Shows, so up from it goes there; it used to be under none, and
+ * up went to whichever tab was nearest, Search.
+ */
+const tabOf = (stack: Route[], route: Route): Route =>
+  route.name === "settings" ? route : [...stack].reverse().find((r) => r.name === "search" || r.name === "home" || r.name === "library" || r.name === "live" || r.name === "requests") ?? route;
+
 /** Leaving the app, as webOS wants it done: its own way back to the launcher, else closing. */
 export function leave() {
   const webOS = (window as unknown as { webOS?: { platformBack?: () => void } }).webOS;
@@ -162,18 +170,18 @@ export function Root(props: { app: App }) {
         </svg>
         {connected ? (
           // Search first, as a glass, as on the Fire TV.
-          <button class={"tab icon" + (route.name === "search" ? " on" : "")} data-focus aria-label="Search" onClick={() => app.navigate({ name: "search" })}>
+          <button class={"tab icon" + (tabOf(state.stack, route).name === "search" ? " on" : "")} data-focus aria-label="Search" onClick={() => app.navigate({ name: "search" })}>
             <SearchGlyph />
           </button>
         ) : null}
         {TABS.map(([label, target]) => (
           <button
             key={label}
-            class={"tab" + (sameTab(route, target) ? " on" : "")}
+            class={"tab" + (sameTab(tabOf(state.stack, route), target) ? " on" : "")}
             data-focus
             onClick={() => app.navigate(target)}
             // Moving onto a tab opens it, as the Fire TV's do.
-            onFocus={(e) => { if (arrowedOnto(e.currentTarget) && !sameTab(app.state.route, target)) app.navigate(target); }}
+            onFocus={(e) => { if (arrowedOnto(e.currentTarget) && !sameTab(tabOf(app.state.stack, app.state.route), target)) app.navigate(target); }}
           >
             {label}
           </button>

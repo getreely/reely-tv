@@ -547,6 +547,37 @@ test("arrows move along a row and down to the next; Back from a tab goes Home", 
   await expect(page.getByText("Recently Added Movies")).toBeVisible();
 });
 
+test("up from a show's page goes to the tab it was opened from, as on the Fire TV, not Search", async ({ page }) => {
+  await fakePlex(page);
+  await page.goto("/");
+  await press(page, "Enter");
+  await expect(page.getByText("Recently Added Movies")).toBeVisible({ timeout: 10_000 });
+  const upToTabs = async () => {
+    for (let i = 0; i < 10 && !(await page.locator(".tabs .tab:focus").count()); i++) await press(page, "ArrowUp");
+  };
+  // From Home: Home.
+  await expect(page.locator(".card:focus .title")).toHaveText("Northbound");
+  await press(page, "Enter");
+  await expect(page.getByRole("heading", { name: "Northbound" })).toBeVisible();
+  await upToTabs();
+  await expect(page.locator(".tabs .tab:focus")).toHaveText("Home");
+  await expect(page.getByRole("heading", { name: "Northbound" })).toBeVisible();
+  // From TV Shows: TV Shows, and the page stays.
+  await page.locator(".tab", { hasText: "TV Shows" }).click();
+  const show = page.locator(".card", { hasText: "Northbound" }).first();
+  await expect(show).toBeVisible();
+  await show.focus();
+  await press(page, "Enter");
+  await expect(page.getByRole("heading", { name: "Northbound" })).toBeVisible();
+  await expect(page.locator(".tabs .tab.on")).toHaveText("TV Shows");
+  await upToTabs();
+  await expect(page.locator(".tabs .tab:focus")).toHaveText("TV Shows");
+  await expect(page.getByRole("heading", { name: "Northbound" })).toBeVisible();
+  // OK there: TV Shows itself.
+  await press(page, "Enter");
+  await expect(page.getByRole("heading", { name: "Season 1" })).toHaveCount(0);
+});
+
 test("opened from file://, as an installed webOS app is, it starts and draws in Geist", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(String(e)));
