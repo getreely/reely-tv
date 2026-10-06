@@ -34,11 +34,12 @@ final class ImageLoader {
 struct RemoteImage: View {
     let url: URL?
     var contentMode: ContentMode = .fill
+    var background: Color = .surfaceHigh
     @State private var image: UIImage?
 
     var body: some View {
         ZStack {
-            Color.surfaceHigh
+            background
             if let image {
                 Image(uiImage: image).resizable().aspectRatio(contentMode: contentMode)
                     .transition(.opacity)

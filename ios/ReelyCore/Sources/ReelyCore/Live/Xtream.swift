@@ -187,10 +187,10 @@ public enum Xtream {
     }
 
     /// A programme from the channel's archive: the panel's timeshift address, in its own time zone.
-    public static func catchUpUrl(_ c: XtreamCredentials, _ channel: XtreamChannel, start: Int, stop: Int, timezone: String?) -> String? {
+    public static func catchUpUrl(_ c: XtreamCredentials, _ channel: XtreamChannel, start: Int, stop: Int, timezone: String?, format: StreamFormat = .ts) -> String? {
         guard !c.isPlaylist, channel.archiveDays > 0 else { return nil }
         let minutes = max(1, (stop - start + 59) / 60)
-        return "\(c.base)/timeshift/\(encodeComponent(c.username))/\(encodeComponent(c.password))/\(minutes)/\(panelTime(start, timezone: timezone))/\(channel.streamId).ts"
+        return "\(c.base)/timeshift/\(encodeComponent(c.username))/\(encodeComponent(c.password))/\(minutes)/\(panelTime(start, timezone: timezone))/\(channel.streamId).\(format.rawValue)"
     }
 
     /// "2024-03-05:20-30": a moment as the panel's clock reads it.

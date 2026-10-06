@@ -17,6 +17,11 @@ final class DemoTransport: HttpTransport, @unchecked Sendable {
     func send(_ request: HttpRequest) async throws -> HttpResponse {
         guard let url = URL(string: request.url) else { return HttpResponse(status: 404, data: Data()) }
         if url.path.hasPrefix("/photo/") { return HttpResponse(status: 200, data: DemoTransport.picture(for: request.url)) }
+        if url.path == "/player_api.php" {
+            let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            let body = DemoTransport.panel(query.first { $0.name == "action" }?.value, streamId: query.first { $0.name == "stream_id" }?.value.flatMap(Int.init))
+            return HttpResponse(status: 200, data: Data(body.utf8))
+        }
         guard let body = DemoTransport.answer(url.path) else { return HttpResponse(status: 404, data: Data()) }
         return HttpResponse(status: 200, data: Data(body.utf8))
     }
@@ -81,6 +86,47 @@ final class DemoTransport: HttpTransport, @unchecked Sendable {
         case "/library/sections/1/collections":
             return #"{"MediaContainer": {"Metadata": [{"ratingKey": "c1", "type": "collection", "title": "Space", "childCount": 4, "thumb": "/thumb/c1"}]}}"#
         default: return nil
+        }
+    }
+
+    // MARK: A stand-in live TV provider
+
+    static let channels: [(Int, String, [String])] = [
+        (101, "News 24", ["Morning Briefing", "The World Today", "Business Live", "Weather Watch", "Evening Headlines", "Late Edition"]),
+        (102, "UK: Sport One", ["Match Day Live", "Goals of the Week", "Racing from Ascot", "Cricket Highlights", "The Fight Night", "Sports Desk"]),
+        (103, "Harbour TV", ["Northbound", "Coastline", "The Orchard", "Night Shift", "Static", "Harbour Lights"]),
+        (104, "Film Four Plus", ["Low Orbit", "Paper Moons", "The Long Field", "Quiet Hours", "Red Coast", "Afterglow"]),
+        (105, "Kids Club", ["Cartoon Morning", "Little Builders", "Story Time", "Puzzle Pals", "Wild Things", "Bedtime Tales"]),
+        (106, "Discovery Deep", ["Ocean Floors", "Planet Builders", "Ice Worlds", "The Big Migration", "Volcano Week", "Night Skies"]),
+        (107, "Music Hits", ["Top 40", "Throwback Hour", "Acoustic Sessions", "Live at the Hall", "Chart Countdown", "Late Mix"]),
+    ]
+
+    static func panel(_ action: String?, streamId: Int?) -> String {
+        switch action {
+        case nil:
+            return #"{"user_info": {"auth": 1, "status": "Active", "max_connections": "2", "active_cons": "1", "exp_date": "1893456000"}, "server_info": {"timezone": "UTC"}}"#
+        case "get_live_categories":
+            return #"[{"category_id": "1", "category_name": "Entertainment"}, {"category_id": "2", "category_name": "News"}, {"category_id": "3", "category_name": "Sport"}, {"category_id": "4", "category_name": "Kids"}]"#
+        case "get_live_streams":
+            return "[" + channels.enumerated().map { i, c in
+                #"{"stream_id": \#(c.0), "num": \#(i + 1), "name": "\#(c.1)", "epg_channel_id": "c\#(c.0)", "tv_archive": \#(i < 3 ? 1 : 0), "tv_archive_duration": 3}"#
+            }.joined(separator: ",") + "]"
+        case "get_short_epg", "get_simple_data_table":
+            guard let streamId, let channel = channels.first(where: { $0.0 == streamId }) else { return #"{"epg_listings": []}"# }
+            // Half-hour and hour programmes around now, the same each run.
+            let now = Int(Date().timeIntervalSince1970)
+            var at = now / 1800 * 1800 - 3600
+            var items: [String] = []
+            for i in 0..<10 {
+                let length = (stableHash(channel.1 + String(i)) % 2 + 1) * 1800
+                let title = Data(channel.2[i % channel.2.count].utf8).base64EncodedString()
+                let about = Data("A look at what's happening, live from the studio.".utf8).base64EncodedString()
+                items.append(#"{"title": "\#(title)", "description": "\#(about)", "start_timestamp": "\#(at)", "stop_timestamp": "\#(at + length)"}"#)
+                at += length
+            }
+            return #"{"epg_listings": [\#(items.joined(separator: ","))]}"#
+        default:
+            return "[]"
         }
     }
 

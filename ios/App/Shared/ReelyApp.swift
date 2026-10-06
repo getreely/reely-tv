@@ -22,7 +22,12 @@ struct ReelyApp: App {
             let transport = DemoTransport(scene: scene)
             ImageLoader.shared.transport = transport
             let api = PlexAPI(http: Http(transport: transport), identity: identity, plexTv: DemoTransport.server, discover: DemoTransport.server)
-            let secrets = MemoryStore(["signin", "code"].contains(scene) ? [:] : ["plexToken": "demo"])
+            var kept = ["signin", "code"].contains(scene) ? [:] : ["plexToken": "demo"]
+            // Signed in to a stand-in live TV provider, for the Live TV scenes.
+            if ["live", "guide", "channel", "overguide"].contains(scene) {
+                kept["xtream"] = #"{"base": "\#(DemoTransport.server)", "username": "demo", "password": "demo"}"#
+            }
+            let secrets = MemoryStore(kept)
             _store = State(initialValue: ReelyStore(api: api, store: MemoryStore(), secrets: secrets))
         } else {
             _store = State(initialValue: ReelyStore(api: PlexAPI(identity: identity), store: defaults, secrets: KeychainStore()))
@@ -48,6 +53,12 @@ struct ReelyApp: App {
                     if args.contains("settings") { store.navigate(.settings) }
                     if args.contains("search") { store.navigate(.search); await store.setQuery("orbit") }
                     if args.contains("profiles") { NotificationCenter.default.post(name: .chooseProfile, object: nil) }
+                    if args.contains("live") || args.contains("guide") || args.contains("channel") || args.contains("overguide") {
+                        store.navigate(.live)
+                        await store.loadLive()
+                        if let first = store.live.categories.first { await store.openCategory(first) }
+                        if args.contains("channel") || args.contains("overguide") { store.watchChannel(0) }
+                    }
                     if args.contains("library") { store.navigate(.library(kind: "movie")); store.setLibraryView("movie", .grid) }
                 }
         }
@@ -72,6 +83,23 @@ struct RootView: View {
             if store.askWho || choosingProfile { ProfilesView { store.askedWho(); choosingProfile = false }.zIndex(2) }
             // What's playing covers everything, as on the Fire TV.
             if store.playing != nil { PlayerView().transition(.opacity).zIndex(1) }
+            if store.live.watching != nil { LivePlayerView().transition(.opacity).zIndex(1.5) }
+            // A reminder from the guide, over whatever's on.
+            if let due = store.live.due {
+                ReminderNotice(due: due)
+                    .padding(.horizontal, pageMargin).padding(.top, dp(24))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(3)
+            }
+        }
+        .animation(.easeOut(duration: 0.25), value: store.live.due)
+        .task {
+            // Reminders come due whatever's on screen, as on the Fire TV.
+            while !Task.isCancelled {
+                store.checkReminders()
+                try? await Task.sleep(nanoseconds: 20_000_000_000)
+            }
         }
     }
 }
@@ -91,6 +119,7 @@ struct RouteContent: View {
             case .detail(let key, let base): DetailView(ratingKey: key, serverBase: base).id(key)
             case .settings: SettingsView()
             case .search: SearchView()
+            case .live: LiveView()
             case .person, .collection, .playlist: ListPageView(route: route).id(route)
             default: NotYet(route: route)
             }

@@ -99,8 +99,7 @@ struct SettingsSection: View {
             case .playback: playback
             case .home: home
             case .theme: theme
-            case .live:
-                Group_(title: "Live TV") { Row_(title: "Not signed in", note: "Sign in from the Live TV tab.", value: "Go to Live TV") { store.navigate(.live) } }
+            case .live: LiveSettings()
             case .requests:
                 Group_(title: "Requests") { Row_(title: "Not connected", note: "Connect to Reely from the Request tab.", value: "Go to Requests") { store.navigate(.requests) } }
             case .plex: plexSection
@@ -238,6 +237,74 @@ struct SettingsSection: View {
             Text("Version \(ReelyApp.version)").font(Typeface.label).foregroundStyle(Color.muted)
         }
         Group_(title: "Licenses") { Row_(title: "Geist", note: "The typeface.", value: "SIL Open Font License", action: nil) }
+    }
+}
+
+/// Live TV's settings, as on the Fire TV: the channels and guide, watching, and the provider.
+private struct LiveSettings: View {
+    @Environment(ReelyStore.self) private var store
+    @State private var guideNamed: Bool?
+
+    var body: some View {
+        let live = store.live
+        if let c = live.credentials {
+            Group_(title: "Channels and guide") {
+                Row_(title: "Refresh channels", note: nil, value: live.busy ? "Refreshing…" : "\(live.categories.count) categories") {
+                    Task { await store.refreshChannels() }
+                }
+                if guideNamed == false {
+                    Row_(title: "TV guide", note: "Your playlist doesn't name one. To add one, sign out and sign in again with a TV guide address.", value: "None", action: nil)
+                } else {
+                    Row_(title: "Refresh TV guide", note: failure(live.guideStatus) ?? "What's on, asked for again.",
+                         value: c.isPlaylist ? guideValue(live.guideStatus) : nil) {
+                        Task { await store.refreshGuide() }
+                    }
+                }
+            }
+            #if os(tvOS)
+            Group_(title: "Watching") {
+                Switch_(title: "Guide preview", note: "Plays the highlighted channel in the guide.",
+                        on: Binding(get: { store.prefs.guidePreview }, set: { store.prefs.guidePreview = $0 }))
+            }
+            #endif
+            Group_(title: "Provider") {
+                Row_(title: c.isPlaylist ? "Playlist" : "Server", note: nil, value: URL(string: c.playlistUrl ?? c.base)?.host ?? "—", action: nil)
+                if !c.isPlaylist {
+                    Row_(title: "Account", note: nil, value: account(live.account), action: nil)
+                    Row_(title: "Connections", note: "Each channel on screen uses one, including the guide preview.",
+                         value: "\(live.account?.activeConnections ?? "?") of \(live.account?.maxConnections ?? "?") in use", action: nil)
+                }
+                Row_(title: "Sign out of live TV", note: nil, value: nil) { store.signOutLive() }
+            }
+            .task(id: c) { guideNamed = await store.guideNamed() }
+        } else {
+            Group_(title: "Live TV") {
+                Row_(title: "Not signed in", note: "Sign in to your provider from the Live TV tab.", value: "Go to Live TV") { store.navigate(.live) }
+            }
+        }
+    }
+
+    /// How the playlist's guide stands, as the Fire TV says it.
+    private func guideValue(_ status: GuideStatus) -> String {
+        switch status {
+        case .updating: return "Updating…"
+        case .ready(let at): return "Updated \(liveTime(at))"
+        case .failed: return "Couldn't update"
+        case .none: return "None"
+        case .idle: return "Not loaded"
+        }
+    }
+
+    private func failure(_ status: GuideStatus) -> String? {
+        if case .failed(let message) = status { return message }
+        return nil
+    }
+
+    private func account(_ a: XtreamAccount?) -> String {
+        guard let a else { return "—" }
+        let until = a.expiresAt.flatMap(Double.init).map { "until " + Date(timeIntervalSince1970: $0).formatted(date: .abbreviated, time: .omitted) }
+        let status: String = a.status.prefix(1).uppercased() + String(a.status.dropFirst())
+        return [status, until].compactMap { $0 }.joined(separator: " · ")
     }
 }
 

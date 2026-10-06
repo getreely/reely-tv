@@ -145,6 +145,20 @@ extension ReelyStore {
         }
     }
 
+    /// Back from a category's channels to the list of categories.
+    public func closeCategory() {
+        live.category = nil
+        live.channels = []
+    }
+
+    public func dismissLiveError() { live.error = nil }
+
+    /// What's on a channel: the guide's whole listing where it's been read, else now and next.
+    public func listing(for channel: XtreamChannel) -> [Programme] {
+        let table = live.table[channel.streamId] ?? []
+        return table.isEmpty ? live.guide[channel.streamId] ?? [] : table
+    }
+
     /// A category's channels, without opening it: the guide over a channel browses them.
     public func channelsOf(_ category: XtreamCategory) async throws -> [XtreamChannel] {
         guard let c = live.credentials else { return [] }
@@ -227,8 +241,9 @@ extension ReelyStore {
 
     // MARK: Watching
 
+    /// A channel's stream. Apple's player plays HLS but not a bare MPEG-TS stream, so it's always HLS here.
     public func channelUrl(_ channel: XtreamChannel) -> String? {
-        live.credentials.map { Xtream.streamUrl($0, channel, format: prefs.streamFormat == .ts ? .ts : .m3u8) }
+        live.credentials.map { Xtream.streamUrl($0, channel, format: .m3u8) }
     }
 
     public func watchChannel(_ index: Int) {
@@ -269,7 +284,8 @@ extension ReelyStore {
     @discardableResult
     public func playCatchUp(_ index: Int, _ programme: Programme) -> Bool {
         guard live.channels.indices.contains(index), let c = live.credentials,
-              let url = Xtream.catchUpUrl(c, live.channels[index], start: programme.start, stop: programme.stop, timezone: live.account?.timezone) else { return false }
+              let url = Xtream.catchUpUrl(c, live.channels[index], start: programme.start, stop: programme.stop,
+                                            timezone: live.account?.timezone, format: .m3u8) else { return false }
         noteWatched(live.channels[index])
         live.watching = index
         live.catchUp = LiveState.CatchUp(programme: programme, url: url)

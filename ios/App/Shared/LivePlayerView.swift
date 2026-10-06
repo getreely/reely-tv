@@ -1,0 +1,418 @@
+import SwiftUI
+import AVFoundation
+import ReelyCore
+
+/// A channel, or a programme from its archive, in Apple's player.
+@MainActor
+@Observable
+final class LiveModel {
+    @ObservationIgnored let player = AVPlayer()
+    private(set) var playing = false
+    private(set) var waiting = true
+    private(set) var failed: String?
+    @ObservationIgnored private var observations: [NSKeyValueObservation] = []
+    @ObservationIgnored private var loaded: String?
+
+    init() {
+        observations.append(player.observe(\.timeControlStatus, options: [.new]) { [weak self] p, _ in
+            let status = p.timeControlStatus
+            Task { @MainActor in
+                self?.playing = status == .playing
+                self?.waiting = status != .playing
+            }
+        })
+    }
+
+    func load(_ url: String?, largerBuffer: Bool) {
+        guard url != loaded else { return }
+        loaded = url
+        failed = nil
+        waiting = true
+        guard let url, let address = URL(string: url) else { player.replaceCurrentItem(with: nil); return }
+        let item = AVPlayerItem(url: address)
+        item.preferredForwardBufferDuration = largerBuffer ? 120 : 0
+        observations.append(item.observe(\.status, options: [.new]) { [weak self] item, _ in
+            let status = item.status
+            Task { @MainActor in
+                if status == .failed { self?.failed = "This channel isn't playing. It may be off air, or your provider's connection limit reached." }
+            }
+        })
+        player.replaceCurrentItem(with: item)
+        player.play()
+    }
+
+    func togglePlay() { playing ? player.pause() : player.play() }
+
+    func skip(_ seconds: Double) {
+        let at = max(0, player.currentTime().seconds + seconds)
+        player.seek(to: CMTime(seconds: at, preferredTimescale: 600))
+    }
+
+    func stop() {
+        player.pause()
+        player.replaceCurrentItem(with: nil)
+        loaded = nil
+    }
+}
+
+/**
+ * A channel, full screen, as on the Fire TV. On Apple TV: left and right change channel
+ * (or skip, in the archive), down brings up the guide over it, OK or up has its actions —
+ * the guide, Start over, Go live, Favorites, a channel by number — and Back goes back to
+ * the list. On a phone: a tap has the same actions, and a swipe up or down changes channel.
+ */
+struct LivePlayerView: View {
+    @Environment(ReelyStore.self) private var store
+    @State private var model = LiveModel()
+    /// What's on, over the picture for a few seconds after a change.
+    @State private var banner = true
+    /// The actions under it, with the cursor in them.
+    @State private var actions = false
+    @State private var guide = ProcessInfo.processInfo.arguments.contains("overguide")
+    @State private var hideTask: Task<Void, Never>?
+    @State private var askNumber = false
+    @State private var number = ""
+    @State private var notice: String?
+    #if os(tvOS)
+    @FocusState private var surface: Bool
+    @FocusState private var action: String?
+    #else
+    @State private var channels = false
+    #endif
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            content(now: Int(context.date.timeIntervalSince1970))
+        }
+        .onAppear { load(); showBanner() }
+        .onChange(of: url) { _, _ in load(); showBanner() }
+        .onDisappear { model.stop() }
+        .alert("Channel number", isPresented: $askNumber) {
+            TextField("Number", text: $number)
+            #if os(iOS)
+                .keyboardType(.numberPad)
+            #endif
+            Button("Watch") { tune() }
+            Button("Cancel", role: .cancel) { number = "" }
+        } message: {
+            Text("A channel in \(store.live.category?.name ?? "this list"), by the number on it.")
+        }
+    }
+
+    private var channel: XtreamChannel? { store.live.watchingChannel }
+    private var catchUp: LiveState.CatchUp? { store.live.catchUp }
+    private var url: String? { catchUp?.url ?? channel.flatMap { store.channelUrl($0) } }
+
+    private func load() { model.load(url, largerBuffer: store.prefs.largerBuffer) }
+
+    @ViewBuilder
+    private func content(now: Int) -> some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            VideoSurface(player: model.player).ignoresSafeArea()
+            #if os(tvOS)
+            // The remote's, while nothing else on screen takes the cursor.
+            Button { showActions() } label: { Color.black.opacity(0.001).frame(maxWidth: .infinity, maxHeight: .infinity) }
+                .buttonStyle(PlainFocusStyle())
+                .focused($surface)
+                .disabled(actions || guide)
+                .onMoveCommand { move($0, now: now) }
+                .ignoresSafeArea()
+            #endif
+            if !guide {
+                if model.waiting && model.failed == nil { ProgressView().tint(.white).scaleEffect(Typeface.scale) }
+                if let error = notice ?? model.failed {
+                    Text(error).font(Typeface.body).foregroundStyle(Color.chalk).multilineTextAlignment(.center)
+                        .padding(dp(16)).background(RoundedRectangle(cornerRadius: dp(12)).fill(Color.black.opacity(0.7)))
+                        .padding(pageMargin)
+                }
+            }
+            #if os(tvOS)
+            if guide, let channel {
+                GuideOverlay(playing: channel, now: now) { closeGuide() }.transition(.opacity)
+            } else if banner || actions {
+                bannerView(now: now).transition(.opacity)
+            }
+            #else
+            if banner { bannerView(now: now).transition(.opacity) }
+            #endif
+        }
+        #if os(tvOS)
+        .onExitCommand {
+            if actions { hideActions() } else { close() }
+        }
+        .onPlayPauseCommand { if catchUp != nil { model.togglePlay(); showBanner() } }
+        .onAppear { surface = true }
+        #else
+        .contentShape(Rectangle())
+        .onTapGesture { if banner { withAnimation { banner = false } } else { showBanner(stay: true) } }
+        .gesture(DragGesture(minimumDistance: 40).onEnded { drag in
+            guard abs(drag.translation.height) > abs(drag.translation.width) else { return }
+            store.stepChannel(drag.translation.height < 0 ? 1 : -1)
+        })
+        .statusBarHidden(true)
+        .persistentSystemOverlays(.hidden)
+        .sheet(isPresented: $channels) { ChannelPicker().presentationDetents([.medium, .large]) }
+        #endif
+    }
+
+    // MARK: Over the picture
+
+    private func bannerView(now: Int) -> some View {
+        let listing = channel.map { store.listing(for: $0) } ?? []
+        let on = listing.first { $0.isOn(at: now) }
+        let favorite = channel.map { store.live.favorites.contains($0.streamId) } ?? false
+        let startOver = catchUp == nil && on != nil && channel != nil && store.canCatchUp(channel!, on!, now: now)
+        return VStack(alignment: .leading, spacing: dp(8)) {
+            #if os(iOS)
+            HStack {
+                Button { close() } label: { Image(systemName: "xmark").font(.system(size: 20, weight: .semibold)) }
+                    .foregroundStyle(Color.chalk).accessibilityLabel("Close")
+                Spacer()
+            }
+            #endif
+            Spacer()
+            Text(([channel.flatMap { $0.number > 0 ? String($0.number) : nil }, channel?.name].compactMap { $0 }.joined(separator: "  ")) + (favorite ? "  ♥" : ""))
+                .font(Typeface.headline).foregroundStyle(Color.chalk).lineLimit(1)
+            if let catchUp {
+                Text("\(catchUp.programme.title)  ·  \(liveTime(catchUp.programme.start))–\(liveTime(catchUp.programme.stop))  ·  From the archive")
+                    .font(Typeface.meta).foregroundStyle(Color.muted).lineLimit(1)
+            } else if let on {
+                Text("\(on.title)  ·  \(liveTime(on.start))–\(liveTime(on.stop))").font(Typeface.meta).foregroundStyle(Color.muted).lineLimit(1)
+                if let next = listing.first(where: { $0.start >= on.stop }) {
+                    Text("Next: \(liveTime(next.start)) \(next.title)").font(Typeface.label).foregroundStyle(Color.faint).lineLimit(1)
+                }
+            }
+            #if os(tvOS)
+            if actions {
+                actionRow(on: on, favorite: favorite, startOver: startOver).padding(.top, 8)
+            } else {
+                Text(catchUp != nil ? "Left and right skip  ·  OK for more" : "Left and right change channel  ·  Down: the guide  ·  OK for more")
+                    .font(Typeface.label).foregroundStyle(Color.faint)
+            }
+            #else
+            actionRow(on: on, favorite: favorite, startOver: startOver).padding(.top, 6)
+            #endif
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, pageMargin).padding(.vertical, dp(24))
+        .background(LinearGradient(colors: [.clear, .clear, Color.black.opacity(0.85)], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
+    }
+
+    private func actionRow(on: Programme?, favorite: Bool, startOver: Bool) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: dp(10)) {
+                if catchUp != nil {
+                    control("Back 10", "gobackward.10") { model.skip(-10) }
+                    control(model.playing ? "Pause" : "Play", model.playing ? "pause.fill" : "play.fill") { model.togglePlay() }
+                    control("Forward 10", "goforward.10") { model.skip(10) }
+                    control("Go live", "dot.radiowaves.left.and.right", filled: true) { store.goLive() }
+                } else {
+                    #if os(tvOS)
+                    control("Guide", "list.bullet.rectangle", filled: true) { openGuide() }
+                    #else
+                    control("Previous", "chevron.up") { store.stepChannel(-1) }
+                    control("Next", "chevron.down") { store.stepChannel(1) }
+                    control("Channels", "list.bullet.rectangle", filled: true) { channels = true }
+                    #endif
+                    if startOver, let on, let at = store.live.watching {
+                        control("Start over", "backward.end.fill") { store.playCatchUp(at, on) }
+                    }
+                }
+                if let channel {
+                    control(favorite ? "Remove from Favorites" : "Add to Favorites", favorite ? "heart.fill" : "heart") { store.toggleFavorite(channel) }
+                }
+                control("Channel number", "number") { askNumber = true }
+            }
+            .padding(.vertical, dp(10))
+        }
+        .scrollClipDisabled()
+        #if os(tvOS)
+        .focusSection()
+        .defaultFocus($action, catchUp != nil ? "Play" : "Guide")
+        .onChange(of: action) { _, _ in showActions() }
+        #endif
+    }
+
+    private func control(_ title: String, _ systemImage: String, filled: Bool = false, _ run: @escaping () -> Void) -> some View {
+        PanelButton(title: title, systemImage: systemImage, filled: filled) {
+            run()
+            showBanner(stay: true)
+        }
+        #if os(tvOS)
+        .focused($action, equals: title == "Pause" ? "Play" : title)
+        #endif
+    }
+
+    // MARK: The remote
+
+    #if os(tvOS)
+    private func move(_ direction: MoveCommandDirection, now: Int) {
+        switch direction {
+        case .left, .right:
+            let by = direction == .left ? -1 : 1
+            if catchUp != nil { model.skip(Double(by * 10)) } else { store.stepChannel(by) }
+            showBanner()
+        case .down: openGuide()
+        case .up: showActions()
+        @unknown default: break
+        }
+    }
+
+    private func openGuide() {
+        hideTask?.cancel()
+        actions = false
+        banner = false
+        withAnimation(.easeOut(duration: 0.2)) { guide = true }
+    }
+
+    private func closeGuide() {
+        withAnimation(.easeIn(duration: 0.2)) { guide = false }
+        surface = true
+    }
+
+    private func showActions() {
+        withAnimation(.easeOut(duration: 0.2)) { banner = true; actions = true }
+        scheduleHide(after: 8)
+    }
+
+    private func hideActions() {
+        hideTask?.cancel()
+        withAnimation(.easeIn(duration: 0.2)) { actions = false; banner = false }
+        surface = true
+    }
+    #endif
+
+    private func showBanner(stay: Bool = false) {
+        withAnimation(.easeOut(duration: 0.2)) { banner = true }
+        scheduleHide(after: stay ? 8 : 5)
+    }
+
+    private func scheduleHide(after seconds: UInt64) {
+        hideTask?.cancel()
+        // Screenshots keep it up.
+        if ProcessInfo.processInfo.arguments.contains("-demo") { return }
+        hideTask = Task {
+            try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeIn(duration: 0.3)) {
+                banner = false
+                #if os(tvOS)
+                actions = false
+                #endif
+            }
+            #if os(tvOS)
+            surface = true
+            #endif
+        }
+    }
+
+    /// The channel with the number typed, in the list that's open.
+    private func tune() {
+        let typed = number.trimmingCharacters(in: .whitespaces)
+        number = ""
+        guard let n = Int(typed) else { return }
+        if !store.tuneNumber(n) { say("No channel \(n) in \(store.live.category?.name ?? "this list").") }
+    }
+
+    private func say(_ text: String) {
+        notice = text
+        Task {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            if notice == text { notice = nil }
+        }
+    }
+
+    private func close() {
+        hideTask?.cancel()
+        model.stop()
+        store.stopLive()
+    }
+}
+
+#if os(iOS)
+/// Over a channel on a phone: the categories, and their channels to change to, without
+/// leaving the one that's playing until another is chosen.
+struct ChannelPicker: View {
+    @Environment(ReelyStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    @State private var category: XtreamCategory?
+    @State private var channels: [XtreamChannel] = []
+    @State private var loading = false
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            let now = Int(context.date.timeIntervalSince1970)
+            VStack(alignment: .leading, spacing: 8) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(store.shownCategories) { c in Pill(title: c.name, on: c.id == category?.id) { choose(c) } }
+                    }
+                    .padding(.horizontal, pageMargin).padding(.vertical, 12)
+                }
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        if loading { ProgressView().padding(40) }
+                        ForEach(Array(channels.enumerated()), id: \.element.streamId) { index, channel in
+                            ChannelRow(channel: channel, now: now, onWatch: { watch(index) })
+                                .background(channel.streamId == store.live.watchingChannel?.streamId ? Color.surfaceHigh : .clear, in: RoundedRectangle(cornerRadius: 12))
+                        }
+                    }
+                    .padding(.horizontal, pageMargin - 8)
+                }
+            }
+        }
+        .background(Color.surfaceRaised)
+        .onAppear {
+            category = store.live.category
+            channels = store.live.channels
+        }
+    }
+
+    private func choose(_ c: XtreamCategory) {
+        guard c.id != category?.id else { return }
+        category = c
+        channels = []
+        loading = true
+        Task {
+            let found = (try? await store.channelsOf(c)) ?? []
+            guard category == c else { return }
+            channels = found
+            loading = false
+            await store.loadGuide(Array(found.prefix(40)))
+        }
+    }
+
+    private func watch(_ index: Int) {
+        dismiss()
+        if channels == store.live.channels { store.watchChannel(index) } else { store.watchIn(category, channels, index: index) }
+    }
+}
+#endif
+
+/// "Starting now": a reminder from the guide, as the Fire TV puts it up. Watch, or Dismiss.
+struct ReminderNotice: View {
+    @Environment(ReelyStore.self) private var store
+    @Environment(\.accent) private var accent
+    let due: Reminder
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: dp(6)) {
+            Text("Starting now").font(Typeface.label).foregroundStyle(accent.swiftColor)
+            Text(due.title).font(Typeface.rowTitle).foregroundStyle(Color.chalk).lineLimit(2)
+            Text("On \(due.channelName)").font(Typeface.meta).foregroundStyle(Color.muted)
+            HStack(spacing: dp(10)) {
+                PanelButton(title: "Watch", systemImage: "play.fill", filled: true) { Task { await store.watchReminder() } }
+                PanelButton(title: "Dismiss", systemImage: "xmark") { store.dismissReminder() }
+            }
+            .padding(.top, dp(6))
+        }
+        .padding(dp(18))
+        .frame(maxWidth: dp(420), alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: dp(16)).fill(Color.surfaceRaised.opacity(0.97)))
+        .overlay(RoundedRectangle(cornerRadius: dp(16)).strokeBorder(Color.line))
+        #if os(tvOS)
+        .focusSection()
+        #endif
+    }
+}
