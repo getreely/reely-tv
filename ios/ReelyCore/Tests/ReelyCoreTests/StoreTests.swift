@@ -103,6 +103,25 @@ final class StoreTests: XCTestCase {
         XCTAssertTrue(fake.asked.contains("/video/:/transcode/universal/stop"))
     }
 
+    func testSubtitlesTurnedOffMidwayGoAndStayOff() async {
+        let fake = FakePlex()
+        fakeServer(fake, at: home)
+        fake.json(home, "/library/metadata/m1", #"{"MediaContainer": {"Metadata": [{"ratingKey": "m1", "Media": [{"container": "mkv", "videoCodec": "hevc", "audioCodec": "aac", "Part": [{"id": 41, "key": "/library/parts/41/file.mkv", "Stream": [{"id": 1, "streamType": 1}, {"id": 4, "streamType": 3, "codec": "srt", "key": "/library/streams/4", "displayTitle": "English", "selected": "1"}]}]}]}]}}"#)
+        let store = makeStore(fake, secrets: MemoryStore(["plexToken": "account-token"]))
+        await store.start()
+        await store.play(store.home.recentMovies[0], resume: false)
+        guard let before = store.playing else { return XCTFail("nothing playing") }
+        XCTAssertEqual(before.textSubtitle?.id, "4")
+        await store.chooseStreams(audioId: nil, subtitleId: "0", positionMs: 5_000)
+        guard let after = store.playing else { return XCTFail("nothing playing") }
+        XCTAssertNil(after.textSubtitle)
+        XCTAssertFalse(after.playback.subtitleStreams.contains(where: \.selected))
+        XCTAssertTrue(fake.asked.contains("/library/parts/41"))
+        // And on again.
+        await store.chooseStreams(audioId: nil, subtitleId: "4", positionMs: 6_000)
+        XCTAssertEqual(store.playing?.textSubtitle?.id, "4")
+    }
+
     func testNoServerAnswersSaysSo() async {
         let fake = FakePlex()
         fakeServer(fake, at: home)

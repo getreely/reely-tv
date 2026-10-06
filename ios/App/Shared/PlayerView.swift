@@ -114,6 +114,8 @@ struct PlayerView: View {
         #else
         // A tap shows or hides the controls at once; a second on the same side skips, as on the Android phone.
         .gesture(SpatialTapGesture(coordinateSpace: .global).onEnded { tap in tapped(tap.location) })
+        // A sheet closed: the controls stay a few seconds more, then go as usual.
+        .onChange(of: panel) { _, now in if now == nil { showControls() } }
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
         #endif
@@ -206,25 +208,18 @@ struct PlayerView: View {
         .background(on ? AnyShapeStyle(accent.swiftColor) : AnyShapeStyle(.ultraThinMaterial), in: Capsule())
     }
 
-    /// The file's subtitles in iOS's own menu, the one on ticked; and Find subtitles online.
+    /*
+     * Subtitles, Audio and the sleep timer open a sheet from the bottom, the way the Fire
+     * TV phone app's panels do. They were iOS's pop-up menus, but those belong to the
+     * controls: when the controls put themselves away a few seconds after the last touch,
+     * the menu went with them, and whatever was picked in it was lost. A sheet holds the
+     * controls up until it closes.
+     */
     @ViewBuilder
     private var subtitlesMenu: some View {
         let p = store.playing
         if model.usingVLC ? !model.vlcSubtitles.isEmpty : (!(p?.playback.subtitleStreams.isEmpty ?? true) || p?.item.isIptv == false) {
-            Menu {
-                if model.usingVLC {
-                    menuItem("Off", on: model.vlcSubtitleId < 0) { model.chooseVLCSubtitle(-1) }
-                    ForEach(model.vlcSubtitles, id: \.self) { t in menuItem(t.name, on: t.id == model.vlcSubtitleId) { model.chooseVLCSubtitle(t.id) } }
-                } else {
-                    menuItem("Off", on: !(p?.playback.subtitleStreams.contains(where: \.selected) ?? false)) { choose(subtitle: "0") }
-                    ForEach(p?.playback.subtitleStreams ?? [], id: \.id) { s in menuItem(s.label, on: s.selected) { choose(subtitle: s.id) } }
-                    if p?.item.isIptv == false {
-                        Divider()
-                        Button { find() } label: { Label("Find subtitles online", systemImage: "magnifyingglass") }
-                    }
-                }
-            } label: { chipLabel("captions.bubble", nil) }
-            .accessibilityLabel("Subtitles")
+            chip("captions.bubble", nil) { panel = .subtitles }.accessibilityLabel("Subtitles")
         }
     }
 
@@ -232,32 +227,17 @@ struct PlayerView: View {
     private var audioMenu: some View {
         let p = store.playing
         if model.usingVLC ? model.vlcAudio.count > 1 : (p?.playback.audioStreams.count ?? 0) > 1 {
-            Menu {
-                if model.usingVLC {
-                    ForEach(model.vlcAudio, id: \.self) { t in menuItem(t.name, on: t.id == model.vlcAudioId) { model.chooseVLCAudio(t.id) } }
-                } else {
-                    ForEach(p?.playback.audioStreams ?? [], id: \.id) { s in menuItem(s.label, on: s.selected) { choose(audio: s.id) } }
-                }
-            } label: { chipLabel("speaker.wave.2", nil) }
-            .accessibilityLabel("Audio")
+            chip("speaker.wave.2", nil) { panel = .audio }.accessibilityLabel("Audio")
         }
     }
 
     private var sleepMenu: some View {
-        Menu {
-            ForEach(SLEEP_CHOICES.filter { $0 != -1 || store.playing?.item.type == "episode" }, id: \.self) { m in
-                menuItem(m == 0 ? "Off" : m == -1 ? "End of this episode" : "\(m) minutes",
-                         on: m == 0 ? sleepAt == nil && !sleepAtEnd : m == -1 ? sleepAtEnd : false) { setSleep(m) }
-            }
-        } label: { chipLabel("moon.zzz", sleepLabel, on: sleepAt != nil || sleepAtEnd) }
-        .accessibilityLabel("Sleep timer")
+        Button { panel = .sleep } label: { chipLabel("moon.zzz", sleepLabel, on: sleepAt != nil || sleepAtEnd) }
+            .buttonStyle(PressStyle())
+            .accessibilityLabel("Sleep timer")
     }
 
     @ViewBuilder
-    private func menuItem(_ title: String, on: Bool, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) { if on { Label(title, systemImage: "checkmark") } else { Text(title) } }
-    }
-
     /// The bar: dragged, it shows where it'll go, and goes there on letting go.
     private var phoneScrubber: some View {
         let shown = scrubMs ?? model.positionMs
