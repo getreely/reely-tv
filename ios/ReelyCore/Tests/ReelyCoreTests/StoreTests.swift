@@ -136,11 +136,11 @@ final class StoreTests: XCTestCase {
         let first = store.playing?.sessionId ?? ""
         await store.chooseStreams(audioId: nil, subtitleId: "5", positionMs: 1_000)
         XCTAssertEqual(store.playing?.url.contains("subtitles=burn"), true)
-        // A conversion of its own, named both ways Plex reads it, never the one it replaces.
+        // A conversion of its own, never the one it replaces.
         let second = store.playing?.sessionId ?? ""
         XCTAssertNotEqual(first, second)
         XCTAssertEqual(store.playing?.url.contains("session=\(second)"), true)
-        XCTAssertEqual(store.playing?.url.contains("X-Plex-Session-Identifier=\(second)"), true)
+        XCTAssertEqual(store.playing?.url.contains("X-Plex-Session-Identifier"), false)
         XCTAssertFalse(store.replacingStream)
         await store.chooseStreams(audioId: nil, subtitleId: "0", positionMs: 2_000)
         XCTAssertEqual(store.playing?.url.contains("subtitles=none"), true)

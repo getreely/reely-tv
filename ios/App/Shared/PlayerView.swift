@@ -557,6 +557,8 @@ struct PlayerView: View {
                         if let c = p.playback.container { infoRow("File", c.uppercased()) }
                         let chosen = p.playback.subtitleStreams.first(where: \.selected)?.label
                         infoRow("Subtitles", [chosen, p.textSubtitle != nil ? "Drawn by Reely" : chosen != nil ? "Burned in by Plex" : "Off"].compactMap { $0 }.joined(separator: " · "))
+                        if p.attempt > 0 { infoRow("Stream", "Started afresh \(p.attempt) time\(p.attempt == 1 ? "" : "s")") }
+                        if let problem = model.lastProblem { infoRow("Last problem", problem) }
                     }
                 }
             }

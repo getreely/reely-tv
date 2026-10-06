@@ -440,9 +440,6 @@ public struct PlexAPI: Sendable {
         return "\(base)/video/:/transcode/universal/start.m3u8?path=\(encodeComponent("/library/metadata/\(ratingKey)"))&mediaIndex=\(mediaIndex)&partIndex=0"
             + "&protocol=hls&fastSeek=1&directPlay=0&directStream=\(copyVideo ? 1 : 0)&subtitles=\(subtitles)&subtitleSize=\(subtitleSize)&audioBoost=100&videoQuality=100"
             + "&videoResolution=\(resolution)\(bitrate)&session=\(sessionId)"
-            // Plex keeps a conversion per session: said in both the ways it reads it, so a new
-            // one is never taken for the one it replaces.
-            + "&X-Plex-Session-Identifier=\(sessionId)"
             // The tracks chosen, said outright, so a conversion started part-way through has
             // them rather than whatever the server last had on record; see chooseStreams.
             + (audioStreamId.map { "&audioStreamID=\($0)" } ?? "") + (subtitleStreamId.map { "&subtitleStreamID=\($0)" } ?? "")
@@ -450,7 +447,8 @@ public struct PlexAPI: Sendable {
     }
 
     public func stopTranscode(_ base: String, _ token: String, sessionId: String) async {
-        _ = try? await http.ask(HttpRequest(url: "\(base)/video/:/transcode/universal/stop?session=\(sessionId)&X-Plex-Session-Identifier=\(sessionId)"
+        _ = try? await http.ask(HttpRequest(url: "\(base)/video/:/transcode/universal/stop?session=\(sessionId)"
+            // Whose conversion it is, as Plex's own apps say it, or it may not be found to stop.
             + "&X-Plex-Client-Identifier=\(encodeComponent(identity.clientId))&X-Plex-Token=\(token)"))
     }
 

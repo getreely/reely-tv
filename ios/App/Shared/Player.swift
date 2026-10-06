@@ -39,6 +39,8 @@ final class PlayerModel {
     @ObservationIgnored private var drops = 0
     @ObservationIgnored private var retry: Task<Void, Never>?
     private(set) var stuckAt: Int?
+    /// What the player last said went wrong, for Playback info: the codes say which it was.
+    private(set) var lastProblem: String?
     @ObservationIgnored private var loadedSubtitle: String?
     @ObservationIgnored private weak var store: ReelyStore?
     @ObservationIgnored private var endObserver: NSObjectProtocol?
@@ -115,6 +117,7 @@ final class PlayerModel {
         guard status == .failed else { return }
         // The stream being swapped for a sound or subtitle change: the new one is on its way.
         if store?.replacingStream == true { return }
+        lastProblem = PlayerModel.describe(error)
         if PlayerModel.dropped(error), let p = store?.playing {
             let at = max(positionMs, p.startMs)
             if drops < RECONNECT_TRIES {
@@ -163,6 +166,17 @@ final class PlayerModel {
         drops = 0
         failed = "Reconnecting…"
         Task { await store.reopen(positionMs: at) }
+    }
+
+    /// "CoreMediaErrorDomain -12938 · NSURLErrorDomain -1004": each error and what was under it.
+    private static func describe(_ error: Error?) -> String? {
+        var parts: [String] = []
+        var next = error as NSError?
+        while let e = next, parts.count < 4 {
+            parts.append("\(e.domain) \(e.code)")
+            next = e.userInfo[NSUnderlyingErrorKey] as? NSError
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     /// The network, or the server turning the stream away part-way, rather than the file.
