@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { relevant, rememberedSearches, split } from "../../src/core/searchMatch";
+import { namesAll, relevant, rememberedSearches, split } from "../../src/core/searchMatch";
 import { item } from "./fixtures";
 
 const film = (title: string) => item({ ratingKey: title, title });
@@ -32,5 +32,12 @@ describe("search matching", () => {
     expect(rememberedSearches(["dune", "Heat"], "  heat  ")).toEqual(["heat", "dune"]);
     expect(rememberedSearches(["a"], "   ")).toEqual(["a"]);
     expect(rememberedSearches(["1", "2", "3", "4", "5", "6", "7", "8"], "new")).toHaveLength(8);
+  });
+
+  it("a person's name counts in any order and case, every word present", () => {
+    expect(namesAll("Tom Hanks", "hanks TOM")).toBe(true);
+    expect(namesAll("Tom Hanks", "tom")).toBe(true);
+    expect(namesAll("Tom Hanks", "tom cruise")).toBe(false);
+    expect(namesAll("Tom Hanks", "  ")).toBe(false);
   });
 });

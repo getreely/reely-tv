@@ -29,6 +29,13 @@ public func splitResults(_ query: String, _ items: [PlexItem]) -> (matches: [Ple
     return (matches, items.filter { !keys.contains($0.id) })
 }
 
+/// Every word typed is in [name], in any order: "hanks" or "tom hanks" names Tom Hanks.
+public func namesAll(_ name: String, _ query: String) -> Bool {
+    let typed = query.lowercased().split(whereSeparator: \.isWhitespace)
+    let whole = name.lowercased()
+    return !typed.isEmpty && typed.allSatisfy { whole.contains($0) }
+}
+
 private func rankName(_ name: [String], _ wanted: [String], _ joined: String) -> Int? {
     guard !name.isEmpty else { return nil }
     let whole = name.joined()

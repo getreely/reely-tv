@@ -36,4 +36,11 @@ final class SearchTests: XCTestCase {
         XCTAssertEqual(subtitleTime("01:02.345"), 62_345)
         XCTAssertNil(subtitleTime("soon"))
     }
+
+    func testPeopleNamedByEveryWord() {
+        XCTAssertTrue(namesAll("Tom Hanks", "hanks TOM"))
+        XCTAssertTrue(namesAll("Tom Hanks", "tom"))
+        XCTAssertFalse(namesAll("Tom Hanks", "tom cruise"))
+        XCTAssertFalse(namesAll("Tom Hanks", "  "))
+    }
 }

@@ -1058,5 +1058,6 @@ function Vod_MergeSearch(lib as object, query as string, found as object, iptvWi
         out.more = []
     end if
     out.unreachable = Bool_(found.unreachable) and fromIptv.Count() = 0
+    out.peopleFirst = Plex_PeopleFirst(query, split.matches, Arr_(found.people))
     return out
 end function

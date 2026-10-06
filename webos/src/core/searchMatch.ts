@@ -59,3 +59,13 @@ export function rememberedSearches(recent: string[], query: string, limit = 8): 
   if (!text) return recent;
   return [text, ...recent.filter((r) => r.toLowerCase() !== text.toLowerCase())].slice(0, limit);
 }
+
+/**
+ * Every word typed is in [name], in any order: "hanks" or "tom hanks" names Tom Hanks.
+ * What decides whether people lead a search or come last.
+ */
+export function namesAll(name: string, query: string): boolean {
+  const typed = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const whole = name.toLowerCase();
+  return typed.length > 0 && typed.every((w) => whole.includes(w));
+}

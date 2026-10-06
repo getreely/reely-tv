@@ -11,6 +11,9 @@ public struct SearchState: Equatable, Sendable {
     public var recent: [String] = []
     /// No server answered.
     public var unreachable = false
+    /// People at the top only when the words are a person's name and no film or show's:
+    /// most searches are for a title, and the people who were in it come last.
+    public var peopleFirst = false
     public init() {}
 }
 
@@ -69,6 +72,7 @@ extension ReelyStore {
         search.people = Array(people)
         search.collections = collections
         search.unreachable = !shownServers().isEmpty && answered.isEmpty && fromIptv.isEmpty
+        search.peopleFirst = matches.isEmpty && people.contains { namesAll($0.name, query) }
     }
 
     /// What was searched kept, when something it found is opened: a search that worked.

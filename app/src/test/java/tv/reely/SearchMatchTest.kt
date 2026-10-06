@@ -48,4 +48,11 @@ class SearchMatchTest {
         assertEquals(listOf("NFL Films Presents"), matches.map { it.title })
         assertEquals(listOf("Friday Night Lights", "Inflation"), others.map { it.title })
     }
+
+    @Test fun `a person's name counts in any order and case, every word present`() {
+        assertEquals(true, tv.reely.ui.namesAll("Tom Hanks", "hanks TOM"))
+        assertEquals(true, tv.reely.ui.namesAll("Tom Hanks", "tom"))
+        assertEquals(false, tv.reely.ui.namesAll("Tom Hanks", "tom cruise"))
+        assertEquals(false, tv.reely.ui.namesAll("Tom Hanks", "  "))
+    }
 }

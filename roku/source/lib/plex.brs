@@ -556,6 +556,27 @@ function Plex_SplitMatches(query as string, items as object) as object
     return { matches: matches, others: others }
 end function
 
+' Every word typed is in the name, in any order: "hanks" or "tom hanks" names Tom Hanks.
+function Plex_NamesAll(name as string, query as string) as boolean
+    whole = LCase(name)
+    typed = 0
+    for each w in LCase(query).Tokenize(" ")
+        typed = typed + 1
+        if Instr(1, whole, w) = 0 then return false
+    end for
+    return typed > 0
+end function
+
+' People lead a search only when it's a person's name typed and no film or show's: most
+' searches are for a title, and the people who were in it come last.
+function Plex_PeopleFirst(query as string, matches as object, people as object) as boolean
+    if matches.Count() > 0 then return false
+    for each p in people
+        if Plex_NamesAll(Str_(p.name), query) then return true
+    end for
+    return false
+end function
+
 ' ---------------------------------------------------------------- Libraries
 
 ' A filter's values (genres, decades): its key and name.

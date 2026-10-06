@@ -165,7 +165,9 @@ test("Search finds by name and people; Settings keeps a playback choice", async 
   await expect(page.locator(".grid .card .title")).toHaveText(["Low Orbit"]);
   await expect(page.getByText("1 in your library  ·  1 person")).toBeVisible();
   await page.screenshot({ path: "shots/lg-search.png" });
-  // Down to the person, and in: what they're in.
+  // The title first; the person after it, a title having matched. Down to them, and in.
+  await press(page, "ArrowDown");
+  await expect(page.locator(".card:focus .title")).toHaveText("Low Orbit");
   await press(page, "ArrowDown");
   await expect(page.locator(".person:focus .name")).toHaveText("Ana Orbit");
   await press(page, "Enter");

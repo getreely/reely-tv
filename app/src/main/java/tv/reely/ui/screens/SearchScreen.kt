@@ -148,8 +148,13 @@ fun SearchScreen(
                 }
             }
 
-            // People after channels: a name typed is a person often enough to be worth a row.
-            if (search.people.isNotEmpty()) {
+            /*
+             * People: at the top when the words are a person's name and no title's, as
+             * someone after an actor types; otherwise at the end, after the films and shows
+             * most searches are for.
+             */
+            val peopleRow: androidx.compose.foundation.lazy.grid.LazyGridScope.() -> Unit = {
+                if (search.people.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     Column(
                         modifier = Modifier.padding(bottom = 10.dp),
@@ -173,6 +178,9 @@ fun SearchScreen(
                     }
                 }
             }
+
+            }
+            if (search.peopleFirst) peopleRow()
 
             if (search.results.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
@@ -263,6 +271,7 @@ fun SearchScreen(
                     modifier = rowItem(resultFocus, item.listKey),
                 )
             }
+            if (!search.peopleFirst) peopleRow()
         }
     }
 }

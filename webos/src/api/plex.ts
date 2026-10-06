@@ -843,7 +843,8 @@ export async function searchAll(base: string, token: string, query: string): Pro
   return { items: itemsFromHubs(hubs, base), people: peopleFromHubs(hubs, base), collections: itemsFromHubs(hubs, base, ["collection"]) };
 }
 
-export function itemsFromHubs(hubs: any[], base: string, wanted = ["movie", "show", "episode"]): PlexItem[] {
+// Films and shows, not the shows' single episodes, as on the Fire TV.
+export function itemsFromHubs(hubs: any[], base: string, wanted = ["movie", "show"]): PlexItem[] {
   const seen = new Set<string>();
   const out: PlexItem[] = [];
   for (const hub of hubs) {

@@ -352,7 +352,8 @@ function PlexApi_Search(libraries as object, query as string, clientId as string
         if c <> invalid then
             answered = true
             hubs = Arr_(c.Hub)
-            items.Append(Plex_ItemsFromHubs(hubs, s.base, ["movie", "show", "episode"]))
+            ' Films and shows, not the shows' single episodes, as on the Fire TV.
+            items.Append(Plex_ItemsFromHubs(hubs, s.base, ["movie", "show"]))
             people.Append(Plex_PeopleFromHubs(hubs, s.base))
             collections.Append(Plex_ItemsFromHubs(hubs, s.base, ["collection"]))
         end if
@@ -365,7 +366,9 @@ function PlexApi_Search(libraries as object, query as string, clientId as string
         results = more
         more = []
     end if
-    return { results: results, more: more, people: Head_(people, 20), collections: collections, unreachable: not answered }
+    people = Head_(people, 20)
+    first = Plex_PeopleFirst(query, split.matches, people)
+    return { results: results, more: more, people: people, collections: collections, unreachable: not answered, peopleFirst: first }
 end function
 
 ' What a person is in, from the libraries on the server they were found on, newest first.

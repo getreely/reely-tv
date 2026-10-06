@@ -1,6 +1,6 @@
 import * as plex from "../api/plex";
 import type { PlexDetail, PlexHomeUser, PlexItem, PlexPerson, PlexServer } from "../api/plex";
-import { rememberedSearches, split } from "../core/searchMatch";
+import { namesAll, rememberedSearches, split } from "../core/searchMatch";
 import { stableSort } from "../core/sort";
 import { isTextCodec } from "../core/subtitles";
 import { readable } from "../core/http";
@@ -222,6 +222,11 @@ export interface SearchState {
   recent: string[];
   /** No server answered. */
   unreachable: boolean;
+  /**
+   * People at the top only when the words are a person's name and no film or show's:
+   * most searches are for a title, and the people who were in it come last.
+   */
+  peopleFirst: boolean;
 }
 
 /** A person's page, or a collection's: the titles in it. */
@@ -428,7 +433,7 @@ export function initialState(): AppState {
 }
 
 const emptySearch = (recent: string[]): SearchState => ({
-  query: "", busy: false, results: [], more: [], people: [], collections: [], channels: [], recent, unreachable: false,
+  query: "", busy: false, results: [], more: [], people: [], collections: [], channels: [], recent, unreachable: false, peopleFirst: false,
 });
 
 const emptyLive = (): LiveState => ({
@@ -1990,6 +1995,7 @@ export class App {
         collections,
         channels,
         unreachable: servers.length > 0 && answered.length === 0 && fromIptv.length === 0,
+        peopleFirst: !matches.length && people.some((x) => namesAll(x.name, query)),
       },
     }));
   }

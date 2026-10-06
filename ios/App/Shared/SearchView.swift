@@ -3,7 +3,8 @@ import ReelyCore
 
 /**
  * Search, as on the Fire TV: movies and shows from every server, best matches first and
- * Plex's own guesses after; people and collections; what was searched before.
+ * Plex's own guesses after; collections; people last, unless it was a person's name that
+ * was typed; what was searched before.
  */
 struct SearchView: View {
     @Environment(ReelyStore.self) private var store
@@ -64,9 +65,22 @@ struct SearchView: View {
 
     @ViewBuilder
     private func results(_ search: SearchState) -> some View {
+        // People last, unless it was a person's name that was typed.
+        if search.peopleFirst { people(search) }
         if !search.results.isEmpty {
             CardRow(title: "Movies and shows") { ForEach(search.results) { i in card(i) } }
         }
+        if !search.collections.isEmpty {
+            CardRow(title: "Collections") { ForEach(search.collections) { i in card(i) } }
+        }
+        if !search.more.isEmpty {
+            CardRow(title: "More from Plex") { ForEach(search.more) { i in card(i) } }
+        }
+        if !search.peopleFirst { people(search) }
+    }
+
+    @ViewBuilder
+    private func people(_ search: SearchState) -> some View {
         if !search.people.isEmpty {
             CardRow(title: "People") {
                 ForEach(search.people, id: \.id) { person in
@@ -84,12 +98,6 @@ struct SearchView: View {
                     .buttonStyle(CardStyle())
                 }
             }
-        }
-        if !search.collections.isEmpty {
-            CardRow(title: "Collections") { ForEach(search.collections) { i in card(i) } }
-        }
-        if !search.more.isEmpty {
-            CardRow(title: "More from Plex") { ForEach(search.more) { i in card(i) } }
         }
     }
 

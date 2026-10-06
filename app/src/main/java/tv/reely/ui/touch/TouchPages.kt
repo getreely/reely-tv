@@ -181,6 +181,33 @@ internal fun TouchSearch(viewModel: ReelyViewModel, state: ReelyState, actions: 
                 item { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Accent) } }
             }
             if (search.unreachable) item { TouchError("Couldn't reach your Plex server to search it.") }
+            val peopleRow: androidx.compose.foundation.lazy.LazyListScope.() -> Unit = {
+                if (search.people.isNotEmpty()) item {
+                    TouchRow("People") {
+                        items(search.people, key = { "p:" + it.id + it.name }) { person ->
+                            Column(
+                                modifier = Modifier
+                                    .width(84.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .combinedClickableCompat {
+                                        viewModel.rememberSearch()
+                                        viewModel.navigate(Route.Person(person.id, person.name, person.thumb, person.serverBase))
+                                    },
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Box(Modifier.size(72.dp).clip(CircleShape).background(SurfaceHigh), contentAlignment = Alignment.Center) {
+                                    val picture = actions.image(person.serverBase, person.thumb, 150, 150)
+                                    if (picture != null) AsyncImage(picture, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                                    else Text(person.name.take(1), color = Muted)
+                                }
+                                Text(person.name, style = MaterialTheme.typography.labelMedium, color = Chalk, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                }
+            }
+            if (search.peopleFirst) peopleRow()
             if (search.results.isNotEmpty()) item {
                 TouchRow("Results") {
                     items(search.results, key = { it.listKey }) { item ->
@@ -222,32 +249,9 @@ internal fun TouchSearch(viewModel: ReelyViewModel, state: ReelyState, actions: 
                     }
                 }
             }
-            if (search.people.isNotEmpty()) item {
-                TouchRow("People") {
-                    items(search.people, key = { "p:" + it.id + it.name }) { person ->
-                        Column(
-                            modifier = Modifier
-                                .width(84.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .combinedClickableCompat {
-                                    viewModel.rememberSearch()
-                                    viewModel.navigate(Route.Person(person.id, person.name, person.thumb, person.serverBase))
-                                },
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Box(Modifier.size(72.dp).clip(CircleShape).background(SurfaceHigh), contentAlignment = Alignment.Center) {
-                                val picture = actions.image(person.serverBase, person.thumb, 150, 150)
-                                if (picture != null) AsyncImage(picture, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                                else Text(person.name.take(1), color = Muted)
-                            }
-                            Text(person.name, style = MaterialTheme.typography.labelMedium, color = Chalk, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        }
-                    }
-                }
-            }
             if (search.collections.isNotEmpty()) item { Rowed("Collections", search.collections, actions) }
             if (search.more.isNotEmpty()) item { Rowed("More results", search.more, actions) }
+            if (!search.peopleFirst) peopleRow()
             if (!search.busy && !search.unreachable && search.results.isEmpty() && search.channels.isEmpty() &&
                 search.people.isEmpty() && search.collections.isEmpty() && search.more.isEmpty()
             ) {

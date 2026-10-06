@@ -514,6 +514,11 @@ data class SearchState(
     val unreachable: Boolean = false,
     /** What was searched for lately, newest first, to offer again when the box is empty. */
     val recent: List<String> = emptyList(),
+    /**
+     * People at the top only when the words are a person's name and no film or show's:
+     * most searches are for a title, and the people who were in it come last.
+     */
+    val peopleFirst: Boolean = false,
 )
 
 sealed interface GuideStatus {
@@ -3637,7 +3642,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 it.copy(
                     search = it.search.copy(
                         results = emptyList(), more = emptyList(), channels = emptyList(),
-                        people = emptyList(), collections = emptyList(), busy = false,
+                        people = emptyList(), collections = emptyList(), busy = false, peopleFirst = false,
                     )
                 )
             }
@@ -3691,6 +3696,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                     search = current.search.copy(
                         results = results, more = more, channels = channels, people = people,
                         collections = collections, busy = false, unreachable = !answered,
+                        peopleFirst = matches.isEmpty() && people.any { namesAll(it.name, query) },
                     )
                 )
             }
@@ -5363,4 +5369,10 @@ internal fun panelLoginIn(playlistUrl: String): XtreamCredentials? {
     val password = uri.getQueryParameter("password")?.takeIf { it.isNotBlank() } ?: return null
     val base = playlistUrl.substringBefore("/get.php")
     return XtreamCredentials(base, username, password)
+}
+
+/** Every word of [query] in [name], whatever the case: "tom hanks" in "Tom Hanks". */
+internal fun namesAll(name: String, query: String): Boolean {
+    val words = query.lowercase().split(Regex("\\s+")).filter(String::isNotBlank)
+    return words.isNotEmpty() && words.all { it in name.lowercase() }
 }

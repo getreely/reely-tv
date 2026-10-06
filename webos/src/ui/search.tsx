@@ -7,9 +7,9 @@ import { Card, Pill, Row, Spinner, useRescue } from "./parts";
 import { open } from "./screens";
 
 /*
- * Search, as the Fire TV has it: channels first, then people, then the movies and shows
- * that match by name, collections, and Plex's other guesses. Recent searches while the
- * box is empty.
+ * Search, as the Fire TV has it: channels first, then the movies and shows that match by
+ * name, collections, Plex's other guesses, and the people last, unless it's a person's
+ * name that was typed. Recent searches while the box is empty.
  */
 
 const episodeLine = (i: PlexItem) =>
@@ -48,6 +48,15 @@ export function Search(props: { app: App; state: AppState }) {
     s.people.length ? (s.people.length === 1 ? "1 person" : `${s.people.length} people`) : null,
     s.collections.length ? (s.collections.length === 1 ? "1 collection" : `${s.collections.length} collections`) : null,
   ].filter(Boolean).join("  ·  ");
+
+  const peopleRow = s.people.length ? (
+    <section class="row">
+      <h2>People</h2>
+      <div class="strip">
+        {s.people.map((p) => <PersonButton key={`p:${p.id}`} app={app} person={p} onPress={() => person(p)} />)}
+      </div>
+    </section>
+  ) : null;
 
   return (
     <div>
@@ -90,14 +99,7 @@ export function Search(props: { app: App; state: AppState }) {
               ))}
             </Row>
           ) : null}
-          {s.people.length ? (
-            <section class="row">
-              <h2>People</h2>
-              <div class="strip">
-                {s.people.map((p) => <PersonButton key={`p:${p.id}`} app={app} person={p} onPress={() => person(p)} />)}
-              </div>
-            </section>
-          ) : null}
+          {s.peopleFirst ? peopleRow : null}
           {s.results.length ? (
             <section class="row">
               <h2>Movies and shows</h2>
@@ -117,6 +119,7 @@ export function Search(props: { app: App; state: AppState }) {
               <div class="grid">{s.more.map((i) => poster(i, `more:${plex.listKey(i)}`))}</div>
             </section>
           ) : null}
+          {s.peopleFirst ? null : peopleRow}
         </>
       ) : null}
     </div>

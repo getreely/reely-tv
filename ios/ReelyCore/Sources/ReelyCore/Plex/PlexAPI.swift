@@ -488,7 +488,8 @@ public struct PlexAPI: Sendable {
                          collections: PlexAPI.items(fromHubs: hubs, base: base, wanted: ["collection"]))
     }
 
-    public static func items(fromHubs hubs: [JSON], base: String, wanted: Set<String> = ["movie", "show", "episode"]) -> [PlexItem] {
+    /// Films and shows, not the shows' single episodes, as on the Fire TV.
+    public static func items(fromHubs hubs: [JSON], base: String, wanted: Set<String> = ["movie", "show"]) -> [PlexItem] {
         var seen = Set<String>()
         var out: [PlexItem] = []
         for hub in hubs {

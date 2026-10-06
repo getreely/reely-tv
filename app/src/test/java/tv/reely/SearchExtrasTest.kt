@@ -34,6 +34,19 @@ class SearchExtrasTest {
         assertEquals("25 titles", collections.single().caption)
     }
 
+    @Test fun `a search finds shows and films, not single episodes`() {
+        val found = JSONArray(
+            """
+            [
+              {"type": "show", "Metadata": [{"ratingKey": "s1", "type": "show", "title": "Northbound"}]},
+              {"type": "episode", "Metadata": [{"ratingKey": "e1", "type": "episode", "title": "Pilot", "grandparentTitle": "Northbound"}]},
+              {"type": "movie", "Metadata": [{"ratingKey": "m1", "type": "movie", "title": "Low Orbit"}]}
+            ]
+            """.trimIndent()
+        )
+        assertEquals(listOf("Northbound", "Low Orbit"), PlexApi.itemsFromHubs(found, "http://plex").map { it.title })
+    }
+
     @Test fun `a search is remembered first, once`() {
         val recent = listOf("bond", "nfl", "the office")
         // The newest spelling is the one kept.

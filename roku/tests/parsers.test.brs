@@ -34,12 +34,17 @@ sub Main()
         { type: "actor", Directory: [{ id: "77", tag: "Ana Orbit" }, { id: "77", tag: "Ana Orbit" }] },
         { type: "collection", Metadata: [{ ratingKey: "c1", type: "collection", title: "Orbit Films" }] }
     ]
-    Expect("movies and shows from the hubs", Titles_(Plex_ItemsFromHubs(hubs, "http://a", ["movie", "show", "episode"])), ["x1", "m1"])
+    Expect("movies and shows from the hubs", Titles_(Plex_ItemsFromHubs(hubs, "http://a", ["movie", "show"])), ["x1", "m1"])
     Expect("collections apart", Titles_(Plex_ItemsFromHubs(hubs, "http://a", ["collection"])), ["c1"])
     Expect("each person once", Plex_PeopleFromHubs(hubs, "http://a").Count(), 1)
     split = Plex_SplitMatches("orbit", Plex_ItemsFromHubs(hubs, "http://a", ["movie"]))
     Expect("by name first", Titles_(split.matches), ["m1"])
     Expect("Plex's guesses after", Titles_(split.others), ["x1"])
+    Expect("a person's name in any order", Plex_NamesAll("Ana Orbit", "orbit ANA"), true)
+    Expect("not every word in the name", Plex_NamesAll("Ana Orbit", "ana smith"), false)
+    Expect("nothing typed names no one", Plex_NamesAll("Ana Orbit", "  "), false)
+    Expect("people last when a title matches", Plex_PeopleFirst("orbit", split.matches, [{ name: "Ana Orbit" }]), false)
+    Expect("people first for a name alone", Plex_PeopleFirst("ana orbit", [], [{ name: "Ana Orbit" }]), true)
     Expect("words: case and punctuation aside", Plex_Words("Low-Orbit: THE Return"), ["low", "orbit", "the", "return"])
 
     ' Libraries: the A–Z jump and the narrowing.

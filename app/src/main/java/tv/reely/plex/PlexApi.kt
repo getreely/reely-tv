@@ -1241,7 +1241,7 @@ object PlexApi {
             Unit
         }
 
-    /** Searches the whole library at once — films, shows and episodes together. */
+    /** Searches the whole library at once — films and shows together. */
     suspend fun search(base: String, token: String, query: String): List<PlexItem> =
         searchAll(base, token, query).items
 
@@ -1279,7 +1279,9 @@ object PlexApi {
     internal fun itemsFromHubs(
         hubs: JSONArray,
         base: String,
-        wanted: Set<String> = setOf("movie", "show", "episode"),
+        // Films and shows, not the shows' single episodes: a search for a show was a
+        // screenful of its episodes with the show itself somewhere among them.
+        wanted: Set<String> = setOf("movie", "show"),
     ): List<PlexItem> {
         return buildList {
             for (index in 0 until hubs.length()) {

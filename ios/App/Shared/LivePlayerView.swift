@@ -128,6 +128,7 @@ final class LiveModel {
  */
 struct LivePlayerView: View {
     @Environment(ReelyStore.self) private var store
+    @Environment(\.accent) private var accent
     @Environment(\.scenePhase) private var scenePhase
     @State private var model = LiveModel()
     #if os(iOS)

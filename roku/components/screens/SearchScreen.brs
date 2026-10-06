@@ -73,12 +73,14 @@ sub answered(r as object)
         Ask_("iptvSearch", { query: m.query.Trim(), answer: a, id: r.id })
         return
     end if
+    ' People last, unless it was a person's name that was typed.
+    people = { title: "People", items: a.people, people: true }
     rows = [
-        { title: "People", items: a.people, people: true },
         { title: "Movies and shows", items: a.results },
         { title: "Collections", items: a.collections },
         { title: "Other results", items: a.more }
     ]
+    if Bool_(a.peopleFirst) then rows.Unshift(people) else rows.Push(people)
     #if DEBUG
         if r.op = "iptvSearch" then
             names = []
