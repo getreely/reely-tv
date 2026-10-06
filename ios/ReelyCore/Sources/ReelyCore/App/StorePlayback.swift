@@ -29,11 +29,15 @@ func randomHex(_ count: Int) -> String {
 
 extension ReelyStore {
     /// Plex's conversion, at the quality chosen in Settings.
-    func converted(_ base: String, _ token: String, ratingKey: String, sessionId: String, mediaIndex: Int, subtitles: String, videoCodec: String?) -> String {
+    func converted(_ base: String, _ token: String, ratingKey: String, sessionId: String, mediaIndex: Int, subtitles: String, videoCodec: String?,
+                   streams: PlexPlayback? = nil) -> String {
         let kbps = prefs.maxBitrateKbps
         let resolution = kbps >= 20_000 ? "3840x2160" : (kbps == 0 || kbps >= 8_000) ? "1920x1080" : "1280x720"
         return api.transcodeUrl(base, token, ratingKey: ratingKey, sessionId: sessionId, maxBitrateKbps: kbps, resolution: resolution,
-                                mediaIndex: mediaIndex, subtitles: subtitles, subtitleSize: Int((prefs.subtitleScale * 100).rounded()), videoCodec: videoCodec)
+                                mediaIndex: mediaIndex, subtitles: subtitles, subtitleSize: Int((prefs.subtitleScale * 100).rounded()), videoCodec: videoCodec,
+                                audioStreamId: streams?.audioStreams.first(where: \.selected)?.id,
+                                // "0" is none: Plex draws nothing in rather than what it had before.
+                                subtitleStreamId: streams.map { $0.subtitleStreams.first(where: \.selected)?.id ?? "0" })
     }
 
     /// A film or episode, from where it was left (or the top), with the rest of its season queued after it.
@@ -72,7 +76,7 @@ extension ReelyStore {
         var plan = PlaybackPlan.plan(playback, mode: prefs.playbackMode)
         if burn && prefs.playbackMode != .direct { plan = PlaybackPlan(direct: false, reason: "Plex draws these subtitles into the picture") }
         let url = plan.direct ? playback.url
-            : converted(base, token, ratingKey: item.ratingKey, sessionId: sessionId, mediaIndex: mediaIndex, subtitles: burn ? "burn" : "none", videoCodec: playback.videoCodec)
+            : converted(base, token, ratingKey: item.ratingKey, sessionId: sessionId, mediaIndex: mediaIndex, subtitles: burn ? "burn" : "none", videoCodec: playback.videoCodec, streams: playback)
         let nearEnd = item.durationMs > 0 && Double(item.viewOffsetMs) >= Double(item.durationMs) * 0.95
         let startMs = resume && item.viewOffsetMs > 0 && !nearEnd ? item.viewOffsetMs : 0
         playError = nil
@@ -86,7 +90,7 @@ extension ReelyStore {
         // The provider's files have no Plex to convert them.
         guard var p = playing, p.direct, !p.item.isIptv else { return false }
         p.url = converted(p.base, p.token, ratingKey: p.item.ratingKey, sessionId: p.sessionId, mediaIndex: p.mediaIndex,
-                          subtitles: subtitlePlan(p.playback).burn ? "burn" : "none", videoCodec: p.playback.videoCodec)
+                          subtitles: subtitlePlan(p.playback).burn ? "burn" : "none", videoCodec: p.playback.videoCodec, streams: p.playback)
         p.direct = false
         p.reason = "This device couldn't play the file as it is"
         p.startMs = positionMs
@@ -123,7 +127,7 @@ extension ReelyStore {
             next.sessionId = sessionId
             next.url = p.direct ? found?.url ?? p.url
                 : converted(base, token, ratingKey: p.item.ratingKey, sessionId: sessionId, mediaIndex: p.mediaIndex,
-                            subtitles: subtitlePlan(p.playback).burn ? "burn" : "none", videoCodec: p.playback.videoCodec)
+                            subtitles: subtitlePlan(p.playback).burn ? "burn" : "none", videoCodec: p.playback.videoCodec, streams: p.playback)
         }
         guard playing?.sessionId == p.sessionId else { return }
         playing = next
@@ -136,7 +140,13 @@ extension ReelyStore {
     public func chooseStreams(audioId: String?, subtitleId: String?, positionMs: Int) async {
         guard let p = playing else { return }
         if let part = p.playback.partId { _ = await api.selectStream(p.base, p.token, partId: part, audioStreamId: audioId, subtitleStreamId: subtitleId) }
-        var playback = p.playback
+        /*
+         * Then read the title again, as starting it afresh does — which is how a choice made
+         * part-way through used to take effect only after leaving and coming back. The
+         * choice is laid over what comes back, in case the server hasn't caught up.
+         */
+        let fresh = p.item.isIptv ? nil : try? await api.playback(p.base, p.token, ratingKey: p.item.ratingKey, mediaIndex: p.mediaIndex)
+        var playback = fresh ?? p.playback
         if let audioId { playback.audioStreams = playback.audioStreams.map { var s = $0; s.selected = s.id == audioId; return s } }
         if let subtitleId { playback.subtitleStreams = playback.subtitleStreams.map { var s = $0; s.selected = s.id == subtitleId; return s } }
         guard playing?.sessionId == p.sessionId else { return }
@@ -157,7 +167,7 @@ extension ReelyStore {
         var next = p
         next.playback = playback
         next.url = asIs ? playback.url : converted(p.base, p.token, ratingKey: p.item.ratingKey, sessionId: sessionId, mediaIndex: p.mediaIndex,
-                                                    subtitles: burn ? "burn" : "none", videoCodec: playback.videoCodec)
+                                                    subtitles: burn ? "burn" : "none", videoCodec: playback.videoCodec, streams: playback)
         next.direct = asIs
         next.reason = asIs ? nil : (burn ? "Plex draws these subtitles into the picture" : "Plex is changing the sound track")
         next.startMs = positionMs

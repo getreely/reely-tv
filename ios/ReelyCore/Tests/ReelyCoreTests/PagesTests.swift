@@ -41,8 +41,8 @@ final class PagesTests: XCTestCase {
         XCTAssertEqual(store.browse["movie"]?.items.map(\.title), ["Low Orbit", "Paper Moons"])
         XCTAssertEqual(store.browse["movie"]?.total, 2)
         await store.setFilter("movie", unwatched: true, genre: .some(PlexGenre(id: "7", title: "Drama")))
-        XCTAssertTrue(asked.last!.contains("&unwatched=1&genre=7"))
-        XCTAssertTrue(asked.last!.contains("X-Plex-Container-Start=0"))
+        // The library's own Recently Added is asked for alongside, so not necessarily last.
+        XCTAssertTrue(asked.contains { $0.contains("&unwatched=1&genre=7") && $0.contains("X-Plex-Container-Start=0") })
         for _ in 0..<50 where store.browse["movie"]?.letters.isEmpty != false { try? await Task.sleep(nanoseconds: 10_000_000) }
         let at = await store.jumpTo("movie", letter: "P")
         XCTAssertEqual(at, 1)

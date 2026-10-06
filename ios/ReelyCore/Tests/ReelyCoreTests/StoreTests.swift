@@ -137,6 +137,8 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(store.playing?.url.contains("subtitles=burn"), true)
         await store.chooseStreams(audioId: nil, subtitleId: "0", positionMs: 2_000)
         XCTAssertEqual(store.playing?.url.contains("subtitles=none"), true)
+        // Said outright in the new stream, not left to what the server last had.
+        XCTAssertEqual(store.playing?.url.contains("subtitleStreamID=0"), true)
     }
 
     func testNoServerAnswersSaysSo() async {

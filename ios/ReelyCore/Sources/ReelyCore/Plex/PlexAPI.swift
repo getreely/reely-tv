@@ -434,12 +434,15 @@ public struct PlexAPI: Sendable {
      */
     public func transcodeUrl(_ base: String, _ token: String, ratingKey: String, sessionId: String, maxBitrateKbps: Int,
                              resolution: String, mediaIndex: Int = 0, subtitles: String = "burn", subtitleSize: Int = 100,
-                             videoCodec: String? = nil) -> String {
+                             videoCodec: String? = nil, audioStreamId: String? = nil, subtitleStreamId: String? = nil) -> String {
         let bitrate = maxBitrateKbps > 0 ? "&maxVideoBitrate=\(maxBitrateKbps)" : ""
         let copyVideo = videoCodec == nil || videoCodec?.lowercased() == "h264"
         return "\(base)/video/:/transcode/universal/start.m3u8?path=\(encodeComponent("/library/metadata/\(ratingKey)"))&mediaIndex=\(mediaIndex)&partIndex=0"
             + "&protocol=hls&fastSeek=1&directPlay=0&directStream=\(copyVideo ? 1 : 0)&subtitles=\(subtitles)&subtitleSize=\(subtitleSize)&audioBoost=100&videoQuality=100"
             + "&videoResolution=\(resolution)\(bitrate)&session=\(sessionId)"
+            // The tracks chosen, said outright, so a conversion started part-way through has
+            // them rather than whatever the server last had on record; see chooseStreams.
+            + (audioStreamId.map { "&audioStreamID=\($0)" } ?? "") + (subtitleStreamId.map { "&subtitleStreamID=\($0)" } ?? "")
             + "&X-Plex-Client-Identifier=\(encodeComponent(identity.clientId))&X-Plex-Platform=\(encodeComponent(identity.platform))&X-Plex-Product=\(encodeComponent(PlexAPI.product))&X-Plex-Token=\(token)"
     }
 

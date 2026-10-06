@@ -3,11 +3,12 @@ import AVFoundation
 
 /**
  * What a video app tells iOS at launch: its sound is the point, so it plays with the
- * ring/silent switch on silent and carries on to AirPlay and in the background; and while
- * something's playing, the phone turns on its side, as the Android phone app does.
+ * ring/silent switch on silent and carries on to AirPlay and in the background. The player
+ * turns with the phone: upright for a picture across the top, on its side for the whole
+ * screen.
  */
 final class AppDelegate: NSObject, UIApplicationDelegate {
-    /// What the screen may turn to: everything, or landscape while a video plays.
+    /// What the screen may turn to, playing or not.
     static var orientations: UIInterfaceOrientationMask = .allButUpsideDown
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
@@ -24,14 +25,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         UIDevice.current.userInterfaceIdiom == .pad ? .all : AppDelegate.orientations
     }
 
-    /// On its side for a video; back to however it's held after.
+    /*
+     * Playing used to lock the phone on its side, so it couldn't be watched upright. Now it
+     * follows however the phone is held, as YouTube and the TV app do; kept as the one place
+     * to change if that's ever wanted back.
+     */
     @MainActor
-    static func playing(_ on: Bool) {
-        guard UIDevice.current.userInterfaceIdiom == .phone else { return }
-        orientations = on ? .landscape : .allButUpsideDown
-        for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
-            scene.windows.first?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-            scene.requestGeometryUpdate(.iOS(interfaceOrientations: on ? .landscapeRight : .portrait)) { _ in }
-        }
-    }
+    static func playing(_ on: Bool) {}
 }
