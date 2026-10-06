@@ -39,7 +39,7 @@ app (Amazon's Vega SDK, React Native), which can reuse the LG app's TypeScript c
 | Chapters, preview pictures while scrubbing | ✅ | ✅ | ✅ | 🟡 (chapters tested; preview pictures are Roku's own, from Plex's index) | 🟡 (chapters built; no preview pictures yet) |
 | Sleep timer | ✅ | ✅ | ✅ | 🟡 (offered in the player; built) | 🟡 (built; not yet tried on a device) |
 | Choose where sound plays (Bluetooth headphones) | ✅ | ✅ | — | — | 🟡 (AirPlay picker in Settings on iPhone and iPad; Apple TV's own) |
-| Touch: tap, double-tap skip, drag the bar | — | ✅ | — | — | 🟡 (tap and drag the bar; no double-tap yet) |
+| Touch: tap, double-tap skip, drag the bar | — | ✅ | — | — | 🟡 (tap, double-tap skip and drag the bar; built) |
 | **Live TV** | | | | | |
 | Xtream login and M3U playlists | ✅ | ✅ | ✅ | ✅ (Xtream signed in in the simulator; a playlist's channels and guide there too) | 🟡 (built and unit-tested; streams only as HLS, as Apple's player plays no bare MPEG-TS) |
 | Categories, favorites, recently watched | ✅ | ✅ | ✅ | ✅ | 🟡 (built; seen in the simulator, not yet tried on a device) |

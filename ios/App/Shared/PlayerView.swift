@@ -91,6 +91,11 @@ struct PlayerView: View {
             }
         }
         #else
+        // As on the Android phone: a double tap on the left skips back, on the right forward.
+        .onTapGesture(count: 2, coordinateSpace: .global) { at in
+            model.skip(at.x < UIScreen.main.bounds.width / 2 ? -10 : 10)
+            showControls()
+        }
         .onTapGesture { controls ? (controls = false) : showControls() }
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
