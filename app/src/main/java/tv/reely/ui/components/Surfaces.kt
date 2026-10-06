@@ -23,6 +23,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.foundation.layout.height
 import androidx.compose.ui.layout.layout
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
@@ -265,6 +267,57 @@ fun IconAction(
         )
     }
 }
+
+/**
+ * The page's main action, wide, as the Apple TV app and the phones have it: the symbol and
+ * what it plays — "Resume S2 · E3" — in the accent color, white when focused. Its top
+ * lines up with the round actions beside it.
+ */
+@Composable
+fun PlayAction(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var focused by remember { mutableStateOf(false) }
+    Row(
+        modifier = modifier
+            .height(44.dp)
+            .onFocusChanged { focused = it.isFocused }
+            .graphicsLayer { val lift = if (focused) 1.05f else 1f; scaleX = lift; scaleY = lift }
+            .clip(RoundedCornerShape(50))
+            .background(if (focused) Chalk else Accent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 26.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        PlayGlyph(if (focused) Ink else tv.reely.ui.theme.OnAccent, 18.dp)
+        Text(
+            text = label,
+            color = if (focused) Ink else tv.reely.ui.theme.OnAccent,
+            fontSize = 17.sp,
+            lineHeight = 21.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * What scrolls up under the floating top bar fades out over its last [height] rather than
+ * being cut off in a hard line half way through a row of buttons.
+ */
+fun Modifier.fadeTop(height: androidx.compose.ui.unit.Dp = 28.dp): Modifier = this
+    .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
+    .drawWithContent {
+        drawContent()
+        val edge = (height.toPx() / size.height).coerceIn(0f, 1f)
+        drawRect(
+            Brush.verticalGradient(0f to Color.Transparent, edge to Color.Black),
+            blendMode = androidx.compose.ui.graphics.BlendMode.DstIn,
+        )
+    }
 
 /** Critic score, audience score and certificate as separate marks rather than a sentence. */
 @Composable

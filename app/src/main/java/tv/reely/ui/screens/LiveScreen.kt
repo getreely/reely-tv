@@ -191,8 +191,9 @@ private fun CategoryCard(category: XtreamCategory, onClick: () -> Unit, modifier
                 .background(
                     Brush.linearGradient(
                         listOf(
-                            tint.copy(alpha = if (focused) 0.5f else 0.34f),
-                            tint.copy(alpha = if (focused) 0.2f else 0.1f),
+                            // Richer than they were: from the sofa the categories read as one grey.
+                            tint.copy(alpha = if (focused) 0.62f else 0.46f),
+                            tint.copy(alpha = if (focused) 0.26f else 0.16f),
                         )
                     )
                 )
@@ -202,8 +203,8 @@ private fun CategoryCard(category: XtreamCategory, onClick: () -> Unit, modifier
         ) {
             Text(
                 text = category.name,
-                color = if (focused) Chalk else Chalk.copy(alpha = 0.86f),
-                style = ReelyType.Body,
+                color = Chalk,
+                style = ReelyType.Body.copy(fontSize = 22.sp, lineHeight = 27.sp),
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,

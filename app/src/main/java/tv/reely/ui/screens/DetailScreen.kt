@@ -63,6 +63,8 @@ import tv.reely.ui.components.EmptyNote
 import tv.reely.ui.components.ErrorNote
 import tv.reely.ui.components.HeroText
 import tv.reely.ui.components.IconAction
+import tv.reely.ui.components.PlayAction
+import tv.reely.ui.components.fadeTop
 import tv.reely.ui.components.ExpandableSummary
 import tv.reely.ui.components.PlayGlyph
 import tv.reely.ui.components.RestartGlyph
@@ -266,7 +268,7 @@ fun DetailScreen(
             CompositionLocalProvider(LocalBringIntoViewSpec provides pageScroll) {
             LazyColumn(
                 state = page,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().fadeTop(),
                 contentPadding = PaddingValues(top = 14.dp, bottom = 34.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
@@ -364,11 +366,10 @@ fun DetailScreen(
 
                                 else -> detail.viewOffsetMs
                             }
-                            IconAction(
-                                label = if (resumeFrom > 0) "Resume" else "Play",
-                                filled = true,
+                            PlayAction(
+                                label = listOfNotNull(if (resumeFrom > 0) "Resume" else "Play", target?.caption).joinToString(" "),
                                 onClick = { if (target != null) onPlay(target) else onPlayDetail() },
-                                glyph = { PlayGlyph(it, 20.dp) },
+                                modifier = Modifier.padding(end = 10.dp),
                             )
                             // Only worth offering when Play would pick up part-way through.
                             if (resumeFrom > 0) {
