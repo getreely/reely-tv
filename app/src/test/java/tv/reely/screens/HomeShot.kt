@@ -178,7 +178,11 @@ class HomeShot {
                     tv.reely.ui.screens.LibraryScreen(
                         kind = tv.reely.ui.LibraryKind.SHOWS,
                         view = tv.reely.ui.LibraryView.HOME,
-                        plex = PlexState(baseUrl = "http://server", serverToken = "t", token = "t", serverName = "Living Room"),
+                        // A library's Recently Added is its own, since each library has one.
+                        plex = PlexState(
+                            baseUrl = "http://server", serverToken = "t", token = "t", serverName = "Living Room",
+                            browse = mapOf(tv.reely.ui.LibraryKind.SHOWS to tv.reely.ui.BrowseState(addedShows = groups)),
+                        ),
                         home = HomeState(continueWatching = cw, recentEpisodes = groups),
                         focused = groups[1].newest,
                         imageUrl = { _, path, w, h -> Shots.imageUrl(path, w, h) },

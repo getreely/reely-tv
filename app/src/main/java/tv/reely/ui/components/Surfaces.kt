@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import coil.request.ImageRequest
@@ -80,6 +81,20 @@ import tv.reely.ui.theme.SurfaceRaised
  * The same picture gives the screen its colour: [onTint] is told the artwork's main
  * colour, and [glow], when given, lights the bottom of the screen with it.
  */
+/**
+ * How far a page's backdrop reaches up behind the top bar, which floats over it rather
+ * than sitting on a strip of its own. The bar is a fixed height, so this is too.
+ */
+val BACKDROP_RISE = 68.dp
+
+/** Drawn [rise] taller and moved up by it, so it runs to the top of the screen behind the bar. */
+private fun Modifier.riseBehindTopBar(rise: androidx.compose.ui.unit.Dp): Modifier = layout { measurable, constraints ->
+    val extra = rise.roundToPx()
+    val max = if (constraints.hasBoundedHeight) constraints.maxHeight + extra else constraints.maxHeight
+    val placeable = measurable.measure(constraints.copy(minHeight = (constraints.minHeight + extra).coerceAtMost(max), maxHeight = max))
+    layout(placeable.width, (placeable.height - extra).coerceAtLeast(0)) { placeable.place(0, -extra) }
+}
+
 @Composable
 fun HeroBackdrop(
     url: String?,
@@ -105,7 +120,7 @@ fun HeroBackdrop(
         if (tint != null) latestOnTint?.invoke(tint)
     }
 
-    Box(modifier) {
+    Box(modifier.riseBehindTopBar(BACKDROP_RISE)) {
         Crossfade(targetState = shown, animationSpec = tween(BACKDROP_FADE_MS), label = "backdrop") { picture ->
             if (picture != null) {
                 Image(

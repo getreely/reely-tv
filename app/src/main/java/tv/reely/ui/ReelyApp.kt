@@ -33,6 +33,8 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.layout.widthIn
 import tv.reely.ui.theme.ReelyType
 import tv.reely.ui.theme.SurfaceRaised
@@ -1013,10 +1015,19 @@ internal fun TopBar(
     /** Opens "Who's watching?"; null when there is nobody else to switch to. */
     onProfile: (() -> Unit)? = null,
 ) {
+    /*
+     * The bar floats over the page: drawn after it, on no strip of its own, so a title's
+     * backdrop runs to the top of the screen behind it (see HeroBackdrop), with a shade
+     * at the very top to keep the words readable over a bright one. The tabs sit together
+     * in a frosted capsule, as the phone's tabs do.
+     */
     Row(
         modifier = Modifier
+            .zIndex(1f)
             .fillMaxWidth()
-            .padding(horizontal = 40.dp, vertical = 14.dp),
+            .height(tv.reely.ui.components.BACKDROP_RISE)
+            .background(Brush.verticalGradient(0f to Ink.copy(alpha = 0.7f), 1f to Color.Transparent))
+            .padding(horizontal = 40.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -1029,6 +1040,15 @@ internal fun TopBar(
             modifier = Modifier.padding(end = 22.dp).height(30.dp),
         )
 
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(99.dp))
+                .background(tv.reely.ui.theme.SurfaceRaised.copy(alpha = 0.78f))
+                .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(99.dp))
+                .padding(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
         destinations.forEachIndexed { index, destination ->
             val isSelected = destination.route.sameTabAs(current)
             NavTab(
@@ -1046,6 +1066,7 @@ internal fun TopBar(
                     },
             )
         }
+        }
 
         Box(modifier = Modifier.weight(1f))
 
@@ -1059,6 +1080,14 @@ internal fun TopBar(
         }
 
         val settingsSelected = settingsDestination.route == current
+        // Its own frosted circle, to match the capsule of tabs across from it.
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(99.dp))
+                .background(tv.reely.ui.theme.SurfaceRaised.copy(alpha = 0.78f))
+                .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(99.dp))
+                .padding(4.dp),
+        ) {
         NavTab(
             label = settingsDestination.label,
             selected = settingsSelected,
@@ -1069,6 +1098,7 @@ internal fun TopBar(
             canSelectOnFocus = canSelectOnFocus,
             modifier = Modifier.focusRequester(settingsFocus),
         )
+        }
 
         // The time at the far right, quietly: nobody should have to leave the app to find
         // out how late it is.
