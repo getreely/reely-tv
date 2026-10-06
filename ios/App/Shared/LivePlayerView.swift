@@ -286,8 +286,56 @@ struct LivePlayerView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, pageMargin).padding(.vertical, dp(24))
         .background(LinearGradient(colors: [.clear, .clear, Color.black.opacity(0.85)], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
+        #if os(iOS)
+        // A finger on the controls keeps them up, whatever it's doing.
+        .simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { _ in scheduleHide(after: 8) })
+        #endif
     }
 
+    #if os(iOS)
+    /*
+     * On a phone: round symbols in one row, as the film player has them, each named for
+     * VoiceOver. They fit across without scrolling — scrolling a strip of worded buttons
+     * sideways didn't count as using the controls, and they went away mid-slide.
+     */
+    private func actionRow(on: Programme?, favorite: Bool, startOver: Bool) -> some View {
+        HStack(spacing: 14) {
+            if catchUp != nil {
+                liveButton("Back 10 seconds", "gobackward.10") { model.skip(-10) }
+                liveButton(model.playing ? "Pause" : "Play", model.playing ? "pause.fill" : "play.fill", big: true) { model.togglePlay() }
+                liveButton("Forward 10 seconds", "goforward.10") { model.skip(10) }
+                liveButton("Go live", "dot.radiowaves.left.and.right", filled: true) { store.goLive() }
+            } else {
+                liveButton("Previous channel", "chevron.up") { store.stepChannel(-1) }
+                liveButton("Next channel", "chevron.down") { store.stepChannel(1) }
+                liveButton("Channels", "list.bullet", filled: true) { channels = true }
+                if startOver, let on, let at = store.live.watching {
+                    liveButton("Start over", "backward.end.fill") { store.playCatchUp(at, on) }
+                }
+            }
+            if let channel {
+                liveButton(favorite ? "Remove from Favorites" : "Add to Favorites", favorite ? "heart.fill" : "heart") { store.toggleFavorite(channel) }
+            }
+            liveButton("Channel number", "number") { askNumber = true }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, dp(10))
+    }
+
+    private func liveButton(_ title: String, _ symbol: String, filled: Bool = false, big: Bool = false, _ run: @escaping () -> Void) -> some View {
+        Button {
+            run()
+            showBanner(stay: true)
+        } label: {
+            Image(systemName: symbol).font(.system(size: big ? 22 : 18, weight: .semibold))
+                .foregroundStyle(filled ? accent.onColor : .white)
+                .frame(width: big ? 60 : 50, height: big ? 60 : 50)
+                .background(filled ? AnyShapeStyle(accent.swiftColor) : AnyShapeStyle(.ultraThinMaterial), in: Circle())
+        }
+        .buttonStyle(PressStyle())
+        .accessibilityLabel(title)
+    }
+    #else
     private func actionRow(on: Programme?, favorite: Bool, startOver: Bool) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: dp(10)) {
@@ -322,6 +370,8 @@ struct LivePlayerView: View {
         .onChange(of: action) { _, _ in showActions() }
         #endif
     }
+
+    #endif
 
     private func control(_ title: String, _ systemImage: String, filled: Bool = false, _ run: @escaping () -> Void) -> some View {
         PanelButton(title: title, systemImage: systemImage, filled: filled) {
