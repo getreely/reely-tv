@@ -1,0 +1,350 @@
+import Foundation
+import Observation
+
+/** Where the app is: a tab, or a page opened on top of one, as on the Fire TV. */
+public enum Route: Equatable, Hashable, Sendable {
+    case home
+    case library(kind: String)
+    case search
+    case live
+    case requests
+    case settings
+    case detail(ratingKey: String, serverBase: String?)
+    case person(id: String, name: String, serverBase: String?)
+    case playlist(ratingKey: String, title: String, serverBase: String?)
+    case collection(ratingKey: String, title: String, serverBase: String?)
+
+    /// A tab replaces what was open; anything else goes on top of it.
+    public var isTab: Bool {
+        switch self {
+        case .home, .library, .search, .live, .requests, .settings: return true
+        default: return false
+        }
+    }
+}
+
+public struct PlexState: Equatable, Sendable {
+    /// The profile's token, and the account's (the same until a Home profile is switched to).
+    public var token: String?
+    public var accountToken: String?
+    public var user: PlexHomeUser?
+    public var homeUsers: [PlexHomeUser] = []
+    public var servers: [PlexServer] = []
+    public var serverName: String?
+    public var baseUrl: String?
+    public var serverToken: String?
+    /// Every movie and TV library on every server that answered.
+    public var libraries: [LibraryChoice] = []
+    /// Looking for the servers, after signing in or at start.
+    public var finding = false
+    public var error: String?
+    /// Signing in: the code to type at plex.tv/link, and the link the QR code carries.
+    public var linkCode: String?
+    public var linkUrl: String?
+    /// Addresses a server stopped answering at, and where it answers now. What's already on
+    /// screen was read from the old one and still names it; this is how it reaches the new.
+    public var moved: [String: String] = [:]
+
+    public var isSignedIn: Bool { token != nil }
+    public var isConnected: Bool { baseUrl != nil && serverToken != nil }
+
+    /// Where a server is now, by an address it was read from. Nil means the one connected.
+    public func baseFor(_ base: String?) -> String? { base.map { moved[$0] ?? $0 } ?? baseUrl }
+
+    /// The token for a server, by its address. Nil means the one connected.
+    public func tokenFor(_ base: String?) -> String? {
+        let now = base.map { moved[$0] ?? $0 }
+        if now == nil || now == baseUrl { return serverToken }
+        return libraries.first { $0.baseUrl == now }?.token
+    }
+}
+
+/**
+ * Everything the app knows and does, for every screen: the Swift counterpart of the Fire
+ * TV's ReelyViewModel. Screens read it and call into it; nothing else talks to a server.
+ */
+@MainActor
+@Observable
+public final class ReelyStore {
+    public private(set) var plex = PlexState()
+    public private(set) var home = HomeRows()
+    public private(set) var homeBusy = false
+    public private(set) var homeError: String?
+    public var prefs: Prefs { didSet { if prefs != oldValue { store.setJson("prefs", prefs) } } }
+    public private(set) var route: Route = .home
+    public private(set) var stack: [Route] = [.home]
+
+    public let api: PlexAPI
+    private let store: KeyValueStore
+    private let secrets: KeyValueStore
+    private var linkTask: Task<Void, Never>?
+    private var homeRun = 0
+    private var relocating: Task<Bool, Never>?
+
+    public init(api: PlexAPI, store: KeyValueStore, secrets: KeyValueStore) {
+        self.api = api
+        self.store = store
+        self.secrets = secrets
+        self.prefs = store.json("prefs", as: Prefs.self) ?? Prefs()
+        plex.token = secrets.string("plexToken")
+        plex.accountToken = secrets.string("plexAccountToken") ?? plex.token
+        plex.user = store.json("plexUser", as: PlexHomeUser.self)
+    }
+
+    /// A client id kept for good: plex.tv knows each device by it.
+    public static func clientId(_ store: KeyValueStore) -> String {
+        if let id = store.string("clientId") { return id }
+        let id = "reely-ios-" + UUID().uuidString.lowercased()
+        store.set("clientId", id)
+        return id
+    }
+
+    /// At start: signed in already, the servers are looked for.
+    public func start() async {
+        if let token = plex.token { await connect(token) }
+    }
+
+    // MARK: Getting about
+
+    public func navigate(_ to: Route) {
+        route = to
+        stack = to.isTab ? [to] : stack + [to]
+    }
+
+    @discardableResult
+    public func back() -> Bool {
+        guard stack.count > 1 else { return false }
+        stack.removeLast()
+        route = stack.last!
+        return true
+    }
+
+    /// The tab a page belongs to: the one it was opened from.
+    public var tab: Route { route == .settings ? route : stack.last(where: \.isTab) ?? route }
+
+    // MARK: Signing in
+
+    /**
+     * Two PINs for one sign-in, as the Fire TV does: the short one to type at plex.tv/link,
+     * and a strong one for the QR code. Whichever is approved first signs in.
+     */
+    public func startLink() {
+        linkTask?.cancel()
+        plex.error = nil
+        linkTask = Task { [weak self] in
+            guard let self else { return }
+            let strong = try? await api.createPin(strong: true)
+            let pin: PlexPin
+            do { pin = try await api.createPin() } catch {
+                plex.error = (error as? HttpError)?.message ?? "Couldn't get a sign-in code from Plex. Try again."
+                return
+            }
+            plex.linkCode = pin.code
+            plex.linkUrl = strong.map { self.api.authUrl(code: $0.code) }
+            // plex.tv expires a PIN after 15 minutes; stop looking well before that.
+            for _ in 0..<150 {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                if Task.isCancelled { return }
+                for candidate in [pin, strong].compactMap({ $0 }) {
+                    if let token = await api.claimPin(id: candidate.id) {
+                        await signedIn(token)
+                        return
+                    }
+                }
+            }
+            plex.linkCode = nil
+            plex.linkUrl = nil
+            plex.error = "That code has expired. Try signing in again."
+        }
+    }
+
+    public func cancelLink() {
+        linkTask?.cancel()
+        linkTask = nil
+        plex.linkCode = nil
+        plex.linkUrl = nil
+    }
+
+    public func signedIn(_ token: String) async {
+        secrets.set("plexToken", token)
+        secrets.set("plexAccountToken", token)
+        plex.token = token
+        plex.accountToken = token
+        plex.linkCode = nil
+        plex.linkUrl = nil
+        plex.user = await api.account(token: token)
+        store.setJson("plexUser", plex.user)
+        plex.homeUsers = await api.homeUsers(token: token)
+        await connect(token)
+    }
+
+    public func signOut() {
+        cancelLink()
+        secrets.set("plexToken", nil)
+        secrets.set("plexAccountToken", nil)
+        store.set("server", nil)
+        store.set("plexUser", nil)
+        plex = PlexState()
+        home = HomeRows()
+        stack = [.home]
+        route = .home
+    }
+
+    // MARK: Servers
+
+    /// The servers, and the first that answers: the one last used, else the account's own.
+    public func connect(_ token: String) async {
+        plex.finding = true
+        plex.error = nil
+        let servers: [PlexServer]
+        do { servers = try await api.servers(token: token) } catch {
+            plex.finding = false
+            plex.error = (error as? HttpError)?.message ?? "Couldn't load your Plex servers. Try again."
+            return
+        }
+        guard plex.token == token else { return }
+        let last = store.string("server")
+        let ordered = servers.filter { $0.name == last } + servers.filter { $0.name != last }
+        var reached: [(PlexServer, String?)] = []
+        await withTaskGroup(of: (Int, String?).self) { group in
+            for (i, server) in ordered.enumerated() { group.addTask { (i, await self.api.firstReachable(server)) } }
+            var found = [String?](repeating: nil, count: ordered.count)
+            for await (i, base) in group { found[i] = base }
+            reached = zip(ordered, found).map { ($0, $1) }
+        }
+        var libraries: [LibraryChoice] = []
+        var chosen: (PlexServer, String)?
+        for (server, base) in reached {
+            guard let base else { continue }
+            if chosen == nil { chosen = (server, base) }
+            for section in (try? await api.sections(base, server.accessToken)) ?? [] where section.type == "movie" || section.type == "show" {
+                libraries.append(LibraryChoice(serverName: server.name, baseUrl: base, token: server.accessToken, section: section))
+            }
+        }
+        guard plex.token == token else { return }
+        plex.servers = servers
+        plex.finding = false
+        guard let (server, base) = chosen else {
+            plex.error = servers.isEmpty
+                ? "This Plex account has no Plex server of its own, and nobody has shared one with it yet."
+                : "Found \(servers.map(\.name).joined(separator: " and ")), but couldn't reach \(servers.count > 1 ? "any of them" : "it"). Make sure it's on. Reely keeps trying."
+            return
+        }
+        store.set("server", server.name)
+        plex.serverName = server.name
+        plex.baseUrl = base
+        plex.serverToken = server.accessToken
+        plex.libraries = libraries
+        await refreshHome()
+    }
+
+    /**
+     * The servers in use, looked for again where they are now, without starting over: an
+     * address can stop working while the app stays open (a friend's server, a relay, a new
+     * address from the router). plex.tv is asked where each is, and one that doesn't answer
+     * where it was is used from where it does. True when anything moved.
+     */
+    @discardableResult
+    public func relocateServers() async -> Bool {
+        if let running = relocating { return await running.value }
+        let look = Task { await lookForServers() }
+        relocating = look
+        let moved = await look.value
+        relocating = nil
+        return moved
+    }
+
+    private func lookForServers() async -> Bool {
+        guard let account = plex.token, let servers = try? await api.servers(token: account) else { return false }
+        plex.servers = servers
+        var inUse: [String: (String, String)] = [:]
+        for l in plex.libraries { inUse[l.serverName] = (l.baseUrl, l.token) }
+        if let name = plex.serverName, let base = plex.baseUrl, let token = plex.serverToken { inUse[name] = (base, token) }
+        var moves: [String: (String, String)] = [:]
+        for (name, (base, token)) in inUse {
+            guard let server = servers.first(where: { $0.name == name }) ?? servers.first(where: { $0.accessToken == token }) else { continue }
+            let answers = await api.reachable(server, base)
+            if answers && server.accessToken == token { continue }
+            guard let now = answers ? base : await api.firstReachable(server) else { continue }
+            if now != base || server.accessToken != token { moves[base] = (now, server.accessToken) }
+        }
+        guard !moves.isEmpty else { return false }
+        plex = ReelyStore.afterMoves(plex, moves)
+        return true
+    }
+
+    /// Servers found at other addresses, or with other tokens; the old addresses kept as aliases.
+    nonisolated public static func afterMoves(_ p: PlexState, _ moves: [String: (String, String)]) -> PlexState {
+        var next = p
+        if let base = p.baseUrl, let (b, t) = moves[base] { next.baseUrl = b; next.serverToken = t }
+        var aliases = p.moved.mapValues { to in moves[to]?.0 ?? to }
+        for (from, (to, _)) in moves where from != to { aliases[from] = to }
+        next.moved = aliases
+        next.libraries = p.libraries.map { l in
+            guard let (b, t) = moves[l.baseUrl] else { return l }
+            var c = l
+            c.baseUrl = b
+            c.token = t
+            return c
+        }
+        return next
+    }
+
+    // MARK: Libraries
+
+    /// The libraries switched on in Settings, or all of them when none is; of a kind, or every kind.
+    public func shownLibraries(kind: String? = nil) -> [LibraryChoice] {
+        let all = plex.libraries.filter { kind == nil || $0.section.type == kind }
+        let pinned = all.filter { prefs.favouriteSections.contains($0.id) }
+        return pinned.isEmpty ? all : pinned
+    }
+
+    public func togglePinned(_ library: LibraryChoice) {
+        if let i = prefs.favouriteSections.firstIndex(of: library.id) { prefs.favouriteSections.remove(at: i) }
+        else { prefs.favouriteSections.append(library.id) }
+        Task { await refreshHome() }
+    }
+
+    // MARK: Home
+
+    public func refreshHome() async {
+        let sources = shownLibraries()
+        guard !sources.isEmpty else { return }
+        homeRun += 1
+        let run = homeRun
+        homeBusy = true
+        homeError = nil
+        let rows = await loadHome(api, sources)
+        guard run == homeRun else { return }
+        guard let rows else {
+            // Perhaps a server is somewhere else now: looked for, and if so, asked there.
+            if await relocateServers() { await refreshHome(); return }
+            homeBusy = false
+            homeError = "Couldn't reach your Plex server. Trying again…"
+            return
+        }
+        home = rows
+        homeBusy = false
+    }
+
+    public func isHidden(_ row: HomeRow) -> Bool { prefs.hiddenHomeRows.contains(row.rawValue) }
+
+    public func setHidden(_ row: HomeRow, _ hidden: Bool) {
+        prefs.hiddenHomeRows.removeAll { $0 == row.rawValue }
+        if hidden { prefs.hiddenHomeRows.append(row.rawValue) }
+    }
+
+    // MARK: Pictures
+
+    /// A picture through its server's resizer, at the size it's drawn.
+    public func imageUrl(_ serverBase: String?, _ path: String?, width: Int, height: Int) -> URL? {
+        guard let base = plex.baseFor(serverBase), let token = plex.tokenFor(serverBase),
+              let url = PlexAPI.imageUrl(base, token, path: path, width: width, height: height) else { return nil }
+        return URL(string: url)
+    }
+
+    public func logoUrl(_ serverBase: String?, _ path: String?) -> URL? {
+        guard let path, let base = plex.baseFor(serverBase), let token = plex.tokenFor(serverBase) else { return nil }
+        return URL(string: PlexAPI.logoUrl(base, token, path: path))
+    }
+}

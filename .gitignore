@@ -9,3 +9,9 @@ captures/
 .cxx/
 *.jks
 *.keystore
+
+# iOS
+ios/**/.build/
+ios/**/*.xcodeproj/
+ios/**/DerivedData/
+ios/**/xcuserdata/
