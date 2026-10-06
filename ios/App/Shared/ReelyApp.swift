@@ -101,6 +101,9 @@ struct RootView: View {
             }
         }
         .animation(.easeOut(duration: 0.25), value: store.live.due)
+        #if os(tvOS)
+        .modifier(ScreensaverHost())
+        #endif
         .task {
             // Reminders come due whatever's on screen, as on the Fire TV.
             while !Task.isCancelled {

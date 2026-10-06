@@ -18,8 +18,16 @@ struct PlayerView: View {
     @State private var upNextDismissed = false
     @FocusState private var focus: Control?
 
-    enum Panel: Identifiable { case subtitles, audio, chapters, info; var id: Self { self } }
-    enum Control: Hashable { case play, subtitles, audio, chapters, info, skip, upNext }
+    /// The sleep timer: a time to stop at, or the end of this episode.
+    @State private var sleepAt: Date?
+    @State private var sleepAtEnd = false
+    /// Subtitles found online by the Plex server, as they're looked for and added.
+    @State private var found: [PlexOnlineSubtitle]?
+    @State private var findNote: String?
+    @State private var adding: String?
+
+    enum Panel: Identifiable { case subtitles, audio, chapters, sleep, find, info; var id: Self { self } }
+    enum Control: Hashable { case play, subtitles, audio, chapters, sleep, info, skip, upNext }
 
     var body: some View {
         ZStack {
@@ -45,7 +53,13 @@ struct PlayerView: View {
         .onChange(of: store.playing) { _, p in if let p { model.load(p) } }
         .onChange(of: model.positionMs) { _, _ in autoSkip(); countUpNext() }
         .onChange(of: model.ended) { _, ended in
-            if ended { if store.nextInQueue != nil { goNext() } else { close() } }
+            // The sleep timer set for this episode's end: it ends here, rather than going on.
+            if ended { if store.nextInQueue != nil && !sleepAtEnd { goNext() } else { close() } }
+        }
+        .task(id: sleepAt) {
+            guard let at = sleepAt else { return }
+            try? await Task.sleep(nanoseconds: UInt64(max(0, at.timeIntervalSinceNow) * 1_000_000_000))
+            if !Task.isCancelled, sleepAt == at { close() }
         }
         .sheet(item: $panel) { panel in
             #if os(iOS)
@@ -103,7 +117,8 @@ struct PlayerView: View {
                 PanelButton(title: model.playing ? "Pause" : "Play", systemImage: model.playing ? "pause.fill" : "play.fill") { model.togglePlay() }
                     .focused($focus, equals: .play)
                 #endif
-                if !(store.playing?.playback.subtitleStreams.isEmpty ?? true) {
+                // With none in the file, Subtitles still finds some online.
+                if !(store.playing?.playback.subtitleStreams.isEmpty ?? true) || store.playing?.item.isIptv == false {
                     PanelButton(title: "Subtitles", systemImage: "captions.bubble") { panel = .subtitles }.focused($focus, equals: .subtitles)
                 }
                 if (store.playing?.playback.audioStreams.count ?? 0) > 1 {
@@ -112,6 +127,8 @@ struct PlayerView: View {
                 if !(store.playing?.playback.chapters.isEmpty ?? true) {
                     PanelButton(title: "Chapters", systemImage: "list.bullet") { panel = .chapters }.focused($focus, equals: .chapters)
                 }
+                PanelButton(title: sleepLabel ?? "Sleep timer", systemImage: "moon.zzz", filled: sleepAt != nil || sleepAtEnd) { panel = .sleep }
+                    .focused($focus, equals: .sleep)
                 PanelButton(title: "Playback info", systemImage: "info.circle") { panel = .info }.focused($focus, equals: .info)
             }
         }
@@ -210,12 +227,12 @@ struct PlayerView: View {
     private func autoSkip() {
         guard let marker = activeSkip else { return }
         if marker.type == "intro" && store.prefs.skipIntros && model.positionMs < marker.startMs + 1500 { model.seek(toMs: marker.endMs) }
-        if marker.type == "credits" && store.prefs.skipCredits && store.nextInQueue != nil { goNext() }
+        if marker.type == "credits" && store.prefs.skipCredits && store.nextInQueue != nil && !sleepAtEnd { goNext() }
     }
 
     /// Up Next comes up at the credits, or the last half minute when there are none marked.
     private var showUpNext: Bool {
-        guard !upNextDismissed, model.durationMs > 0 else { return false }
+        guard !upNextDismissed, !sleepAtEnd, model.durationMs > 0 else { return false }
         let credits = store.playing?.playback.markers.first { $0.type == "credits" }?.startMs
         let from = credits ?? (model.durationMs - 30_000)
         return model.positionMs >= from && activeSkip?.type != "intro"
@@ -272,6 +289,31 @@ struct PlayerView: View {
                     ForEach(p?.playback.subtitleStreams ?? [], id: \.id) { s in
                         Button { choose(subtitle: s.id) } label: { row(s.label, on: s.selected) }
                     }
+                    if p?.item.isIptv == false {
+                        Button { find() } label: { Label("Find subtitles online", systemImage: "magnifyingglass").font(Typeface.body) }
+                    }
+                case .find:
+                    Text(findNote ?? (found == nil ? "Looking for subtitles…" : adding != nil ? "Adding them…"
+                                      : found!.isEmpty ? "No \(languageName) subtitles were found for this." : "\(languageName), found by your Plex server."))
+                        .font(Typeface.meta).foregroundStyle(Color.muted)
+                    ForEach(found ?? [], id: \.key) { s in
+                        Button { add(s) } label: {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(s.title).font(Typeface.body)
+                                Text([s.provider, s.hearingImpaired ? "For the hard of hearing" : nil, s.forced ? "Forced" : nil].compactMap { $0 }.joined(separator: "  ·  "))
+                                    .font(Typeface.label).foregroundStyle(Color.muted)
+                            }
+                        }
+                        .disabled(adding != nil)
+                    }
+                case .sleep:
+                    if let at = sleepAt { Text("Stops in \(max(1, Int(ceil(at.timeIntervalSinceNow / 60)))) min.").font(Typeface.meta).foregroundStyle(Color.muted) }
+                    ForEach(SLEEP_CHOICES.filter { $0 != -1 || p?.item.type == "episode" }, id: \.self) { m in
+                        Button { setSleep(m) } label: {
+                            row(m == 0 ? "Off" : m == -1 ? "End of this episode" : "\(m) minutes",
+                                on: m == 0 ? sleepAt == nil && !sleepAtEnd : m == -1 ? sleepAtEnd : false)
+                        }
+                    }
                 case .audio:
                     ForEach(p?.playback.audioStreams ?? [], id: \.id) { s in
                         Button { choose(audio: s.id) } label: { row(s.label, on: s.selected) }
@@ -284,10 +326,15 @@ struct PlayerView: View {
                     }
                 case .info:
                     if let p {
-                        infoRow("Playing", p.direct ? "The file as it is" : "Converted by Plex")
-                        if let reason = p.reason { infoRow("Why", reason) }
-                        infoRow("File", [p.playback.container?.uppercased(), p.playback.videoCodec?.uppercased(), p.playback.audioCodec?.uppercased()].compactMap { $0 }.joined(separator: " · "))
-                        if let sub = p.textSubtitle { infoRow("Subtitles", sub.label) }
+                        let audio = p.playback.audioStreams.first(where: \.selected) ?? p.playback.audioStreams.first
+                        infoRow("Playing", p.item.isIptv ? "From your IPTV provider" : p.direct ? "The original file" : "Converted by Plex")
+                        if let reason = p.reason, !p.item.isIptv { infoRow("Why", reason) }
+                        if let v = p.playback.videoCodec { infoRow("Video", v.uppercased()) }
+                        if let a = audio?.label ?? p.playback.audioCodec.map({ $0.uppercased() + (p.playback.audioChannels > 0 ? " · \(p.playback.audioChannels) channels" : "") }) {
+                            infoRow("Audio", a)
+                        }
+                        if let c = p.playback.container { infoRow("File", c.uppercased()) }
+                        infoRow("Subtitles", p.textSubtitle != nil ? "Drawn by Reely" : p.playback.subtitleStreams.contains(where: \.selected) ? "Burned in by Plex" : "Off")
                     }
                 }
             }
@@ -300,6 +347,8 @@ struct PlayerView: View {
         case .subtitles: return "Subtitles"
         case .audio: return "Audio"
         case .chapters: return "Chapters"
+        case .sleep: return "Sleep timer"
+        case .find: return "Find subtitles"
         case .info: return "Playback info"
         }
     }
@@ -316,12 +365,53 @@ struct PlayerView: View {
         HStack { Text(label).foregroundStyle(Color.muted); Spacer(); Text(value) }.font(Typeface.meta)
     }
 
+    private var sleepLabel: String? {
+        if sleepAtEnd { return "Sleep at the end of this" }
+        guard let at = sleepAt else { return nil }
+        return "Sleep in \(max(1, Int(ceil(at.timeIntervalSinceNow / 60)))) min"
+    }
+
+    private func setSleep(_ minutes: Int) {
+        panel = nil
+        sleepAtEnd = minutes == -1
+        sleepAt = minutes > 0 ? Date().addingTimeInterval(TimeInterval(minutes * 60)) : nil
+    }
+
+    private var languageCode: String { Locale.current.language.languageCode?.identifier ?? "en" }
+    private var languageName: String { Locale.current.localizedString(forLanguageCode: languageCode) ?? languageCode.uppercased() }
+
+    private func find() {
+        found = nil
+        findNote = nil
+        adding = nil
+        panel = .find
+        let language = languageCode
+        Task {
+            let result = await store.findSubtitles(language: language)
+            found = result.results
+            findNote = result.error
+        }
+    }
+
+    private func add(_ s: PlexOnlineSubtitle) {
+        adding = s.key
+        let pos = model.positionMs
+        Task {
+            let problem = await store.addFoundSubtitle(s, language: languageCode, positionMs: pos)
+            adding = nil
+            if let problem { findNote = problem } else { panel = nil }
+        }
+    }
+
     private func choose(audio: String? = nil, subtitle: String? = nil) {
         let pos = model.positionMs
         panel = nil
         Task { await store.chooseStreams(audioId: audio, subtitleId: subtitle, positionMs: pos) }
     }
 }
+
+/// Minutes the sleep timer offers, as the Fire TV's does; -1 is the end of this episode.
+let SLEEP_CHOICES = [0, 15, 30, 45, 60, 90, -1]
 
 /// A control in the player: a symbol and a word, filled for the one that matters most.
 struct PanelButton: View {
