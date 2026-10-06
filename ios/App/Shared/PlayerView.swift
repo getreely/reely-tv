@@ -63,7 +63,7 @@ struct PlayerView: View {
                 .ignoresSafeArea()
             #endif
             if let line = model.subtitle { subtitleView(line) }
-            if model.buffering && !model.ended { ProgressView().tint(.white).scaleEffect(Typeface.scale) }
+            if (model.buffering || store.replacingStream) && !model.ended { ProgressView().tint(.white).scaleEffect(Typeface.scale) }
             if let error = model.failed ?? store.playError {
                 VStack(spacing: dp(14)) {
                     Text(error).font(Typeface.body).foregroundStyle(Color.chalk)
@@ -91,6 +91,7 @@ struct PlayerView: View {
             showControls()
         }
         .onChange(of: store.playing) { _, p in if let p { model.load(p) } }
+        .onChange(of: store.replacingStream) { _, now in if now { model.release() } }
         // VLC can't draw to a closed app: its sound plays on, and the picture comes back with it.
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { model.vlc?.wentAway() }

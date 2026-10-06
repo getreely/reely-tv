@@ -143,6 +143,19 @@ final class PlayerModel {
         failed = "This couldn't be played. Try again."
     }
 
+    /**
+     * A sound or subtitle change on its way: the old stream let go of at once. Still asking
+     * for pieces of it kept Plex's old conversion going, and the new one came back the same.
+     */
+    func release() {
+        guard !usingVLC else { return }
+        retry?.cancel()
+        player.pause()
+        player.replaceCurrentItem(with: nil)
+        loadedUrl = nil
+        buffering = true
+    }
+
     /// After giving up on a dropped connection: from where it was, afresh.
     func tryAgain() {
         guard let at = stuckAt, let store else { return }
@@ -178,7 +191,8 @@ final class PlayerModel {
     }
 
     private func tick(_ time: CMTime) {
-        guard !usingVLC else { return }
+        // Between streams there's no time to tell: nought would be reported to Plex as where it got to.
+        guard !usingVLC, player.currentItem != nil else { return }
         positionMs = Int(time.seconds.isFinite ? time.seconds * 1000 : 0)
         if let d = player.currentItem?.duration.seconds, d.isFinite, d > 0 { durationMs = Int(d * 1000) }
         else if let p = store?.playing { durationMs = p.item.durationMs }

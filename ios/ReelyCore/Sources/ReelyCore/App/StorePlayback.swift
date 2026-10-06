@@ -179,9 +179,15 @@ extension ReelyStore {
          */
         replacingStream = true
         defer { replacingStream = false }
+        /*
+         * The player lets go of the old stream first (it watches replacingStream): while it
+         * was still asking for pieces of it, Plex kept that conversion going and handed it
+         * to the new request too, subtitles as they were.
+         */
+        try? await Task.sleep(nanoseconds: 300_000_000)
         if !p.direct {
             await api.stopTranscode(p.base, p.token, sessionId: p.sessionId)
-            try? await Task.sleep(nanoseconds: 800_000_000)
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
         }
         guard playing?.sessionId == p.sessionId else { return }
         let sessionId = randomHex(12)
