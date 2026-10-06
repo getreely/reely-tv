@@ -2,16 +2,16 @@ import SwiftUI
 import ReelyCore
 
 /**
- * Reely on iPhone and iPad: Home, Movies, TV Shows, Live TV and Requests along the bottom,
- * each with iOS's own navigation, so a page opened from a tab goes back with a swipe from
- * the edge, under large titles and frosted bars. Search and Settings open as sheets from
- * every tab's corner.
+ * Reely on iPhone and iPad: Home, Movies, TV Shows, Live TV and Requests in a bar floating
+ * over the bottom, each with iOS's own navigation, so a page opened from a tab goes back
+ * with a swipe from the edge, under large titles and frosted bars. Search and Settings open
+ * as sheets from every tab's corner.
  */
 struct PhoneRoot: View {
     @Environment(ReelyStore.self) private var store
     private let tabs: [(String, String, Route)] = [
-        ("Home", "house.fill", .home), ("Movies", "film", .library(kind: "movie")), ("TV Shows", "tv", .library(kind: "show")),
-        ("Live TV", "dot.radiowaves.left.and.right", .live), ("Requests", "plus.circle", .requests),
+        ("Home", "house.fill", .home), ("Movies", "film.fill", .library(kind: "movie")), ("TV Shows", "tv.fill", .library(kind: "show")),
+        ("Live TV", "dot.radiowaves.left.and.right", .live), ("Requests", "plus.circle.fill", .requests),
     ]
 
     /// Settings or Search, over the tabs.
@@ -30,9 +30,13 @@ struct PhoneRoot: View {
                             RouteContent(route: page).modifier(PageChrome(route: page))
                         }
                 }
-                .tabItem { Label(label, systemImage: icon) }
+                // The system's own bar stays hidden; ReelyTabBar floats in its place.
+                .toolbar(.hidden, for: .tabBar)
                 .tag(route)
             }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            ReelyTabBar(tabs: tabs, selected: selected.wrappedValue) { store.navigate($0) }
         }
         .sheet(isPresented: Binding(get: { sheetUp }, set: { if !$0 { store.closeSheet() } })) {
             RouteContent(route: store.route).background(Color.ink)
@@ -100,5 +104,51 @@ private struct PageChrome: ViewModifier {
         case .collection(_, let title, _), .playlist(_, let title, _): return title
         default: return ""
         }
+    }
+}
+
+/**
+ * The tabs, in a frosted capsule floating over the bottom of the page: an icon each, and the
+ * one showing in a pill of the accent color with its name beside it. Pressed again, a tab
+ * goes back to its top. What's on the page scrolls on underneath.
+ */
+private struct ReelyTabBar: View {
+    @Environment(\.accent) private var accent
+    let tabs: [(String, String, Route)]
+    let selected: Route
+    let choose: (Route) -> Void
+    @Namespace private var pill
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(tabs, id: \.0) { label, icon, route in
+                let on = route == selected
+                Button { choose(route) } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: icon).font(.system(size: 17, weight: .semibold))
+                        if on { Text(label).font(Typeface.geist(14, .semibold)).lineLimit(1).fixedSize() }
+                    }
+                    .foregroundStyle(on ? accent.onColor : Color.chalk.opacity(0.62))
+                    .padding(.horizontal, on ? 16 : 13)
+                    .frame(height: 46)
+                    .background {
+                        if on { Capsule().fill(accent.swiftColor).matchedGeometryEffect(id: "pill", in: pill) }
+                    }
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(label)
+                .accessibilityAddTraits(on ? .isSelected : [])
+            }
+        }
+        .padding(5)
+        .background(.ultraThinMaterial, in: Capsule())
+        .background(Capsule().fill(Color.ink.opacity(0.35)))
+        .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.45), radius: 18, y: 8)
+        .environment(\.colorScheme, .dark)
+        .animation(.spring(response: 0.34, dampingFraction: 0.82), value: selected)
+        .sensoryFeedback(.selection, trigger: selected)
+        .padding(.bottom, 6)
     }
 }
