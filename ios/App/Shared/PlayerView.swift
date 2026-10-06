@@ -558,6 +558,11 @@ struct PlayerView: View {
                         let chosen = p.playback.subtitleStreams.first(where: \.selected)?.label
                         infoRow("Subtitles", [chosen, p.textSubtitle != nil ? "Drawn by Reely" : chosen != nil ? "Burned in by Plex" : "Off"].compactMap { $0 }.joined(separator: " · "))
                         if p.attempt > 0 { infoRow("Stream", "Started afresh \(p.attempt) time\(p.attempt == 1 ? "" : "s")") }
+                        // What the conversion was asked for, as the address says it: subtitles drawn in or not, and which.
+                        if !p.direct, let asked = URLComponents(string: p.url)?.queryItems {
+                            let value = { (name: String) in asked.first { $0.name == name }?.value }
+                            infoRow("Asked Plex for", ["subtitles \(value("subtitles") ?? "?")", value("subtitleStreamID").map { "track \($0)" }].compactMap { $0 }.joined(separator: " · "))
+                        }
                         if let problem = model.lastProblem { infoRow("Last problem", problem) }
                     }
                 }

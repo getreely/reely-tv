@@ -142,6 +142,8 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(store.playing?.url.contains("session=\(second)"), true)
         XCTAssertEqual(store.playing?.url.contains("X-Plex-Session-Identifier"), false)
         XCTAssertFalse(store.replacingStream)
+        // The old one told as stopped first, as leaving the player does.
+        XCTAssertTrue(fake.asked.contains("/:/timeline"))
         await store.chooseStreams(audioId: nil, subtitleId: "0", positionMs: 2_000)
         XCTAssertEqual(store.playing?.url.contains("subtitles=none"), true)
         // Said outright in the new stream, not left to what the server last had.

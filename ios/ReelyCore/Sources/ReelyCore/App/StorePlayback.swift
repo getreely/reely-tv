@@ -185,10 +185,16 @@ extension ReelyStore {
          * to the new request too, subtitles as they were.
          */
         try? await Task.sleep(nanoseconds: 300_000_000)
+        /*
+         * And the old one told as stopped, as leaving the player tells it. Until it hears
+         * that, Plex keeps the sitting going and serves the new conversion the old one's
+         * subtitles: a new stream, a moment's black, and the same words on it.
+         */
+        await report(positionMs: positionMs, durationMs: p.item.durationMs, state: "stopped", p)
         if !p.direct {
             await api.stopTranscode(p.base, p.token, sessionId: p.sessionId)
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
         }
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
         guard playing?.sessionId == p.sessionId else { return }
         let sessionId = randomHex(12)
         var next = p
