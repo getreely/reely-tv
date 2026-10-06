@@ -63,6 +63,7 @@ internal fun PlayerHost(viewModel: ReelyViewModel, state: ReelyState, touch: Boo
             onOpenSavedMultiview = viewModel::openSavedMultiview,
             onStepEpisode = viewModel::stepEpisode,
             onDecodeFailure = viewModel::retryWithTranscode,
+            onReopen = viewModel::reopenPlayback,
             onConvertAudio = viewModel::convertAudio,
             onToggleFormat = viewModel::toggleFormat,
             onReportProgress = viewModel::reportProgress,

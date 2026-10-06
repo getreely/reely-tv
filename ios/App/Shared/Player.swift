@@ -33,6 +33,14 @@ final class PlayerModel {
     @ObservationIgnored private var observations: [NSKeyValueObservation] = []
     @ObservationIgnored private var lastReport = Date.distantPast
     @ObservationIgnored private var loadedUrl: String?
+    @ObservationIgnored private var loadedAttempt = 0
+    /*
+     * The connection dropped: fresh tries so far, and where it was when it gave up and
+     * waits for Try again. Plex's own app picks up again the same way.
+     */
+    @ObservationIgnored private var drops = 0
+    @ObservationIgnored private var retry: Task<Void, Never>?
+    private(set) var stuckAt: Int?
     @ObservationIgnored private var loadedSubtitle: String?
     @ObservationIgnored private weak var store: ReelyStore?
     @ObservationIgnored private var endObserver: NSObjectProtocol?
@@ -54,9 +62,13 @@ final class PlayerModel {
 
     /// What the store says is playing, loaded when it's changed: another file, or a conversion of this one.
     func load(_ p: Playing) {
-        guard p.url != loadedUrl, let url = URL(string: p.url) else { loadSubtitle(p); return }
+        guard p.url != loadedUrl || p.attempt != loadedAttempt, let url = URL(string: p.url) else { loadSubtitle(p); return }
+        // Another title, not the same one asked for afresh: its drops start from none.
+        if p.attempt <= loadedAttempt { drops = 0 }
         loadedUrl = p.url
+        loadedAttempt = p.attempt
         failed = nil
+        stuckAt = nil
         ended = false
         // A provider's MKV and the like: VLC, as the Fire TV's ExoPlayer plays them.
         if p.item.isIptv && !applePlays(p.url, container: p.playback.container) {
@@ -94,6 +106,24 @@ final class PlayerModel {
 
     private func itemStatus(_ status: AVPlayerItem.Status, error: Error?) {
         guard status == .failed else { return }
+        if PlayerModel.dropped(error), let p = store?.playing {
+            let at = max(positionMs, p.startMs)
+            if drops < RECONNECT_TRIES {
+                drops += 1
+                failed = "Reconnecting…"
+                let wait = UInt64(RECONNECT_WAIT_SECONDS * drops) * 1_000_000_000
+                retry?.cancel()
+                retry = Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: wait)
+                    guard !Task.isCancelled, let store = self?.store, store.playing?.sessionId == p.sessionId else { return }
+                    await store.reopen(positionMs: at)
+                }
+            } else {
+                stuckAt = at
+                failed = p.item.isIptv ? "Lost the connection to your IPTV provider." : "Lost the connection to your Plex server."
+            }
+            return
+        }
         // Not as it is, then: Plex converts it, from where it had got to.
         if let store, store.playing?.direct == true, store.convert(positionMs: positionMs) { return }
         // The provider's files have no Plex to convert them: VLC tries instead, from where it got to.
@@ -102,6 +132,27 @@ final class PlayerModel {
             return
         }
         failed = "This couldn't be played. Try again."
+    }
+
+    /// After giving up on a dropped connection: from where it was, afresh.
+    func tryAgain() {
+        guard let at = stuckAt, let store else { return }
+        stuckAt = nil
+        drops = 0
+        failed = "Reconnecting…"
+        Task { await store.reopen(positionMs: at) }
+    }
+
+    /// The network, or the server turning the stream away part-way, rather than the file.
+    private static func dropped(_ error: Error?) -> Bool {
+        var next = error as NSError?
+        while let e = next {
+            if e.domain == NSURLErrorDomain { return true }
+            // CoreMedia's: an HTTP 403/404 for a piece of the stream, or pieces not arriving in time.
+            if e.domain == "CoreMediaErrorDomain" && [-12660, -12938, -12884, -12889, -16839].contains(e.code) { return true }
+            next = e.userInfo[NSUnderlyingErrorKey] as? NSError
+        }
+        return false
     }
 
     private func loadSubtitle(_ p: Playing) {

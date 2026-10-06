@@ -91,3 +91,6 @@ public struct PlaybackPlan: Equatable, Sendable {
 public let WATCHED_AT = 0.9
 /// How often where playback is gets told to the server.
 public let REPORT_EVERY_SECONDS = 10.0
+/// After the connection drops: fresh tries, the wait growing by this many seconds each time, then Try again.
+public let RECONNECT_TRIES = 3
+public let RECONNECT_WAIT_SECONDS = 3

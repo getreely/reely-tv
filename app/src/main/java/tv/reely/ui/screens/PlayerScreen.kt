@@ -242,6 +242,8 @@ fun PlayerScreen(
     onOpenSavedMultiview: () -> Unit = {},
     onStepEpisode: (Int) -> Unit,
     onDecodeFailure: (Long) -> Unit,
+    /** The connection to the Plex server dropped: ask for the title again, afresh, from here. */
+    onReopen: (Long) -> Unit = {},
     /** The file's sound cannot be played here; ask the server to convert just that. */
     onConvertAudio: (Long) -> Unit,
     onToggleFormat: () -> Unit,
@@ -350,10 +352,25 @@ fun PlayerScreen(
     // Starting again after the sound lost its output; see onPlayerError.
     var soundRetries by remember { mutableIntStateOf(0) }
     var reconnectAt by remember { mutableLongStateOf(0L) }
+    // The next try is for a dropped connection rather than lost sound; see reconnect.
+    var reconnectFresh by remember { mutableStateOf(false) }
+    // Which of the playback's fresh starts has been loaded; see LaunchedEffect(playback.url).
+    var reopenedSeen by remember { mutableIntStateOf(playback.reopened) }
+    /*
+     * A Plex title whose connection dropped is asked for again as a new stream: the old
+     * address can belong to a session the server has already ended, and then every try at
+     * it fails the same way. Anything else — lost sound, an IPTV film — starts the same
+     * stream again.
+     */
     fun reconnect() {
-        error = null
-        exoPlayer.prepare()
-        exoPlayer.playWhenReady = true
+        if (reconnectFresh && playback.onPlex) {
+            error = "Reconnecting…"
+            onReopen(exoPlayer.currentPosition.coerceAtLeast(0))
+        } else {
+            error = null
+            exoPlayer.prepare()
+            exoPlayer.playWhenReady = true
+        }
     }
     /*
      * Why there is no sound, when nothing can be done about it. Separate from `error`
@@ -719,6 +736,7 @@ fun PlayerScreen(
                     if (soundRetries < SOUND_RETRIES) {
                         soundRetries++
                         error = "Headphones or speaker disconnected. Carrying on with the TV…"
+                        reconnectFresh = false
                         if (!currentPlayback.isLive) reconnectAt = System.currentTimeMillis() + SOUND_RETRY_MS
                     } else {
                         error = "The sound has nowhere to play. Check the TV or your headphones, and press OK to try again."
@@ -736,11 +754,15 @@ fun PlayerScreen(
                 } else if (connection && !currentPlayback.isLive && reconnects < RECONNECT_TRIES) {
                     // Live channels have their own; see LivePlayer.
                     reconnects++
+                    reconnectFresh = true
                     error = "Reconnecting…"
                     reconnectAt = System.currentTimeMillis() + RECONNECT_WAIT_MS * reconnects
                 } else {
-                    error = if (connection && currentPlayback.fromIptv) "Lost the connection to your IPTV provider. Press OK to try again."
-                        else if (connection && !currentPlayback.isLive) "Lost the connection to your Plex server. Press OK to try again."
+                    reconnectFresh = connection
+                    // The player's own number for what went wrong, for anyone helping find out why.
+                    val code = " (Error ${playbackError.errorCode})"
+                    error = if (connection && currentPlayback.fromIptv) "Lost the connection to your IPTV provider. Press OK to try again.$code"
+                        else if (connection && !currentPlayback.isLive) "Lost the connection to your Plex server. Press OK to try again.$code"
                         else describe(playbackError)
                 }
             }
@@ -777,8 +799,11 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(playback.url) {
-        reconnects = 0
+    LaunchedEffect(playback.url, playback.reopened) {
+        // Asked for afresh after a drop, the tries carry on counting; otherwise a server
+        // that never came back would be asked forever. Anything new starts from none.
+        if (playback.reopened <= reopenedSeen) reconnects = 0
+        reopenedSeen = playback.reopened
         audioDecoder = null
         error = null
         audioNotice = null

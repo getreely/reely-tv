@@ -19,6 +19,8 @@ public struct Playing: Equatable, Sendable {
     public var mediaIndex: Int
     /// Text subtitles the app draws itself, with the size and background from Settings.
     public var textSubtitle: PlexSubtitle?
+    /// How many times it's been asked for afresh after the connection dropped; see reopen.
+    public var attempt = 0
 }
 
 func randomHex(_ count: Int) -> String {
@@ -90,6 +92,41 @@ extension ReelyStore {
         p.startMs = positionMs
         playing = p
         return true
+    }
+
+    /**
+     * The connection dropped part-way. The same address again is no use when Plex has
+     * ended the session behind it — every try fails the same way, while Plex's own app
+     * carries on — so the title is asked for again as a new session, through the server's
+     * current address (looked for again if it doesn't answer), the same way it was
+     * playing, from [positionMs]. The provider's files are simply loaded again.
+     */
+    public func reopen(positionMs: Int) async {
+        guard let p = playing else { return }
+        var next = p
+        next.startMs = positionMs
+        next.attempt += 1
+        if !p.item.isIptv {
+            var base = p.base, token = p.token
+            var found = try? await api.playback(base, token, ratingKey: p.item.ratingKey, mediaIndex: p.mediaIndex)
+            if found == nil, await relocateServers(), let b = plex.baseFor(p.item.serverBase), let t = plex.tokenFor(p.item.serverBase) {
+                base = b
+                token = t
+                found = try? await api.playback(b, t, ratingKey: p.item.ratingKey, mediaIndex: p.mediaIndex)
+            }
+            if !p.direct { await api.stopTranscode(p.base, p.token, sessionId: p.sessionId) }
+            // Something else started meanwhile.
+            guard playing?.sessionId == p.sessionId else { return }
+            let sessionId = randomHex(12)
+            next.base = base
+            next.token = token
+            next.sessionId = sessionId
+            next.url = p.direct ? found?.url ?? p.url
+                : converted(base, token, ratingKey: p.item.ratingKey, sessionId: sessionId, mediaIndex: p.mediaIndex,
+                            subtitles: p.textSubtitle != nil ? "none" : "burn", videoCodec: p.playback.videoCodec)
+        }
+        guard playing?.sessionId == p.sessionId else { return }
+        playing = next
     }
 
     /**

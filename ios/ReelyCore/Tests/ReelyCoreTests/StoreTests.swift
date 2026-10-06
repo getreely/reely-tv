@@ -82,6 +82,27 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(store.imageUrl(item.serverBase, "/thumb/m1", width: 10, height: 10)?.absoluteString.hasPrefix(moved), true)
     }
 
+    func testADroppedStreamIsAskedForAfreshFromWhereItWas() async {
+        let fake = FakePlex()
+        fakeServer(fake, at: home)
+        fake.json(home, "/library/metadata/m1", #"{"MediaContainer": {"Metadata": [{"ratingKey": "m1", "Media": [{"container": "mkv", "videoCodec": "hevc", "audioCodec": "dca", "Part": [{"id": 41, "key": "/library/parts/41/file.mkv"}]}]}]}}"#)
+        let store = makeStore(fake, secrets: MemoryStore(["plexToken": "account-token"]))
+        await store.start()
+        store.prefs.playbackMode = .transcode
+        await store.play(store.home.recentMovies[0], resume: false)
+        guard let before = store.playing else { return XCTFail("nothing playing") }
+        XCTAssertFalse(before.direct)
+        await store.reopen(positionMs: 42_000)
+        guard let after = store.playing else { return XCTFail("nothing playing") }
+        // A new session from where it got to, converted as before; the old one handed back.
+        XCTAssertNotEqual(after.sessionId, before.sessionId)
+        XCTAssertTrue(after.url.contains(after.sessionId))
+        XCTAssertFalse(after.direct)
+        XCTAssertEqual(after.startMs, 42_000)
+        XCTAssertEqual(after.attempt, 1)
+        XCTAssertTrue(fake.asked.contains("/video/:/transcode/universal/stop"))
+    }
+
     func testNoServerAnswersSaysSo() async {
         let fake = FakePlex()
         fakeServer(fake, at: home)

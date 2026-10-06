@@ -59,6 +59,9 @@ struct PlayerView: View {
             if let error = model.failed ?? store.playError {
                 VStack(spacing: dp(14)) {
                     Text(error).font(Typeface.body).foregroundStyle(Color.chalk)
+                    if model.stuckAt != nil {
+                        PrimaryButton(title: "Try again") { model.tryAgain() }.frame(maxWidth: dp(240))
+                    }
                     PrimaryButton(title: "Back") { close() }.frame(maxWidth: dp(240))
                 }
             }

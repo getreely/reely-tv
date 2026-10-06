@@ -583,6 +583,12 @@ data class Playback(
     val partId: Long? = null,
     val audioStreams: List<tv.reely.core.PlexStream> = emptyList(),
     val subtitleStreams: List<tv.reely.core.PlexStream> = emptyList(),
+    /**
+     * How many times the stream has been asked for afresh after the connection dropped
+     * (see ReelyViewModel.reopenPlayback). Counted so the player loads it again even when
+     * the address comes back the same, as a file played directly does.
+     */
+    val reopened: Int = 0,
 ) {
     /** From the IPTV provider's films and series: nothing to report to Plex, nothing it can convert. */
     val fromIptv: Boolean get() = serverBase == tv.reely.xtream.IPTV_SOURCE
@@ -3364,6 +3370,71 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                     transcodeSession = session,
                 )
             )
+        }
+    }
+
+    /**
+     * The stream stopped answering part-way. Picking the same address up again is no use
+     * when the server has ended the session behind it, or moved — the next piece just
+     * fails the same way, which is why Plex's own app carried on when this one said the
+     * connection was lost. So the title is asked for again as a new session, through the
+     * server's current address (looked for again if it doesn't answer), from where it got
+     * to, the same way it was playing: direct, converted, or with just its sound converted.
+     */
+    fun reopenPlayback(positionMs: Long) {
+        val playback = _state.value.playback ?: return
+        if (!playback.onPlex) return
+        val ratingKey = playback.ratingKey ?: return
+        val on = playback.serverBase
+        viewModelScope.launch {
+            var base = _state.value.plex.baseFor(on) ?: return@launch
+            var token = _state.value.plex.tokenFor(on) ?: return@launch
+            val resolved = runCatching { PlexApi.playback(base, token, ratingKey, playback.mediaIndex) }
+                .recoverCatching { failure ->
+                    if (!relocateServers()) throw failure
+                    val now = _state.value.plex
+                    base = now.baseFor(on) ?: throw failure
+                    token = now.tokenFor(on) ?: throw failure
+                    PlexApi.playback(base, token, ratingKey, playback.mediaIndex)
+                }
+                .getOrNull()
+            // Something else started while the server was asked.
+            if (_state.value.playback?.url != playback.url) return@launch
+            releaseTranscode()
+            val session = UUID.randomUUID().toString()
+            _state.update {
+                val current = it.playback ?: return@update it
+                it.copy(
+                    playback = current.copy(
+                        url = when {
+                            current.audioConverted -> PlexApi.audioConvertUrl(
+                                base = base,
+                                token = token,
+                                clientId = clientId,
+                                ratingKey = ratingKey,
+                                sessionId = session,
+                                mediaIndex = current.mediaIndex,
+                            )
+                            current.transcoding -> PlexApi.transcodeUrl(
+                                base = base,
+                                token = token,
+                                clientId = clientId,
+                                ratingKey = ratingKey,
+                                sessionId = session,
+                                maxBitrateKbps = it.prefs.maxBitrateKbps,
+                                resolution = RESOLUTION,
+                                mediaIndex = current.mediaIndex,
+                                subtitles = startsWithServerSubtitles(current.subtitleStreams, it.prefs.subtitlesAtStart),
+                            )
+                            else -> resolved?.url ?: current.url
+                        },
+                        subtitles = if (current.transcoding) current.subtitles else resolved?.subtitles ?: current.subtitles,
+                        startPositionMs = positionMs,
+                        transcodeSession = if (current.transcoding) session else null,
+                        reopened = current.reopened + 1,
+                    ),
+                )
+            }
         }
     }
 

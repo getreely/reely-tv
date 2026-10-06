@@ -63,5 +63,6 @@
     </Group>
     <Timer id="ticker" duration="0.5" repeat="true" />
     <Timer id="sleepTimer" repeat="false" />
+    <Timer id="retryTimer" repeat="false" />
   </children>
 </component>

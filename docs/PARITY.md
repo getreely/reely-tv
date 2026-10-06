@@ -38,6 +38,7 @@ app (Amazon's Vega SDK, React Native), which can reuse the LG app's TypeScript c
 | Skip intro and credits; Up Next; next season | ✅ | ✅ | ✅ | ✅ (Skip Intro in the simulator; Up Next and skipping in unit tests) | 🟡 (built; not yet tried on a device) |
 | Chapters, preview pictures while scrubbing | ✅ | ✅ | ✅ | 🟡 (chapters tested; preview pictures are Roku's own, from Plex's index) | 🟡 (chapters built; no preview pictures yet) |
 | Sleep timer | ✅ | ✅ | ✅ | 🟡 (offered in the player; built) | 🟡 (built; not yet tried on a device) |
+| A dropped connection picks up again: a fresh stream from where it was, three tries, then OK / Try again | ✅ | ✅ | 🟡 (built; not yet tried on a TV) | 🟡 (built; not yet tried on a device) | 🟡 (built; unit-tested) |
 | Choose where sound plays (Bluetooth headphones) | ✅ | ✅ | — | — | 🟡 (AirPlay picker in Settings on iPhone and iPad; Apple TV's own) |
 | Touch: tap, double-tap skip, drag the bar | — | ✅ | — | — | 🟡 (tap, double-tap skip and drag the bar; built) |
 | **Live TV** | | | | | |

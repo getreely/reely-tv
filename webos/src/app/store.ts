@@ -124,6 +124,8 @@ export interface Playing {
   mediaIndex: number;
   /** Text subtitles the app draws itself, with the size and background from Settings. */
   textSubtitle: plex.PlexSubtitle | null;
+  /** How many times it's been asked for afresh after the connection dropped; see reopen. */
+  attempt?: number;
 }
 
 /** As the Fire TV offers them; 0.9 is its standard. */
@@ -1338,6 +1340,31 @@ export class App {
     const url = this.converted(p.base, p.token, p.item.ratingKey, p.sessionId, p.mediaIndex, p.textSubtitle ? "none" : "burn", p.playback.videoCodec);
     this.set((s) => ({ ...s, playing: { ...p, url, direct: false, startMs: positionMs } }));
     return true;
+  }
+
+  /**
+   * The connection dropped part-way. The same address again is no use when Plex has
+   * already ended the session behind it — every try fails the same way, while Plex's own
+   * app carries on — so the title is asked for again as a new session, the same way it
+   * was playing, from [positionMs]. The provider's files are simply loaded again.
+   */
+  async reopen(positionMs: number) {
+    const p = this.current.playing;
+    if (!p) return;
+    const attempt = (p.attempt ?? 0) + 1;
+    if (p.base === IPTV_SOURCE) {
+      this.set((s) => ({ ...s, playing: { ...p, startMs: positionMs, attempt } }));
+      return;
+    }
+    const found = await plex.playback(p.base, p.token, p.item.ratingKey, p.mediaIndex).catch(() => null);
+    // Something else started meanwhile.
+    if (this.current.playing?.sessionId !== p.sessionId) return;
+    if (!p.direct) void plex.stopTranscode(p.base, p.token, p.sessionId);
+    const sessionId = randomHex(12);
+    const url = p.direct
+      ? found?.url ?? p.url
+      : this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, p.textSubtitle ? "none" : "burn", p.playback.videoCodec);
+    this.set((s) => ({ ...s, playing: { ...p, url, startMs: positionMs, sessionId, attempt } }));
   }
 
   /** Plex's conversion, at the quality chosen in Settings. */

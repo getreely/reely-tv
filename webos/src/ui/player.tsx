@@ -7,6 +7,7 @@ import { ask } from "../core/http";
 import { cueAt, parseSubtitles, type Cue } from "../core/subtitles";
 import type { PlexOnlineSubtitle } from "../api/plex";
 import { Spinner } from "./parts";
+import { IPTV_SOURCE } from "../api/vod";
 
 const clock = (ms: number) => {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -21,6 +22,9 @@ const episodeLine = (i: PlexItem) =>
 /** Minutes the sleep timer offers, as the Fire TV's does; -1 is the end of this episode. */
 export const SLEEP_CHOICES = [0, 15, 30, 45, 60, 90, -1];
 const END_OF_EPISODE = -1;
+// After the connection drops: fresh tries, the wait growing by this each time, then OK.
+const RECONNECT_TRIES = 3;
+const RECONNECT_WAIT_MS = 3_000;
 
 type Sleep = { atMs: number | null; endOfEpisode: boolean } | null;
 
@@ -55,6 +59,13 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
   const introSkipped = useRef<string | null>(null);
   const creditsOffered = useRef<string | null>(null);
   const leaving = useRef(false);
+  /*
+   * The connection dropped: tries at a fresh stream so far, the next one waiting, and
+   * whether it's given up and waits for OK. Plex's own app picks up again the same way.
+   */
+  const drops = useRef(0);
+  const dropTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stuckAt = useRef<number | null>(null);
   // Skipping: held (pressed again and again), it goes further each time; a picture of where it lands.
   const skips = useRef({ at: 0, count: 0 });
   const [preview, setPreview] = useState<{ ms: number; until: number } | null>(null);
@@ -107,8 +118,13 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
   const shownKey = useRef(key);
   useEffect(() => {
     leaving.current = false;
-    if (shownKey.current !== key) setUpNext(null);
+    if (shownKey.current !== key) {
+      setUpNext(null);
+      drops.current = 0;
+    }
     shownKey.current = key;
+    setError(null);
+    stuckAt.current = null;
     const v = video.current;
     if (!v) return;
     v.src = playing.url;
@@ -119,7 +135,8 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
     v.addEventListener("loadedmetadata", start, { once: true });
     v.load();
     return () => v.removeEventListener("loadedmetadata", start);
-  }, [playing.url]);
+  }, [playing.url, playing.attempt]);
+  useEffect(() => () => { if (dropTimer.current) clearTimeout(dropTimer.current); }, []);
 
   useEffect(() => {
     const v = video.current!;
@@ -129,7 +146,24 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
     const play = () => setPaused(false);
     const wait = () => setWaiting(true);
     const ready = () => setWaiting(false);
+    // Playing again: the next drop gets its full set of tries.
+    const going = () => { drops.current = 0; };
     const fail = () => {
+      if (v.error?.code === MediaError.MEDIA_ERR_NETWORK) {
+        const at = now();
+        if (drops.current < RECONNECT_TRIES) {
+          drops.current++;
+          setError("Reconnecting…");
+          if (dropTimer.current) clearTimeout(dropTimer.current);
+          dropTimer.current = setTimeout(() => void app.reopen(at), RECONNECT_WAIT_MS * drops.current);
+        } else {
+          stuckAt.current = at;
+          setError(playing.base === IPTV_SOURCE
+            ? "Lost the connection to your IPTV provider. Press OK to try again."
+            : "Lost the connection to your Plex server. Press OK to try again.");
+        }
+        return;
+      }
       // The TV said it could and then couldn't: Plex converts it.
       if (app.convert(now())) return;
       setError("This didn't play. Check the connection to your Plex server and try again.");
@@ -141,7 +175,7 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
       else stop();
     };
     const on: Array<[string, () => void]> = [["timeupdate", time], ["durationchange", meta], ["pause", pause], ["play", play],
-      ["waiting", wait], ["playing", ready], ["canplay", ready], ["error", fail], ["ended", ended]];
+      ["waiting", wait], ["playing", ready], ["canplay", ready], ["playing", going], ["error", fail], ["ended", ended]];
     on.forEach(([e, f]) => v.addEventListener(e, f));
     const report = setInterval(() => { if (!v.paused && !leaving.current) void app.report(now(), total(), "playing"); }, REPORT_EVERY_MS);
     const hide = setInterval(() => {
@@ -239,6 +273,15 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
           return !(a === "left" || a === "right" || a === "ok");
         }
         if (a === "stop") { stop(); return true; }
+        // Given up after the connection dropped: OK tries again from there.
+        if (stuckAt.current !== null && (a === "ok" || a === "play" || a === "playPause")) {
+          const at = stuckAt.current;
+          stuckAt.current = null;
+          drops.current = 0;
+          setError("Reconnecting…");
+          void app.reopen(at);
+          return true;
+        }
         // In the controls: along the row, up to the bar, OK presses; Back puts them away.
         if (cursor !== null) {
           if (a === "back") { setCursor(null); setControls(false); return true; }

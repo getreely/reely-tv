@@ -31,6 +31,11 @@ sub init()
     m.video.observeField("position", "onPosition")
     m.ticker.observeField("fire", "onTick")
     m.sleepTimer.observeField("fire", "onSleep")
+    m.retryTimer = m.top.findNode("retryTimer")
+    m.retryTimer.observeField("fire", "onRetry")
+    m.drops = 0
+    m.stuckAt = -1
+    m.lastMs = 0
     m.sleepEnd = false
     m.sleepUntil = 0
     m.ctlAt = -1
@@ -53,6 +58,10 @@ sub start()
     m.startMs = 0
     if r.resume = true and m.item.viewOffsetMs > 0 and not (m.item.durationMs > 0 and m.item.viewOffsetMs >= m.item.durationMs * 0.95) then m.startMs = m.item.viewOffsetMs
     m.leaving = false
+    m.drops = 0
+    m.stuckAt = -1
+    m.lastMs = 0
+    m.retryTimer.control = "stop"
     m.introDone = false
     m.creditsOffered = false
     m.upNextAt = 0
@@ -189,11 +198,33 @@ sub onState()
     Trace_("video " + s)
     if s = "playing" then
         m.wait.text = ""
+        ' Playing again: the next drop gets its full set of tries.
+        m.drops = 0
     else if s = "paused" then
         report("paused")
     else if s = "finished" then
         ended()
     else if s = "error" then
+        code = m.video.errorCode
+        Trace_("video error " + Str(code).Trim() + " " + Str_(m.video.errorMsg))
+        ' The connection dropped (unreachable, an HTTP failure, timed out): started again
+        ' as a fresh stream from where it got to, a few times with a growing wait, then
+        ' OK. The same address again is no use when Plex has ended the session behind it.
+        if m.p <> invalid and (code = 0 or code = -1 or code = -2) then
+            at = Int(m.video.position * 1000)
+            if at <= 0 then at = m.lastMs
+            if m.drops < 3 then
+                m.drops = m.drops + 1
+                m.retryAt = at
+                m.wait.text = "Reconnecting…"
+                m.retryTimer.duration = 3 * m.drops
+                m.retryTimer.control = "start"
+            else
+                m.stuckAt = at
+                m.wait.text = Iif_(Bool_(m.p.iptv), "Lost the connection to your IPTV provider. Press OK to try again.", "Lost the connection to your Plex server. Press OK to try again.")
+            end if
+            return
+        end if
         ' The file wouldn't play as it is: Plex converts it, from where it got to.
         if m.p <> invalid and Bool_(m.p.iptv) then
             m.wait.text = "Your provider couldn't play this. Try again in a moment."
@@ -208,8 +239,15 @@ sub onState()
     end if
 end sub
 
+' The wait after a dropped connection is over: a fresh stream, from where it was.
+sub onRetry()
+    if m.leaving or m.p = invalid then return
+    begin(m.retryAt)
+end sub
+
 sub onPosition()
     now = m.video.position
+    if now > 0 then m.lastMs = Int(now * 1000)
     if Abs(now - m.lastReport) >= 10 then
         m.lastReport = now
         report("playing")
@@ -289,6 +327,7 @@ sub finish(finished as boolean)
     report("stopped")
     m.ticker.control = "stop"
     m.sleepTimer.control = "stop"
+    m.retryTimer.control = "stop"
     m.video.control = "stop"
     m.forceConvert = false
     m.top.done = { item: m.item, finished: finished }
@@ -834,6 +873,15 @@ end sub
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press then return false
     if m.chooser <> invalid then return true
+    ' Given up after the connection dropped: OK, or Play, tries again from there.
+    if m.stuckAt >= 0 and (key = "OK" or key = "play") and m.p <> invalid then
+        at = m.stuckAt
+        m.stuckAt = -1
+        m.drops = 0
+        m.wait.text = "Reconnecting…"
+        begin(at)
+        return true
+    end if
     if m.post.visible then
         ' Any press but OK on Play next stops the countdown: somebody reaching for the
         ' remote is making up their mind.
