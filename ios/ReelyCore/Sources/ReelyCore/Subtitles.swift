@@ -39,7 +39,7 @@ private func cleanCue(_ text: String) -> String {
 }
 
 public func parseSubtitles(_ text: String, codec: String?) -> [Cue] {
-    var body = text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+    var body = normalizedLines(text).joined(separator: "\n")
     if body.hasPrefix("\u{FEFF}") { body.removeFirst() }
     let c = (codec ?? "").lowercased()
     let ass = c == "ass" || c == "ssa" || body.range(of: "^\\[Script Info\\]", options: [.regularExpression, .anchored]) != nil || body.contains("\n[Script Info]")
@@ -107,4 +107,9 @@ public func subtitlePlan(_ playback: PlexPlayback) -> (text: PlexSubtitle?, burn
     guard let on = playback.subtitleStreams.first(where: \.selected) else { return (nil, false) }
     let text = playback.subtitles.first { $0.id == on.id && isTextCodec($0.codec) }
     return (text, text == nil)
+}
+
+/// Lines, however they end: "\r\n" is one character to Swift, so it's looked for as such.
+public func normalizedLines(_ text: String) -> [String] {
+    text.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "\n" || $0 == "\r\n" || $0 == "\r" }).map(String.init)
 }

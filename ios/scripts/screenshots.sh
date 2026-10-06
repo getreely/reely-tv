@@ -25,7 +25,7 @@ shoot() {
   xcrun simctl boot "$udid" 2>/dev/null || true
   xcrun simctl bootstatus "$udid" -b
   xcrun simctl install "$udid" "$app"
-  for scene in signin code home movie show library settings; do
+  for scene in signin code home movie show library settings search profiles; do
     xcrun simctl terminate "$udid" "$bundle" 2>/dev/null || true
     xcrun simctl launch "$udid" "$bundle" -demo "$scene"
     sleep 8

@@ -201,8 +201,10 @@ struct SettingsSection: View {
     @ViewBuilder private var plexSection: some View {
         let plex = store.plex
         if let user = plex.user {
-            Group_(title: "Profile") {
-                Row_(title: user.title, note: plex.homeUsers.count > 1 ? "Plex Home member" : "Signed in to Plex", value: nil, action: nil)
+            Group_(title: "Profile", note: plex.homeUsers.count > 1 ? "Each profile in your Plex Home has its own libraries, watch history and Continue Watching." : nil) {
+                Row_(title: user.title, note: plex.homeUsers.count > 1 ? "Plex Home member" : "Signed in to Plex",
+                     value: plex.homeUsers.count > 1 ? "Switch" : nil,
+                     action: plex.homeUsers.count > 1 ? { NotificationCenter.default.post(name: .chooseProfile, object: nil) } : nil)
             }
         }
         Group_(title: "Server") {

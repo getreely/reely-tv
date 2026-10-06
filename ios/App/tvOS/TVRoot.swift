@@ -43,6 +43,11 @@ private struct TopBar: View {
                 }
             }
             Spacer()
+            if store.plex.isConnected && store.plex.homeUsers.count > 1 {
+                TabButton(label: store.plex.user?.title ?? "Profiles", systemImage: nil, on: false) {
+                    NotificationCenter.default.post(name: .chooseProfile, object: nil)
+                }
+            }
             if store.plex.isConnected {
                 TabButton(label: nil, systemImage: "gearshape", on: store.tab == .settings) { store.navigate(.settings) }
                     .focused($focused, equals: .settings)

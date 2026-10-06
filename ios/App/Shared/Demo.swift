@@ -26,7 +26,7 @@ final class DemoTransport: HttpTransport, @unchecked Sendable {
         case "/api/v2/pins": return #"{"id": 1, "code": "R3LY"}"#
         case "/api/v2/pins/1": return #"{"authToken": null}"#
         case "/api/v2/user": return #"{"uuid": "u1", "title": "Ann"}"#
-        case "/api/v2/home/users": return #"{"users": [{"uuid": "u1", "title": "Ann", "admin": true}]}"#
+        case "/api/v2/home/users": return #"{"users": [{"uuid": "u1", "title": "Ann", "admin": true}, {"uuid": "u2", "title": "Kid", "restricted": true, "protected": true}]}"#
         case "/api/v2/resources":
             return """
             [{"name": "Living Room", "provides": "server", "owned": true, "accessToken": "demo",
@@ -70,6 +70,8 @@ final class DemoTransport: HttpTransport, @unchecked Sendable {
             })
         case "/library/metadata/m1/related", "/library/metadata/show-northbound/related":
             return #"{"MediaContainer": {"Hub": [{"Metadata": [\#(["Paper Moons", "Quiet Hours", "Red Coast", "Afterglow"].enumerated().map { i, t in movie("r\(i)", t, year: 2020 + i, offset: 0, viewed: 0) }.joined(separator: ","))]}]}}"#
+        case "/hubs/search":
+            return #"{"MediaContainer": {"Hub": [{"type": "movie", "Metadata": [\#(movie("m1", "Low Orbit", year: 2025, offset: 0, viewed: 0))]}, {"type": "actor", "Directory": [{"id": "1", "tag": "Ada Moreno"}]}]}}"#
         case "/library/sections/1/genre":
             return #"{"MediaContainer": {"Directory": [{"key": "1", "title": "Drama"}, {"key": "2", "title": "Science Fiction"}, {"key": "3", "title": "Thriller"}]}}"#
         case "/library/sections/1/decade":

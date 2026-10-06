@@ -46,6 +46,8 @@ struct ReelyApp: App {
                     if args.contains("movie") { store.navigate(.detail(ratingKey: "m1", serverBase: nil)) }
                     if args.contains("show") { store.navigate(.detail(ratingKey: "show-northbound", serverBase: nil)) }
                     if args.contains("settings") { store.navigate(.settings) }
+                    if args.contains("search") { store.navigate(.search); await store.setQuery("orbit") }
+                    if args.contains("profiles") { NotificationCenter.default.post(name: .chooseProfile, object: nil) }
                     if args.contains("library") { store.navigate(.library(kind: "movie")); store.setLibraryView("movie", .grid) }
                 }
         }
@@ -55,15 +57,19 @@ struct ReelyApp: App {
 /// Every screen, by where the app is; the frame around them is the device's own.
 struct RootView: View {
     @Environment(ReelyStore.self) private var store
+    @State private var choosingProfile = false
 
     var body: some View {
         ZStack {
             Color.ink.ignoresSafeArea()
+                .onReceive(NotificationCenter.default.publisher(for: .chooseProfile)) { _ in choosingProfile = true }
             #if os(tvOS)
             TVRoot()
             #else
             PhoneRoot()
             #endif
+            // Signed in to a Plex Home of several: who's watching, once.
+            if store.askWho || choosingProfile { ProfilesView { store.askedWho(); choosingProfile = false }.zIndex(2) }
             // What's playing covers everything, as on the Fire TV.
             if store.playing != nil { PlayerView().transition(.opacity).zIndex(1) }
         }
@@ -84,6 +90,8 @@ struct RouteContent: View {
             case .library(let kind): LibraryView(kind: kind).id(kind)
             case .detail(let key, let base): DetailView(ratingKey: key, serverBase: base).id(key)
             case .settings: SettingsView()
+            case .search: SearchView()
+            case .person, .collection, .playlist: ListPageView(route: route).id(route)
             default: NotYet(route: route)
             }
         }
@@ -103,4 +111,9 @@ struct NotYet: View {
         .padding(.top, topInset)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+}
+
+extension Notification.Name {
+    /// Settings' profile row, or the top bar's: the picker over everything.
+    static let chooseProfile = Notification.Name("reely.chooseProfile")
 }

@@ -73,6 +73,14 @@ public final class ReelyStore {
     public var prefs: Prefs { didSet { if prefs != oldValue { store.setJson("prefs", prefs) } } }
     public internal(set) var browse: [String: Browse] = ["movie": Browse(), "show": Browse()]
     public internal(set) var detail: DetailPage?
+    public internal(set) var search = SearchState()
+    /// Just signed in to a Plex Home of several people.
+    public internal(set) var askWho = false
+    public internal(set) var list: ListPage?
+    /// The account's Watchlist, by Plex's own ids.
+    public internal(set) var watchlist: Set<String> = []
+    var watchlistEdits = 0
+    var searchRun = 0
     /// What's playing; nil when nothing is.
     public internal(set) var playing: Playing?
     public internal(set) var playError: String?
@@ -94,6 +102,7 @@ public final class ReelyStore {
         plex.token = secrets.string("plexToken")
         plex.accountToken = secrets.string("plexAccountToken") ?? plex.token
         plex.user = store.json("plexUser", as: PlexHomeUser.self)
+        search.recent = store.json("recentSearches", as: [String].self) ?? []
     }
 
     /// A client id kept for good: plex.tv knows each device by it.
@@ -106,7 +115,9 @@ public final class ReelyStore {
 
     /// At start: signed in already, the servers are looked for.
     public func start() async {
-        if let token = plex.token { await connect(token) }
+        guard let token = plex.token else { return }
+        Task { await loadProfiles() }
+        await connect(token)
     }
 
     // MARK: Getting about
@@ -180,7 +191,38 @@ public final class ReelyStore {
         plex.user = await api.account(token: token)
         store.setJson("plexUser", plex.user)
         plex.homeUsers = await api.homeUsers(token: token)
+        // Signed in to a Plex Home of several people: "Who's watching?" comes up once.
+        askWho = plex.homeUsers.count > 1
         await connect(token)
+    }
+
+    /// The Home's people, asked for again: for the profile picker.
+    public func loadProfiles() async {
+        guard let account = plex.accountToken ?? plex.token else { return }
+        plex.homeUsers = await api.homeUsers(token: account)
+    }
+
+    public func askedWho() { askWho = false }
+
+    /// Becomes another member of the Home, with their PIN when they have one; nil when done, else why not.
+    public func switchUser(_ user: PlexHomeUser, pin: String?) async -> String? {
+        guard let account = plex.accountToken ?? plex.token else { return "Sign in to Plex first." }
+        do {
+            let token = try await api.switchHomeUser(token: account, uuid: user.uuid, pin: pin)
+            secrets.set("plexToken", token)
+            store.setJson("plexUser", user)
+            store.set("server", nil)
+            let users = plex.homeUsers
+            plex = PlexState(token: token, accountToken: account, user: user, homeUsers: users)
+            home = HomeRows()
+            browse = ["movie": Browse(), "show": Browse()]
+            detail = nil
+            navigate(.home)
+            await connect(token)
+            return nil
+        } catch {
+            return (error as? HttpError)?.message ?? "Couldn't switch profiles. Try again."
+        }
     }
 
     public func signOut() {
@@ -352,8 +394,11 @@ public final class ReelyStore {
             homeError = "Couldn't reach your Plex server. Trying again…"
             return
         }
+        let watch = home.watchlist
         home = rows
+        home.watchlist = watch
         homeBusy = false
+        Task { await refreshWatchlist() }
     }
 
     public func isHidden(_ row: HomeRow) -> Bool { prefs.hiddenHomeRows.contains(row.rawValue) }

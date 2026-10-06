@@ -1,5 +1,8 @@
 import SwiftUI
 import AVFoundation
+#if os(tvOS)
+import AVKit
+#endif
 import ReelyCore
 
 /**

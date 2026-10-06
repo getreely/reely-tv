@@ -28,6 +28,7 @@ struct HomeView: View {
                             WideCard(title: item.rowTitle, subtitle: item.episodeLine,
                                      url: store.imageUrl(item.serverBase, item.art ?? item.thumb, width: 480, height: 270),
                                      progress: item.resumeFraction) { open(item) }
+                                .itemMenu(item, inContinueWatching: true)
                                 .focused($focused, equals: "continue|" + item.id)
                         }
                     }
@@ -39,6 +40,7 @@ struct HomeView: View {
                                        subtitle: group.count > 1 ? "\(group.count) new episodes" : group.newest.caption,
                                        url: store.imageUrl(group.serverBase, group.thumb, width: 300, height: 450),
                                        badge: group.count) { open(group.newest) }
+                                .itemMenu(group.newest)
                                 .focused($focused, equals: "episodes|" + group.newest.id)
                         }
                     }
@@ -50,6 +52,7 @@ struct HomeView: View {
                                 PosterCard(title: item.title, subtitle: item.caption,
                                            url: store.imageUrl(item.serverBase, item.thumb, width: 300, height: 450),
                                            progress: item.resumeFraction, watched: item.isWatched) { open(item) }
+                                    .itemMenu(item)
                                     .focused($focused, equals: row.rawValue + "|" + item.id)
                             }
                         }

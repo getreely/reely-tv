@@ -101,6 +101,7 @@ struct LibraryView: View {
         PosterCard(title: i.rowTitle, subtitle: i.type == "episode" ? i.episodeLine : i.caption,
                    url: store.imageUrl(i.serverBase, i.type == "episode" ? (i.grandparentThumb ?? i.thumb) : i.thumb, width: 300, height: 450),
                    progress: i.resumeFraction, watched: i.isWatched) { open(i) }
+            .itemMenu(i)
     }
 
     @ViewBuilder
@@ -146,6 +147,7 @@ struct LibraryView: View {
             ForEach(browse.items) { i in
                 PosterCard(title: i.title, subtitle: i.caption, url: store.imageUrl(i.serverBase, i.thumb, width: 300, height: 450),
                            progress: i.resumeFraction, watched: i.isWatched) { open(i) }
+                    .itemMenu(i)
                     .id(i.id)
                     .onAppear {
                         // The next page in before it's reached.

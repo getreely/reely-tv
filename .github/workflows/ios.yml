@@ -30,16 +30,28 @@ jobs:
       - name: iPhone and iPad
         working-directory: ios
         run: |
+          set -o pipefail
           xcodebuild -quiet -project Reely.xcodeproj -scheme Reely -configuration Debug \
             -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO build
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build-ios.log
 
       - name: Apple TV
         working-directory: ios
         run: |
+          set -o pipefail
           xcodebuild -quiet -project Reely.xcodeproj -scheme ReelyTV -configuration Debug \
             -destination 'generic/platform=tvOS Simulator' -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO build
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build-tv.log
+
+      - name: Compiler errors as notes
+        if: failure()
+        working-directory: ios
+        run: |
+          # The compiler's own words, as notes readable through GitHub's API.
+          grep -h ": error: " build-*.log 2>/dev/null | sort -u | head -10 | while IFS= read -r line; do
+            file=$(echo "$line" | cut -d: -f1 | sed "s#^$PWD/#ios/#"); num=$(echo "$line" | cut -d: -f2)
+            echo "::error file=$file,line=$num::$(echo "$line" | cut -d: -f4- | cut -c1-900)"
+          done
 
       - name: Screenshots
         working-directory: ios

@@ -139,6 +139,10 @@ struct DetailView: View {
             if d.versions.count > 1 && episode == nil && !d.isShow {
                 ActionButton(title: "Quality", systemImage: "sparkles.tv") { choosingVersion = true }
             }
+            if let guid = d.guid, episode == nil {
+                let listed = store.watchlist.contains(guid)
+                ActionButton(title: "Watchlist", systemImage: listed ? "bookmark.fill" : "bookmark") { Task { await store.toggleWatchlist() } }
+            }
             if !page.trailers.isEmpty && episode == nil {
                 ActionButton(title: "Trailer", systemImage: "film") { Task { await store.playTrailer() } }
             }
