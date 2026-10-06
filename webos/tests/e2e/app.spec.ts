@@ -776,6 +776,9 @@ test("Live TV: sign in to a provider, pick a category, watch, change channel, fa
   // The green key (404) favorites it; Back goes to the list, and Favorites is offered.
   await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { keyCode: 404, bubbles: true } as KeyboardEventInit)));
   await expect(page.locator(".player-title")).toContainText("♥");
+  // Brought up by a key, the banner still goes by itself a few seconds later.
+  await expect(page.locator(".player-bar.on")).toHaveCount(1);
+  await expect(page.locator(".player-bar.on")).toHaveCount(0, { timeout: 7_000 });
   // Down: the guide over the channel, which plays on behind it, as on the Fire TV; the
   // cursor on what's on now, on the channel playing.
   await press(page, "ArrowDown");

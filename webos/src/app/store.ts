@@ -1314,9 +1314,26 @@ export class App {
       const url = asIs ? playback.url : this.converted(base, token, item.ratingKey, sessionId, mediaIndex, burn ? "burn" : "none", playback.videoCodec);
       const startMs = resume && item.viewOffsetMs > 0 && !(item.durationMs > 0 && item.viewOffsetMs >= item.durationMs * 0.95) ? item.viewOffsetMs : 0;
       this.set((s) => ({ ...s, playError: null, playing: { item, base, token, playback, url, direct: asIs, startMs, sessionId, queue, mediaIndex, textSubtitle: text } }));
+      await this.queueRestOfShow();
     } catch (error) {
       this.set((s) => ({ ...s, playError: readable(error) }));
     }
+  }
+
+  /**
+   * An episode started from Home, Continue Watching, search or a poster's menu came with
+   * nothing after it, and the last of a season had nothing either: so no Up Next, and the
+   * player simply closed at the end. The whole show is asked for instead, every season in
+   * order, as the Fire TV's Up Next goes on into the next season.
+   */
+  private async queueRestOfShow() {
+    const p = this.current.playing;
+    if (!p || p.item.type !== "episode" || this.nextInQueue() || !p.item.grandparentRatingKey) return;
+    const episodes = await plex.episodesOf(p.base, p.token, p.item.grandparentRatingKey).catch(() => null);
+    if (!episodes?.some((e) => e.ratingKey === p.item.ratingKey)) return;
+    // Something else started meanwhile.
+    if (this.current.playing?.sessionId !== p.sessionId) return;
+    this.set((s) => (s.playing ? { ...s, playing: { ...s.playing, queue: episodes } } : s));
   }
 
   /** One of the provider's: the file from the panel, as it is; where it's left is kept on the TV. */

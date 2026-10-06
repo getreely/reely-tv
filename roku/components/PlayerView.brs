@@ -78,6 +78,13 @@ sub start()
         Ask_("iptvPlayback", { ratingKey: m.item.ratingKey, durationMs: m.item.durationMs })
     else
         Ask_("playback", { base: m.base, token: m.token, ratingKey: m.item.ratingKey, mediaIndex: m.mediaIndex })
+        ' An episode started from Home, search or a poster's menu came with nothing after it,
+        ' and the last of a season had nothing either: no Up Next, and the player just
+        ' closed. The whole show is asked for instead, every season in order.
+        showKey = Str_(m.item.grandparentRatingKey)
+        if Str_(m.item.type) = "episode" and showKey <> "" and Plex_NextInQueue(m.queue, m.item) = invalid then
+            Ask_("nextEpisode", { base: m.base, token: m.token, showKey: showKey, id: m.item.ratingKey })
+        end if
     end if
 end sub
 
@@ -87,6 +94,17 @@ sub answered(r as object)
         return
     else if r.op = "addSubtitle" then
         onAdded(r.answer)
+        return
+    else if r.op = "nextEpisode" then
+        ' Still the episode it was asked for, and in what came back.
+        if r.answer = invalid or m.item = invalid or Str_(r.id) <> m.item.ratingKey then return
+        queue = Arr_(r.answer.queue)
+        for each e in queue
+            if e.ratingKey = m.item.ratingKey then
+                m.queue = queue
+                return
+            end if
+        end for
         return
     end if
     if r.op = "playback" or r.op = "iptvPlayback" then

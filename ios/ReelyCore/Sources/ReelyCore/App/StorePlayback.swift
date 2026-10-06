@@ -57,11 +57,13 @@ extension ReelyStore {
             guard let raw = found else { throw HttpError("That file isn't on the server any more.") }
             startPlaying(item, base: plex.baseFor(item.serverBase) ?? base, token: plex.tokenFor(item.serverBase) ?? token,
                          playback: raw, resume: resume, queue: queue, mediaIndex: mediaIndex)
+            await queueRestOfShow()
         } catch {
             // The server not answering where it was: looked for, and asked again where it is now.
             if await relocateServers(), let b = plex.baseFor(item.serverBase), let t = plex.tokenFor(item.serverBase),
                let raw = try? await api.playback(b, t, ratingKey: item.ratingKey, mediaIndex: mediaIndex) {
                 startPlaying(item, base: b, token: t, playback: raw, resume: resume, queue: queue, mediaIndex: mediaIndex)
+                await queueRestOfShow()
                 return
             }
             playError = (error as? HttpError)?.message ?? "Couldn't play that. Try again."
@@ -82,6 +84,21 @@ extension ReelyStore {
         playError = nil
         playing = Playing(item: item, base: base, token: token, playback: playback, url: url, direct: plan.direct, reason: plan.reason,
                           startMs: startMs, sessionId: sessionId, queue: queue, mediaIndex: mediaIndex, textSubtitle: text)
+    }
+
+    /**
+     * An episode started from Home, Continue Watching, search or a poster's menu came with
+     * nothing after it, and the last of a season had nothing either: so no Up Next, and the
+     * player simply closed at the end. The whole show is asked for instead, every season in
+     * order, as the Fire TV's Up Next goes on into the next season.
+     */
+    func queueRestOfShow() async {
+        guard let p = playing, p.item.type == "episode", nextInQueue == nil, let show = p.item.grandparentRatingKey,
+              let episodes = try? await api.episodes(p.base, p.token, of: show),
+              episodes.contains(where: { $0.ratingKey == p.item.ratingKey }) else { return }
+        // Something else started meanwhile.
+        guard playing?.sessionId == p.sessionId else { return }
+        playing?.queue = episodes
     }
 
     /// The file wouldn't play as it is: Plex converts it instead, from where it had got to.

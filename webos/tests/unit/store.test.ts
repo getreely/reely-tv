@@ -449,6 +449,28 @@ describe("playing a file as it is, or converted", () => {
   });
 });
 
+describe("Up Next for an episode started on its own", () => {
+  it("has the rest of the show queued, into the next season", async () => {
+    const base = fakePlex();
+    useFetcher(async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/library/metadata/e1") {
+        return new Response(JSON.stringify({ MediaContainer: { Metadata: [{ ratingKey: "e1", type: "episode", Media: [{ container: "mp4", Part: [{ key: "/p/1.mp4" }] }] }] } }), { status: 200 });
+      }
+      if (url.pathname === "/library/metadata/s1/allLeaves") {
+        return new Response(JSON.stringify({ MediaContainer: { Metadata: [
+          { ratingKey: "e0", type: "episode" }, { ratingKey: "e1", type: "episode" }, { ratingKey: "e2", type: "episode", parentIndex: 2, index: 1 },
+        ] } }), { status: 200 });
+      }
+      return base.fetch(input, init);
+    });
+    await app.startSignIn();
+    const episode = { ...app.state.home.recentEpisodes[0].newest, ratingKey: "e1", grandparentRatingKey: "s1" };
+    await app.play(episode, false, () => true);
+    expect(app.nextInQueue()?.ratingKey).toBe("e2");
+  });
+});
+
 describe("telling Plex where playback got to", () => {
   it("stopping tells the server where, for the sitting just ended", async () => {
     const told: string[] = [];

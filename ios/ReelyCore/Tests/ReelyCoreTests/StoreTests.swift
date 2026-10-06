@@ -103,6 +103,19 @@ final class StoreTests: XCTestCase {
         XCTAssertTrue(fake.asked.contains("/video/:/transcode/universal/stop"))
     }
 
+    func testAnEpisodeStartedOnItsOwnHasTheNextOneQueued() async {
+        let fake = FakePlex()
+        fakeServer(fake, at: home)
+        fake.json(home, "/library/metadata/e1", #"{"MediaContainer": {"Metadata": [{"ratingKey": "e1", "type": "episode", "Media": [{"container": "mp4", "videoCodec": "h264", "audioCodec": "aac", "Part": [{"id": 51, "key": "/library/parts/51/file.mp4"}]}]}]}}"#)
+        // The whole show, every season: the last of season 1 is followed by the first of season 2.
+        fake.json(home, "/library/metadata/s1/allLeaves", #"{"MediaContainer": {"Metadata": [{"ratingKey": "e0", "type": "episode"}, {"ratingKey": "e1", "type": "episode"}, {"ratingKey": "e2", "type": "episode", "parentIndex": 2, "index": 1}]}}"#)
+        let store = makeStore(fake, secrets: MemoryStore(["plexToken": "account-token"]))
+        await store.start()
+        let episode = PlexItem(ratingKey: "e1", type: "episode", parentIndex: 1, grandparentRatingKey: "s1", serverBase: store.home.recentMovies.first?.serverBase)
+        await store.play(episode, resume: false)
+        XCTAssertEqual(store.nextInQueue?.ratingKey, "e2")
+    }
+
     func testSubtitlesTurnedOffMidwayGoAndStayOff() async {
         let fake = FakePlex()
         fakeServer(fake, at: home)

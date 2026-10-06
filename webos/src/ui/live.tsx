@@ -393,6 +393,8 @@ export function LivePlayer(props: { app: App; state: AppState; channel: XtreamCh
   guideUp.current = guide;
   const video = useRef<HTMLVideoElement>(null);
   const [banner, setBanner] = useState(true);
+  // Each key: the banner's few seconds start again.
+  const [poke, setPoke] = useState(0);
   const [typed, setTyped] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [waiting, setWaiting] = useState(true);
@@ -410,17 +412,26 @@ export function LivePlayer(props: { app: App; state: AppState; channel: XtreamCh
     v.load();
     void v.play().catch(() => undefined);
     setBanner(true);
-    const hide = setTimeout(() => setBanner(false), 5_000);
+    setPoke((n) => n + 1);
     const ready = () => setWaiting(false);
     const fail = () => setError("This channel isn't playing. It may be off air, or your provider's connection limit reached.");
     v.addEventListener("playing", ready);
     v.addEventListener("error", fail);
     return () => {
-      clearTimeout(hide);
       v.removeEventListener("playing", ready);
       v.removeEventListener("error", fail);
     };
   }, [url]);
+
+  /*
+   * The banner goes a few seconds after the last key, however it came up. It used to go
+   * only once, after a channel started: brought back by a key, it stayed up for good.
+   */
+  useEffect(() => {
+    if (!banner || guide) return;
+    const t = setTimeout(() => setBanner(false), 5_000);
+    return () => clearTimeout(t);
+  }, [banner, guide, poke]);
 
   // Digits typed in a row tune that channel a moment after the last one.
   useEffect(() => {
@@ -434,6 +445,7 @@ export function LivePlayer(props: { app: App; state: AppState; channel: XtreamCh
 
   useEffect(() => onKeys((a) => {
     if (guideUp.current) return false;
+    setPoke((n) => n + 1);
     if (typeof a === "object") { setTyped((t) => (t + a.digit).slice(0, 4)); return true; }
     switch (a) {
       case "stop": app.stopLive(); return true;
