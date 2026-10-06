@@ -92,6 +92,8 @@ extension ReelyStore {
             live.account = account
             live.busy = false
             live.categories = []
+            forgetIptv()
+            Task { await loadIptv() }
             await loadLive()
         } catch {
             live.busy = false
@@ -102,6 +104,7 @@ extension ReelyStore {
     public func signOutLive() {
         secrets.set("xtream", nil)
         Task { await xtream.forgetGuide() }
+        forgetIptv()
         let (favorites, recent, reminders) = (live.favorites, live.recent, live.reminders)
         live = LiveState()
         live.favorites = favorites

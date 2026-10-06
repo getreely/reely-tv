@@ -96,7 +96,7 @@ struct SearchView: View {
     private func card(_ i: PlexItem) -> some View {
         PosterCard(title: i.rowTitle, subtitle: i.type == "episode" ? i.episodeLine : i.caption,
                    url: store.imageUrl(i.serverBase, i.type == "episode" ? (i.grandparentThumb ?? i.thumb) : i.thumb, width: 300, height: 450),
-                   progress: i.resumeFraction, watched: i.isWatched) {
+                   progress: i.resumeFraction, watched: i.isWatched, tag: i.sourceTag) {
             store.rememberSearch()
             openPage(store, i)
         }
@@ -131,7 +131,7 @@ struct ListPageView: View {
                     ForEach(page?.items ?? []) { i in
                         PosterCard(title: i.rowTitle, subtitle: i.type == "episode" ? i.episodeLine : i.caption,
                                    url: store.imageUrl(i.serverBase, i.type == "episode" ? (i.grandparentThumb ?? i.thumb) : i.thumb, width: 300, height: 450),
-                                   progress: i.resumeFraction, watched: i.isWatched) {
+                                   progress: i.resumeFraction, watched: i.isWatched, tag: i.sourceTag) {
                             if isPlaylist { Task { await store.play(i, resume: true, queue: page?.items ?? []) } } else { openPage(store, i) }
                         }
                         .itemMenu(i)

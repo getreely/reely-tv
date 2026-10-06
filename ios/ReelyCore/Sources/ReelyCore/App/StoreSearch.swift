@@ -54,7 +54,10 @@ extension ReelyStore {
             if let found = try? await api.searchAll(base, token, query: query) { answered.append(found) }
         }
         guard run == searchRun else { return }
-        let (matches, others) = splitResults(query, answered.flatMap(\.items))
+        let on = iptvOn
+        let fromIptv = on ? iptv.search(query, iptvWins: prefs.iptvWins) : []
+        let plexFound = answered.flatMap(\.items).filter { !on || !iptv.hides($0, iptvWins: prefs.iptvWins) }
+        let (matches, others) = splitResults(query, plexFound + fromIptv)
         var names = Set<String>()
         let people = answered.flatMap(\.people).filter { names.insert($0.name.lowercased()).inserted }.prefix(PEOPLE_RESULTS)
         var titles = Set<String>()
@@ -65,7 +68,7 @@ extension ReelyStore {
         search.more = matches.isEmpty ? [] : others
         search.people = Array(people)
         search.collections = collections
-        search.unreachable = !shownServers().isEmpty && answered.isEmpty
+        search.unreachable = !shownServers().isEmpty && answered.isEmpty && fromIptv.isEmpty
     }
 
     /// What was searched kept, when something it found is opened: a search that worked.
@@ -161,6 +164,12 @@ extension ReelyStore {
 
     /// Gone from Continue Watching, as the poster's menu offers.
     public func removeFromContinueWatching(_ item: PlexItem) async {
+        if item.isIptv {
+            iptv.watch.forgetProgress(item.ratingKey)
+            saveIptvWatch()
+            composeHome()
+            return
+        }
         guard let base = plex.baseFor(item.serverBase), let token = plex.tokenFor(item.serverBase) else { return }
         try? await api.removeFromContinueWatching(base, token, ratingKey: item.ratingKey)
         home.continueWatching.removeAll { $0.id == item.id }
@@ -169,6 +178,24 @@ extension ReelyStore {
 
     /// A show's or season's next episode, played with the rest of its season after it.
     public func playNextEpisode(of item: PlexItem) async {
+        if item.isIptv, let c = live.credentials {
+            let showId: Int
+            switch IptvKey.parse(item.ratingKey) {
+            case .show(let id): showId = id
+            case .season(let id, _): showId = id
+            default: return
+            }
+            var info = iptv.cachedSeries(showId)
+            if info == nil { info = await xtream.seriesInfo(c, id: showId) }
+            guard let info else { return }
+            iptv.keepSeries(showId, info)
+            let name = item.type == "show" ? item.title : item.parentTitle ?? item.title
+            var all = (info.seasons ?? []).flatMap { Vod.episodeItems(showId: showId, showName: name, poster: item.thumb, backdrop: nil, season: $0) }.map(iptv.marked)
+            if item.type == "season" { all = all.filter { $0.parentRatingKey == item.ratingKey } }
+            guard let next = PlexAPI.nextEpisode(all) else { return }
+            await play(next, resume: true, queue: all.filter { $0.parentRatingKey == next.parentRatingKey })
+            return
+        }
         guard let base = plex.baseFor(item.serverBase), let token = plex.tokenFor(item.serverBase) else { return }
         let all: [PlexItem]
         if item.type == "season" {

@@ -100,7 +100,7 @@ struct LibraryView: View {
     private func poster(_ i: PlexItem) -> some View {
         PosterCard(title: i.rowTitle, subtitle: i.type == "episode" ? i.episodeLine : i.caption,
                    url: store.imageUrl(i.serverBase, i.type == "episode" ? (i.grandparentThumb ?? i.thumb) : i.thumb, width: 300, height: 450),
-                   progress: i.resumeFraction, watched: i.isWatched) { open(i) }
+                   progress: i.resumeFraction, watched: i.isWatched, tag: i.sourceTag) { open(i) }
             .itemMenu(i)
     }
 
@@ -146,7 +146,7 @@ struct LibraryView: View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: posterWidth, maximum: posterWidth), spacing: dp(14))], alignment: .leading, spacing: dp(18)) {
             ForEach(browse.items) { i in
                 PosterCard(title: i.title, subtitle: i.caption, url: store.imageUrl(i.serverBase, i.thumb, width: 300, height: 450),
-                           progress: i.resumeFraction, watched: i.isWatched) { open(i) }
+                           progress: i.resumeFraction, watched: i.isWatched, tag: i.sourceTag) { open(i) }
                     .itemMenu(i)
                     .id(i.id)
                     .onAppear {

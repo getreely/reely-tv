@@ -93,6 +93,11 @@ public final class ReelyStore {
     public let xtream: XtreamClient
     public internal(set) var live = LiveState()
     public internal(set) var requests = RequestsState()
+    /// The provider's films and series, matched with Plex.
+    public internal(set) var iptv = IptvLibrary()
+    public internal(set) var iptvStatus = IptvStatus()
+    /// Home as Plex has it, before the provider's titles go in.
+    @ObservationIgnored var plexHome = HomeRows()
     public internal(set) var requestPage: RequestPage?
     @ObservationIgnored var reelyClient: ReelyClient?
     @ObservationIgnored var requestSearchRun = 0
@@ -114,6 +119,7 @@ public final class ReelyStore {
         search.recent = store.json("recentSearches", as: [String].self) ?? []
         loadLiveState()
         requests.address = store.string("reelyUrl")
+        iptv.watch = IptvWatch(store.json("iptvWatch", as: [IptvMark].self) ?? [])
     }
 
     /// A client id kept for good: plex.tv knows each device by it.
@@ -405,10 +411,10 @@ public final class ReelyStore {
             homeError = "Couldn't reach your Plex server. Trying again…"
             return
         }
-        let watch = home.watchlist
-        home = rows
-        home.watchlist = watch
+        plexHome = rows
+        composeHome()
         homeBusy = false
+        if iptvStatus.ready == false && !iptvStatus.loading { Task { await loadIptv() } }
         Task { await refreshWatchlist() }
         Task { await checkReadyRequests() }
         // Home's Trending and Popular are Reely's.
@@ -426,6 +432,8 @@ public final class ReelyStore {
 
     /// A picture through its server's resizer, at the size it's drawn.
     public func imageUrl(_ serverBase: String?, _ path: String?, width: Int, height: Int) -> URL? {
+        // The provider's pictures are whole addresses of their own.
+        if serverBase == IPTV_SOURCE { return path.flatMap(URL.init(string:)) }
         guard let base = plex.baseFor(serverBase), let token = plex.tokenFor(serverBase),
               let url = PlexAPI.imageUrl(base, token, path: path, width: width, height: height) else { return nil }
         return URL(string: url)

@@ -50,7 +50,7 @@ struct DetailView: View {
                         ForEach(page.related) { item in
                             PosterCard(title: item.title, subtitle: item.caption,
                                        url: store.imageUrl(item.serverBase, item.thumb, width: 300, height: 450),
-                                       watched: item.isWatched) { store.navigate(.detail(ratingKey: item.ratingKey, serverBase: item.serverBase)) }
+                                       watched: item.isWatched, tag: item.sourceTag) { store.navigate(.detail(ratingKey: item.ratingKey, serverBase: item.serverBase)) }
                         }
                     }
                 }

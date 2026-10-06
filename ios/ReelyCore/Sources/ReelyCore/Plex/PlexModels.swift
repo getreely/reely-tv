@@ -5,7 +5,7 @@ import Foundation
  * same fields, read the same way, so the apps agree about every title.
  */
 
-public struct PlexItem: Equatable, Hashable, Sendable, Identifiable {
+public struct PlexItem: Equatable, Hashable, Sendable, Identifiable, Codable {
     public var ratingKey: String
     public var title: String
     public var titleSort: String?

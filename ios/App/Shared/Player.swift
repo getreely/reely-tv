@@ -82,6 +82,11 @@ final class PlayerModel {
         guard status == .failed else { return }
         // Not as it is, then: Plex converts it, from where it had got to.
         if let store, store.playing?.direct == true, store.convert(positionMs: positionMs) { return }
+        // The provider's files have no Plex to convert them: say what Apple's player can't open.
+        if let p = store?.playing, p.item.isIptv, let ext = p.playback.container, !PlaybackPlan.containers.contains(ext.lowercased()) {
+            failed = "Apple's player can't open \(ext.uppercased()) files, and this one from your IPTV provider is one."
+            return
+        }
         failed = "This couldn't be played. Try again."
     }
 

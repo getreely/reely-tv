@@ -12,7 +12,9 @@ extension ReelyStore {
     }
 
     /// The libraries in a tab's menu: those of its kind switched on, else all of its kind.
-    public func libraries(of kind: String) -> [LibraryChoice] { shownLibraries(kind: kind) }
+    public func libraries(of kind: String) -> [LibraryChoice] {
+        shownLibraries(kind: kind) + (iptvOn && prefs.iptvInMenus ? [iptvChoice(kind)] : [])
+    }
 
     public func openLibrary(_ kind: String, _ choice: LibraryChoice? = nil) async {
         guard let target = choice ?? browse[kind]?.choice ?? libraries(of: kind).first else { return }
@@ -24,6 +26,8 @@ extension ReelyStore {
             // Another library's genres and decades aren't this one's.
             if switching { b.genre = nil; b.decade = nil; b.genres = []; b.decades = []; b.letters = []; b.released = []; b.collections = nil }
         }
+        // The provider's titles: all here already.
+        if target.baseUrl == IPTV_SOURCE { loadIptvGrid(kind); return }
         let type = kind == "movie" ? PLEX_TYPE_MOVIE : PLEX_TYPE_SHOW
         Task {
             let genres = (try? await api.genres(target.baseUrl, target.token, section: target.section.key, type: type)) ?? []
@@ -60,7 +64,7 @@ extension ReelyStore {
     }
 
     func loadLetters(_ kind: String) async {
-        guard let b = browse[kind], let choice = b.choice else { return }
+        guard let b = browse[kind], let choice = b.choice, choice.baseUrl != IPTV_SOURCE else { return }
         let filters = b.filters
         let letters = (try? await api.firstCharacters(choice.baseUrl, choice.token, section: choice.section.key,
                                                        type: kind == "movie" ? PLEX_TYPE_MOVIE : PLEX_TYPE_SHOW, filters: filters)) ?? []
@@ -85,6 +89,7 @@ extension ReelyStore {
     /// The next page of the grid, in before it's reached.
     public func loadMore(_ kind: String) async {
         guard let b = browse[kind], let choice = b.choice else { return }
+        if choice.baseUrl == IPTV_SOURCE { if b.items.isEmpty || b.busy { loadIptvGrid(kind) }; return }
         let offset = b.items.count
         let type = kind == "movie" ? PLEX_TYPE_MOVIE : PLEX_TYPE_SHOW
         let filters = b.filters
@@ -112,6 +117,12 @@ extension ReelyStore {
     }
 
     public func openDetail(ratingKey: String, serverBase: String?, episodeKey: String? = nil) async {
+        if serverBase == IPTV_SOURCE {
+            let key = "\(IPTV_SOURCE)|\(ratingKey)"
+            detail = DetailPage(key: key, serverBase: IPTV_SOURCE)
+            await openIptvDetail(key, ratingKey: ratingKey, episodeKey: episodeKey)
+            return
+        }
         let base = plex.baseFor(serverBase)
         let key = "\(base ?? "")|\(ratingKey)"
         detail = DetailPage(key: key, serverBase: base)
@@ -139,6 +150,7 @@ extension ReelyStore {
     }
 
     public func selectSeason(_ season: PlexItem) async {
+        if season.isIptv { selectIptvSeason(season); return }
         guard let page = detail, let base = page.serverBase, let token = plex.tokenFor(base) else { return }
         await loadSeason(page.key, base, token, season, focusKey: page.detail?.onDeckKey, seasons: page.seasons)
     }
@@ -158,6 +170,10 @@ extension ReelyStore {
      * without the page going back to nothing first and the cursor with it.
      */
     public func refreshDetail(watched: PlexItem) async {
+        if let page = detail, page.serverBase == IPTV_SOURCE, let d = page.detail {
+            await openIptvDetail(page.key, ratingKey: d.ratingKey, episodeKey: watched.type == "episode" ? watched.ratingKey : page.focused?.ratingKey)
+            return
+        }
         guard let page = detail, let d = page.detail, let base = page.serverBase, let token = plex.tokenFor(base) else { return }
         let episodeKey = watched.type == "episode" ? watched.ratingKey : nil
         if let season = page.season, let parent = watched.parentRatingKey, episodeKey != nil, parent != season.ratingKey {
@@ -174,6 +190,7 @@ extension ReelyStore {
     // MARK: Watched
 
     public func setWatched(_ item: PlexItem, _ watched: Bool) async {
+        if item.isIptv { await setIptvWatched(item, watched); return }
         guard let base = plex.baseFor(item.serverBase), let token = plex.tokenFor(item.serverBase) else { return }
         try? await api.setWatched(base, token, ratingKey: item.ratingKey, watched: watched)
         await refreshHome()

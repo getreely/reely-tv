@@ -76,7 +76,16 @@ struct GuideGrid: View {
                     .padding(.horizontal, pageMargin).padding(.bottom, 60)
                 }
                 .scrollClipDisabled()
-                .onAppear { if let landOn { proxy.scrollTo(landOn, anchor: .center) } }
+                .onAppear {
+                    if let landOn { proxy.scrollTo(landOn, anchor: .center) }
+                    // Over a channel, the cursor starts on it, not on the categories above.
+                    if overlay != nil {
+                        Task { @MainActor in
+                            try? await Task.sleep(nanoseconds: 150_000_000)
+                            focus = landing
+                        }
+                    }
+                }
             }
             .defaultFocus($focus, landing)
         }
@@ -87,14 +96,17 @@ struct GuideGrid: View {
 
     // MARK: What's highlighted
 
+    /// What the cursor's on; before it's reached the grid, where it will land.
+    private var shown: Cell? { focus ?? landing }
+
     private var focusedChannel: XtreamChannel? {
-        guard let focus else { return nil }
-        return channels.first { $0.streamId == focus.streamId }
+        guard let shown else { return nil }
+        return channels.first { $0.streamId == shown.streamId }
     }
 
     private var focusedProgramme: Programme? {
-        guard let focus, let channel = focusedChannel else { return nil }
-        return store.listing(for: channel).first { $0.start == focus.start }
+        guard let shown, let channel = focusedChannel else { return nil }
+        return store.listing(for: channel).first { $0.start == shown.start }
     }
 
     private var about: some View {

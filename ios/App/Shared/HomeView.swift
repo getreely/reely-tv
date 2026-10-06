@@ -53,7 +53,7 @@ struct HomeView: View {
                             ForEach(titles) { item in
                                 PosterCard(title: item.title, subtitle: item.caption,
                                            url: store.imageUrl(item.serverBase, item.thumb, width: 300, height: 450),
-                                           progress: item.resumeFraction, watched: item.isWatched) { open(item) }
+                                           progress: item.resumeFraction, watched: item.isWatched, tag: item.sourceTag) { open(item) }
                                     .itemMenu(item)
                                     .focused($focused, equals: row.rawValue + "|" + item.id)
                             }

@@ -284,6 +284,27 @@ private struct LiveSettings: View {
                         on: Binding(get: { store.prefs.guidePreview }, set: { store.prefs.guidePreview = $0 }))
             }
             #endif
+            Group_(title: "Movies and shows", note: c.isPlaylist
+                   ? "Your provider's movies and shows need an Xtream login rather than a playlist. Sign out and sign in with your server, username and password to use them."
+                   : store.iptvStatus.error ?? "Your provider's movies and shows in the Movies and TV Shows tabs, on Home and in search, marked IPTV. Off, only Plex's are shown.") {
+                if c.isPlaylist {
+                    Row_(title: "Show IPTV movies and shows", note: nil, value: "Needs an Xtream login", action: nil)
+                } else {
+                    Switch_(title: "Show IPTV movies and shows", on: Binding(get: { store.prefs.iptvLibrary }, set: { store.setIptvLibrary($0) }))
+                    if store.prefs.iptvLibrary {
+                        Choice_(title: "When a title is in both", note: "Which copy shows on Home and in search, and which the IPTV library leaves out.", options: [
+                            Option(value: false, label: "Plex", note: "Plex's copy. The IPTV library only has what Plex doesn't."),
+                            Option(value: true, label: "IPTV", note: "The provider's copy, in place of Plex's on Home and in search."),
+                        ], selected: Binding(get: { store.prefs.iptvWins }, set: { store.setIptvWins($0) }))
+                        Switch_(title: "IPTV in the Movies and TV Shows menus", note: "As a library of its own, beside Plex's.",
+                                on: Binding(get: { store.prefs.iptvInMenus }, set: { store.prefs.iptvInMenus = $0 }))
+                        Row_(title: "Refresh movies and shows", note: nil,
+                             value: store.iptvStatus.loading ? "Refreshing…" : store.iptvStatus.ready ? "\(store.iptv.catalog.movies.count) movies · \(store.iptv.catalog.series.count) shows" : "Not loaded") {
+                            Task { await store.refreshIptv() }
+                        }
+                    }
+                }
+            }
             Group_(title: "Provider") {
                 Row_(title: c.isPlaylist ? "Playlist" : "Server", note: nil, value: URL(string: c.playlistUrl ?? c.base)?.host ?? "—", action: nil)
                 if !c.isPlaylist {

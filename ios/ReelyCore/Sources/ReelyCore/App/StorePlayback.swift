@@ -36,6 +36,7 @@ extension ReelyStore {
 
     /// A film or episode, from where it was left (or the top), with the rest of its season queued after it.
     public func play(_ item: PlexItem, resume: Bool = true, queue: [PlexItem] = [], mediaIndex: Int = 0) async {
+        if item.isIptv { playIptv(item, resume: resume, queue: queue); return }
         guard let base = plex.baseFor(item.serverBase), let token = plex.tokenFor(item.serverBase) else {
             playError = "Couldn't reach the server this is on."
             return
@@ -78,7 +79,8 @@ extension ReelyStore {
     /// The file wouldn't play as it is: Plex converts it instead, from where it had got to.
     @discardableResult
     public func convert(positionMs: Int) -> Bool {
-        guard var p = playing, p.direct else { return false }
+        // The provider's files have no Plex to convert them.
+        guard var p = playing, p.direct, !p.item.isIptv else { return false }
         p.url = converted(p.base, p.token, ratingKey: p.item.ratingKey, sessionId: p.sessionId, mediaIndex: p.mediaIndex,
                           subtitles: p.textSubtitle != nil ? "none" : "burn", videoCodec: p.playback.videoCodec)
         p.direct = false
@@ -128,6 +130,7 @@ extension ReelyStore {
     /// Where playback is, told to the server: what keeps Continue Watching right everywhere.
     public func report(positionMs: Int, durationMs: Int, state: String, _ which: Playing? = nil) async {
         guard let p = which ?? playing, p.item.type != "clip" else { return }
+        if p.item.isIptv { noteIptvProgress(p.item, positionMs: positionMs, durationMs: durationMs); return }
         await api.reportTimeline(p.base, p.token, ratingKey: p.item.ratingKey, positionMs: positionMs,
                                  durationMs: durationMs > 0 ? durationMs : p.item.durationMs, state: state, sessionId: p.sessionId)
     }
@@ -138,7 +141,7 @@ extension ReelyStore {
         await report(positionMs: positionMs, durationMs: durationMs, state: "stopped", p)
         if !p.direct { await api.stopTranscode(p.base, p.token, sessionId: p.sessionId) }
         if p.item.type == "clip" { return }
-        await refreshHome()
+        if p.item.isIptv { composeHome() } else { await refreshHome() }
         if detail != nil { await refreshDetail(watched: p.item) }
     }
 
