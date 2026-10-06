@@ -9,6 +9,8 @@
     <!-- Which are on (Watched, on the Watchlist), by index. -->
     <field id="on" type="array" onChange="paint" />
     <field id="focusIndex" type="integer" value="0" onChange="paint" />
+    <!-- The first (Play) wide with its name inside, as on the Fire TV, rather than a circle. -->
+    <field id="wideFirst" type="boolean" value="false" onChange="build" />
     <field id="pressed" type="integer" alwaysNotify="true" />
   </interface>
   <script type="text/brightscript" uri="pkg:/components/parts/RoundRow.brs" />

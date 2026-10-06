@@ -31,7 +31,7 @@
       <Group id="facts" translation="[96, 96]" />
       <Label id="upNext" translation="[96, 152]" width="1500" color="0xF2F4F7FF" />
       <Label id="summary" translation="[96, 198]" width="1150" wrap="true" maxLines="3" lineSpacing="6" color="0xB3BAC4FF" />
-      <RoundRow id="actions" translation="[70, 330]" />
+      <RoundRow id="actions" translation="[70, 330]" wideFirst="true" />
       <PillRow id="versions" translation="[96, 490]" fontSize="22" visible="false" />
       <Label id="note" translation="[96, 490]" width="1500" color="0xFF6B6BFF" />
       <PillRow id="seasons" translation="[96, 490]" fontSize="24" visible="false" />

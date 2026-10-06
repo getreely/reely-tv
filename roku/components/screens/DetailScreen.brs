@@ -264,7 +264,10 @@ sub paintActions()
     resume = t <> invalid and t.viewOffsetMs > 0 and not Plex_IsWatched(t)
     glyphs = []
     if t <> invalid then
-        labels.Push(Iif_(resume, "Resume", "Play"))
+        ' What it plays, in the button, as on the Fire TV: "Resume S1 · E2".
+        verb = Iif_(resume, "Resume", "Play")
+        if show then verb = Join_([verb, Plex_Caption(t)], " ")
+        labels.Push(verb)
         m.actionIds.Push("play")
         glyphs.Push("play")
         if resume then

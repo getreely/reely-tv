@@ -168,6 +168,7 @@ export function Root(props: { app: App }) {
           <path fill="var(--accent)" d="M43.19 66V30H52.72L52.99 37.19Q54.07 33.43 56.15 31.71Q58.23 30 61.52 30H64.81V38.33H61.52Q57.29 38.33 55.28 40.04Q53.26 41.75 53.26 45.78V66Z" />
           <path fill="var(--accent)" d="M47.5,72h13a2,2 0 0 1 2,2v0a2,2 0 0 1 -2,2h-13a2,2 0 0 1 -2,-2v0a2,2 0 0 1 2,-2z" />
         </svg>
+        <span class="tab-pill">
         {connected ? (
           // Search first, as a glass, as on the Fire TV.
           <button class={"tab icon" + (tabOf(state.stack, route).name === "search" ? " on" : "")} data-focus aria-label="Search" onClick={() => app.navigate({ name: "search" })}>
@@ -186,6 +187,7 @@ export function Root(props: { app: App }) {
             {label}
           </button>
         ))}
+        </span>
         {connected ? (
           <span class="tabs-end">
             {state.plex.homeUsers.length > 1 ? (
@@ -193,9 +195,11 @@ export function Root(props: { app: App }) {
                 {state.plex.user?.title ?? "Profiles"}
               </button>
             ) : null}
-            <button class={"tab icon" + (route.name === "settings" ? " on" : "")} data-focus aria-label="Settings" onClick={() => app.navigate({ name: "settings" })}>
-              <GearGlyph />
-            </button>
+            <span class="tab-pill">
+              <button class={"tab icon" + (route.name === "settings" ? " on" : "")} data-focus aria-label="Settings" onClick={() => app.navigate({ name: "settings" })}>
+                <GearGlyph />
+              </button>
+            </span>
             <Clock />
           </span>
         ) : null}

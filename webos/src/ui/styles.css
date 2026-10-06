@@ -32,8 +32,13 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 .app { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column; }
 /* The tabs on the left, Search and Settings at the far end; margins, as Chromium 68 has no flex gap. */
-/* A solid band, as the Fire TV's: the picture behind a page starts under it. */
-.tabs { position: relative; z-index: 1; display: flex; align-items: center; padding: 1.5rem 3rem 0.5rem; background: var(--ink); }
+/* Over the page, as the Fire TV's: no band of its own, so the picture behind a page runs to
+   the top of the screen, with a shade at the very top to keep the words readable. The tabs
+   sit together in a frosted capsule, the gear in one of its own. */
+.tabs { position: relative; z-index: 1; display: flex; align-items: center; padding: 1.1rem 3rem 0.4rem; background: linear-gradient(180deg, rgba(8, 9, 11, 0.72) 0%, rgba(8, 9, 11, 0) 100%); }
+.tab-pill { display: flex; align-items: center; padding: 0.25rem; border-radius: 999px; background: rgba(22, 24, 29, 0.8); box-shadow: inset 0 0 0 0.06rem rgba(255, 255, 255, 0.08); }
+.tab-pill > * { margin-right: 0.15rem; }
+.tab-pill > *:last-child { margin-right: 0; }
 .tabs > * { margin-right: 0.5rem; }
 .tab { padding: 0.55rem 1.1rem; border-radius: 999px; color: var(--muted); font-size: 1.1rem; font-weight: 500; }
 .tab.on { position: relative; color: var(--chalk); font-weight: 600; }
@@ -392,6 +397,10 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .title-next { font-size: 1.1rem; color: var(--chalk); margin-bottom: 0.5rem; }
 .title-hero .summary { font-size: 1.2rem; max-width: 46rem; margin-bottom: 0.4rem; }
 .round-actions { display: flex; margin-top: 1.2rem; }
+/* Play, wide, its top in line with the round actions beside it. */
+.play-pill { align-self: flex-start; display: flex; align-items: center; height: 3.2rem; padding: 0 1.7rem; margin-right: 1.6rem; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: 1.2rem; font-weight: 600; white-space: nowrap; transition: transform 140ms ease; }
+.play-pill .glyph { width: 1.15rem; height: 1.15rem; margin-right: 0.65rem; }
+.play-pill:focus { background: var(--chalk); color: var(--ink); transform: scale(1.05); box-shadow: 0 0 0 0.16rem var(--chalk); }
 .round { display: flex; flex-direction: column; align-items: center; margin-right: 1.4rem; }
 .round .disc { width: 3.2rem; height: 3.2rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: rgba(21, 23, 27, 0.85); box-shadow: inset 0 0 0 0.08rem var(--line); color: var(--chalk); transition: transform 140ms ease; }
 .round .disc .glyph { width: 1.35rem; height: 1.35rem; }

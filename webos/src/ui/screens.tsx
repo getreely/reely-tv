@@ -417,7 +417,10 @@ export function Detail(props: { app: App; state: AppState; onPlay: (item: PlexIt
         {page.error ? <p class="note error">{page.error}</p> : null}
         {d.type !== "collection" ? (
           <div class="round-actions">
-            <RoundButton label={resumeFrom > 0 ? "Resume" : "Play"} glyph="play" primary autofocus onPress={() => play(true)} />
+            <PlayPill
+              label={[resumeFrom > 0 ? "Resume" : "Play", target ? [target.parentIndex != null ? `S${target.parentIndex}` : null, target.index != null ? `E${target.index}` : null].filter(Boolean).join(" · ") : null].filter(Boolean).join(" ")}
+              onPress={() => play(true)}
+            />
             {resumeFrom > 0 ? <RoundButton label="Restart" glyph="restart" onPress={() => play(false)} /> : null}
             {!show || target ? <RoundButton label={watchedNow ? "Unwatch" : "Watched"} glyph="check" on={watchedNow} onPress={() => void app.toggleWatched()} /> : null}
             {d.guid ? <RoundButton label="Watchlist" glyph={state.plex.watchlist.has(d.guid) ? "saved" : "save"} on={state.plex.watchlist.has(d.guid)} onPress={() => void app.toggleWatchlist()} /> : null}
@@ -629,6 +632,16 @@ function titleFacts(d: plex.PlexDetail, show: boolean): string[] {
 type Glyph = "play" | "restart" | "check" | "save" | "saved" | "film";
 
 /** A round button with its name under it, as the Fire TV's title page has them. */
+/** The page's main action, wide, as the Fire TV and the phones have it: what it plays, in the accent color. */
+function PlayPill(props: { label: string; onPress: () => void }) {
+  return (
+    <button class="play-pill" data-focus data-autofocus="" aria-label={props.label} onClick={props.onPress}>
+      <RoundGlyph glyph="play" />
+      <span>{props.label}</span>
+    </button>
+  );
+}
+
 function RoundButton(props: { label: string; glyph: Glyph; primary?: boolean; on?: boolean; autofocus?: boolean; onPress: () => void }) {
   return (
     <button class={"round" + (props.primary ? " primary" : "") + (props.on ? " on" : "")} data-focus data-autofocus={props.autofocus ? "" : undefined} aria-label={props.label} onClick={props.onPress}>

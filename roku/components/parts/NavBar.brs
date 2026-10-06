@@ -6,6 +6,9 @@ sub init()
     m.tabs = m.top.findNode("tabs")
     m.pills = []
     m.labels = []
+    m.lines = []
+    m.xs = []
+    m.ws = []
     font = FontOf_("pkg:/fonts/geist_semibold.ttf", 30)
     m.top.findNode("clock").font = FontOf_("pkg:/fonts/geist_regular.ttf", 28)
     x = 170
@@ -40,10 +43,26 @@ sub init()
             label.translation = [x, 28]
         end if
         m.tabs.appendChild(label)
+        ' The open tab's mark, as on the Fire TV: a short line in the accent under its name.
+        line = CreateObject("roSGNode", "Rectangle")
+        line.width = 28
+        line.height = 5
+        line.translation = [x + Int((w - 28) / 2), 84]
+        line.color = "0x2E6BFFFF"
+        line.visible = false
+        m.tabs.appendChild(line)
         m.pills.Push(pill)
         m.labels.Push(label)
+        m.lines.Push(line)
+        m.xs.Push(x)
+        m.ws.Push(w)
         x = x + w + 10
     end for
+    ' The tabs together in a frosted capsule, and the gear in one of its own, as on the Fire
+    ' TV and LG: behind everything else in the bar.
+    last = m.ids.Count() - 2
+    m.tabs.insertChild(Capsule_(m.xs[0] - 8, m.xs[last] + m.ws[last] + 8), 0)
+    m.tabs.insertChild(Capsule_(m.xs[m.ids.Count() - 1] - 8, m.xs[m.ids.Count() - 1] + 64 + 8), 0)
     m.at = 1
     m.focused = false
     m.pending = ""
@@ -121,14 +140,15 @@ sub paint__()
             if here then print "TAB "; m.ids[i]
         #end if
         m.pills[i].visible = here or open
+        m.lines[i].visible = open and not here and m.icons[m.ids[i]] = invalid
         if here then
             m.pills[i].uri = "pkg:/images/pill.9.png"
             m.pills[i].blendColor = "0xF2F4F7FF"
             Tint_(m.labels[i], "0x08090BFF")
         else if open then
-            ' The open tab, while the cursor is elsewhere: outlined.
-            m.pills[i].uri = "pkg:/images/pillring.9.png"
-            m.pills[i].blendColor = "0xF2F4F766"
+            ' The open tab, while the cursor is elsewhere: bright, with the accent line under
+            ' it, rather than an outline that read as a second cursor.
+            m.pills[i].visible = false
             Tint_(m.labels[i], "0xF2F4F7FF")
         else
             Tint_(m.labels[i], "0xB3BAC4FF")
@@ -207,5 +227,20 @@ sub openPending__()
 end sub
 
 sub paintMark()
-    if m.top.accent <> "" then m.top.findNode("mark").blendColor = m.top.accent
+    if m.top.accent = "" then return
+    m.top.findNode("mark").blendColor = m.top.accent
+    for each line in m.lines
+        line.color = m.top.accent
+    end for
 end sub
+
+' A dark, see-through capsule from [left] to [right], behind the tabs.
+function Capsule_(left as integer, right as integer) as object
+    capsule = CreateObject("roSGNode", "Poster")
+    capsule.uri = "pkg:/images/pill.9.png"
+    capsule.width = right - left
+    capsule.height = 76
+    capsule.translation = [left, 22]
+    capsule.blendColor = "0x16181DD0"
+    return capsule
+end function

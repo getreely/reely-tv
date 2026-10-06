@@ -131,7 +131,7 @@ test("signs in with a code, browses with the remote, plays and comes back", asyn
   await press(page, "Enter");
   await expect(page.getByRole("heading", { name: "Northbound" })).toBeVisible();
   await expect(page.getByText("Up next  ·  S1 · E2  ·  Episode 2")).toBeVisible();
-  await expect(page.locator(".round:focus .label")).toHaveText("Play");
+  await expect(page.locator(".play-pill:focus")).toHaveText(/^Play/);
   await page.screenshot({ path: "shots/lg-show.png" });
 
   // Play: DTS sound the TV can't play, so Plex converts it.
@@ -309,7 +309,7 @@ test("the player: Skip Intro, another sound track kept with Plex, Up Next on to 
   await press(page, "Enter");
   await expect(page.getByText("Continue Watching")).toBeVisible({ timeout: 10_000 });
   await press(page, "Enter");
-  await expect(page.locator(".round:focus .label")).toHaveText("Play");
+  await expect(page.locator(".play-pill:focus")).toHaveText(/^Play/);
   await press(page, "Enter");
   await expect(page.locator(".player")).toBeVisible();
 
