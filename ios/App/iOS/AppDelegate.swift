@@ -13,6 +13,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         try? AVAudioSession.sharedInstance().setActive(true)
+        // The bars' titles in Reely's type, white on the frosted dark.
+        let bar = UINavigationBar.appearance()
+        if let large = UIFont(name: "Geist-Bold", size: 32) { bar.largeTitleTextAttributes = [.font: large, .foregroundColor: UIColor.white] }
+        if let small = UIFont(name: "Geist-SemiBold", size: 17) { bar.titleTextAttributes = [.font: small, .foregroundColor: UIColor.white] }
         return true
     }
 

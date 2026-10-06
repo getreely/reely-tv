@@ -113,7 +113,10 @@ struct ListPageView: View {
         let page = store.list
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: dp(16)) {
+                #if os(tvOS)
+                // On iPhone and iPad the name is iOS's own large title.
                 Text(title).font(Typeface.display).foregroundStyle(Color.chalk).padding(.horizontal, pageMargin)
+                #endif
                 if isPlaylist, let items = page?.items, !items.isEmpty {
                     HStack(spacing: dp(10)) {
                         ActionButton(title: "Play", systemImage: "play.fill", filled: true) { Task { await store.playList(shuffled: false) } }

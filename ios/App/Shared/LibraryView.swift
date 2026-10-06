@@ -58,7 +58,44 @@ struct LibraryView: View {
         }
     }
 
+    private func libraryName(_ l: LibraryChoice) -> String {
+        // With more than one server, which one each library is on: two called Movies otherwise look the same.
+        store.plex.servers.count > 1 && l.baseUrl != IPTV_SOURCE ? "\(l.section.title) · \(l.serverName)" : l.section.title
+    }
+
+    @ViewBuilder
     private func toolbar(_ browse: Browse, _ libraries: [LibraryChoice]) -> some View {
+        #if os(iOS)
+        // iPhone and iPad: which library in a menu, and its home, everything or its collections in a switch.
+        VStack(alignment: .leading, spacing: 12) {
+            if libraries.count > 1 {
+                Menu {
+                    ForEach(libraries) { l in
+                        Button { Task { await store.openLibrary(kind, l) } } label: {
+                            if browse.choice == l { Label(libraryName(l), systemImage: "checkmark") } else { Text(libraryName(l)) }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(browse.choice.map(libraryName) ?? "Library").font(Typeface.geist(15, .semibold))
+                        Image(systemName: "chevron.down").font(.system(size: 11, weight: .bold))
+                    }
+                    .foregroundStyle(Color.chalk)
+                    .padding(.horizontal, 14).frame(height: 34)
+                    .background(Color.surfaceHigh, in: Capsule())
+                }
+            }
+            if browse.choice?.baseUrl != IPTV_SOURCE {
+                Picker("View", selection: Binding(get: { browse.view }, set: { store.setLibraryView(kind, $0) })) {
+                    Text("Home").tag(Browse.View.home)
+                    Text("All").tag(Browse.View.grid)
+                    Text("Collections").tag(Browse.View.collections)
+                }
+                .pickerStyle(.segmented)
+            }
+        }
+        .padding(.horizontal, pageMargin)
+        #else
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: dp(8)) {
                 Pill(title: "Home", on: browse.view == .home) { store.setLibraryView(kind, .home) }
@@ -75,7 +112,6 @@ struct LibraryView: View {
             }
             .padding(.horizontal, pageMargin).padding(.vertical, dp(8))
         }
-        #if os(tvOS)
         .focusSection()
         #endif
     }
@@ -117,6 +153,40 @@ struct LibraryView: View {
     @ViewBuilder
     private func grid(_ browse: Browse, proxy: ScrollViewProxy) -> some View {
         let sortLabel = LIBRARY_SORTS.first { $0.id == browse.sort }?.label ?? "A–Z"
+        #if os(iOS)
+        // Sort, genre and decade as iOS's own menus; unwatched on or off.
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                Menu {
+                    ForEach(LIBRARY_SORTS, id: \.id) { sort in
+                        Button { Task { await store.setSort(kind, sort.id) } } label: {
+                            if sort.id == browse.sort { Label(sort.label, systemImage: "checkmark") } else { Text(sort.label) }
+                        }
+                    }
+                } label: { filterChip(sortLabel, symbol: "arrow.up.arrow.down", on: false) }
+                Button { Task { await store.setFilter(kind, unwatched: !browse.unwatched) } } label: {
+                    filterChip("Unwatched", symbol: browse.unwatched ? "checkmark" : nil, on: browse.unwatched)
+                }
+                if !browse.genres.isEmpty {
+                    Menu {
+                        Button("All genres") { Task { await store.setFilter(kind, genre: .some(nil)) } }
+                        ForEach(browse.genres, id: \.id) { g in
+                            Button { Task { await store.setFilter(kind, genre: .some(g)) } } label: {
+                                if browse.genre?.id == g.id { Label(g.title, systemImage: "checkmark") } else { Text(g.title) }
+                            }
+                        }
+                    } label: { filterChip(browse.genre?.title ?? "Genre", symbol: "chevron.down", on: browse.genre != nil) }
+                }
+                if browse.decades.count > 1 {
+                    Menu {
+                        Button("All decades") { Task { await store.setFilter(kind, decade: .some(nil)) } }
+                        ForEach(browse.decades, id: \.id) { d in Button(d.title) { Task { await store.setFilter(kind, decade: .some(d)) } } }
+                    } label: { filterChip(browse.decade?.title ?? "Decade", symbol: "chevron.down", on: browse.decade != nil) }
+                }
+            }
+            .padding(.horizontal, pageMargin)
+        }
+        #else
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: dp(8)) {
                 Pill(title: "Sort · \(sortLabel)", on: browse.sort != "titleSort:asc") { choosingSort = true }
@@ -133,7 +203,6 @@ struct LibraryView: View {
             }
             .padding(.horizontal, pageMargin).padding(.vertical, dp(6))
         }
-        #if os(tvOS)
         .focusSection()
         #endif
         if let error = browse.error { ErrorNote(text: error).padding(.horizontal, pageMargin) }
@@ -175,6 +244,18 @@ struct LibraryView: View {
             ProgressView().frame(maxWidth: .infinity).padding(dp(30))
         }
     }
+
+    #if os(iOS)
+    private func filterChip(_ title: String, symbol: String?, on: Bool) -> some View {
+        HStack(spacing: 5) {
+            Text(title).font(Typeface.geist(13, .semibold)).lineLimit(1)
+            if let symbol { Image(systemName: symbol).font(.system(size: 10, weight: .bold)) }
+        }
+        .foregroundStyle(on ? Color.ink : Color.chalk)
+        .padding(.horizontal, 12).frame(height: 32)
+        .background(on ? Color.chalk : Color.surfaceHigh, in: Capsule())
+    }
+    #endif
 
     /// Three across on a phone, as many as fit on an iPad or a television.
     private var gridColumns: [GridItem] {

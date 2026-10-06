@@ -18,7 +18,7 @@ struct HomeView: View {
                 #if os(tvOS)
                 HeroBanner(item: hero ?? home.continueWatching.first ?? home.recentMovies.first)
                 #else
-                PageHeader(title: "Home")
+                PhoneHero(items: heroItems)
                 #endif
                 if let error = store.homeError { ErrorNote(text: error).padding(.horizontal, pageMargin) }
                 // Something asked for has arrived: said first, one at a time.
@@ -86,6 +86,10 @@ struct HomeView: View {
             .padding(.bottom, dp(24))
         }
         .refreshable { await store.refreshHome() }
+        #if os(iOS)
+        // The hero runs up under the bar, as the Apple TV app's does.
+        .ignoresSafeArea(edges: .top)
+        #endif
         .onChange(of: focused) { _, id in
             // Which row is said first, so a title in two rows is two places for the cursor.
             guard let focus = id, let bar = focus.firstIndex(of: "|") else { return }
@@ -96,6 +100,14 @@ struct HomeView: View {
     }
 
     private func shown(_ row: HomeRow) -> Bool { !store.isHidden(row) }
+
+    /// The hero's pages: what's part-watched, then what's new, each once.
+    private var heroItems: [PlexItem] {
+        let home = store.home
+        var seen = Set<String>()
+        let all = home.continueWatching.prefix(3) + home.recentMovies.prefix(3) + home.recentEpisodes.prefix(2).map(\.newest)
+        return Array(all.filter { $0.art != nil && seen.insert($0.id).inserted }.prefix(6))
+    }
 
     private func open(_ item: PlexItem) {
         switch item.type {
@@ -146,6 +158,15 @@ struct PageHeader: View {
     let title: String
 
     var body: some View {
+        #if os(iOS)
+        // On iPhone and iPad the page's name, Search and Settings are in iOS's own bar.
+        EmptyView()
+        #else
+        header
+        #endif
+    }
+
+    private var header: some View {
         HStack(spacing: dp(14)) {
             ReelyMark(height: 26)
             Text(title).font(Typeface.headline).foregroundStyle(Color.chalk)

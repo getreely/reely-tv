@@ -94,6 +94,14 @@ struct RootView: View {
             if store.askWho || choosingProfile { ProfilesView { store.askedWho(); choosingProfile = false }.zIndex(2) }
             // What's playing covers everything, as on the Fire TV.
             if store.playing != nil { PlayerView().transition(.opacity).zIndex(1) }
+            // Asked to play: the player's black screen at once, while Plex answers.
+            if store.playing == nil, store.opening != nil {
+                ZStack {
+                    Color.black.ignoresSafeArea()
+                    ProgressView().tint(.white).scaleEffect(Typeface.scale * 1.3)
+                }
+                .transition(.opacity).zIndex(1)
+            }
             if store.live.watching != nil { LivePlayerView().transition(.opacity).zIndex(1.5) }
             #if os(tvOS)
             // The first time in, signed in: how to get around with the remote.
@@ -136,7 +144,12 @@ struct RouteContent: View {
             switch route {
             case .home: HomeView()
             case .library(let kind): LibraryView(kind: kind).id(kind)
-            case .detail(let key, let base): DetailView(ratingKey: key, serverBase: base).id(key)
+            case .detail(let key, let base):
+                #if os(iOS)
+                PhoneDetail(ratingKey: key, serverBase: base).id(key)
+                #else
+                DetailView(ratingKey: key, serverBase: base).id(key)
+                #endif
             case .settings: SettingsView()
             case .search: SearchView()
             case .live: LiveView()

@@ -37,6 +37,8 @@ extension ReelyStore {
     /// A film or episode, from where it was left (or the top), with the rest of its season queued after it.
     public func play(_ item: PlexItem, resume: Bool = true, queue: [PlexItem] = [], mediaIndex: Int = 0) async {
         if item.isIptv { playIptv(item, resume: resume, queue: queue); return }
+        opening = item
+        defer { opening = nil }
         guard let base = plex.baseFor(item.serverBase), let token = plex.tokenFor(item.serverBase) else {
             playError = "Couldn't reach the server this is on."
             return

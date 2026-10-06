@@ -85,6 +85,8 @@ public final class ReelyStore {
     var searchRun = 0
     /// What's playing; nil when nothing is.
     public internal(set) var playing: Playing?
+    /// Asked to play, and on its way: the player's black screen goes up at once, not when Plex has answered.
+    public internal(set) var opening: PlexItem?
     public internal(set) var playError: String?
     public private(set) var route: Route = .home
     public private(set) var stack: [Route] = [.home]
@@ -155,6 +157,13 @@ public final class ReelyStore {
         if (to == .settings || to == .search) && route != .settings && route != .search { beneath = stack }
         route = to
         stack = to.isTab ? [to] : stack + [to]
+    }
+
+    /// The pages over the tab, as iOS's own navigation has them after a swipe back.
+    public func setPath(_ path: [Route]) {
+        guard let root = stack.first, root.isTab else { return }
+        stack = [root] + path
+        route = stack.last ?? root
     }
 
     /// Settings or Search put away (a phone's sheet closed): back to what was under it.

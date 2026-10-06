@@ -28,6 +28,12 @@ struct PlayerView: View {
     @State private var found: [PlexOnlineSubtitle]?
     @State private var findNote: String?
     @State private var adding: String?
+    #if os(iOS)
+    /// Where the finger has the bar while scrubbing: the picture goes there on letting go.
+    @State private var scrubMs: Int?
+    /// The last tap, to tell a double tap (skip) from a single one (the controls).
+    @State private var lastTap: (at: Date, left: Bool)?
+    #endif
 
     enum Panel: Identifiable { case subtitles, audio, chapters, sleep, find, info; var id: Self { self } }
     enum Control: Hashable { case play, subtitles, audio, chapters, sleep, info, skip, upNext }
@@ -58,7 +64,11 @@ struct PlayerView: View {
             }
             if let marker = activeSkip { skipButton(marker) }
             if let next = store.nextInQueue, showUpNext { upNext(next) }
+            #if os(iOS)
+            if controls && panel == nil { phoneControls }
+            #else
             if controls && panel == nil { overlay }
+            #endif
         }
         #if os(iOS)
         .onAppear { AppDelegate.playing(true) }
@@ -99,18 +109,187 @@ struct PlayerView: View {
             }
         }
         #else
-        // As on the Android phone: a double tap on the left skips back, on the right forward.
-        .onTapGesture(count: 2, coordinateSpace: .global) { at in
-            model.skip(at.x < UIScreen.main.bounds.width / 2 ? -10 : 10)
-            showControls()
-        }
-        .onTapGesture { controls ? (controls = false) : showControls() }
+        // A tap shows or hides the controls at once; a second on the same side skips, as on the Android phone.
+        .gesture(SpatialTapGesture(coordinateSpace: .global).onEnded { tap in tapped(tap.location) })
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
         #endif
     }
 
     // MARK: Controls
+
+    #if os(iOS)
+    private func tapped(_ at: CGPoint) {
+        let left = at.x < UIScreen.main.bounds.width / 2
+        if let last = lastTap, Date().timeIntervalSince(last.at) < 0.35, last.left == left {
+            model.skip(left ? -10 : 10)
+            lastTap = nil
+            showControls()
+            return
+        }
+        lastTap = (Date(), left)
+        if controls { withAnimation(.easeIn(duration: 0.2)) { controls = false } } else { showControls() }
+    }
+
+    /// iPhone and iPad: the title and AirPlay along the top, the big play in the middle with a
+    /// skip either side, and the bar with the tracks, chapters, sleep and info under it.
+    private var phoneControls: some View {
+        ZStack {
+            LinearGradient(colors: [Color.black.opacity(0.7), .clear, .clear, Color.black.opacity(0.8)], startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea().allowsHitTesting(false)
+            VStack(spacing: 0) {
+                HStack(spacing: 14) {
+                    roundButton("xmark", size: 16) { close() }.accessibilityLabel("Close")
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title).font(Typeface.geist(17, .semibold)).foregroundStyle(.white).lineLimit(1)
+                        if let sub = subtitleLine { Text(sub).font(Typeface.geist(13, .medium)).foregroundStyle(.white.opacity(0.7)).lineLimit(1) }
+                    }
+                    Spacer()
+                    RoutePicker().frame(width: 40, height: 40)
+                }
+                Spacer()
+                HStack(spacing: 52) {
+                    roundButton("gobackward.10", size: 24) { model.skip(-10); showControls() }.accessibilityLabel("Back 10 seconds")
+                    Button { model.togglePlay(); showControls() } label: {
+                        Image(systemName: model.playing ? "pause.fill" : "play.fill")
+                            .font(.system(size: 34, weight: .bold)).foregroundStyle(.white)
+                            .frame(width: 78, height: 78).background(.ultraThinMaterial, in: Circle())
+                    }
+                    .buttonStyle(PressStyle())
+                    .accessibilityLabel(model.playing ? "Pause" : "Play")
+                    roundButton("goforward.10", size: 24) { model.skip(10); showControls() }.accessibilityLabel("Forward 10 seconds")
+                }
+                Spacer()
+                phoneScrubber
+                HStack(spacing: 10) {
+                    subtitlesMenu
+                    audioMenu
+                    if !(store.playing?.playback.chapters.isEmpty ?? true) {
+                        chip("list.bullet", "Chapters") { panel = .chapters }
+                    }
+                    sleepMenu
+                    chip("info.circle", nil) { panel = .info }.accessibilityLabel("Playback info")
+                    Spacer(minLength: 0)
+                    if let next = store.nextInQueue {
+                        chip("forward.end.fill", "Next") { goNext() }.accessibilityLabel("Next: \(next.title)")
+                    }
+                }
+                .padding(.top, 10)
+            }
+            .padding(.horizontal, 20).padding(.vertical, 14)
+        }
+        .transition(.opacity)
+    }
+
+    private func roundButton(_ symbol: String, size: CGFloat, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: size, weight: .semibold)).foregroundStyle(.white)
+                .frame(width: size * 2.3, height: size * 2.3).background(.ultraThinMaterial, in: Circle())
+        }
+        .buttonStyle(PressStyle())
+    }
+
+    private func chip(_ symbol: String, _ label: String?, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) { chipLabel(symbol, label) }.buttonStyle(PressStyle())
+    }
+
+    private func chipLabel(_ symbol: String, _ label: String?, on: Bool = false) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol).font(.system(size: 14, weight: .semibold))
+            if let label { Text(label).font(Typeface.geist(13, .semibold)).lineLimit(1) }
+        }
+        .foregroundStyle(on ? accent.onColor : .white)
+        .padding(.horizontal, 12).frame(height: 34)
+        .background(on ? AnyShapeStyle(accent.swiftColor) : AnyShapeStyle(.ultraThinMaterial), in: Capsule())
+    }
+
+    /// The file's subtitles in iOS's own menu, the one on ticked; and Find subtitles online.
+    @ViewBuilder
+    private var subtitlesMenu: some View {
+        let p = store.playing
+        if model.usingVLC ? !model.vlcSubtitles.isEmpty : (!(p?.playback.subtitleStreams.isEmpty ?? true) || p?.item.isIptv == false) {
+            Menu {
+                if model.usingVLC {
+                    menuItem("Off", on: model.vlcSubtitleId < 0) { model.chooseVLCSubtitle(-1) }
+                    ForEach(model.vlcSubtitles, id: \.self) { t in menuItem(t.name, on: t.id == model.vlcSubtitleId) { model.chooseVLCSubtitle(t.id) } }
+                } else {
+                    menuItem("Off", on: !(p?.playback.subtitleStreams.contains(where: \.selected) ?? false)) { choose(subtitle: "0") }
+                    ForEach(p?.playback.subtitleStreams ?? [], id: \.id) { s in menuItem(s.label, on: s.selected) { choose(subtitle: s.id) } }
+                    if p?.item.isIptv == false {
+                        Divider()
+                        Button { find() } label: { Label("Find subtitles online", systemImage: "magnifyingglass") }
+                    }
+                }
+            } label: { chipLabel("captions.bubble", nil) }
+            .accessibilityLabel("Subtitles")
+        }
+    }
+
+    @ViewBuilder
+    private var audioMenu: some View {
+        let p = store.playing
+        if model.usingVLC ? model.vlcAudio.count > 1 : (p?.playback.audioStreams.count ?? 0) > 1 {
+            Menu {
+                if model.usingVLC {
+                    ForEach(model.vlcAudio, id: \.self) { t in menuItem(t.name, on: t.id == model.vlcAudioId) { model.chooseVLCAudio(t.id) } }
+                } else {
+                    ForEach(p?.playback.audioStreams ?? [], id: \.id) { s in menuItem(s.label, on: s.selected) { choose(audio: s.id) } }
+                }
+            } label: { chipLabel("speaker.wave.2", nil) }
+            .accessibilityLabel("Audio")
+        }
+    }
+
+    private var sleepMenu: some View {
+        Menu {
+            ForEach(SLEEP_CHOICES.filter { $0 != -1 || store.playing?.item.type == "episode" }, id: \.self) { m in
+                menuItem(m == 0 ? "Off" : m == -1 ? "End of this episode" : "\(m) minutes",
+                         on: m == 0 ? sleepAt == nil && !sleepAtEnd : m == -1 ? sleepAtEnd : false) { setSleep(m) }
+            }
+        } label: { chipLabel("moon.zzz", sleepLabel, on: sleepAt != nil || sleepAtEnd) }
+        .accessibilityLabel("Sleep timer")
+    }
+
+    @ViewBuilder
+    private func menuItem(_ title: String, on: Bool, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) { if on { Label(title, systemImage: "checkmark") } else { Text(title) } }
+    }
+
+    /// The bar: dragged, it shows where it'll go, and goes there on letting go.
+    private var phoneScrubber: some View {
+        let shown = scrubMs ?? model.positionMs
+        return VStack(spacing: 6) {
+            GeometryReader { g in
+                let fraction = model.durationMs > 0 ? Double(shown) / Double(model.durationMs) : 0
+                let x = g.size.width * min(1, max(0, fraction))
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.25)).frame(height: scrubMs == nil ? 5 : 8)
+                    Capsule().fill(accent.swiftColor).frame(width: x, height: scrubMs == nil ? 5 : 8)
+                    Circle().fill(.white).frame(width: scrubMs == nil ? 13 : 20, height: scrubMs == nil ? 13 : 20)
+                        .offset(x: x - (scrubMs == nil ? 6.5 : 10))
+                }
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .gesture(DragGesture(minimumDistance: 0).onChanged { v in
+                    hideTask?.cancel()
+                    scrubMs = Int(Double(model.durationMs) * min(1, max(0, v.location.x / max(1, g.size.width))))
+                }.onEnded { _ in
+                    if let at = scrubMs { model.seek(toMs: at) }
+                    scrubMs = nil
+                    showControls()
+                })
+                .animation(.easeOut(duration: 0.15), value: scrubMs == nil)
+            }
+            .frame(height: 24)
+            HStack {
+                Text(clock(shown))
+                Spacer()
+                Text("-" + clock(max(0, model.durationMs - shown)))
+            }
+            .font(Typeface.geist(12, .medium)).foregroundStyle(.white.opacity(0.75)).monospacedDigit()
+        }
+    }
+    #endif
 
     private var overlay: some View {
         VStack(alignment: .leading) {

@@ -191,19 +191,18 @@ struct ChannelsView: View {
             .padding(.top, topInset)
             .onExitCommand { store.closeCategory() }
             #else
-            VStack(spacing: 0) {
-                HStack(spacing: 12) {
-                    Button { store.closeCategory() } label: { Image(systemName: "chevron.left").font(.system(size: 20, weight: .semibold)) }
-                        .accessibilityLabel("Back")
-                    Text(category.name).font(Typeface.headline).lineLimit(1)
-                    Spacer()
-                    Button { Task { await store.refreshGuide() } } label: { Image(systemName: "arrow.clockwise") }
-                        .accessibilityLabel("Refresh the guide")
+            channelList(now)
+                .navigationTitle(category.name)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button { store.closeCategory() } label: { Label("Live TV", systemImage: "chevron.left") }
+                            .labelStyle(.titleAndIcon)
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { Task { await store.refreshGuide() } } label: { Image(systemName: "arrow.clockwise") }
+                            .accessibilityLabel("Refresh the guide")
+                    }
                 }
-                .font(.system(size: 18, weight: .medium)).foregroundStyle(Color.chalk)
-                .padding(.horizontal, pageMargin).padding(.vertical, 10)
-                channelList(now)
-            }
             .sheet(item: $schedule) { channel in ScheduleSheet(channel: channel).presentationDetents([.medium, .large]) }
             #endif
         }
