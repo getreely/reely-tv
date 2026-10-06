@@ -60,6 +60,10 @@ struct PlayerView: View {
             if let next = store.nextInQueue, showUpNext { upNext(next) }
             if controls && panel == nil { overlay }
         }
+        #if os(iOS)
+        .onAppear { AppDelegate.playing(true) }
+        .onDisappear { AppDelegate.playing(false) }
+        #endif
         .onAppear {
             model.attach(store)
             if let p = store.playing { model.load(p) }

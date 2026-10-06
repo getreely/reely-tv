@@ -3,6 +3,7 @@ import ReelyCore
 
 @main
 struct ReelyApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var store: ReelyStore
 
     init() {

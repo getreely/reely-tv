@@ -131,6 +131,10 @@ struct LivePlayerView: View {
             content(now: Int(context.date.timeIntervalSince1970))
         }
         .onAppear { load(); showBanner() }
+        #if os(iOS)
+        .onAppear { AppDelegate.playing(true) }
+        .onDisappear { AppDelegate.playing(false) }
+        #endif
         .onChange(of: url) { _, _ in load(); showBanner() }
         .onDisappear { model.stop() }
         .alert("Channel number", isPresented: $askNumber) {
