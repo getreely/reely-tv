@@ -28,6 +28,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -189,9 +190,11 @@ fun TouchApp(
         },
         hold = { menuFor = it },
         image = imageUrl ?: { base, path, w, h -> viewModel.plexImageUrl(base, path, w, h) },
+        logo = if (imageUrl != null) { _, _ -> null } else { base, path -> viewModel.plexLogoUrl(base, path) },
         search = { viewModel.navigate(Route.Search) },
         settings = { viewModel.navigate(Route.Settings) },
         profile = if (state.plex.canSwitchUser) ({ pickingProfile = true }) else null,
+        initial = state.plex.user?.title?.take(1)?.uppercase(),
     )
 
     TouchTheme {
@@ -206,20 +209,30 @@ fun TouchApp(
             // as it always has.
             contentWindowInsets = if (BuildConfig.EDGE_TO_EDGE) WindowInsets.systemBars.union(WindowInsets.displayCutout)
             else ScaffoldDefaults.contentWindowInsets,
-            bottomBar = { if (!sideways) TouchNavBar(state, onSelect = { viewModel.navigate(it.route) }) },
         ) { padding ->
             val edgeToEdge = if (BuildConfig.EDGE_TO_EDGE) Modifier.consumeWindowInsets(padding).imePadding() else Modifier
             Row(Modifier.fillMaxSize().padding(padding).then(edgeToEdge)) {
                 if (sideways) TouchNavRail(state, onSelect = { viewModel.navigate(it.route) })
+                // Upright, the tabs float over the bottom of the page, which scrolls on under them.
+                val barSpace = if (sideways) 0.dp else FLOATING_BAR_SPACE
                 Box(Modifier.weight(1f).fillMaxSize()) {
-                    TouchContent(viewModel, state, actions)
-                    // Inside the bar's padding, so it sits above the tabs rather than on them.
+                    CompositionLocalProvider(LocalBarSpace provides barSpace) {
+                        TouchContent(viewModel, state, actions)
+                    }
+                    if (!sideways) {
+                        TouchFloatingBar(
+                            selected = TouchTab.entries.firstOrNull { it.matches(state.stack.first()) },
+                            onSelect = { viewModel.navigate(it.route) },
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp),
+                        )
+                    }
+                    // Above the tabs rather than on them.
                     state.dueReminder?.let { due ->
                         TouchReminder(
                             reminder = due,
                             onWatch = viewModel::watchReminder,
                             onDismiss = viewModel::dismissReminder,
-                            modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp),
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 12.dp + barSpace),
                         )
                     }
                 }
@@ -259,40 +272,14 @@ internal class TouchActions(
     val open: (PlexItem) -> Unit,
     val hold: (PlexItem) -> Unit,
     val image: (String?, String?, Int, Int) -> String?,
+    /** A title's logo, for Home's picture; null when it has none. */
+    val logo: (String?, String?) -> String?,
     val search: () -> Unit,
     val settings: () -> Unit,
     val profile: (() -> Unit)?,
+    /** The first letter of who's watching, on the profile button. */
+    val initial: String? = null,
 )
-
-@Composable
-private fun TouchNavBar(state: ReelyState, onSelect: (TouchTab) -> Unit) {
-    val top = state.stack.first()
-    NavigationBar(containerColor = SurfaceRaised) {
-        TouchTab.entries.forEach { tab ->
-            val selected = tab.matches(top)
-            NavigationBarItem(
-                selected = selected,
-                onClick = { onSelect(tab) },
-                icon = {
-                    val color = if (selected) Ink else Muted
-                    when (tab) {
-                        TouchTab.HOME -> HomeTabGlyph(color)
-                        TouchTab.MOVIES -> FilmTabGlyph(color)
-                        TouchTab.SHOWS -> ShowTabGlyph(color)
-                        TouchTab.LIVE -> LiveTabGlyph(color)
-                        TouchTab.REQUESTS -> RequestTabGlyph(color)
-                    }
-                },
-                label = { Text(tab.label, maxLines = 1) },
-                colors = NavigationBarItemDefaults.colors(
-                    indicatorColor = Chalk,
-                    selectedTextColor = Chalk,
-                    unselectedTextColor = Muted,
-                ),
-            )
-        }
-    }
-}
 
 @Composable
 private fun TouchNavRail(state: ReelyState, onSelect: (TouchTab) -> Unit) {
@@ -362,32 +349,22 @@ private fun WatchingFullScreen(watching: Boolean) {
     }
 }
 
-/** The top of a tab: its name, and Search, the profile and Settings in the corner. */
+/**
+ * The top of a tab, as iOS has it: Search, Settings and the profile in a frosted capsule in
+ * the corner (the mark across from them on Home), and the tab's name large underneath.
+ */
 @Composable
-internal fun TouchHeader(title: String, actions: TouchActions, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier.fillMaxWidth().padding(start = TouchMargin, end = 8.dp, top = 8.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // The mark, top left, as on the television: in the color chosen in Settings.
-        androidx.compose.foundation.Image(
-            painter = androidx.compose.ui.res.painterResource(tv.reely.R.drawable.ic_mark),
-            contentDescription = "Reely",
-            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Accent),
-            modifier = Modifier.padding(end = 14.dp).height(26.dp),
-        )
-        Text(title, style = MaterialTheme.typography.headlineMedium, color = Chalk, maxLines = 1, modifier = Modifier.weight(1f))
-        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            HeaderButton(onClick = actions.search) { tv.reely.ui.components.SearchGlyph(it, 22.dp) }
-            actions.profile?.let { onProfile ->
-                HeaderButton(onClick = onProfile) { color ->
-                    Box(Modifier.size(22.dp).clip(CircleShape).background(Accent), contentAlignment = Alignment.Center) {
-                        Text("☺", color = tv.reely.ui.theme.OnAccent, style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-            }
-            HeaderButton(onClick = actions.settings) { tv.reely.ui.components.GearGlyph(it, 22.dp) }
+internal fun TouchHeader(title: String, actions: TouchActions, modifier: Modifier = Modifier, mark: Boolean = false) {
+    androidx.compose.foundation.layout.Column(modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = TouchMargin, end = TouchMargin, top = 8.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (mark) MarkCircle()
+            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+            GlassActions(actions)
         }
+        if (title.isNotEmpty()) LargeTitle(title)
     }
 }
 
@@ -403,16 +380,17 @@ internal fun HeaderButton(onClick: () -> Unit, glyph: @Composable (Color) -> Uni
 @Composable
 internal fun TouchPageBar(title: String, onBack: () -> Unit, modifier: Modifier = Modifier, trailing: (@Composable () -> Unit)? = null) {
     Row(
-        modifier = modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+        modifier = modifier.fillMaxWidth().padding(start = TouchMargin, end = 8.dp, top = 8.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        HeaderButton(onClick = onBack) { tv.reely.ui.components.ArrowGlyph(it, left = true, size = 22.dp) }
+        GlassCircle(onClick = onBack, description = "Back") { tv.reely.ui.components.ArrowGlyph(Chalk, left = true, size = 20.dp) }
         Text(
             title,
             style = MaterialTheme.typography.titleLarge,
             color = Chalk,
             maxLines = 1,
-            modifier = Modifier.weight(1f).padding(start = 4.dp),
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).padding(start = 12.dp),
         )
         trailing?.invoke()
     }

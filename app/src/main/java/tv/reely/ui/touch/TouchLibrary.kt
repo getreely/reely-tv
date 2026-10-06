@@ -34,6 +34,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.Row
+import tv.reely.ui.theme.Muted
+import androidx.compose.ui.draw.rotate
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import tv.reely.plex.PlexItem
@@ -71,43 +75,46 @@ internal fun TouchLibrary(viewModel: ReelyViewModel, state: ReelyState, route: R
     val browse: BrowseState = if (showingIptv) state.iptv.browseFor(kind) else state.plex.browseFor(kind)
 
     Column(Modifier.fillMaxSize()) {
-        TouchHeader(if (showingIptv) "IPTV ${kind.title}" else browse.section?.title ?: kind.title, actions)
-        // Where in the tab: its home, the library, collections, IPTV; and which library.
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = TouchMargin),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            val views = buildList {
-                add(LibraryView.HOME to "For you")
-                add(LibraryView.GRID to "Library")
-                add(LibraryView.COLLECTIONS to "Collections")
-                if (iptvOn && state.prefs.iptvInMenus) add(LibraryView.IPTV to "IPTV")
+        TouchHeader("", actions)
+        // The tab's name, large; with more than one library of its kind, pressed for the others.
+        val choices = state.plex.menuChoicesFor(kind)
+        var choosing by remember { mutableStateOf(false) }
+        Box {
+            Row(
+                modifier = if (choices.size > 1 && !showingIptv) Modifier.clickable { choosing = true } else Modifier,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                LargeTitle(if (showingIptv) "IPTV ${kind.title}" else browse.section?.title ?: kind.title, Modifier.weight(1f, fill = false))
+                if (choices.size > 1 && !showingIptv) {
+                    Chevron(Muted, 16.dp)
+                }
             }
-            items(views, key = { it.first.name }) { (target, label) ->
-                TouchChip(label, selected = view == target, onClick = { viewModel.navigate(Route.Library(kind, target)) })
-            }
-            val choices = state.plex.menuChoicesFor(kind)
-            if (choices.size > 1 && !showingIptv) item(key = "libraries") {
-                var open by remember { mutableStateOf(false) }
-                Box {
-                    TouchChip("Libraries ▾", selected = false, onClick = { open = true })
-                    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                        choices.forEach { choice ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(if (state.plex.namesNeedServer) "${choice.section.title} — ${choice.serverName}" else choice.section.title)
-                                },
-                                onClick = {
-                                    open = false
-                                    viewModel.openLibrary(kind, choice)
-                                    viewModel.navigate(Route.Library(kind, LibraryView.GRID))
-                                },
-                            )
-                        }
-                    }
+            DropdownMenu(expanded = choosing, onDismissRequest = { choosing = false }) {
+                choices.forEach { choice ->
+                    DropdownMenuItem(
+                        text = { Text(if (state.plex.namesNeedServer) "${choice.section.title} — ${choice.serverName}" else choice.section.title) },
+                        onClick = {
+                            choosing = false
+                            viewModel.openLibrary(kind, choice)
+                            viewModel.navigate(Route.Library(kind, LibraryView.GRID))
+                        },
+                    )
                 }
             }
         }
+        // Where in the tab: its home, the library, collections, IPTV — side by side, as iOS's segments.
+        val views = buildList {
+            add(LibraryView.HOME to "Home")
+            add(LibraryView.GRID to "All")
+            add(LibraryView.COLLECTIONS to "Collections")
+            if (iptvOn && state.prefs.iptvInMenus) add(LibraryView.IPTV to "IPTV")
+        }
+        TouchSegments(
+            options = views.map { it.second },
+            selected = views.indexOfFirst { it.first == view },
+            onSelect = { i -> viewModel.navigate(Route.Library(kind, views[i].first)) },
+            modifier = Modifier.padding(horizontal = TouchMargin, vertical = 8.dp),
+        )
         when (view) {
             LibraryView.HOME -> TabHome(viewModel, state, kind, actions)
             LibraryView.COLLECTIONS -> Collections(browse, actions)
@@ -134,7 +141,7 @@ private fun TabHome(viewModel: ReelyViewModel, state: ReelyState, kind: LibraryK
     val iptvNew = if (kind == LibraryKind.MOVIES) home.iptvMovies else home.iptvShows
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp + barSpace()),
         verticalArrangement = Arrangement.spacedBy(22.dp),
     ) {
         if (resumable.isNotEmpty()) item {
@@ -224,7 +231,7 @@ private fun Grid(
         columns = touchPosterColumns(),
         state = gridState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = TouchMargin, end = if (rail) TouchMargin + 14.dp else TouchMargin, top = 12.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(start = TouchMargin, end = if (rail) TouchMargin + 14.dp else TouchMargin, top = 12.dp, bottom = 24.dp + barSpace()),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -408,7 +415,7 @@ private fun Collections(browse: BrowseState, actions: TouchActions) {
     LazyVerticalGrid(
         columns = touchPosterColumns(),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = TouchMargin, end = TouchMargin, top = 12.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(start = TouchMargin, end = TouchMargin, top = 12.dp, bottom = 24.dp + barSpace()),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {

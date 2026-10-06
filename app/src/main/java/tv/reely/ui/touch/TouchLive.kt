@@ -83,7 +83,7 @@ internal fun TouchLive(viewModel: ReelyViewModel, state: ReelyState, actions: To
         Column(Modifier.fillMaxSize()) {
             TouchHeader("Live TV", actions)
             live.error?.let { TouchError(it, onDismiss = viewModel::dismissLiveError) }
-            LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+            LazyColumn(contentPadding = PaddingValues(bottom = 24.dp + barSpace())) {
                 items(live.shownCategories, key = { it.id }) { item ->
                     TouchListRow(item.name, onClick = { viewModel.openCategory(item) })
                 }
@@ -106,7 +106,7 @@ internal fun TouchLive(viewModel: ReelyViewModel, state: ReelyState, actions: To
     Column(Modifier.fillMaxSize()) {
         TouchPageBar(category.name, onBack = viewModel::clearCategory)
         live.error?.let { TouchError(it, onDismiss = viewModel::dismissLiveError) }
-        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp + barSpace())) {
             if (live.busy && live.channels.isEmpty()) {
                 item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Accent) } }
             }
@@ -201,7 +201,7 @@ private fun Schedule(viewModel: ReelyViewModel, state: ReelyState, channel: Xtre
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false),
         containerColor = SurfaceRaised,
     ) {
-        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp + barSpace())) {
             item {
                 Text(channel.name, style = MaterialTheme.typography.titleLarge, color = Chalk, modifier = Modifier.padding(horizontal = 20.dp))
             }
@@ -274,7 +274,7 @@ private fun LiveSignIn(viewModel: ReelyViewModel, live: LiveState) {
     var url by rememberSaveable { mutableStateOf("") }
     var guide by rememberSaveable { mutableStateOf("") }
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = TouchMargin, vertical = 8.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = barSpace()).padding(horizontal = TouchMargin, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Watch live TV from your provider", style = MaterialTheme.typography.headlineSmall, color = Chalk)

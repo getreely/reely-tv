@@ -54,7 +54,7 @@ import tv.reely.xtream.sourceTag
 internal fun TouchHome(viewModel: ReelyViewModel, state: ReelyState, actions: TouchActions) {
     if (!state.plex.isConnected) {
         Column(Modifier.fillMaxSize()) {
-            TouchHeader("Home", actions)
+            TouchHeader("Home", actions, mark = true)
             TouchSignIn(viewModel, state)
         }
         return
@@ -66,10 +66,24 @@ internal fun TouchHome(viewModel: ReelyViewModel, state: ReelyState, actions: To
     PullToRefreshBox(isRefreshing = home.busy && !home.isEmpty, onRefresh = viewModel::refreshHome) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 24.dp),
+            contentPadding = PaddingValues(bottom = 24.dp + barSpace()),
             verticalArrangement = Arrangement.spacedBy(22.dp),
         ) {
-            item { TouchHeader("Home", actions) }
+            // Home opens on a picture of what's on, swiped across, with the corner buttons over it.
+            val hero = heroItems(home.continueWatching, home.recentMovies, home.recentEpisodes.map { it.newest })
+            item(key = "top") {
+                if (hero.isEmpty()) {
+                    TouchHeader("", actions, mark = true)
+                } else {
+                    TouchHero(hero, actions, onPlay = { viewModel.play(it) }) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            MarkCircle()
+                            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+                            GlassActions(actions)
+                        }
+                    }
+                }
+            }
             home.error?.let { error -> item { TouchError(error) } }
 
             state.requests.ready.firstOrNull()?.let { arrived ->
@@ -224,7 +238,7 @@ internal fun TouchSignIn(viewModel: ReelyViewModel, state: ReelyState) {
         runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = TouchMargin, vertical = 12.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = barSpace()).padding(horizontal = TouchMargin, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         if (plex.token != null && plex.linkCode == null) {

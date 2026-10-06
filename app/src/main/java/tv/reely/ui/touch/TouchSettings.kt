@@ -1,5 +1,6 @@
 package tv.reely.ui.touch
 
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import tv.reely.ui.ReelyState
 import tv.reely.ui.ReelyViewModel
@@ -11,6 +12,12 @@ import tv.reely.ui.screens.SettingsScreen
  */
 @Composable
 internal fun TouchSettings(viewModel: ReelyViewModel, state: ReelyState, onSwitchProfile: () -> Unit = {}) {
+    // Clear of the floating tabs.
+    androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.padding(bottom = barSpace())) { TouchSettingsBody(viewModel, state, onSwitchProfile) }
+}
+
+@Composable
+private fun TouchSettingsBody(viewModel: ReelyViewModel, state: ReelyState, onSwitchProfile: () -> Unit) {
     SettingsScreen(
         plex = state.plex,
         live = state.live,

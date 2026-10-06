@@ -52,7 +52,7 @@ internal fun TouchRequests(viewModel: ReelyViewModel, state: ReelyState, actions
         }
         return
     }
-    LazyColumn(contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+    LazyColumn(contentPadding = PaddingValues(bottom = 24.dp + barSpace()), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         item { TouchHeader("Requests", actions) }
         item {
             Column(Modifier.padding(horizontal = TouchMargin), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -98,7 +98,7 @@ private fun TitleRow(heading: String, titles: List<RequestTitle>, requests: Requ
 private fun ConnectReely(viewModel: ReelyViewModel, requests: RequestsState) {
     var address by rememberSaveable { mutableStateOf("") }
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = TouchMargin, vertical = 8.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = barSpace()).padding(horizontal = TouchMargin, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Ask for movies and shows", style = MaterialTheme.typography.headlineSmall, color = Chalk)
@@ -123,7 +123,7 @@ private fun ConnectReely(viewModel: ReelyViewModel, requests: RequestsState) {
 internal fun TouchRequestTitle(viewModel: ReelyViewModel, state: ReelyState, route: Route.RequestTitle) {
     val page = state.requestDetail?.takeIf { it.title.key == route.title.key }
     val status = state.requests.statusOf(route.title)
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = barSpace())) {
         Box(Modifier.heroHeight()) {
             AsyncImage(page?.detail?.backdrop ?: route.title.poster, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Ink.copy(alpha = 0.35f), Color.Transparent, Ink))))

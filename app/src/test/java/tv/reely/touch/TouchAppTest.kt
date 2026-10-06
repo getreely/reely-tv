@@ -8,6 +8,8 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
@@ -78,13 +80,14 @@ class TouchAppTest {
         signedIn()
         show()
         compose.onNodeWithText("Recently Added Movies").assertIsDisplayed()
-        compose.onNodeWithText("Movies").performClick()
+        // The floating tabs show only the chosen one's name; each is found by what it's called.
+        compose.onNodeWithContentDescription("Movies").performClick()
         compose.runOnIdle { assertEquals(Route.Library(LibraryKind.MOVIES), model.state.value.route) }
-        compose.onNodeWithText("Live TV").performClick()
+        compose.onNodeWithContentDescription("Live TV").performClick()
         compose.onNodeWithText("Watch live TV from your provider").assertIsDisplayed()
-        compose.onNodeWithText("Requests").performClick()
+        compose.onNodeWithContentDescription("Requests").performClick()
         compose.onNodeWithText("Ask for movies and shows").assertIsDisplayed()
-        compose.onNodeWithText("Home").performClick()
+        compose.onNodeWithContentDescription("Home").performClick()
         compose.runOnIdle { assertEquals(Route.Home, model.state.value.route) }
     }
 
@@ -93,7 +96,8 @@ class TouchAppTest {
         show()
         compose.onAllNodesWithText("Ember Street").onFirst().performTouchInput { longClick() }
         compose.onNodeWithText("Mark as watched").assertIsDisplayed()
-        compose.onNodeWithText("Details").assertIsDisplayed()
+        // Home's picture has a Details of its own; the menu's is the last drawn.
+        compose.onAllNodesWithText("Details").onLast().assertIsDisplayed()
     }
 
     @Test fun `back from a page goes back, and from a tab to Home`() {
@@ -131,7 +135,8 @@ class TouchAppTest {
         signedIn()
         show()
         // Nowhere to play it from here; what matters is that it's asked to play, not opened.
-        compose.onAllNodesWithText("Northbound").onFirst().performClick()
+        // The first Northbound is Home's picture, which opens the show; the second is the card.
+        compose.onAllNodesWithText("Northbound")[1].performClick()
         compose.runOnIdle { assertTrue(model.state.value.route is Route.Home) }
     }
 
@@ -173,7 +178,7 @@ class TouchAppTest {
             )
         }
         show()
-        compose.onNodeWithText("Up next  ·  S1 · E3  ·  Episode 3").assertIsDisplayed()
+        compose.onNodeWithText("Play S1 · E3").assertIsDisplayed()
     }
 
     @Test fun `a phone's library says how many there are, and its A to Z rail goes to a letter`() {

@@ -54,6 +54,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.asImageBitmap
 import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
@@ -1550,6 +1553,26 @@ fun PlayerScreen(
                     .windowInsetsPadding(WindowInsets.displayCutout)
                     .padding(16.dp),
             )
+        }
+        // As on the iPhone: back ten seconds, play or pause, and on ten, large in the middle
+        // of the picture where a thumb finds them. Live television has the bar's own.
+        if (controlsShowing && touch && !playback.isLive) {
+            Row(
+                modifier = Modifier.align(Alignment.Center),
+                horizontalArrangement = Arrangement.spacedBy(36.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TouchRound(size = 60.dp, description = "Back 10 seconds", onClick = {
+                    exoPlayer.seekTo((exoPlayer.currentPosition - TOUCH_SKIP_MS).coerceAtLeast(0)); interaction++
+                }) { TenSeconds(forward = false) }
+                TouchRound(size = 78.dp, description = if (playing) "Pause" else "Play", onClick = { togglePlay(exoPlayer); interaction++ }) {
+                    if (playing) tv.reely.ui.components.PauseGlyph(Chalk, 30.dp) else tv.reely.ui.components.PlayGlyph(Chalk, 30.dp)
+                }
+                TouchRound(size = 60.dp, description = "Forward 10 seconds", onClick = {
+                    val end = exoPlayer.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
+                    exoPlayer.seekTo((exoPlayer.currentPosition + TOUCH_SKIP_MS).coerceAtMost(end)); interaction++
+                }) { TenSeconds(forward = true) }
+            }
         }
         if (controlsShowing) {
             PlayerClock(
@@ -3108,6 +3131,33 @@ private const val TOUCH_SKIP_MS = 10_000L
 
 /** How far a swipe has to travel to change channel. */
 private val TOUCH_SWIPE_DP = 72.dp
+
+/** A round frosted button over the picture, for a finger. */
+@Composable
+private fun TouchRound(size: androidx.compose.ui.unit.Dp, description: String, onClick: () -> Unit, content: @Composable () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(Ink.copy(alpha = 0.45f))
+            .border(0.5.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = description },
+        contentAlignment = Alignment.Center,
+    ) { content() }
+}
+
+/** A turning arrow with 10 in it: ten seconds back, or (mirrored) on. */
+@Composable
+private fun TenSeconds(forward: Boolean) {
+    Box(contentAlignment = Alignment.Center) {
+        tv.reely.ui.components.RestartGlyph(
+            Chalk, 30.dp,
+            modifier = if (forward) Modifier.graphicsLayer { scaleX = -1f } else Modifier,
+        )
+        Text("10", color = Chalk, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 2.dp))
+    }
+}
 
 /** The way out of the player on a touch screen, where there's no remote to press Back on. */
 @Composable

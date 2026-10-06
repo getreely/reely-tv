@@ -1,6 +1,18 @@
 package tv.reely.ui.touch
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -80,68 +92,25 @@ internal fun TouchDetail(viewModel: ReelyViewModel, state: ReelyState, actions: 
         ?.takeIf { detail.type == "movie" || detail.type == "show" }
     val isCollection = detail.type == "collection"
 
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
-        item(key = "hero") {
-            Box(Modifier.heroHeight()) {
-                AsyncImage(
-                    model = actions.image(page.serverBase, detail.art ?: detail.thumb, 720, 405),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                Box(
-                    Modifier.fillMaxSize().background(
-                        Brush.verticalGradient(listOf(Ink.copy(alpha = 0.35f), Color.Transparent, Ink)),
-                    ),
-                )
-                Box(Modifier.padding(4.dp)) {
-                    HeaderButton(onClick = viewModel::goBack) { tv.reely.ui.components.ArrowGlyph(it, left = true, size = 22.dp) }
-                }
-            }
-        }
+    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp + barSpace())) {
+        item(key = "hero") { DetailHeader(page, actions, onBack = viewModel::goBack) }
         item(key = "about") {
             Column(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = TouchMargin),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                // A finger's width on a phone; not a bar across a tablet.
+                modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(horizontal = TouchMargin),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Text(detail.title, style = MaterialTheme.typography.headlineMedium, color = Chalk)
-                val facts = listOfNotNull(
-                    detail.facts.takeIf { it.isNotBlank() },
-                    detail.qualities.takeIf { it.isNotEmpty() }?.joinToString(" · "),
-                ).joinToString("  ·  ")
-                if (facts.isNotEmpty()) Text(facts, style = MaterialTheme.typography.bodyMedium, color = Muted)
                 page.error?.let { TouchError(it, modifier = Modifier.padding(0.dp)) }
+                if (!isCollection) PlayButton(viewModel, page)
+                Story(page)
                 if (!isCollection) Actions(viewModel, page, watchlisted)
-                detail.tagline?.let { Text(it, style = MaterialTheme.typography.titleSmall, color = Chalk) }
-                detail.summary?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = Muted) }
-                val credits = listOfNotNull(
-                    detail.genres.takeIf { it.isNotEmpty() }?.let { "Genres" to it.joinToString(", ") },
-                    detail.directors.takeIf { it.isNotEmpty() }?.let { "Directed by" to it.joinToString(", ") },
-                    detail.writers.takeIf { it.isNotEmpty() }?.let { "Written by" to it.joinToString(", ") },
-                    formatAirDate(detail.airDate)?.let { (if (detail.isShow) "First aired" else "Released") to it },
-                )
-                credits.forEach { (label, value) ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(label, style = MaterialTheme.typography.bodySmall, color = Faint, modifier = Modifier.width(96.dp))
-                        Text(value, style = MaterialTheme.typography.bodySmall, color = Muted)
-                    }
-                }
             }
         }
 
         if (page.seasons.size > 1) item(key = "seasons") {
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = TouchMargin, vertical = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(page.seasons, key = { it.ratingKey }) { season ->
-                    TouchChip(
-                        season.title,
-                        selected = page.selectedSeason?.ratingKey == season.ratingKey,
-                        onClick = { viewModel.selectSeason(season) },
-                    )
-                }
-            }
+            SeasonPicker(page, onPick = viewModel::selectSeason)
+        } else if (detail.isShow && page.episodes.isNotEmpty()) item(key = "episodes-title") {
+            TouchSectionTitle("Episodes", Modifier.padding(top = 18.dp))
         }
         if (detail.isShow) {
             if (page.busy && page.episodes.isEmpty()) item(key = "loading") {
@@ -196,75 +165,225 @@ internal fun TouchDetail(viewModel: ReelyViewModel, state: ReelyState, actions: 
     }
 }
 
+/**
+ * The top of a title's page, as the iPhone's: the backdrop to the screen's edges, its logo
+ * (or name) over the foot of it, what it is and in what quality, and back in a frosted
+ * circle in the corner.
+ */
 @Composable
-private fun Actions(viewModel: ReelyViewModel, page: DetailState, watchlisted: Boolean?) {
+private fun DetailHeader(page: DetailState, actions: TouchActions, onBack: () -> Unit) {
     val detail = page.detail ?: return
-    /*
-     * As on the television: a show's page is about one episode — the one it was opened
-     * on, else the one you're up to — and Play, Restart and Watched are about that one.
-     * Without it, Play went to the season's first episode however far through you were.
-     */
-    val target = page.focusedEpisode?.takeIf { detail.isShow }
-    val resumeFrom = when {
+    Box(Modifier.fillMaxWidth().height(440.dp)) {
+        AsyncImage(
+            model = actions.image(page.serverBase, detail.art ?: detail.thumb, 1280, 720),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(0f to Ink.copy(alpha = 0.5f), 0.3f to Color.Transparent, 0.75f to Ink.copy(alpha = 0.7f), 1f to Ink),
+            ),
+        )
+        Box(Modifier.padding(start = TouchMargin, top = 8.dp)) {
+            GlassCircle(onClick = onBack, description = "Back") { tv.reely.ui.components.ArrowGlyph(Chalk, left = true, size = 20.dp) }
+        }
+        Column(
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            val logo = actions.logo(page.serverBase, detail.logo)
+            if (logo != null) {
+                AsyncImage(model = logo, contentDescription = detail.title, contentScale = ContentScale.Fit, modifier = Modifier.widthIn(max = 280.dp).heightIn(max = 100.dp))
+            } else {
+                Text(
+                    detail.title, color = Chalk, fontFamily = tv.reely.ui.theme.Geist, fontWeight = FontWeight.Bold, fontSize = 30.sp, lineHeight = 34.sp,
+                    textAlign = TextAlign.Center, maxLines = 3, overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                val facts = listOfNotNull(
+                    detail.year?.toString(),
+                    if (detail.isShow && detail.childCount > 0) (if (detail.childCount == 1) "1 season" else "${detail.childCount} seasons") else null,
+                    formatDuration(detail.durationMs).takeIf { !detail.isShow && detail.durationMs > 0 },
+                    detail.contentRating,
+                ).joinToString(" · ")
+                if (facts.isNotEmpty()) Text(facts, color = Chalk.copy(alpha = 0.75f), fontFamily = tv.reely.ui.theme.Geist, fontWeight = FontWeight.Medium, fontSize = 13.sp, maxLines = 1)
+                (page.focusedEpisode?.qualities?.takeIf { it.isNotEmpty() } ?: detail.qualities).take(3).forEach { quality ->
+                    Text(
+                        quality, color = Chalk, fontFamily = tv.reely.ui.theme.Geist, fontWeight = FontWeight.SemiBold, fontSize = 11.sp, maxLines = 1,
+                        modifier = Modifier.border(1.dp, Chalk.copy(alpha = 0.4f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 1.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * As on the television: a show's page is about one episode — the one it was opened on,
+ * else the one you're up to — and Play, Restart and Watched are about that one.
+ */
+private fun targetOf(page: DetailState): PlexItem? = page.focusedEpisode?.takeIf { page.detail?.isShow == true }
+
+private fun resumeOf(page: DetailState): Long {
+    val detail = page.detail ?: return 0
+    val target = targetOf(page)
+    return when {
         target != null -> target.viewOffsetMs
         detail.isShow -> page.episodes.firstOrNull { it.resumeFraction != null }?.viewOffsetMs ?: 0L
         else -> detail.viewOffsetMs
     }
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        target?.let { episode ->
+}
+
+/** One wide Play: the film, or the episode you're up to, from where it was left; and how long is left. */
+@Composable
+private fun PlayButton(viewModel: ReelyViewModel, page: DetailState) {
+    val detail = page.detail ?: return
+    val target = targetOf(page)
+    val resumeFrom = resumeOf(page)
+    val duration = target?.durationMs ?: detail.durationMs
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Chalk)
+                .clickable { if (target != null) viewModel.play(target, queue = page.episodes) else viewModel.playFromDetail() },
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PlayGlyph(Ink, 16.dp)
+            Spacer(Modifier.width(10.dp))
+            val verb = if (resumeFrom > 0) "Resume" else "Play"
             Text(
-                listOfNotNull(
-                    if (resumeFrom > 0) "Continue" else "Up next",
-                    listOfNotNull(episode.parentIndex?.let { "S$it" }, episode.index?.let { "E$it" }).joinToString(" · ").ifEmpty { null },
-                    episode.title,
-                ).joinToString("  ·  "),
-                style = MaterialTheme.typography.bodyMedium,
-                color = Chalk,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                listOfNotNull(verb, target?.let { it.caption ?: it.title }).joinToString(" "),
+                color = Ink, fontFamily = tv.reely.ui.theme.Geist, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, maxLines = 1,
             )
         }
-        TouchPrimaryButton(
-            label = if (resumeFrom > 0) "Resume" else "Play",
-            onClick = { if (target != null) viewModel.play(target, queue = page.episodes) else viewModel.playFromDetail() },
-            // A finger's width on a phone; not a bar across a tablet.
-            modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth(),
-            icon = { PlayGlyph(it, 18.dp) },
+        if (resumeFrom > 0 && duration > 0) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(Modifier.weight(1f).height(4.dp).clip(CircleShape).background(Chalk.copy(alpha = 0.2f))) {
+                    Box(Modifier.fillMaxWidth((resumeFrom.toFloat() / duration).coerceIn(0f, 1f)).height(4.dp).clip(CircleShape).background(Accent))
+                }
+                Text("${maxOf(1, (duration - resumeFrom) / 60_000)} min left", color = Muted, fontFamily = tv.reely.ui.theme.Geist, fontWeight = FontWeight.Medium, fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+/** What it's about: the episode's name, the story (a press opens the rest of it), and who made it. */
+@Composable
+private fun Story(page: DetailState) {
+    val detail = page.detail ?: return
+    val episode = targetOf(page)
+    var open by remember(detail.ratingKey) { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        episode?.let {
+            Text(
+                listOfNotNull(it.caption, it.title).joinToString(" · "),
+                color = Chalk, fontFamily = tv.reely.ui.theme.Geist, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+        }
+        detail.tagline?.takeIf { episode == null }?.let { Text(it, color = Chalk, fontFamily = tv.reely.ui.theme.Geist, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) }
+        (episode?.summary ?: detail.summary)?.takeIf { it.isNotBlank() }?.let { summary ->
+            Text(
+                summary, color = Chalk.copy(alpha = 0.82f), fontFamily = tv.reely.ui.theme.Geist, fontSize = 15.sp, lineHeight = 21.sp,
+                maxLines = if (open) Int.MAX_VALUE else 3, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.animateContentSize().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { open = !open },
+            )
+        }
+        val credits = listOfNotNull(
+            detail.genres.take(3).joinToString(", ").ifEmpty { null },
+            detail.directors.firstOrNull()?.let { "Directed by $it" },
+            formatAirDate(detail.airDate)?.takeIf { open }?.let { (if (detail.isShow) "First aired " else "Released ") + it },
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (resumeFrom > 0) {
-                TouchIconAction("Restart", {
-                    if (target != null) viewModel.play(target, queue = page.episodes, resume = false)
-                    else viewModel.playFromDetail(resume = false)
-                }, { RestartGlyph(it, 20.dp) })
-            }
-            // The show as a whole is marked from its menu; here, as on the television, the episode.
-            val watched = target?.isWatched ?: detail.isWatched
-            TouchIconAction(if (watched) "Unwatch" else "Watched", {
-                if (target != null) viewModel.toggleWatched(target) else viewModel.toggleWatchedDetail()
-            }, { CheckGlyph(it, 20.dp) })
-            if (watchlisted != null) {
-                TouchIconAction("Watchlist", viewModel::toggleWatchlist, { BookmarkGlyph(it, filled = watchlisted, size = 20.dp) })
-            }
-            if (page.trailers.isNotEmpty()) {
-                TouchIconAction("Trailer", viewModel::playTrailer, { TrailerGlyph(it, 20.dp) })
-            }
-            if (detail.versions.size > 1 && !detail.isShow) {
-                var open by remember { mutableStateOf(false) }
-                val chosen = detail.versions.getOrNull(page.versionIndex) ?: detail.versions.first()
-                Box {
-                    TouchIconAction("Quality", { open = true }, { color ->
-                        Text(chosen.label.substringBefore(' '), color = color, style = MaterialTheme.typography.labelMedium)
-                    })
-                    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                        detail.versions.forEachIndexed { index, version ->
-                            DropdownMenuItem(
-                                text = { Text(listOfNotNull(version.label, version.detail).joinToString(" · ")) },
-                                onClick = { open = false; viewModel.selectVersion(index) },
-                            )
-                        }
+        if (credits.isNotEmpty()) Text(credits.joinToString(" · "), color = Muted, fontFamily = tv.reely.ui.theme.Geist, fontWeight = FontWeight.Medium, fontSize = 12.sp, maxLines = 2)
+    }
+}
+
+/** The rest of what can be done with it: a row of symbols with their names under them. */
+@Composable
+private fun Actions(viewModel: ReelyViewModel, page: DetailState, watchlisted: Boolean?) {
+    val detail = page.detail ?: return
+    val target = targetOf(page)
+    val resumeFrom = resumeOf(page)
+    Row(Modifier.fillMaxWidth().padding(top = 2.dp)) {
+        if (watchlisted != null) {
+            PageAction("Watchlist", viewModel::toggleWatchlist, on = watchlisted) { BookmarkGlyph(it, filled = watchlisted, size = 22.dp) }
+        }
+        // The show as a whole is marked from its menu; here, as on the television, the episode.
+        val watched = target?.isWatched ?: detail.isWatched
+        PageAction(if (watched) "Watched" else "Mark watched", {
+            if (target != null) viewModel.toggleWatched(target) else viewModel.toggleWatchedDetail()
+        }, on = watched) { CheckGlyph(it, 22.dp) }
+        if (resumeFrom > 0) {
+            PageAction("Restart", {
+                if (target != null) viewModel.play(target, queue = page.episodes, resume = false)
+                else viewModel.playFromDetail(resume = false)
+            }) { RestartGlyph(it, 22.dp) }
+        }
+        if (page.trailers.isNotEmpty()) {
+            PageAction("Trailer", viewModel::playTrailer) { TrailerGlyph(it, 22.dp) }
+        }
+        if (detail.versions.size > 1 && !detail.isShow) {
+            var choosing by remember { mutableStateOf(false) }
+            val chosen = detail.versions.getOrNull(page.versionIndex) ?: detail.versions.first()
+            Box(Modifier.weight(1f)) {
+                PageAction("Quality", { choosing = true }, modifier = Modifier.fillMaxWidth()) { color ->
+                    Text(chosen.label.substringBefore(' '), color = color, fontFamily = tv.reely.ui.theme.Geist, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+                DropdownMenu(expanded = choosing, onDismissRequest = { choosing = false }) {
+                    detail.versions.forEachIndexed { index, version ->
+                        DropdownMenuItem(
+                            text = { Text(listOfNotNull(version.label, version.detail).joinToString(" · ")) },
+                            onClick = { choosing = false; viewModel.selectVersion(index) },
+                        )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RowScope.PageAction(label: String, onClick: () -> Unit, on: Boolean = false, glyph: @Composable (Color) -> Unit) =
+    PageAction(label, onClick, on, Modifier.weight(1f), glyph)
+
+@Composable
+private fun PageAction(label: String, onClick: () -> Unit, on: Boolean = false, modifier: Modifier, glyph: @Composable (Color) -> Unit) {
+    val color = if (on) Accent else Chalk
+    Column(
+        modifier = modifier.clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick).padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(Modifier.height(26.dp), contentAlignment = Alignment.Center) { glyph(color) }
+        Text(label, color = if (on) Accent else Muted, fontFamily = tv.reely.ui.theme.Geist, fontWeight = FontWeight.Medium, fontSize = 12.sp, maxLines = 1)
+    }
+}
+
+/** A show's seasons: the one showing, large, opening a list of the rest. */
+@Composable
+private fun SeasonPicker(page: DetailState, onPick: (PlexItem) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box(Modifier.padding(start = TouchMargin - 4.dp, top = 18.dp, bottom = 4.dp)) {
+        Row(
+            modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable { open = true }.padding(horizontal = 4.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(page.selectedSeason?.title ?: "Seasons", color = Chalk, fontFamily = tv.reely.ui.theme.Geist, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Chevron(Muted, 14.dp)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            page.seasons.forEach { season ->
+                DropdownMenuItem(
+                    text = { Text(season.title, fontWeight = if (season.ratingKey == page.selectedSeason?.ratingKey) FontWeight.Bold else FontWeight.Normal) },
+                    onClick = { open = false; onPick(season) },
+                )
             }
         }
     }
@@ -276,12 +395,14 @@ private fun EpisodeRow(episode: PlexItem, imageUrl: String?, current: Boolean, o
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = onPlay, onLongClick = onHold)
+            .padding(horizontal = TouchMargin - 6.dp, vertical = 3.dp)
+            .clip(RoundedCornerShape(14.dp))
             .background(if (current) SurfaceHigh else Color.Transparent)
-            .padding(horizontal = TouchMargin, vertical = 10.dp),
+            .combinedClickable(onClick = onPlay, onLongClick = onHold)
+            .padding(horizontal = 6.dp, vertical = 7.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Box(Modifier.width(150.dp)) {
+        Box(Modifier.width(140.dp)) {
             Artwork(imageUrl, ratio = 16f / 9f, progress = episode.resumeFraction, watched = episode.isWatched, tag = episode.sourceTag)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -298,7 +419,7 @@ private fun EpisodeRow(episode: PlexItem, imageUrl: String?, current: Boolean, o
                 color = Muted,
             )
             episode.summary?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = Muted, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                Text(it, style = MaterialTheme.typography.bodySmall, color = Muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
     }

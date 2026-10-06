@@ -318,6 +318,7 @@ fun TouchChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: M
         onClick = onClick,
         label = { Text(label, maxLines = 1) },
         modifier = modifier,
+        shape = androidx.compose.foundation.shape.CircleShape,
         colors = FilterChipDefaults.filterChipColors(
             containerColor = SurfaceRaised,
             labelColor = Chalk,
@@ -327,7 +328,7 @@ fun TouchChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: M
         border = FilterChipDefaults.filterChipBorder(
             enabled = true,
             selected = selected,
-            borderColor = Line,
+            borderColor = SurfaceRaised,
             selectedBorderColor = Chalk,
         ),
     )

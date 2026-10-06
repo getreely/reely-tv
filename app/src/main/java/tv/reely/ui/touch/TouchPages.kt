@@ -104,7 +104,7 @@ private fun TitleGrid(
         LazyVerticalGrid(
             columns = touchPosterColumns(),
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = TouchMargin, end = TouchMargin, top = 8.dp, bottom = 24.dp),
+            contentPadding = PaddingValues(start = TouchMargin, end = TouchMargin, top = 8.dp, bottom = 24.dp + barSpace()),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
@@ -162,7 +162,7 @@ internal fun TouchSearch(viewModel: ReelyViewModel, state: ReelyState, actions: 
                 modifier = Modifier.weight(1f).focusRequester(focus),
             )
         }
-        LazyColumn(contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        LazyColumn(contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp + barSpace()), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             if (search.query.isBlank()) {
                 if (search.recent.isNotEmpty()) {
                     item {
