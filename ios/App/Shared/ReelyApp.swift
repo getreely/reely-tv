@@ -76,11 +76,14 @@ struct ReelyApp: App {
 struct RootView: View {
     @Environment(ReelyStore.self) private var store
     @State private var choosingProfile = false
+    @State private var touring = false
+    private let isDemo = ProcessInfo.processInfo.arguments.contains("-demo")
 
     var body: some View {
         ZStack {
             Color.ink.ignoresSafeArea()
                 .onReceive(NotificationCenter.default.publisher(for: .chooseProfile)) { _ in choosingProfile = true }
+                .onReceive(NotificationCenter.default.publisher(for: .takeTour)) { _ in touring = true }
             #if os(tvOS)
             TVRoot()
             #else
@@ -91,6 +94,12 @@ struct RootView: View {
             // What's playing covers everything, as on the Fire TV.
             if store.playing != nil { PlayerView().transition(.opacity).zIndex(1) }
             if store.live.watching != nil { LivePlayerView().transition(.opacity).zIndex(1.5) }
+            #if os(tvOS)
+            // The first time in, signed in: how to get around with the remote.
+            if (touring || !store.prefs.tourSeen) && store.plex.isConnected && !store.askWho && store.playing == nil && !isDemo {
+                TourView { store.prefs.tourSeen = true; touring = false }.zIndex(2.5)
+            }
+            #endif
             // A reminder from the guide, over whatever's on.
             if let due = store.live.due {
                 ReminderNotice(due: due)
@@ -157,4 +166,6 @@ struct NotYet: View {
 extension Notification.Name {
     /// Settings' profile row, or the top bar's: the picker over everything.
     static let chooseProfile = Notification.Name("reely.chooseProfile")
+    /// Settings' About: the remote tour again.
+    static let takeTour = Notification.Name("reely.takeTour")
 }

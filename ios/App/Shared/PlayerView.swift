@@ -17,6 +17,9 @@ struct PlayerView: View {
     @State private var upNextLeft: Int?
     @State private var upNextDismissed = false
     @FocusState private var focus: Control?
+    #if os(tvOS)
+    @FocusState private var surface: Bool
+    #endif
 
     /// The sleep timer: a time to stop at, or the end of this episode.
     @State private var sleepAt: Date?
@@ -33,6 +36,14 @@ struct PlayerView: View {
         ZStack {
             Color.black.ignoresSafeArea()
             VideoSurface(player: model.player).ignoresSafeArea()
+            #if os(tvOS)
+            // The remote's, while the controls are put away: a press brings them back, left and right still skip.
+            Button { showControls() } label: { Color.black.opacity(0.001).frame(maxWidth: .infinity, maxHeight: .infinity) }
+                .buttonStyle(PlainFocusStyle())
+                .focused($surface)
+                .disabled(controls)
+                .ignoresSafeArea()
+            #endif
             if let line = model.subtitle { subtitleView(line) }
             if model.buffering && !model.ended { ProgressView().tint(.white).scaleEffect(Typeface.scale) }
             if let error = model.failed ?? store.playError {
@@ -71,11 +82,11 @@ struct PlayerView: View {
         #if os(tvOS)
         .onPlayPauseCommand { model.togglePlay(); showControls() }
         .onExitCommand {
-            if panel != nil { panel = nil } else if controls { controls = false } else { close() }
+            if panel != nil { panel = nil } else if controls { controls = false; surface = true } else { close() }
         }
         .onMoveCommand { direction in
             showControls()
-            if focus == nil || focus == .play {
+            if focus == nil || focus == .play || surface {
                 if direction == .left { model.skip(-10) } else if direction == .right { model.skip(10) }
             }
         }
@@ -175,7 +186,12 @@ struct PlayerView: View {
         hideTask?.cancel()
         hideTask = Task {
             try? await Task.sleep(nanoseconds: 5_000_000_000)
-            if !Task.isCancelled, model.playing, panel == nil { withAnimation(.easeIn(duration: 0.3)) { controls = false } }
+            if !Task.isCancelled, model.playing, panel == nil {
+                withAnimation(.easeIn(duration: 0.3)) { controls = false }
+                #if os(tvOS)
+                surface = true
+                #endif
+            }
         }
     }
 

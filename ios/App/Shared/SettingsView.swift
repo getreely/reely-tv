@@ -253,6 +253,13 @@ struct SettingsSection: View {
             Text("Your Plex library and live TV, in one place.").font(Typeface.meta).foregroundStyle(Color.chalk)
             Text("Version \(ReelyApp.version)").font(Typeface.label).foregroundStyle(Color.muted)
         }
+        #if os(tvOS)
+        Group_(title: "Help") {
+            Row_(title: "Take the tour again", note: "How to get around with the remote.", value: nil) {
+                NotificationCenter.default.post(name: .takeTour, object: nil)
+            }
+        }
+        #endif
         Group_(title: "Licenses") { Row_(title: "Geist", note: "The typeface.", value: "SIL Open Font License", action: nil) }
     }
 }
