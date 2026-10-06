@@ -41,6 +41,7 @@ struct SignInView: View {
             }
             .frame(maxWidth: dp(640), alignment: .leading)
             .padding(pageMargin)
+            .padding(.top, topInset)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .onChange(of: store.plex.linkUrl) { _, url in
@@ -88,7 +89,7 @@ struct SignInView: View {
             ProgressView().tint(accent.swiftColor)
             Text("Waiting for you to sign in…").font(Typeface.meta).foregroundStyle(Color.muted)
             Spacer(minLength: 0)
-            Button("Cancel") { store.cancelLink() }.font(Typeface.meta).foregroundStyle(Color.chalk)
+            Pill(title: "Cancel", on: false) { store.cancelLink() }
         }
     }
 }
@@ -103,6 +104,7 @@ struct PrimaryButton: View {
                 .padding(.vertical, dp(12)).padding(.horizontal, dp(22))
                 .frame(maxWidth: .infinity)
                 .background(RoundedRectangle(cornerRadius: dp(10)).fill(accent.swiftColor))
+                .modifier(FocusRing(shape: RoundedRectangle(cornerRadius: dp(10))))
         }
         .buttonStyle(CardStyle())
     }
@@ -117,6 +119,7 @@ struct SecondaryButton: View {
                 .padding(.vertical, dp(12)).padding(.horizontal, dp(22))
                 .frame(maxWidth: .infinity)
                 .background(RoundedRectangle(cornerRadius: dp(10)).fill(Color.surfaceHigh))
+                .modifier(FocusRing(shape: RoundedRectangle(cornerRadius: dp(10))))
         }
         .buttonStyle(CardStyle())
     }

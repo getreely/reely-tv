@@ -58,7 +58,18 @@ final class PlayerModel {
         endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.ended = true }
         }
+        // Buffer, from Settings: about fifty seconds ahead, or up to two minutes.
+        item.preferredForwardBufferDuration = (store?.prefs.largerBuffer ?? false) ? 120 : 50
         player.replaceCurrentItem(with: item)
+        #if os(tvOS)
+        // Match frame rate: the TV switches to the film's rate and range, as the Fire TV does.
+        if store?.prefs.matchFrameRate ?? true {
+            let asset = item.asset
+            Task { @MainActor in
+                if let criteria = try? await asset.load(.preferredDisplayCriteria) { PlayerModel.displayManager?.preferredDisplayCriteria = criteria }
+            }
+        }
+        #endif
         if p.startMs > 0 { player.seek(to: CMTime(value: CMTimeValue(p.startMs), timescale: 1000)) }
         player.play()
         loadSubtitle(p)
@@ -109,7 +120,16 @@ final class PlayerModel {
         player.pause()
         player.replaceCurrentItem(with: nil)
         loadedUrl = nil
+        #if os(tvOS)
+        PlayerModel.displayManager?.preferredDisplayCriteria = nil
+        #endif
     }
+
+    #if os(tvOS)
+    static var displayManager: AVDisplayManager? {
+        (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.windows.first?.avDisplayManager
+    }
+    #endif
 
     var subtitle: String? { cueAt(cues, positionMs) }
 }

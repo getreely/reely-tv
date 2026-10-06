@@ -27,13 +27,13 @@ public struct Prefs: Codable, Equatable, Sendable {
     public var hiddenHomeRows: [String] = []
     /// The libraries switched on, as "server|section": the only ones on Home, searched and in the menus.
     public var favouriteSections: [String] = []
-    public var iptvLibrary: Bool = true
+    public var iptvLibrary: Bool = false
     public var iptvWins: Bool = false
     public var iptvInMenus: Bool = true
     public var screensaverMinutes: Int = 3
     public var tourSeen: Bool = false
     public var accent: String = "blue"
-    public var themeMusic: Bool = true
+    public var themeMusic: Bool = false
     public var themeVolume: Double = 0.10
     public var guidePreview: Bool = true
     public var streamFormat: StreamFormat = .m3u8

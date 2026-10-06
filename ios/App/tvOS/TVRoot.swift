@@ -10,11 +10,14 @@ struct TVRoot: View {
     @Environment(ReelyStore.self) private var store
 
     var body: some View {
-        VStack(spacing: 0) {
-            TopBar()
+        // The page fills the screen, its pictures to the edges, and the tabs sit over its top.
+        ZStack(alignment: .top) {
             RouteContent(route: store.route)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            TopBar()
+                .background(LinearGradient(colors: [Color.ink.opacity(0.9), Color.ink.opacity(0.6), .clear], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
         }
+        .ignoresSafeArea()
         .onExitCommand {
             // Back: the page under this one; from a tab, Home.
             if !store.back(), store.route != .home { store.navigate(.home) }
@@ -46,7 +49,7 @@ private struct TopBar: View {
             }
             Clock()
         }
-        .padding(.horizontal, pageMargin).padding(.top, 40).padding(.bottom, 12)
+        .padding(.horizontal, pageMargin).padding(.top, 50).padding(.bottom, 24)
         .focusSection()
         .onChange(of: focused) { _, route in
             // Moving onto a tab opens it, as the Fire TV's do; Search and Settings open on OK.

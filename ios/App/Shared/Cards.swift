@@ -162,3 +162,24 @@ extension PlexItem {
         return [caption, title].compactMap { $0 }.joined(separator: "  ·  ")
     }
 }
+
+/// The Fire TV's white ring round whatever has the cursor, drawn inside its shape so it's never cut off.
+struct FocusRing<S: InsettableShape>: ViewModifier {
+    let shape: S
+    @Environment(\.isFocused) private var focused
+    func body(content: Content) -> some View {
+        content.overlay(shape.strokeBorder(Color.white, lineWidth: focused ? dp(3) : 0))
+    }
+}
+
+/// A letter of the A–Z jump.
+struct LetterLabel: View {
+    let letter: String
+    @Environment(\.isFocused) private var focused
+    var body: some View {
+        Text(letter).font(Typeface.label)
+            .foregroundStyle(focused ? Color.ink : Color.muted)
+            .frame(minWidth: dp(28), minHeight: dp(28))
+            .background(Circle().fill(focused ? Color.chalk : Color.clear))
+    }
+}

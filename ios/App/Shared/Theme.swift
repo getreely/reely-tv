@@ -73,6 +73,15 @@ enum Typeface {
 /// Distances, scaled the same way as the type.
 func dp(_ value: CGFloat) -> CGFloat { value * Typeface.scale }
 
+/// Room at the top of a page for Apple TV's bar of tabs, which the page runs under, as on the Fire TV.
+var topInset: CGFloat {
+    #if os(tvOS)
+    return 150
+    #else
+    return 0
+    #endif
+}
+
 /// The page's side margin: the Fire TV's 48dp, a phone's 16.
 var pageMargin: CGFloat {
     #if os(tvOS)

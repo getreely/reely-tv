@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 import ReelyCore
 
 /**
@@ -29,6 +30,10 @@ struct DetailView: View {
         .task(id: ratingKey) {
             if store.detail?.detail?.ratingKey != ratingKey { await store.openDetail(ratingKey: ratingKey, serverBase: serverBase) }
         }
+        // A show's theme song on its page, as on the Fire TV, at the volume chosen; never over what's playing.
+        .onChange(of: store.detail?.detail?.theme) { _, _ in themeMusic() }
+        .onChange(of: store.playing == nil) { _, idle in if idle { themeMusic() } else { ThemePlayer.shared.stop() } }
+        .onDisappear { ThemePlayer.shared.stop() }
     }
 
     @ViewBuilder
@@ -100,6 +105,13 @@ struct DetailView: View {
         .padding(.top, dp(110))
     }
 
+    private func themeMusic() {
+        guard store.prefs.themeMusic, store.playing == nil, let page = store.detail, let d = page.detail, d.isShow,
+              let theme = d.theme, let base = page.serverBase, let token = store.plex.tokenFor(base),
+              let url = URL(string: PlexAPI.logoUrl(base, token, path: theme)) else { ThemePlayer.shared.stop(); return }
+        ThemePlayer.shared.play(url, volume: Float(store.prefs.themeVolume))
+    }
+
     private func facts(_ d: PlexDetail) -> String {
         var parts: [String] = []
         if let y = d.year { parts.append(String(y)) }
@@ -115,6 +127,7 @@ struct DetailView: View {
         // What Play would resume. For a show that is the part-watched episode.
         let resumeFrom = episode?.viewOffsetMs ?? (d.isShow ? page.episodes.first { $0.resumeFraction != nil }?.viewOffsetMs ?? 0 : d.viewOffsetMs)
         let watched = episode?.isWatched ?? (d.isShow ? d.leafCount > 0 && d.viewedLeafCount >= d.leafCount : d.viewCount > 0)
+        ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: dp(10)) {
             ActionButton(title: resumeFrom > 0 ? "Resume" : "Play", systemImage: "play.fill", filled: true) { playMain(page, d, episode: episode, resume: true) }
             if resumeFrom > 0 {
@@ -130,7 +143,11 @@ struct DetailView: View {
                 ActionButton(title: "Trailer", systemImage: "film") { Task { await store.playTrailer() } }
             }
         }
-        .padding(.top, dp(4))
+        .padding(.vertical, dp(10))
+        }
+        #if os(tvOS)
+        .scrollClipDisabled()
+        #endif
         #if os(tvOS)
         .focusSection()
         #endif
@@ -206,10 +223,11 @@ struct ActionButton: View {
     var body: some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
-                .font(Typeface.meta)
+                .font(Typeface.meta).lineLimit(1).fixedSize()
                 .foregroundStyle(filled ? accent.onColor : Color.chalk)
                 .padding(.horizontal, dp(16)).padding(.vertical, dp(10))
                 .background(Capsule().fill(filled ? accent.swiftColor : Color.surfaceHigh))
+                .modifier(FocusRing(shape: Capsule()))
         }
         .buttonStyle(CardStyle())
     }
@@ -223,11 +241,34 @@ struct Pill: View {
 
     var body: some View {
         Button(action: action) {
-            Text(title).font(Typeface.meta)
+            Text(title).font(Typeface.meta).lineLimit(1).fixedSize()
                 .foregroundStyle(on ? Color.ink : Color.chalk)
                 .padding(.horizontal, dp(14)).padding(.vertical, dp(8))
                 .background(Capsule().fill(on ? Color.chalk : Color.surfaceHigh))
+                .modifier(FocusRing(shape: Capsule()))
         }
         .buttonStyle(CardStyle())
+    }
+}
+
+/// A show's theme song: one at a time, quiet, and stopped the moment anything else plays.
+@MainActor
+final class ThemePlayer {
+    static let shared = ThemePlayer()
+    private let player = AVPlayer()
+    private var playing: URL?
+
+    func play(_ url: URL, volume: Float) {
+        guard playing != url else { return }
+        playing = url
+        player.replaceCurrentItem(with: AVPlayerItem(url: url))
+        player.volume = volume
+        player.play()
+    }
+
+    func stop() {
+        playing = nil
+        player.pause()
+        player.replaceCurrentItem(with: nil)
     }
 }

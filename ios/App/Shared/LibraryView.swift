@@ -35,6 +35,7 @@ struct LibraryView: View {
                             }
                         }
                         .padding(.bottom, dp(24))
+                        .padding(.top, topInset)
                     }
                     .onChange(of: jumpTarget) { _, id in if let id { withAnimation { proxy.scrollTo(id, anchor: .top) } } }
                 }
@@ -128,10 +129,10 @@ struct LibraryView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: dp(4)) {
                     ForEach(browse.letters, id: \.letter) { l in
-                        Button(l.letter) {
+                        Button {
                             Task { if let at = await store.jumpTo(kind, letter: l.letter), let items = store.browse[kind]?.items, items.indices.contains(at) { jumpTarget = items[at].id } }
-                        }
-                        .font(Typeface.label).foregroundStyle(Color.muted)
+                        } label: { LetterLabel(letter: l.letter) }
+                        .buttonStyle(PlainFocusStyle())
                     }
                 }
                 .padding(.horizontal, pageMargin)

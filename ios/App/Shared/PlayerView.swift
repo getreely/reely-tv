@@ -333,10 +333,11 @@ struct PanelButton: View {
 
     var body: some View {
         Button(action: action) {
-            Label(title, systemImage: systemImage).font(Typeface.meta)
+            Label(title, systemImage: systemImage).font(Typeface.meta).lineLimit(1).fixedSize()
                 .foregroundStyle(filled ? accent.onColor : Color.chalk)
                 .padding(.horizontal, dp(14)).padding(.vertical, dp(9))
                 .background(Capsule().fill(filled ? accent.swiftColor : Color.white.opacity(0.14)))
+                .modifier(FocusRing(shape: Capsule()))
         }
         .buttonStyle(CardStyle())
     }

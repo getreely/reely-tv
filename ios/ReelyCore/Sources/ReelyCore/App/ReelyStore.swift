@@ -303,6 +303,22 @@ public final class ReelyStore {
         return next
     }
 
+    /// Another of the account's servers first: its libraries and Home, from now on.
+    public func chooseServer(_ name: String) async {
+        guard let token = plex.token else { return }
+        store.set("server", name)
+        await connect(token)
+    }
+
+    /// Whether the server is reached at home or over the internet, as the Fire TV says it.
+    public static func connectionKind(_ base: String?) -> String {
+        guard let base, let host = URL(string: base)?.host else { return "—" }
+        let dotted = host.replacingOccurrences(of: "-", with: ".")
+        let home = ["10.", "127.", "192.168."].contains { dotted.hasPrefix($0) }
+            || (16...31).contains { dotted.hasPrefix("172.\($0).") }
+        return home ? "Home network" : "Internet"
+    }
+
     // MARK: Libraries
 
     /// The libraries switched on in Settings, or all of them when none is; of a kind, or every kind.

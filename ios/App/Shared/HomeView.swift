@@ -105,12 +105,13 @@ struct HeroBanner: View {
         ZStack(alignment: .bottomLeading) {
             if let item {
                 RemoteImage(url: store.imageUrl(item.serverBase, item.art ?? item.thumb, width: 1280, height: 720))
-                    .frame(maxWidth: .infinity).frame(height: dp(300)).clipped()
+                    .frame(maxWidth: .infinity).frame(height: dp(300) + topInset).clipped()
                     .overlay(LinearGradient(colors: [.clear, Color.ink.opacity(0.6), Color.ink], startPoint: .top, endPoint: .bottom))
                     .overlay(LinearGradient(colors: [Color.ink.opacity(0.85), .clear], startPoint: .leading, endPoint: .center))
                     .id(item.id)
                     .transition(.opacity)
                 VStack(alignment: .leading, spacing: dp(8)) {
+                    Spacer(minLength: 0)
                     if let logo = store.logoUrl(item.serverBase, item.logo) {
                         RemoteImage(url: logo, contentMode: .fit).frame(maxWidth: dp(320), maxHeight: dp(90), alignment: .leading)
                     } else {
@@ -125,7 +126,7 @@ struct HeroBanner: View {
                 .padding(.horizontal, pageMargin).padding(.bottom, dp(8))
             }
         }
-        .frame(height: dp(300))
+        .frame(height: dp(300) + topInset)
     }
 }
 

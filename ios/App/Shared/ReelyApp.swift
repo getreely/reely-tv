@@ -45,6 +45,7 @@ struct ReelyApp: App {
                     if args.contains("code") { store.startLink() }
                     if args.contains("movie") { store.navigate(.detail(ratingKey: "m1", serverBase: nil)) }
                     if args.contains("show") { store.navigate(.detail(ratingKey: "show-northbound", serverBase: nil)) }
+                    if args.contains("settings") { store.navigate(.settings) }
                     if args.contains("library") { store.navigate(.library(kind: "movie")); store.setLibraryView("movie", .grid) }
                 }
         }
@@ -82,6 +83,7 @@ struct RouteContent: View {
             case .home: HomeView()
             case .library(let kind): LibraryView(kind: kind).id(kind)
             case .detail(let key, let base): DetailView(ratingKey: key, serverBase: base).id(key)
+            case .settings: SettingsView()
             default: NotYet(route: route)
             }
         }
@@ -98,6 +100,7 @@ struct NotYet: View {
                 .font(Typeface.body).foregroundStyle(Color.muted).multilineTextAlignment(.center)
         }
         .padding(pageMargin)
+        .padding(.top, topInset)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
