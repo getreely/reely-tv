@@ -66,16 +66,18 @@ public struct PlexState: Equatable, Sendable {
 @MainActor
 @Observable
 public final class ReelyStore {
-    public private(set) var plex = PlexState()
-    public private(set) var home = HomeRows()
+    public internal(set) var plex = PlexState()
+    public internal(set) var home = HomeRows()
     public private(set) var homeBusy = false
     public private(set) var homeError: String?
     public var prefs: Prefs { didSet { if prefs != oldValue { store.setJson("prefs", prefs) } } }
+    public internal(set) var browse: [String: Browse] = ["movie": Browse(), "show": Browse()]
+    public internal(set) var detail: DetailPage?
     public private(set) var route: Route = .home
     public private(set) var stack: [Route] = [.home]
 
     public let api: PlexAPI
-    private let store: KeyValueStore
+    let store: KeyValueStore
     private let secrets: KeyValueStore
     private var linkTask: Task<Void, Never>?
     private var homeRun = 0
