@@ -19,3 +19,4 @@ ios/App/iOS/Info.plist
 ios/App/tvOS/Info.plist
 ios/build/
 ios/shots/
+ios/Vendor/

@@ -35,7 +35,11 @@ struct PlayerView: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            VideoSurface(player: model.player).ignoresSafeArea()
+            if model.usingVLC, let engine = model.vlc {
+                VLCSurface(engine: engine).ignoresSafeArea()
+            } else {
+                VideoSurface(player: model.player).ignoresSafeArea()
+            }
             #if os(tvOS)
             // The remote's, while the controls are put away: a press brings them back, left and right still skip.
             Button { showControls() } label: { Color.black.opacity(0.001).frame(maxWidth: .infinity, maxHeight: .infinity) }
@@ -134,10 +138,10 @@ struct PlayerView: View {
                     .focused($focus, equals: .play)
                 #endif
                 // With none in the file, Subtitles still finds some online.
-                if !(store.playing?.playback.subtitleStreams.isEmpty ?? true) || store.playing?.item.isIptv == false {
+                if !(store.playing?.playback.subtitleStreams.isEmpty ?? true) || store.playing?.item.isIptv == false || !model.vlcSubtitles.isEmpty {
                     PanelButton(title: "Subtitles", systemImage: "captions.bubble") { panel = .subtitles }.focused($focus, equals: .subtitles)
                 }
-                if (store.playing?.playback.audioStreams.count ?? 0) > 1 {
+                if (store.playing?.playback.audioStreams.count ?? 0) > 1 || model.vlcAudio.count > 1 {
                     PanelButton(title: "Audio", systemImage: "speaker.wave.2") { panel = .audio }.focused($focus, equals: .audio)
                 }
                 if !(store.playing?.playback.chapters.isEmpty ?? true) {
@@ -305,6 +309,16 @@ struct PlayerView: View {
         NavigationStack {
             List {
                 switch panel {
+                case .subtitles where model.usingVLC:
+                    // The file's own, as VLC reads them.
+                    Button { model.chooseVLCSubtitle(-1); self.panel = nil } label: { row("Off", on: model.vlcSubtitleId < 0) }
+                    ForEach(model.vlcSubtitles, id: \.self) { t in
+                        Button { model.chooseVLCSubtitle(t.id); self.panel = nil } label: { row(t.name, on: t.id == model.vlcSubtitleId) }
+                    }
+                case .audio where model.usingVLC:
+                    ForEach(model.vlcAudio, id: \.self) { t in
+                        Button { model.chooseVLCAudio(t.id); self.panel = nil } label: { row(t.name, on: t.id == model.vlcAudioId) }
+                    }
                 case .subtitles:
                     Button { choose(subtitle: "0") } label: { row("Off", on: !(p?.playback.subtitleStreams.contains(where: \.selected) ?? false)) }
                     ForEach(p?.playback.subtitleStreams ?? [], id: \.id) { s in
@@ -348,7 +362,7 @@ struct PlayerView: View {
                 case .info:
                     if let p {
                         let audio = p.playback.audioStreams.first(where: \.selected) ?? p.playback.audioStreams.first
-                        infoRow("Playing", p.item.isIptv ? "From your IPTV provider" : p.direct ? "The original file" : "Converted by Plex")
+                        infoRow("Playing", p.item.isIptv ? (model.usingVLC ? "From your IPTV provider, by VLC" : "From your IPTV provider") : p.direct ? "The original file" : "Converted by Plex")
                         if let reason = p.reason, !p.item.isIptv { infoRow("Why", reason) }
                         if let v = p.playback.videoCodec { infoRow("Video", v.uppercased()) }
                         if let a = audio?.label ?? p.playback.audioCodec.map({ $0.uppercased() + (p.playback.audioChannels > 0 ? " · \(p.playback.audioChannels) channels" : "") }) {

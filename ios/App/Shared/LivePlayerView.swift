@@ -12,11 +12,16 @@ final class LiveModel {
     private(set) var failed: String?
     @ObservationIgnored private var observations: [NSKeyValueObservation] = []
     @ObservationIgnored private var loaded: String?
+    @ObservationIgnored private var cachingMs = 3_000
+    /// VLC playing: a channel sent as bare MPEG-TS, or one Apple's player wouldn't open.
+    private(set) var usingVLC = false
+    @ObservationIgnored private(set) var vlc: VLCEngine?
 
     init() {
         observations.append(player.observe(\.timeControlStatus, options: [.new]) { [weak self] p, _ in
             let status = p.timeControlStatus
             Task { @MainActor in
+                guard self?.usingVLC != true else { return }
                 self?.playing = status == .playing
                 self?.waiting = status != .playing
             }
@@ -28,27 +33,68 @@ final class LiveModel {
         loaded = url
         failed = nil
         waiting = true
-        guard let url, let address = URL(string: url) else { player.replaceCurrentItem(with: nil); return }
+        cachingMs = largerBuffer ? 10_000 : 3_000
+        guard let url, let address = URL(string: url) else { stopVLC(); player.replaceCurrentItem(with: nil); return }
+        // MPEG-TS and the like: VLC, as the Fire TV's ExoPlayer plays them.
+        if !applePlays(url) { startVLC(address); return }
+        stopVLC()
         let item = AVPlayerItem(url: address)
         item.preferredForwardBufferDuration = largerBuffer ? 120 : 0
         observations.append(item.observe(\.status, options: [.new]) { [weak self] item, _ in
             let status = item.status
             Task { @MainActor in
-                if status == .failed { self?.failed = "This channel isn't playing. It may be off air, or your provider's connection limit reached." }
+                if status == .failed { self?.appleFailed() }
             }
         })
         player.replaceCurrentItem(with: item)
         player.play()
     }
 
-    func togglePlay() { playing ? player.pause() : player.play() }
+    /// Apple's player wouldn't: VLC tries, asking for MPEG-TS where the provider sends HLS.
+    private func appleFailed() {
+        guard !usingVLC, let loaded else { return }
+        let ts = loaded.hasSuffix(".m3u8") ? String(loaded.dropLast(5)) + ".ts" : loaded
+        if let address = URL(string: ts) { startVLC(address) } else { failed = LiveModel.notPlaying }
+    }
+
+    static let notPlaying = "This channel isn't playing. It may be off air, or your provider's connection limit reached."
+
+    private func startVLC(_ address: URL) {
+        player.pause()
+        player.replaceCurrentItem(with: nil)
+        let engine = vlc ?? VLCEngine()
+        vlc = engine
+        usingVLC = true
+        failed = nil
+        waiting = true
+        engine.onUpdate = { [weak self] in
+            guard let self, self.usingVLC else { return }
+            self.playing = engine.isPlaying
+            self.waiting = !engine.isPlaying
+            if engine.hasFailed || engine.hasEnded { self.failed = LiveModel.notPlaying }
+        }
+        engine.load(address, startMs: 0, cachingMs: cachingMs)
+    }
+
+    private func stopVLC() {
+        guard usingVLC else { return }
+        vlc?.stop()
+        usingVLC = false
+    }
+
+    func togglePlay() {
+        if usingVLC { vlc?.togglePlay(); return }
+        playing ? player.pause() : player.play()
+    }
 
     func skip(_ seconds: Double) {
+        if usingVLC, let engine = vlc { engine.seek(toMs: engine.positionMs + Int(seconds * 1000)); return }
         let at = max(0, player.currentTime().seconds + seconds)
         player.seek(to: CMTime(seconds: at, preferredTimescale: 600))
     }
 
     func stop() {
+        stopVLC()
         player.pause()
         player.replaceCurrentItem(with: nil)
         loaded = nil
@@ -109,7 +155,11 @@ struct LivePlayerView: View {
     private func content(now: Int) -> some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            VideoSurface(player: model.player).ignoresSafeArea()
+            if model.usingVLC, let engine = model.vlc {
+                VLCSurface(engine: engine).ignoresSafeArea()
+            } else {
+                VideoSurface(player: model.player).ignoresSafeArea()
+            }
             #if os(tvOS)
             // The remote's, while nothing else on screen takes the cursor.
             Button { showActions() } label: { Color.black.opacity(0.001).frame(maxWidth: .infinity, maxHeight: .infinity) }

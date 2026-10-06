@@ -21,10 +21,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/cache@v4
+        with:
+          path: ios/Vendor
+          key: vlckit-${{ hashFiles('ios/scripts/vlckit.sh') }}
+
       - name: Build the iPhone and iPad app
         working-directory: ios
         run: |
           set -o pipefail
+          scripts/vlckit.sh
           VERSION=$(grep -o 'versionName = "[^"]*"' ../app/build.gradle.kts | head -1 | cut -d'"' -f2)
           brew install xcodegen && xcodegen generate
           xcodebuild -quiet -project Reely.xcodeproj -scheme Reely -configuration Release \

@@ -244,9 +244,9 @@ extension ReelyStore {
 
     // MARK: Watching
 
-    /// A channel's stream. Apple's player plays HLS but not a bare MPEG-TS stream, so it's always HLS here.
+    /// A channel's stream, HLS or MPEG-TS as Settings has it: Apple's player plays the one, VLC the other.
     public func channelUrl(_ channel: XtreamChannel) -> String? {
-        live.credentials.map { Xtream.streamUrl($0, channel, format: .m3u8) }
+        live.credentials.map { Xtream.streamUrl($0, channel, format: prefs.streamFormat == .ts ? .ts : .m3u8) }
     }
 
     public func watchChannel(_ index: Int) {

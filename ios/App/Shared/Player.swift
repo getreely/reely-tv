@@ -21,6 +21,14 @@ final class PlayerModel {
     private(set) var failed: String?
     private(set) var ended = false
     private(set) var cues: [Cue] = []
+    /// VLC playing instead of Apple's player: a provider's file Apple's can't open.
+    private(set) var usingVLC = false
+    @ObservationIgnored private(set) var vlc: VLCEngine?
+    /// The file's own tracks, when VLC is playing it.
+    private(set) var vlcAudio: [VLCEngine.Track] = []
+    private(set) var vlcSubtitles: [VLCEngine.Track] = []
+    private(set) var vlcAudioId: Int32 = -1
+    private(set) var vlcSubtitleId: Int32 = -1
     @ObservationIgnored private var timeObserver: Any?
     @ObservationIgnored private var observations: [NSKeyValueObservation] = []
     @ObservationIgnored private var lastReport = Date.distantPast
@@ -50,6 +58,12 @@ final class PlayerModel {
         loadedUrl = p.url
         failed = nil
         ended = false
+        // A provider's MKV and the like: VLC, as the Fire TV's ExoPlayer plays them.
+        if p.item.isIptv && !applePlays(p.url, container: p.playback.container) {
+            startVLC(url, startMs: p.startMs)
+            return
+        }
+        stopVLC()
         let item = AVPlayerItem(url: url)
         // Apple's player takes HLS durations from the stream; a file's from the file.
         observations.append(item.observe(\.status, options: [.new]) { [weak self] item, _ in
@@ -82,9 +96,9 @@ final class PlayerModel {
         guard status == .failed else { return }
         // Not as it is, then: Plex converts it, from where it had got to.
         if let store, store.playing?.direct == true, store.convert(positionMs: positionMs) { return }
-        // The provider's files have no Plex to convert them: say what Apple's player can't open.
-        if let p = store?.playing, p.item.isIptv, let ext = p.playback.container, !PlaybackPlan.containers.contains(ext.lowercased()) {
-            failed = "Apple's player can't open \(ext.uppercased()) files, and this one from your IPTV provider is one."
+        // The provider's files have no Plex to convert them: VLC tries instead, from where it got to.
+        if let p = store?.playing, p.item.isIptv, !usingVLC, let url = URL(string: p.url) {
+            startVLC(url, startMs: max(positionMs, p.startMs))
             return
         }
         failed = "This couldn't be played. Try again."
@@ -104,9 +118,56 @@ final class PlayerModel {
     }
 
     private func tick(_ time: CMTime) {
+        guard !usingVLC else { return }
         positionMs = Int(time.seconds.isFinite ? time.seconds * 1000 : 0)
         if let d = player.currentItem?.duration.seconds, d.isFinite, d > 0 { durationMs = Int(d * 1000) }
         else if let p = store?.playing { durationMs = p.item.durationMs }
+        reportNow()
+    }
+
+    // MARK: VLC
+
+    private func startVLC(_ url: URL, startMs: Int) {
+        player.pause()
+        player.replaceCurrentItem(with: nil)
+        let engine = vlc ?? VLCEngine()
+        vlc = engine
+        usingVLC = true
+        failed = nil
+        buffering = true
+        engine.onUpdate = { [weak self] in self?.vlcTick() }
+        engine.load(url, startMs: startMs, cachingMs: (store?.prefs.largerBuffer ?? false) ? 10_000 : 3_000)
+    }
+
+    private func stopVLC() {
+        guard usingVLC else { return }
+        vlc?.stop()
+        usingVLC = false
+        vlcAudio = []
+        vlcSubtitles = []
+    }
+
+    private func vlcTick() {
+        guard usingVLC, let engine = vlc else { return }
+        positionMs = engine.positionMs
+        durationMs = engine.durationMs > 0 ? engine.durationMs : store?.playing?.item.durationMs ?? 0
+        playing = engine.isPlaying
+        buffering = engine.isBuffering
+        if engine.hasEnded { ended = true }
+        if engine.hasFailed { failed = "This couldn't be played. It may be in a form even VLC can't open, or your provider's connection limit reached." }
+        let audio = engine.audioTracks, subtitles = engine.subtitleTracks
+        if audio != vlcAudio { vlcAudio = audio }
+        if subtitles != vlcSubtitles { vlcSubtitles = subtitles }
+        vlcAudioId = engine.audioTrack
+        vlcSubtitleId = engine.subtitleTrack
+        reportNow()
+    }
+
+    func chooseVLCAudio(_ id: Int32) { vlc?.setAudioTrack(id); vlcAudioId = id }
+    func chooseVLCSubtitle(_ id: Int32) { vlc?.setSubtitleTrack(id); vlcSubtitleId = id }
+
+    /// Where it's got to, told every ten seconds.
+    private func reportNow() {
         if Date().timeIntervalSince(lastReport) >= REPORT_EVERY_SECONDS, let store {
             lastReport = Date()
             let (pos, dur, state) = (positionMs, durationMs, playing ? "playing" : "paused")
@@ -114,17 +175,22 @@ final class PlayerModel {
         }
     }
 
-    func togglePlay() { playing ? player.pause() : player.play() }
+    func togglePlay() {
+        if usingVLC { vlc?.togglePlay(); return }
+        playing ? player.pause() : player.play()
+    }
 
     func seek(toMs ms: Int) {
         let clamped = max(0, durationMs > 0 ? min(ms, durationMs - 1000) : ms)
-        player.seek(to: CMTime(value: CMTimeValue(clamped), timescale: 1000), toleranceBefore: .zero, toleranceAfter: .zero)
+        if usingVLC { vlc?.seek(toMs: clamped) }
+        else { player.seek(to: CMTime(value: CMTimeValue(clamped), timescale: 1000), toleranceBefore: .zero, toleranceAfter: .zero) }
         positionMs = clamped
     }
 
     func skip(_ seconds: Int) { seek(toMs: positionMs + seconds * 1000) }
 
     func stop() {
+        stopVLC()
         player.pause()
         player.replaceCurrentItem(with: nil)
         loadedUrl = nil

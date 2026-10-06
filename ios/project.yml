@@ -24,6 +24,9 @@ targets:
     type: application
     dependencies:
       - package: ReelyCore
+      # VLC's engine, for what Apple's player can't open: scripts/vlckit.sh fetches it.
+      - framework: Vendor/MobileVLCKit.xcframework
+        embed: true
     sources:
       - path: App/Shared
       - path: App/Resources/Fonts
@@ -56,6 +59,8 @@ targets:
     type: application
     dependencies:
       - package: ReelyCore
+      - framework: Vendor/TVVLCKit.xcframework
+        embed: true
     sources:
       - path: App/Shared
       - path: App/Resources/Fonts

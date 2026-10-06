@@ -41,7 +41,7 @@ app (Amazon's Vega SDK, React Native), which can reuse the LG app's TypeScript c
 | Choose where sound plays (Bluetooth headphones) | ✅ | ✅ | — | — | 🟡 (AirPlay picker in Settings on iPhone and iPad; Apple TV's own) |
 | Touch: tap, double-tap skip, drag the bar | — | ✅ | — | — | 🟡 (tap, double-tap skip and drag the bar; built) |
 | **Live TV** | | | | | |
-| Xtream login and M3U playlists | ✅ | ✅ | ✅ | ✅ (Xtream signed in in the simulator; a playlist's channels and guide there too) | 🟡 (built and unit-tested; streams only as HLS, as Apple's player plays no bare MPEG-TS) |
+| Xtream login and M3U playlists | ✅ | ✅ | ✅ | ✅ (Xtream signed in in the simulator; a playlist's channels and guide there too) | 🟡 (built and unit-tested; HLS in Apple's player, MPEG-TS in VLC's) |
 | Categories, favorites, recently watched | ✅ | ✅ | ✅ | ✅ | 🟡 (built; seen in the simulator, not yet tried on a device) |
 | Guide (grid on TV, list on phone), now and next | ✅ | ✅ | ✅ (grid) | ✅ (grid) | 🟡 (built; seen in the simulator, not yet tried on a device) |
 | A playlist's own XMLTV guide (named in it or entered at sign-in), read whole and kept; "TV guide: None" in Settings when there isn't one | ✅ | ✅ | ✅ (a gzipped guide opens on 2022 TVs and later, webOS 22 on; older ones say they can't) | ✅ (six hours back to a day and a half ahead; a gzipped guide can't be opened on a Roku, and it says so) | 🟡 (built and unit-tested) |
@@ -51,7 +51,7 @@ app (Amazon's Vega SDK, React Native), which can reuse the LG app's TypeScript c
 | Channel up/down, numbers on the remote | ✅ | ✅ (swipe) | ✅ | ✅ (left and right; Roku remotes have no number keys) | 🟡 (left and right on Apple TV, swipe on iPhone; numbers typed in, as the Siri remote has no number keys) |
 | Multiview | ✅ | 🟡 (through the player's menus) | — (webOS gives an app one video at a time) | — | ⬜ |
 | **IPTV movies and shows** | | | | | |
-| Switch, tabs' IPTV library, Home rows, search, IPTV badge | ✅ | ✅ | ✅ | ✅ (switch, Movies tab, Home row, search and a series' page in the simulator) | 🟡 (built and unit-tested; Apple's player can't open MKV files, which many providers use) |
+| Switch, tabs' IPTV library, Home rows, search, IPTV badge | ✅ | ✅ | ✅ | ✅ (switch, Movies tab, Home row, search and a series' page in the simulator) | 🟡 (built and unit-tested; MKV and the like play in VLC's player, the file's own sound and subtitle tracks with them) |
 | Matching with Plex, winner chosen | ✅ | ✅ | ✅ | ✅ (matching in the simulator; the winner unit-tested) | 🟡 (unit-tested) |
 | Progress and watched kept on the device | ✅ | ✅ | ✅ | ✅ (unit-tested; the latest 50 kept, the Roku's storage being small) | 🟡 (unit-tested) |
 | **Requests (Reely)** | | | | | |
@@ -86,5 +86,5 @@ screen of the LG and Roku apps measured against the Fire TV's screenshots.
 |---|---|---|
 | Fire TV / Android TV and phone | `app/src/test` | `./gradlew :app:testDebugUnitTest` (Robolectric, Compose UI tests, screenshots with `-Pscreenshots`) |
 | LG | `webos/` | `npm test` (unit, 168) and `npm run e2e` (browser, the built app as the TV opens it); `npm run package` makes `reely-lg.ipk` |
-| iPhone, iPad and Apple TV | `ios/` | `swift test` in `ios/ReelyCore` (the core, on Linux or a Mac); GitHub builds both apps on a Mac and posts simulator screenshots of each screen (`.github/workflows/ios.yml`) |
+| iPhone, iPad and Apple TV | `ios/` | `scripts/vlckit.sh` fetches VLC's engine (VideoLAN's builds, checksums checked); `swift test` in `ios/ReelyCore` (the core, on Linux or a Mac); GitHub builds both apps on a Mac and posts simulator screenshots of each screen (`.github/workflows/ios.yml`) |
 | Roku | `roku/` | `npm run check` (BrighterScript compile), `npm test` (unit, 275, BrightScript simulator) and `npm run e2e` (the app in the SceneGraph simulator, driven by the remote protocol, against a stand-in Plex); `npm run package` makes `reely-roku.zip` |

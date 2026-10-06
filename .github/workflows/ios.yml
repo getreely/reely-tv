@@ -23,6 +23,15 @@ jobs:
         working-directory: ios/ReelyCore
         run: swift test
 
+      # VLC's engine: VideoLAN's builds, a few hundred MB to fetch, so kept between runs.
+      - uses: actions/cache@v4
+        with:
+          path: ios/Vendor
+          key: vlckit-${{ hashFiles('ios/scripts/vlckit.sh') }}
+
+      - name: VLCKit
+        run: ios/scripts/vlckit.sh
+
       - name: Project
         working-directory: ios
         run: brew install xcodegen && xcodegen generate

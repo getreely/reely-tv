@@ -260,7 +260,10 @@ struct SettingsSection: View {
             }
         }
         #endif
-        Group_(title: "Licenses") { Row_(title: "Geist", note: "The typeface.", value: "SIL Open Font License", action: nil) }
+        Group_(title: "Licenses") {
+            Row_(title: "Geist", note: "The typeface.", value: "SIL Open Font License", action: nil)
+            Row_(title: "VLCKit", note: "VideoLAN's player, for files and streams Apple's can't open.", value: "LGPL 2.1", action: nil)
+        }
     }
 }
 
@@ -285,12 +288,18 @@ private struct LiveSettings: View {
                     }
                 }
             }
-            #if os(tvOS)
             Group_(title: "Watching") {
+                if !c.isPlaylist {
+                    Choice_(title: "Stream type", note: "Try the other if channels stutter or won't start.", options: [
+                        Option(value: Prefs.StreamFormat.m3u8, label: "HLS", note: "Works with most providers."),
+                        Option(value: Prefs.StreamFormat.ts, label: "MPEG-TS", note: "Starts faster with some providers."),
+                    ], selected: Binding(get: { store.prefs.streamFormat }, set: { store.prefs.streamFormat = $0 }))
+                }
+                #if os(tvOS)
                 Switch_(title: "Guide preview", note: "Plays the highlighted channel in the guide.",
                         on: Binding(get: { store.prefs.guidePreview }, set: { store.prefs.guidePreview = $0 }))
+                #endif
             }
-            #endif
             Group_(title: "Movies and shows", note: c.isPlaylist
                    ? "Your provider's movies and shows need an Xtream login rather than a playlist. Sign out and sign in with your server, username and password to use them."
                    : store.iptvStatus.error ?? "Your provider's movies and shows in the Movies and TV Shows tabs, on Home and in search, marked IPTV. Off, only Plex's are shown.") {
