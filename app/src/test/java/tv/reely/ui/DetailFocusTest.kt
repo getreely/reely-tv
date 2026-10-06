@@ -68,13 +68,12 @@ class DetailFocusTest {
         compose.waitForIdle()
         compose.runOnIdle { content.requestFocus() }
         compose.waitForIdle()
-        // The button is a circle with its label beneath, so it is found by the label it
-        // sits over.
+        // Play is a wide button with its label inside it, so it is found by that label.
         val focused = compose.onAllNodes(isFocused()).fetchSemanticsNodes().single().boundsInRoot
         val label = compose.onNode(hasText("Resume")).fetchSemanticsNode().boundsInRoot
         assertTrue(
-            "focus should be on Resume, was at $focused (Resume is under ${label.center.x})",
-            label.center.x in focused.left..focused.right && focused.bottom <= label.top + 1f,
+            "focus should be on Resume, was at $focused (Resume is at ${label.center})",
+            label.center.x in focused.left..focused.right && label.center.y in focused.top..focused.bottom,
         )
     }
 }
