@@ -13,6 +13,8 @@ public enum Route: Equatable, Hashable, Sendable {
     case person(id: String, name: String, serverBase: String?)
     case playlist(ratingKey: String, title: String, serverBase: String?)
     case collection(ratingKey: String, title: String, serverBase: String?)
+    /// A title to ask for, from Requests.
+    case requestTitle(RequestTitle)
 
     /// A tab replaces what was open; anything else goes on top of it.
     public var isTab: Bool {
@@ -90,6 +92,10 @@ public final class ReelyStore {
     public let api: PlexAPI
     public let xtream: XtreamClient
     public internal(set) var live = LiveState()
+    public internal(set) var requests = RequestsState()
+    public internal(set) var requestPage: RequestPage?
+    @ObservationIgnored var reelyClient: ReelyClient?
+    @ObservationIgnored var requestSearchRun = 0
     let store: KeyValueStore
     let secrets: KeyValueStore
     private var linkTask: Task<Void, Never>?
@@ -107,6 +113,7 @@ public final class ReelyStore {
         plex.user = store.json("plexUser", as: PlexHomeUser.self)
         search.recent = store.json("recentSearches", as: [String].self) ?? []
         loadLiveState()
+        requests.address = store.string("reelyUrl")
     }
 
     /// A client id kept for good: plex.tv knows each device by it.
@@ -403,6 +410,9 @@ public final class ReelyStore {
         home.watchlist = watch
         homeBusy = false
         Task { await refreshWatchlist() }
+        Task { await checkReadyRequests() }
+        // Home's Trending and Popular are Reely's.
+        if requests.isConnected && requests.rows.isEmpty { Task { await loadRequests() } }
     }
 
     public func isHidden(_ row: HomeRow) -> Bool { prefs.hiddenHomeRows.contains(row.rawValue) }

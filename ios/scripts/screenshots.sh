@@ -25,7 +25,7 @@ shoot() {
   xcrun simctl boot "$udid" 2>/dev/null || true
   xcrun simctl bootstatus "$udid" -b
   xcrun simctl install "$udid" "$app"
-  scenes="signin code home movie show library settings search profiles live channel"
+  scenes="signin code home movie show library settings search profiles live channel requests request"
   # The grid, and the guide over a channel, are Apple TV's.
   if [ "$name" = appletv ]; then scenes="$scenes guide overguide"; fi
   for scene in $scenes; do

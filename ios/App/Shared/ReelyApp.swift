@@ -28,7 +28,9 @@ struct ReelyApp: App {
                 kept["xtream"] = #"{"base": "\#(DemoTransport.server)", "username": "demo", "password": "demo"}"#
             }
             let secrets = MemoryStore(kept)
-            _store = State(initialValue: ReelyStore(api: api, store: MemoryStore(), secrets: secrets))
+            // Connected to a stand-in Reely too, for Requests and Home's Trending and Popular.
+            let kept2 = ["signin", "code"].contains(scene) ? [:] : ["reelyUrl": DemoTransport.server]
+            _store = State(initialValue: ReelyStore(api: api, store: MemoryStore(kept2), secrets: secrets))
         } else {
             _store = State(initialValue: ReelyStore(api: PlexAPI(identity: identity), store: defaults, secrets: KeychainStore()))
         }
@@ -58,6 +60,11 @@ struct ReelyApp: App {
                         await store.loadLive()
                         if let first = store.live.categories.first { await store.openCategory(first) }
                         if args.contains("channel") || args.contains("overguide") { store.watchChannel(0) }
+                    }
+                    if args.contains("requests") { store.navigate(.requests) }
+                    if args.contains("request") {
+                        store.navigate(.requests)
+                        store.navigate(.requestTitle(RequestTitle(kind: "show", tmdbId: 800, title: "Saltwater", year: 2024, poster: DemoTransport.server + "/photo/reely-800")))
                     }
                     if args.contains("library") { store.navigate(.library(kind: "movie")); store.setLibraryView("movie", .grid) }
                 }
@@ -120,6 +127,8 @@ struct RouteContent: View {
             case .settings: SettingsView()
             case .search: SearchView()
             case .live: LiveView()
+            case .requests: RequestsView()
+            case .requestTitle(let title): RequestTitleView(title: title).id(title.key)
             case .person, .collection, .playlist: ListPageView(route: route).id(route)
             default: NotYet(route: route)
             }

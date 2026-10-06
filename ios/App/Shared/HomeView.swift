@@ -21,6 +21,8 @@ struct HomeView: View {
                 PageHeader(title: "Home")
                 #endif
                 if let error = store.homeError { ErrorNote(text: error).padding(.horizontal, pageMargin) }
+                // Something asked for has arrived: said first, one at a time.
+                if let arrived = store.requests.ready.first { ReadyCard(title: arrived, more: store.requests.ready.count - 1) }
 
                 if shown(.continueWatching) && !home.continueWatching.isEmpty {
                     CardRow(title: HomeRow.continueWatching.title) {
@@ -66,6 +68,11 @@ struct HomeView: View {
                                 .focused($focused, equals: "playlists|" + playlist.id)
                         }
                     }
+                }
+                // From Reely: what's trending and popular, films and shows together, each opening its page in Requests.
+                ForEach([HomeRow.trending, .popular], id: \.self) { row in
+                    let titles = store.requests.homeRow(row)
+                    if shown(row) && !titles.isEmpty { RequestRowView(title: row.title, titles: titles) }
                 }
                 if home.isEmpty {
                     if store.homeBusy {

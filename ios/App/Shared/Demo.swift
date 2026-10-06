@@ -22,6 +22,7 @@ final class DemoTransport: HttpTransport, @unchecked Sendable {
             let body = DemoTransport.panel(query.first { $0.name == "action" }?.value, streamId: query.first { $0.name == "stream_id" }?.value.flatMap(Int.init))
             return HttpResponse(status: 200, data: Data(body.utf8))
         }
+        if url.path.hasPrefix("/api/v1/") { return HttpResponse(status: 200, data: Data(DemoTransport.reely(url.path).utf8)) }
         guard let body = DemoTransport.answer(url.path) else { return HttpResponse(status: 404, data: Data()) }
         return HttpResponse(status: 200, data: Data(body.utf8))
     }
@@ -86,6 +87,33 @@ final class DemoTransport: HttpTransport, @unchecked Sendable {
         case "/library/sections/1/collections":
             return #"{"MediaContainer": {"Metadata": [{"ratingKey": "c1", "type": "collection", "title": "Space", "childCount": 4, "thumb": "/thumb/c1"}]}}"#
         default: return nil
+        }
+    }
+
+    // MARK: A stand-in Reely
+
+    static func reelyTitle(_ kind: String, _ id: Int, _ title: String, _ year: Int) -> String {
+        #"{"kind": "\#(kind)", "tmdbId": \#(id), "title": "\#(title)", "year": \#(year), "poster": "\#(server)/photo/reely-\#(id)", "overview": "A story people keep asking for, finally within reach."}"#
+    }
+
+    static func reely(_ path: String) -> String {
+        let movies = [("Glass Harbor", 2025), ("The Quiet Year", 2024), ("Signal Lost", 2025), ("Paper Moons", 2023), ("Far Fields", 2022)]
+            .enumerated().map { reelyTitle("movie", 900 + $0.offset, $0.element.0, $0.element.1) }
+        let shows = [("Saltwater", 2024), ("The Long Night Shift", 2025), ("Orchard Lane", 2023), ("Northbound", 2024)]
+            .enumerated().map { reelyTitle("show", 800 + $0.offset, $0.element.0, $0.element.1) }
+        switch path {
+        case "/api/v1/auth/plex/token": return #"{"status": "ok"}"#
+        case "/api/v1/explore":
+            return #"{"movies": [\#(movies.joined(separator: ","))], "shows": [\#(shows.joined(separator: ","))], "popularMovies": [\#(movies.reversed().joined(separator: ","))], "popularShows": [\#(shows.reversed().joined(separator: ","))]}"#
+        case "/api/v1/requests":
+            return #"{"requests": [{"id": 3, "kind": "movie", "tmdbId": 901, "title": "The Quiet Year", "year": 2024, "poster": "\#(server)/photo/reely-901", "status": "approved"}]}"#
+        case "/api/v1/movies": return #"{"movies": [{"tmdbId": 901, "filePath": "", "downloading": true}]}"#
+        case "/api/v1/shows": return #"{"shows": [{"tmdbId": 801, "onDisk": 4, "aired": 10}]}"#
+        case "/api/v1/auth/me": return #"{"user": {"role": "user", "defaultLibraryId": 3}}"#
+        case "/api/v1/libraries": return #"{"libraries": [{"id": 1, "name": "Movies", "kind": "movies"}, {"id": 3, "name": "TV Shows", "kind": "shows"}, {"id": 4, "name": "Kids TV", "kind": "shows"}]}"#
+        case "/api/v1/preview/show/800":
+            return #"{"inLibraries": [], "preview": {\#(String(reelyTitle("show", 800, "Saltwater", 2024).dropFirst().dropLast())), "backdrop": "\#(server)/photo/art-reely-800", "genres": ["Drama", "Mystery"], "status": "Returning Series", "seasons": [{"number": 1, "name": "Season 1", "episodes": [{}, {}]}, {"number": 2, "name": "Season 2", "episodes": [{}]}, {"number": 3, "name": "Season 3", "episodes": [{}]}]}}"#
+        default: return "{}"
         }
     }
 

@@ -66,6 +66,8 @@ struct PosterCard: View {
     var progress: Double? = nil
     var watched = false
     var badge: Int? = nil
+    /// A word on it: "In library", "Requested" and the like, in Requests.
+    var tag: String? = nil
     let action: () -> Void
     @Environment(\.accent) private var accent
 
@@ -73,6 +75,13 @@ struct PosterCard: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: dp(6)) {
                 Artwork(url: url, aspect: 2 / 3)
+                    .overlay(alignment: .topLeading) {
+                        if let tag {
+                            Text(tag).font(Typeface.geist(11, .semibold)).foregroundStyle(accent.onColor)
+                                .padding(.horizontal, dp(8)).padding(.vertical, dp(4))
+                                .background(Capsule().fill(accent.swiftColor)).padding(dp(6))
+                        }
+                    }
                     .overlay(alignment: .bottom) {
                         if let progress { Progress(fraction: progress).padding(dp(8)) }
                     }

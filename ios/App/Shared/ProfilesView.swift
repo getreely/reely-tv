@@ -32,6 +32,8 @@ struct ProfilesView: View {
                     SecondaryButton(title: "Back") { asking = nil; pin = ""; error = nil }.frame(width: dp(180))
                 }
             } else {
+                // Centred under the question, and scrolling across when there are more than fit.
+                GeometryReader { g in
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: dp(28)) {
                         ForEach(store.plex.homeUsers, id: \.uuid) { user in
@@ -43,7 +45,10 @@ struct ProfilesView: View {
                         }
                     }
                     .padding(dp(24))
+                    .frame(minWidth: g.size.width)
                 }
+                }
+                .frame(height: dp(230))
                 if let error { Text(error).font(Typeface.meta).foregroundStyle(Color.danger) }
             }
         }

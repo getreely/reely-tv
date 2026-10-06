@@ -35,7 +35,12 @@ struct SettingsView: View {
         NavigationStack {
             List(Section.allCases) { s in
                 NavigationLink(s.rawValue) { ScrollView { SettingsSection(section: s).padding(.vertical, 12) }.background(Color.ink).navigationTitle(s.rawValue) }
+                    .font(Typeface.body)
+                    .listRowBackground(Color.surfaceRaised)
             }
+            // Reely's own black and greys, not the system's.
+            .scrollContentBackground(.hidden)
+            .background(Color.ink)
             .navigationTitle("Settings")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { store.back() } } }
         }
@@ -101,7 +106,14 @@ struct SettingsSection: View {
             case .theme: theme
             case .live: LiveSettings()
             case .requests:
-                Group_(title: "Requests") { Row_(title: "Not connected", note: "Connect to Reely from the Request tab.", value: "Go to Requests") { store.navigate(.requests) } }
+                if let address = store.requests.address {
+                    Group_(title: "Reely", note: "Requests go to Reely, signed in with your Plex account.") {
+                        Row_(title: "Server", note: nil, value: Reely.hostOf(address), action: nil)
+                        Row_(title: "Disconnect", note: nil, value: nil) { store.disconnectReely() }
+                    }
+                } else {
+                    Group_(title: "Requests") { Row_(title: "Not connected", note: "Connect to Reely from the Request tab.", value: "Go to Requests") { store.navigate(.requests) } }
+                }
             case .plex: plexSection
             case .about: about
             }
@@ -177,6 +189,11 @@ struct SettingsSection: View {
     @ViewBuilder private var home: some View {
         Group_(title: "Rows on Home") {
             ForEach(HomeRow.allCases.filter { !$0.fromReely && (store.prefs.iptvLibrary || ($0 != .iptvMovies && $0 != .iptvShows)) }, id: \.self) { row in
+                Switch_(title: row.title, on: Binding(get: { !store.isHidden(row) }, set: { store.setHidden(row, !$0) }))
+            }
+        }
+        Group_(title: "From Reely", note: store.requests.isConnected ? "What's trending and popular that you can ask for." : "Connect to Reely from the Request tab to show these.") {
+            ForEach(HomeRow.allCases.filter(\.fromReely), id: \.self) { row in
                 Switch_(title: row.title, on: Binding(get: { !store.isHidden(row) }, set: { store.setHidden(row, !$0) }))
             }
         }
