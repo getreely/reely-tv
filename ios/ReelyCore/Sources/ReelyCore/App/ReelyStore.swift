@@ -85,6 +85,8 @@ public final class ReelyStore {
     var searchRun = 0
     /// What's playing; nil when nothing is.
     public internal(set) var playing: Playing?
+    /// A sound or subtitle change is swapping the stream: the old one stopping is expected, not a dropped connection.
+    public internal(set) var replacingStream = false
     /// Asked to play, and on its way: the player's black screen goes up at once, not when Plex has answered.
     public internal(set) var opening: PlexItem?
     public internal(set) var playError: String?

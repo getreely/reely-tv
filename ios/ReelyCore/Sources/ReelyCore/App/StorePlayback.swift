@@ -138,7 +138,17 @@ extension ReelyStore {
      * from [positionMs]. Nil leaves that one as it is; subtitles "0" turns them off.
      */
     public func chooseStreams(audioId: String?, subtitleId: String?, positionMs: Int) async {
-        guard let p = playing else { return }
+        guard var p = playing else { return }
+        func chosen(_ given: PlexPlayback) -> PlexPlayback {
+            var playback = given
+            if let audioId { playback.audioStreams = playback.audioStreams.map { var s = $0; s.selected = s.id == audioId; return s } }
+            if let subtitleId { playback.subtitleStreams = playback.subtitleStreams.map { var s = $0; s.selected = s.id == subtitleId; return s } }
+            return playback
+        }
+        // The choice shows at once — ticked in the panel, named in Playback info — while the
+        // stream is changed behind it.
+        p.playback = chosen(p.playback)
+        playing = p
         if let part = p.playback.partId { _ = await api.selectStream(p.base, p.token, partId: part, audioStreamId: audioId, subtitleStreamId: subtitleId) }
         /*
          * Then read the title again, as starting it afresh does — which is how a choice made
@@ -146,15 +156,12 @@ extension ReelyStore {
          * choice is laid over what comes back, in case the server hasn't caught up.
          */
         let fresh = p.item.isIptv ? nil : try? await api.playback(p.base, p.token, ratingKey: p.item.ratingKey, mediaIndex: p.mediaIndex)
-        var playback = fresh ?? p.playback
-        if let audioId { playback.audioStreams = playback.audioStreams.map { var s = $0; s.selected = s.id == audioId; return s } }
-        if let subtitleId { playback.subtitleStreams = playback.subtitleStreams.map { var s = $0; s.selected = s.id == subtitleId; return s } }
+        let playback = chosen(fresh ?? p.playback)
         guard playing?.sessionId == p.sessionId else { return }
         let (text, burn) = subtitlePlan(playback)
         let otherSound = playback.audioStreams.count > 1 && !(playback.audioStreams.first?.selected ?? true) && playback.audioStreams.contains(where: \.selected)
         let mode = prefs.playbackMode
         let asIs = mode == .transcode ? false : !burn && !otherSound && (mode == .direct || PlaybackPlan.plan(playback, mode: mode).direct)
-        if !p.direct { await api.stopTranscode(p.base, p.token, sessionId: p.sessionId) }
         // Only text subtitles changed, and the file plays as it is either way: the words change over the picture.
         if asIs && p.direct && playback.url == p.url {
             var next = p
@@ -163,6 +170,20 @@ extension ReelyStore {
             playing = next
             return
         }
+        /*
+         * Otherwise as leaving and starting again does, since that's what worked: the old
+         * conversion stopped first, a moment for Plex to let go of it — a new one asked for
+         * at once could be handed the old one's picture, subtitles and all — and then a new
+         * one from where it got to. The player isn't to take the old one stopping under it
+         * for a dropped connection.
+         */
+        replacingStream = true
+        defer { replacingStream = false }
+        if !p.direct {
+            await api.stopTranscode(p.base, p.token, sessionId: p.sessionId)
+            try? await Task.sleep(nanoseconds: 800_000_000)
+        }
+        guard playing?.sessionId == p.sessionId else { return }
         let sessionId = randomHex(12)
         var next = p
         next.playback = playback
@@ -173,6 +194,7 @@ extension ReelyStore {
         next.startMs = positionMs
         next.sessionId = sessionId
         next.textSubtitle = text
+        next.attempt += 1
         playing = next
     }
 

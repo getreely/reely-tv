@@ -91,6 +91,8 @@ final class PlayerModel {
         }
         // Buffer, from Settings: about fifty seconds ahead, or up to two minutes.
         item.preferredForwardBufferDuration = (store?.prefs.largerBuffer ?? false) ? 120 : 50
+        // Let go of the old stream completely before the new one, so nothing of it is kept.
+        player.replaceCurrentItem(with: nil)
         player.replaceCurrentItem(with: item)
         Task { @MainActor in
             if let group = try? await item.asset.loadMediaSelectionGroup(for: .legible) { item.select(nil, in: group) }
@@ -111,6 +113,8 @@ final class PlayerModel {
 
     private func itemStatus(_ status: AVPlayerItem.Status, error: Error?) {
         guard status == .failed else { return }
+        // The stream being swapped for a sound or subtitle change: the new one is on its way.
+        if store?.replacingStream == true { return }
         if PlayerModel.dropped(error), let p = store?.playing {
             let at = max(positionMs, p.startMs)
             if drops < RECONNECT_TRIES {
