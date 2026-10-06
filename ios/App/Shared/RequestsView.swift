@@ -115,8 +115,10 @@ struct RequestTitleView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: dp(14)) {
                 ZStack(alignment: .bottomLeading) {
-                    RemoteImage(url: (detail?.backdrop ?? title.poster).flatMap(URL.init(string:)))
-                        .frame(maxWidth: .infinity).frame(height: dp(260) + topInset).clipped()
+                    // The picture fills the width without widening the page.
+                    Color.clear.frame(maxWidth: .infinity).frame(height: dp(260) + topInset)
+                        .overlay(RemoteImage(url: (detail?.backdrop ?? title.poster).flatMap(URL.init(string:))))
+                        .clipped()
                         .overlay(LinearGradient(colors: [.clear, Color.ink.opacity(0.7), Color.ink], startPoint: .top, endPoint: .bottom))
                     VStack(alignment: .leading, spacing: dp(8)) {
                         Text(title.title).font(Typeface.display).foregroundStyle(Color.chalk).lineLimit(2)
