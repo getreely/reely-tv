@@ -15,3 +15,7 @@ ios/**/.build/
 ios/**/*.xcodeproj/
 ios/**/DerivedData/
 ios/**/xcuserdata/
+ios/App/iOS/Info.plist
+ios/App/tvOS/Info.plist
+ios/build/
+ios/shots/

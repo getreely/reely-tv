@@ -190,6 +190,14 @@ public final class ReelyStore {
         route = .home
     }
 
+    /// Try again, on the screen saying no server could be reached.
+    public func retryConnect() {
+        guard let token = plex.token, !plex.isConnected, !plex.finding else { return }
+        Task { await connect(token) }
+    }
+
+    public func dismissPlexError() { plex.error = nil }
+
     // MARK: Servers
 
     /// The servers, and the first that answers: the one last used, else the account's own.
