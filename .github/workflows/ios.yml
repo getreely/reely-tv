@@ -41,6 +41,11 @@ jobs:
         working-directory: ios
         run: scripts/screenshots.sh build/Build/Products shots
 
+      - name: Screenshots as notes
+        if: always()
+        working-directory: ios
+        run: scripts/annotate-shots.sh shots || true
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
