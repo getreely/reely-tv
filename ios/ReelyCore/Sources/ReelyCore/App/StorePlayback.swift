@@ -72,7 +72,7 @@ extension ReelyStore {
         var plan = PlaybackPlan.plan(playback, mode: prefs.playbackMode)
         if burn && prefs.playbackMode != .direct { plan = PlaybackPlan(direct: false, reason: "Plex draws these subtitles into the picture") }
         let url = plan.direct ? playback.url
-            : converted(base, token, ratingKey: item.ratingKey, sessionId: sessionId, mediaIndex: mediaIndex, subtitles: text != nil ? "none" : "burn", videoCodec: playback.videoCodec)
+            : converted(base, token, ratingKey: item.ratingKey, sessionId: sessionId, mediaIndex: mediaIndex, subtitles: burn ? "burn" : "none", videoCodec: playback.videoCodec)
         let nearEnd = item.durationMs > 0 && Double(item.viewOffsetMs) >= Double(item.durationMs) * 0.95
         let startMs = resume && item.viewOffsetMs > 0 && !nearEnd ? item.viewOffsetMs : 0
         playError = nil
@@ -86,7 +86,7 @@ extension ReelyStore {
         // The provider's files have no Plex to convert them.
         guard var p = playing, p.direct, !p.item.isIptv else { return false }
         p.url = converted(p.base, p.token, ratingKey: p.item.ratingKey, sessionId: p.sessionId, mediaIndex: p.mediaIndex,
-                          subtitles: p.textSubtitle != nil ? "none" : "burn", videoCodec: p.playback.videoCodec)
+                          subtitles: subtitlePlan(p.playback).burn ? "burn" : "none", videoCodec: p.playback.videoCodec)
         p.direct = false
         p.reason = "This device couldn't play the file as it is"
         p.startMs = positionMs
@@ -123,7 +123,7 @@ extension ReelyStore {
             next.sessionId = sessionId
             next.url = p.direct ? found?.url ?? p.url
                 : converted(base, token, ratingKey: p.item.ratingKey, sessionId: sessionId, mediaIndex: p.mediaIndex,
-                            subtitles: p.textSubtitle != nil ? "none" : "burn", videoCodec: p.playback.videoCodec)
+                            subtitles: subtitlePlan(p.playback).burn ? "burn" : "none", videoCodec: p.playback.videoCodec)
         }
         guard playing?.sessionId == p.sessionId else { return }
         playing = next
@@ -157,7 +157,7 @@ extension ReelyStore {
         var next = p
         next.playback = playback
         next.url = asIs ? playback.url : converted(p.base, p.token, ratingKey: p.item.ratingKey, sessionId: sessionId, mediaIndex: p.mediaIndex,
-                                                    subtitles: text != nil ? "none" : "burn", videoCodec: playback.videoCodec)
+                                                    subtitles: burn ? "burn" : "none", videoCodec: playback.videoCodec)
         next.direct = asIs
         next.reason = asIs ? nil : (burn ? "Plex draws these subtitles into the picture" : "Plex is changing the sound track")
         next.startMs = positionMs

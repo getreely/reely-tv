@@ -122,6 +122,23 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(store.playing?.textSubtitle?.id, "4")
     }
 
+    func testSubtitlesSetToStartOffAreNotBurnedInByPlex() async {
+        let fake = FakePlex()
+        fakeServer(fake, at: home)
+        // Plex has picture subtitles selected for this file; Settings say subtitles start off.
+        fake.json(home, "/library/metadata/m1", #"{"MediaContainer": {"Metadata": [{"ratingKey": "m1", "Media": [{"container": "mkv", "videoCodec": "hevc", "audioCodec": "aac", "Part": [{"id": 41, "key": "/library/parts/41/file.mkv", "Stream": [{"id": 1, "streamType": 1}, {"id": 5, "streamType": 3, "codec": "pgs", "displayTitle": "English (PGS)", "selected": "1"}]}]}]}]}}"#)
+        let store = makeStore(fake, secrets: MemoryStore(["plexToken": "account-token"]))
+        await store.start()
+        store.prefs.subtitlesAtStart = .off
+        await store.play(store.home.recentMovies[0], resume: false)
+        XCTAssertEqual(store.playing?.url.contains("subtitles=none"), true)
+        // Chosen, Plex draws them in; turned off again, it doesn't.
+        await store.chooseStreams(audioId: nil, subtitleId: "5", positionMs: 1_000)
+        XCTAssertEqual(store.playing?.url.contains("subtitles=burn"), true)
+        await store.chooseStreams(audioId: nil, subtitleId: "0", positionMs: 2_000)
+        XCTAssertEqual(store.playing?.url.contains("subtitles=none"), true)
+    }
+
     func testNoServerAnswersSaysSo() async {
         let fake = FakePlex()
         fakeServer(fake, at: home)

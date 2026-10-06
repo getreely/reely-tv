@@ -151,7 +151,7 @@ sub begin(fromMs as dynamic)
         content.url = p.url
         content.streamFormat = m.plan.format
     else
-        content.url = Plex_TranscodeUrl(m.base, m.token, m.item.ratingKey, m.session, m.global.clientId, m.mediaIndex, kbps, Iif_(subs.text, "none", "burn"))
+        content.url = Plex_TranscodeUrl(m.base, m.token, m.item.ratingKey, m.session, m.global.clientId, m.mediaIndex, kbps, Iif_(subs.burn, "burn", "none"))
         content.streamFormat = "hls"
     end if
     ' The Roku's own trick-play pictures, from Plex's index of the file.

@@ -1306,7 +1306,7 @@ export class App {
       // is; picture ones (PGS) only Plex's conversion can put in.
       const { text, burn } = subtitlePlan(playback);
       const asIs = mode === "direct" ? true : mode === "transcode" || burn ? false : direct(playback);
-      const url = asIs ? playback.url : this.converted(base, token, item.ratingKey, sessionId, mediaIndex, text ? "none" : "burn", playback.videoCodec);
+      const url = asIs ? playback.url : this.converted(base, token, item.ratingKey, sessionId, mediaIndex, burn ? "burn" : "none", playback.videoCodec);
       const startMs = resume && item.viewOffsetMs > 0 && !(item.durationMs > 0 && item.viewOffsetMs >= item.durationMs * 0.95) ? item.viewOffsetMs : 0;
       this.set((s) => ({ ...s, playError: null, playing: { item, base, token, playback, url, direct: asIs, startMs, sessionId, queue, mediaIndex, textSubtitle: text } }));
     } catch (error) {
@@ -1337,7 +1337,7 @@ export class App {
     const p = this.current.playing;
     // The provider's files have no Plex to convert them.
     if (!p || !p.direct || p.base === IPTV_SOURCE) return false;
-    const url = this.converted(p.base, p.token, p.item.ratingKey, p.sessionId, p.mediaIndex, p.textSubtitle ? "none" : "burn", p.playback.videoCodec);
+    const url = this.converted(p.base, p.token, p.item.ratingKey, p.sessionId, p.mediaIndex, subtitlePlan(p.playback).burn ? "burn" : "none", p.playback.videoCodec);
     this.set((s) => ({ ...s, playing: { ...p, url, direct: false, startMs: positionMs } }));
     return true;
   }
@@ -1363,7 +1363,7 @@ export class App {
     const sessionId = randomHex(12);
     const url = p.direct
       ? found?.url ?? p.url
-      : this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, p.textSubtitle ? "none" : "burn", p.playback.videoCodec);
+      : this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, subtitlePlan(p.playback).burn ? "burn" : "none", p.playback.videoCodec);
     this.set((s) => ({ ...s, playing: { ...p, url, startMs: positionMs, sessionId, attempt } }));
   }
 
@@ -1401,7 +1401,7 @@ export class App {
       this.set((s) => ({ ...s, playing: { ...p, playback, textSubtitle: text } }));
       return;
     }
-    const url = asIs ? playback.url : this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, text ? "none" : "burn", playback.videoCodec);
+    const url = asIs ? playback.url : this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, burn ? "burn" : "none", playback.videoCodec);
     this.set((s) => ({ ...s, playing: { ...p, playback, url, direct: asIs, startMs: positionMs, sessionId, textSubtitle: text } }));
   }
 
