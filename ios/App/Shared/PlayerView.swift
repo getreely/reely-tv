@@ -26,6 +26,10 @@ struct PlayerView: View {
     @State private var sleepAtEnd = false
     /// Subtitles found online by the Plex server, as they're looked for and added.
     @State private var found: [PlexOnlineSubtitle]?
+    @Environment(\.scenePhase) private var scenePhase
+    #if os(iOS)
+    @State private var pip = PictureInPicture()
+    #endif
     @State private var findNote: String?
     @State private var adding: String?
     #if os(iOS)
@@ -44,7 +48,11 @@ struct PlayerView: View {
             if model.usingVLC, let engine = model.vlc {
                 VLCSurface(engine: engine).ignoresSafeArea()
             } else {
+                #if os(iOS)
+                VideoSurface(player: model.player, pip: pip).ignoresSafeArea()
+                #else
                 VideoSurface(player: model.player).ignoresSafeArea()
+                #endif
             }
             #if os(tvOS)
             // The remote's, while the controls are put away: a press brings them back, left and right still skip.
@@ -83,6 +91,11 @@ struct PlayerView: View {
             showControls()
         }
         .onChange(of: store.playing) { _, p in if let p { model.load(p) } }
+        // VLC can't draw to a closed app: its sound plays on, and the picture comes back with it.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { model.vlc?.wentAway() }
+            if phase == .active { model.vlc?.cameBack() }
+        }
         .onChange(of: model.positionMs) { _, _ in autoSkip(); countUpNext() }
         .onChange(of: model.ended) { _, ended in
             // The sleep timer set for this episode's end: it ends here, rather than going on.
@@ -150,6 +163,12 @@ struct PlayerView: View {
                         if let sub = subtitleLine { Text(sub).font(Typeface.geist(13, .medium)).foregroundStyle(.white.opacity(0.7)).lineLimit(1) }
                     }
                     Spacer()
+                    if pip.possible && !model.usingVLC {
+                        Button { pip.toggle() } label: {
+                            Image(systemName: "pip.enter").font(.system(size: 19, weight: .semibold)).foregroundStyle(.white).frame(width: 40, height: 40)
+                        }
+                        .accessibilityLabel("Picture in picture")
+                    }
                     RoutePicker().frame(width: 40, height: 40)
                 }
                 Spacer()
@@ -535,7 +554,8 @@ struct PlayerView: View {
                             infoRow("Audio", a)
                         }
                         if let c = p.playback.container { infoRow("File", c.uppercased()) }
-                        infoRow("Subtitles", p.textSubtitle != nil ? "Drawn by Reely" : p.playback.subtitleStreams.contains(where: \.selected) ? "Burned in by Plex" : "Off")
+                        let chosen = p.playback.subtitleStreams.first(where: \.selected)?.label
+                        infoRow("Subtitles", [chosen, p.textSubtitle != nil ? "Drawn by Reely" : chosen != nil ? "Burned in by Plex" : "Off"].compactMap { $0 }.joined(separator: " · "))
                     }
                 }
             }

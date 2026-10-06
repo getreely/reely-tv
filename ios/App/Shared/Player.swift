@@ -1,8 +1,6 @@
 import SwiftUI
 import AVFoundation
-#if os(tvOS)
 import AVKit
-#endif
 import ReelyCore
 
 /**
@@ -46,6 +44,10 @@ final class PlayerModel {
     @ObservationIgnored private var endObserver: NSObjectProtocol?
 
     init() {
+        // Subtitles are Reely's to choose: drawn by the app, or by Plex into the picture.
+        // Left to itself, Apple's player turns on any it finds in Plex's stream, and those
+        // stayed on whatever was picked.
+        player.appliesMediaSelectionCriteriaAutomatically = false
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: 600), queue: .main) { [weak self] time in
             MainActor.assumeIsolated { self?.tick(time) }
         }
@@ -90,6 +92,9 @@ final class PlayerModel {
         // Buffer, from Settings: about fifty seconds ahead, or up to two minutes.
         item.preferredForwardBufferDuration = (store?.prefs.largerBuffer ?? false) ? 120 : 50
         player.replaceCurrentItem(with: item)
+        Task { @MainActor in
+            if let group = try? await item.asset.loadMediaSelectionGroup(for: .legible) { item.select(nil, in: group) }
+        }
         #if os(tvOS)
         // Match frame rate: the TV switches to the film's rate and range, as the Fire TV does.
         if store?.prefs.matchFrameRate ?? true {
@@ -259,23 +264,119 @@ final class PlayerModel {
     var subtitle: String? { cueAt(cues, positionMs) }
 }
 
-/// Apple's player, drawn into a SwiftUI page.
+/**
+ * Apple's player, drawn into a SwiftUI page. On iPhone and iPad, with [pip], it goes on in a
+ * window of its own over other apps when you swipe home; without one — or with that turned
+ * off on the phone — the sound plays on, as a phone's video apps do: iOS stops a player
+ * whose picture is still drawing behind a closed app, so the picture lets go of it until
+ * the app comes back.
+ */
 struct VideoSurface: UIViewRepresentable {
     let player: AVPlayer
+    #if os(iOS)
+    var pip: PictureInPicture? = nil
+    #endif
     func makeUIView(context: Context) -> PlayerLayerView {
         let v = PlayerLayerView()
         v.playerLayer.player = player
         v.playerLayer.videoGravity = .resizeAspect
         v.backgroundColor = .black
+        #if os(iOS)
+        v.pip = pip
+        pip?.attach(v.playerLayer)
+        #endif
         return v
     }
-    func updateUIView(_ view: PlayerLayerView, context: Context) { view.playerLayer.player = player }
+    func updateUIView(_ view: PlayerLayerView, context: Context) {
+        if view.held == nil { view.playerLayer.player = player }
+    }
 
     final class PlayerLayerView: UIView {
         override class var layerClass: AnyClass { AVPlayerLayer.self }
         var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+        #if os(iOS)
+        weak var pip: PictureInPicture?
+        #endif
+        /// The player, let go of while the app is out of sight; see VideoSurface.
+        fileprivate(set) var held: AVPlayer?
+        private var watching: [NSObjectProtocol] = []
+
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            let center = NotificationCenter.default
+            watching = [
+                center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.wentAway() }
+                },
+                center.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.cameBack() }
+                },
+            ]
+        }
+        required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+        deinit { watching.forEach(NotificationCenter.default.removeObserver) }
+
+        private func wentAway() {
+            #if os(iOS)
+            if pip?.active == true { return }
+            #endif
+            guard let player = playerLayer.player, player.timeControlStatus != .paused else { return }
+            held = player
+            playerLayer.player = nil
+        }
+
+        private func cameBack() {
+            guard let player = held else { return }
+            playerLayer.player = player
+            held = nil
+        }
     }
 }
+
+#if os(iOS)
+/**
+ * Picture in picture on iPhone and iPad: started from the player's button, or by itself on
+ * swiping home while something plays, as the TV and Netflix apps do.
+ */
+@MainActor
+@Observable
+final class PictureInPicture: NSObject, AVPictureInPictureControllerDelegate {
+    @ObservationIgnored private var controller: AVPictureInPictureController?
+    @ObservationIgnored private var watch: NSKeyValueObservation?
+    private(set) var possible = false
+    private(set) var active = false
+
+    func attach(_ layer: AVPlayerLayer) {
+        guard AVPictureInPictureController.isPictureInPictureSupported(), controller?.playerLayer !== layer,
+              let made = AVPictureInPictureController(playerLayer: layer) else { return }
+        made.canStartPictureInPictureAutomaticallyFromInline = true
+        made.delegate = self
+        controller = made
+        watch = made.observe(\.isPictureInPicturePossible, options: [.initial, .new]) { [weak self] c, _ in
+            let possible = c.isPictureInPicturePossible
+            Task { @MainActor in self?.possible = possible }
+        }
+    }
+
+    func toggle() {
+        guard let controller else { return }
+        if controller.isPictureInPictureActive { controller.stopPictureInPicture() } else { controller.startPictureInPicture() }
+    }
+
+    nonisolated func pictureInPictureControllerWillStartPictureInPicture(_ c: AVPictureInPictureController) {
+        Task { @MainActor in self.active = true }
+    }
+
+    nonisolated func pictureInPictureControllerDidStopPictureInPicture(_ c: AVPictureInPictureController) {
+        Task { @MainActor in self.active = false }
+    }
+
+    nonisolated func pictureInPictureController(_ c: AVPictureInPictureController,
+                                                restoreUserInterfaceForPictureInPictureStopWithCompletionHandler done: @escaping (Bool) -> Void) {
+        done(true)
+    }
+}
+#endif
 
 /// "1:02:03" or "2:03".
 func clock(_ ms: Int) -> String {

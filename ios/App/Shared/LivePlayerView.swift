@@ -99,6 +99,25 @@ final class LiveModel {
         player.replaceCurrentItem(with: nil)
         loaded = nil
     }
+
+    /*
+     * Out of the app and back. The sound plays on while it's away (see VideoSurface and
+     * VLCEngine.wentAway); but a channel can't be paused and picked up later the way a film
+     * can — the stream behind it has moved on or closed — so coming back to one that has
+     * stopped joins it again as it is now.
+     */
+    @ObservationIgnored private var wasPlaying = false
+    func wentAway() {
+        wasPlaying = playing
+        if usingVLC { vlc?.wentAway() }
+    }
+    func cameBack(largerBuffer: Bool) {
+        if usingVLC { vlc?.cameBack() }
+        let stalled = usingVLC ? !(vlc?.isPlaying ?? false) : player.timeControlStatus != .playing || player.currentItem?.status == .failed
+        guard wasPlaying, stalled, let again = loaded else { return }
+        loaded = nil
+        load(again, largerBuffer: largerBuffer)
+    }
 }
 
 /**
@@ -109,7 +128,11 @@ final class LiveModel {
  */
 struct LivePlayerView: View {
     @Environment(ReelyStore.self) private var store
+    @Environment(\.scenePhase) private var scenePhase
     @State private var model = LiveModel()
+    #if os(iOS)
+    @State private var pip = PictureInPicture()
+    #endif
     /// What's on, over the picture for a few seconds after a change.
     @State private var banner = true
     /// The actions under it, with the cursor in them.
@@ -131,6 +154,10 @@ struct LivePlayerView: View {
             content(now: Int(context.date.timeIntervalSince1970))
         }
         .onAppear { load(); showBanner() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { model.wentAway() }
+            if phase == .active { model.cameBack(largerBuffer: store.prefs.largerBuffer) }
+        }
         #if os(iOS)
         .onAppear { AppDelegate.playing(true) }
         .onDisappear { AppDelegate.playing(false) }
@@ -162,7 +189,11 @@ struct LivePlayerView: View {
             if model.usingVLC, let engine = model.vlc {
                 VLCSurface(engine: engine).ignoresSafeArea()
             } else {
+                #if os(iOS)
+                VideoSurface(player: model.player, pip: pip).ignoresSafeArea()
+                #else
                 VideoSurface(player: model.player).ignoresSafeArea()
+                #endif
             }
             #if os(tvOS)
             // The remote's, while nothing else on screen takes the cursor.
@@ -223,6 +254,10 @@ struct LivePlayerView: View {
                 Button { close() } label: { Image(systemName: "xmark").font(.system(size: 20, weight: .semibold)) }
                     .foregroundStyle(Color.chalk).accessibilityLabel("Close")
                 Spacer()
+                if pip.possible && !model.usingVLC {
+                    Button { pip.toggle() } label: { Image(systemName: "pip.enter").font(.system(size: 20, weight: .semibold)) }
+                        .foregroundStyle(Color.chalk).accessibilityLabel("Picture in picture")
+                }
             }
             #endif
             Spacer()

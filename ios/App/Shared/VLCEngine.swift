@@ -50,6 +50,22 @@ final class VLCEngine {
 
     func togglePlay() { player.isPlaying ? player.pause() : player.play() }
 
+    /*
+     * Out of sight, the sound plays on with the picture off — VLC can't draw to a closed
+     * app — and the picture comes back with the app, as VLC's own app does it.
+     */
+    private var shownTrack: Int32?
+    func wentAway() {
+        guard shownTrack == nil, player.isPlaying else { return }
+        shownTrack = player.currentVideoTrackIndex
+        player.currentVideoTrackIndex = -1
+    }
+    func cameBack() {
+        guard let track = shownTrack else { return }
+        shownTrack = nil
+        player.currentVideoTrackIndex = track
+    }
+
     func seek(toMs ms: Int) { player.time = VLCTime(int: Int32(max(0, ms))) }
 
     func stop() {
