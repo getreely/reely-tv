@@ -22,7 +22,7 @@ struct ReelyApp: App {
             let transport = DemoTransport(scene: scene)
             ImageLoader.shared.transport = transport
             let api = PlexAPI(http: Http(transport: transport), identity: identity, plexTv: DemoTransport.server, discover: DemoTransport.server)
-            let secrets = MemoryStore(scene == "home" ? ["plexToken": "demo"] : [:])
+            let secrets = MemoryStore(["signin", "code"].contains(scene) ? [:] : ["plexToken": "demo"])
             _store = State(initialValue: ReelyStore(api: api, store: MemoryStore(), secrets: secrets))
         } else {
             _store = State(initialValue: ReelyStore(api: PlexAPI(identity: identity), store: defaults, secrets: KeychainStore()))
@@ -40,7 +40,12 @@ struct ReelyApp: App {
                 .preferredColorScheme(.dark)
                 .task {
                     await store.start()
-                    if ProcessInfo.processInfo.arguments.contains("code") { store.startLink() }
+                    // Where a screenshot asks to be: a page opened, as somebody would open it.
+                    let args = ProcessInfo.processInfo.arguments
+                    if args.contains("code") { store.startLink() }
+                    if args.contains("movie") { store.navigate(.detail(ratingKey: "m1", serverBase: nil)) }
+                    if args.contains("show") { store.navigate(.detail(ratingKey: "show-northbound", serverBase: nil)) }
+                    if args.contains("library") { store.navigate(.library(kind: "movie")); store.setLibraryView("movie", .grid) }
                 }
         }
     }
@@ -58,6 +63,8 @@ struct RootView: View {
             #else
             PhoneRoot()
             #endif
+            // What's playing covers everything, as on the Fire TV.
+            if store.playing != nil { PlayerView().transition(.opacity).zIndex(1) }
         }
     }
 }
@@ -73,6 +80,8 @@ struct RouteContent: View {
         } else {
             switch route {
             case .home: HomeView()
+            case .library(let kind): LibraryView(kind: kind).id(kind)
+            case .detail(let key, let base): DetailView(ratingKey: key, serverBase: base).id(key)
             default: NotYet(route: route)
             }
         }

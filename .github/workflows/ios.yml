@@ -5,6 +5,10 @@ on:
     paths: ['ios/**', '.github/workflows/ios.yml']
   workflow_dispatch:
 
+permissions:
+  contents: read
+  checks: write
+
 jobs:
   build:
     runs-on: macos-latest
@@ -44,7 +48,9 @@ jobs:
       - name: Screenshots as notes
         if: always()
         working-directory: ios
-        run: scripts/annotate-shots.sh shots || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/post-shots.py shots || true
 
       - uses: actions/upload-artifact@v4
         if: always()

@@ -73,6 +73,9 @@ public final class ReelyStore {
     public var prefs: Prefs { didSet { if prefs != oldValue { store.setJson("prefs", prefs) } } }
     public internal(set) var browse: [String: Browse] = ["movie": Browse(), "show": Browse()]
     public internal(set) var detail: DetailPage?
+    /// What's playing; nil when nothing is.
+    public internal(set) var playing: Playing?
+    public internal(set) var playError: String?
     public private(set) var route: Route = .home
     public private(set) var stack: [Route] = [.home]
 

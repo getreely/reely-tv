@@ -31,8 +31,7 @@ public struct Browse: Equatable, Sendable {
 
 /// The orders a library offers, as the Fire TV names them.
 public let LIBRARY_SORTS: [(id: String, label: String)] = [
-    ("titleSort:asc", "A–Z"), ("addedAt:desc", "Recently added"), ("originallyAvailableAt:desc", "Release date"),
-    ("rating:desc", "Rating"), ("lastViewedAt:desc", "Recently watched"),
+    ("titleSort:asc", "A–Z"), ("addedAt:desc", "Recently added"), ("originallyAvailableAt:desc", "Newest releases"), ("rating:desc", "Critic rating"),
 ]
 
 public let GRID_PAGE = 120
