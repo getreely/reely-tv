@@ -43,6 +43,29 @@ class MainActivity : ComponentActivity() {
     }
 
     /*
+     * Leaving the app with something playing on a phone: it goes on in a small window over
+     * the others, as Plex's and Netflix's do. From Android 12 the system does this by itself
+     * (see TouchApp's PictureInPictureParams); before that, it's done here.
+     */
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (tv.reely.core.PictureInPicture.wanted &&
+            android.os.Build.VERSION.SDK_INT in android.os.Build.VERSION_CODES.O until android.os.Build.VERSION_CODES.S
+        ) {
+            runCatching {
+                enterPictureInPictureMode(
+                    android.app.PictureInPictureParams.Builder().setAspectRatio(android.util.Rational(16, 9)).build(),
+                )
+            }
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: android.content.res.Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        tv.reely.core.PictureInPicture.active.value = isInPictureInPictureMode
+    }
+
+    /*
      * An arrow key that nothing used ends here. Past this point Android's view system
      * would move focus out of the app and back in from the opposite edge — see
      * dropsWhenUnused. Whatever the app does with the key, including moving focus, has

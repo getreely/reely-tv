@@ -53,6 +53,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import tv.reely.xtream.StreamFormat
 import tv.reely.xtream.XtreamApi
 import kotlinx.coroutines.delay
@@ -1258,31 +1259,79 @@ private fun CompactSettings(section: Section, onSection: (Section) -> Unit, cont
     CompositionLocalProvider(LocalCompactSettings provides true) {
         Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
             if (!open) {
-                Text(text = "Settings", color = Chalk, style = ReelyType.Headline, modifier = Modifier.padding(vertical = 12.dp))
-                Column(
-                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Section.shown.forEach { entry ->
-                        SettingRow(title = entry.title, opens = true, onClick = {
-                            onSection(entry)
-                            open = true
-                        })
+                Text(
+                    text = "Settings", color = Chalk, fontFamily = tv.reely.ui.theme.Geist, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    fontSize = 34.sp, modifier = Modifier.padding(top = 12.dp, bottom = 14.dp),
+                )
+                // As iOS's Settings: the sections together in one rounded group, each with its symbol.
+                Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(tv.reely.ui.theme.SurfaceRaised)) {
+                        Section.shown.forEachIndexed { i, entry ->
+                            if (i > 0) Box(Modifier.padding(start = 60.dp).fillMaxWidth().height(0.5.dp).background(tv.reely.ui.theme.Line))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        onSection(entry)
+                                        open = true
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            ) {
+                                SectionSymbol(entry)
+                                Text(entry.title, color = Chalk, fontFamily = tv.reely.ui.theme.Geist, fontSize = 17.sp, modifier = Modifier.weight(1f))
+                                Text("›", color = tv.reely.ui.theme.Muted, fontSize = 22.sp)
+                            }
+                        }
                     }
                 }
             } else {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp, bottom = 10.dp)) {
                     Box(
-                        modifier = Modifier.size(44.dp).clip(CircleShape).clickable { open = false },
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(tv.reely.ui.theme.SurfaceRaised)
+                            .border(0.5.dp, Color.White.copy(alpha = 0.1f), CircleShape)
+                            .clickable { open = false },
                         contentAlignment = Alignment.Center,
-                    ) { tv.reely.ui.components.ArrowGlyph(Chalk, left = true, size = 22.dp) }
-                    Text(text = section.title, color = Chalk, style = ReelyType.Headline, modifier = Modifier.padding(start = 4.dp))
+                    ) { tv.reely.ui.components.ArrowGlyph(Chalk, left = true, size = 20.dp) }
+                    Text(text = section.title, color = Chalk, style = ReelyType.Headline, modifier = Modifier.padding(start = 12.dp))
                 }
                 Column(
                     modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp),
                 ) { content() }
             }
+        }
+    }
+}
+
+/** A section's symbol in a rounded tile of its own color, as iOS's Settings has them. */
+@Composable
+private fun SectionSymbol(section: Section) {
+    val tile = when (section) {
+        Section.PLAYBACK -> Color(0xFF2F6BFF)
+        Section.HOME -> Color(0xFF5B5FE6)
+        Section.THEME -> Color(0xFFE0457B)
+        Section.LIVE_TV -> Color(0xFFE5533D)
+        Section.REQUESTS -> Color(0xFF2FB36B)
+        Section.PLEX -> Color(0xFFE5A00D)
+        Section.UPDATES -> Color(0xFF1FA2C9)
+        Section.ABOUT -> Color(0xFF6B7280)
+    }
+    Box(Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(tile), contentAlignment = Alignment.Center) {
+        val ink = Color.White
+        when (section) {
+            Section.PLAYBACK -> tv.reely.ui.components.PlayGlyph(ink, 14.dp)
+            Section.HOME -> tv.reely.ui.touch.HomeTabGlyph(ink, 18.dp)
+            Section.THEME -> Box(Modifier.size(14.dp).clip(CircleShape).background(ink))
+            Section.LIVE_TV -> tv.reely.ui.touch.LiveTabGlyph(ink, 18.dp)
+            Section.REQUESTS -> tv.reely.ui.components.PlusGlyph(ink, 16.dp)
+            Section.PLEX -> Text("P", color = ink, fontFamily = tv.reely.ui.theme.Geist, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 16.sp)
+            Section.UPDATES -> tv.reely.ui.components.ArrowGlyph(ink, left = false, size = 14.dp, modifier = Modifier.graphicsLayer { rotationZ = 90f })
+            Section.ABOUT -> tv.reely.ui.components.InfoGlyph(ink, 16.dp)
         }
     }
 }

@@ -1538,7 +1538,9 @@ fun PlayerScreen(
          * so a film had no controls, and the flag that gates the direction keys ran on
          * regardless. Hence the tileCount test rather than another deletion.
          */
-        val controlsShowing = controlsVisible && !guideOpen && tileCount == 1 && !postPlay
+        // In picture in picture the window is the picture alone, too small for anything over it.
+        val controlsShowing = controlsVisible && !guideOpen && tileCount == 1 && !postPlay &&
+            !tv.reely.core.PictureInPicture.active.value
         val skip = {
             if (prompt == SkipPrompt.INTRO && intro != null) exoPlayer.seekTo(intro.endMs)
             else onStepEpisode(1)

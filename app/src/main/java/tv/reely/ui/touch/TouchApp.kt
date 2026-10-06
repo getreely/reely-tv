@@ -155,6 +155,7 @@ fun TouchApp(
 
     val playing = state.playback != null
     WatchingFullScreen(playing)
+    PictureInPictureWhilePlaying(playing && state.multiview.size <= 1)
     if (playing) {
         PlayerHost(viewModel, state, touch = true)
         return
@@ -324,6 +325,31 @@ private fun TouchContent(viewModel: ReelyViewModel, state: ReelyState, actions: 
         is Route.Playlist -> TouchPlaylist(viewModel, state, route, actions)
         is Route.Person -> TouchPerson(viewModel, state, route, actions)
         is Route.Settings -> TouchSettings(viewModel, state, onSwitchProfile = actions.profile ?: {})
+    }
+}
+
+/**
+ * While something plays, going home takes it along in a small window: Android 12 and later
+ * are told so ahead and do it themselves, smoothly; earlier ones are asked to by
+ * MainActivity.onUserLeaveHint. Not for a grid of channels, which a small window can't show.
+ */
+@Composable
+private fun PictureInPictureWhilePlaying(wanted: Boolean) {
+    val activity = LocalActivity.current ?: return
+    DisposableEffect(wanted) {
+        tv.reely.core.PictureInPicture.wanted = wanted
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            runCatching {
+                activity.setPictureInPictureParams(
+                    android.app.PictureInPictureParams.Builder()
+                        .setAspectRatio(android.util.Rational(16, 9))
+                        .setAutoEnterEnabled(wanted)
+                        .setSeamlessResizeEnabled(true)
+                        .build(),
+                )
+            }
+        }
+        onDispose { tv.reely.core.PictureInPicture.wanted = false }
     }
 }
 
