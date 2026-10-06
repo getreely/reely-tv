@@ -153,10 +153,11 @@ private fun TabHome(viewModel: ReelyViewModel, state: ReelyState, kind: LibraryK
             }
         }
         if (kind == LibraryKind.MOVIES) {
-            val recent = home.recentMovies.filter { here(it.serverBase, it.librarySectionId) }
+            // This library's own newest, not Home's newest across every library.
+            val recent = browse.added
             if (recent.isNotEmpty()) item { PosterRow("Recently Added", recent, actions) }
         } else {
-            val groups = home.recentEpisodes.filter { here(it.serverBase, it.librarySectionId) }
+            val groups = browse.addedShows
             if (groups.isNotEmpty()) item {
                 TouchRow("Recently Added") {
                     items(groups, key = { it.listKey }) { group ->

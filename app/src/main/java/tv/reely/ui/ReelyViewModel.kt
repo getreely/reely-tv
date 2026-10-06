@@ -309,6 +309,9 @@ data class BrowseState(
     val items: List<PlexItem> = emptyList(),
     /** Newest by release date, which is not the same as newest to the library. */
     val released: List<PlexItem> = emptyList(),
+    /** Newest to this library: films, or episodes gathered on their show. */
+    val added: List<PlexItem> = emptyList(),
+    val addedShows: List<EpisodeGroup> = emptyList(),
     val genres: List<PlexGenre> = emptyList(),
     val sort: LibrarySort = LibrarySort.TITLE,
     val genreId: String? = null,
@@ -826,7 +829,12 @@ internal fun ReelyState.patchItem(
         ),
         plex = plex.copy(
             browse = plex.browse.mapValues { (_, browse) ->
-                browse.copy(items = all(browse.items), released = all(browse.released))
+                browse.copy(
+                    items = all(browse.items),
+                    released = all(browse.released),
+                    added = all(browse.added),
+                    addedShows = browse.addedShows.map { it.copy(newest = one(it.newest)) },
+                )
             },
         ),
         iptv = iptv.copy(
@@ -2300,6 +2308,18 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                 .getOrElse { emptyList() }
             updateBrowse(kind) {
                 if (it.section?.key != section.key) it else it.copy(released = items)
+            }
+        }
+        // What's newly arrived in this library, asked of the library itself: Home's row is the
+        // newest across every library, which may have none of this one's.
+        viewModelScope.launch {
+            if (kind == LibraryKind.MOVIES) {
+                val items = runCatching { PlexApi.recentlyAdded(base, token, section.key, PlexApi.TYPE_MOVIE, limit = 40) }
+                    .getOrElse { emptyList() }
+                updateBrowse(kind) { if (it.section?.key != section.key) it else it.copy(added = items) }
+            } else {
+                val groups = recentEpisodeGroups(listOf(LibraryChoice(plex.serverName.orEmpty(), base, token, section)))
+                updateBrowse(kind) { if (it.section?.key != section.key) it else it.copy(addedShows = groups) }
             }
         }
     }

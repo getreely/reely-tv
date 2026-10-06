@@ -5,7 +5,7 @@ import { stableSort } from "../core/sort";
 import { isTextCodec } from "../core/subtitles";
 import { readable } from "../core/http";
 import { Store, clientId } from "../core/storage";
-import { emptyHome, loadHome, type HomeRows, type LibraryChoice } from "./home";
+import { emptyHome, loadHome, recentEpisodeGroups, type EpisodeGroup, type HomeRows, type LibraryChoice } from "./home";
 import { randomHex } from "../core/storage";
 import * as reely from "../api/reely";
 import * as xtream from "../api/xtream";
@@ -77,6 +77,9 @@ export interface Browse {
   view: LibraryView;
   /** The library's newest releases, for the tab's home. */
   released: PlexItem[];
+  /** Newest to this library, for the tab's home: films, or episodes gathered on their show. */
+  added: PlexItem[];
+  addedShows: EpisodeGroup[];
   /** The library's collections; null until they're in. */
   collections: PlexItem[] | null;
 }
@@ -395,7 +398,7 @@ export interface AppState {
 const emptyBrowse = (): Browse => ({
   choice: null, items: [], total: 0, busy: false, sort: "titleSort:asc", error: null,
   unwatched: false, genre: null, decade: null, genres: [], decades: [], letters: [],
-  view: "home", released: [], collections: null,
+  view: "home", released: [], added: [], addedShows: [], collections: null,
 });
 
 export function initialState(): AppState {
@@ -1041,7 +1044,7 @@ export class App {
         [kind]: {
           ...s.browse[kind], choice: target, items: [], busy: true, error: null,
           // Another library's genres and decades aren't this one's.
-          ...(switching ? { genre: null, decade: null, genres: [], decades: [], letters: [], released: [], collections: null } : {}),
+          ...(switching ? { genre: null, decade: null, genres: [], decades: [], letters: [], released: [], added: [], addedShows: [], collections: null } : {}),
         },
       },
     }));
@@ -1064,11 +1067,17 @@ export class App {
   /** The tab's own home: this library's newest releases, and its collections. */
   private async loadTabHome(kind: Kind, choice: LibraryChoice) {
     const type = kind === "movie" ? plex.TYPE_MOVIE : plex.TYPE_SHOW;
-    const [released, collections] = await Promise.all([
+    // What's newly arrived is asked of this library itself: Home's row is the newest across
+    // every library, which may have none of this one's.
+    const [released, collections, added, addedShows] = await Promise.all([
       plex.items(choice.baseUrl, choice.token, `/library/sections/${choice.section.key}/all?type=${type}&sort=originallyAvailableAt:desc`, 40).catch(() => [] as PlexItem[]),
       plex.collections(choice.baseUrl, choice.token, choice.section.key).catch(() => [] as PlexItem[]),
+      kind === "movie"
+        ? plex.items(choice.baseUrl, choice.token, `/library/sections/${choice.section.key}/all?type=${type}&sort=addedAt:desc`, 40).catch(() => [] as PlexItem[])
+        : Promise.resolve([] as PlexItem[]),
+      kind === "show" ? recentEpisodeGroups([choice]).catch(() => [] as EpisodeGroup[]) : Promise.resolve([] as EpisodeGroup[]),
     ]);
-    if (this.current.browse[kind].choice === choice) this.setBrowse(kind, { released, collections });
+    if (this.current.browse[kind].choice === choice) this.setBrowse(kind, { released, collections, added, addedShows });
   }
 
   setLibraryView(kind: Kind, view: LibraryView) {

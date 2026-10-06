@@ -68,6 +68,8 @@ struct PosterCard: View {
     var badge: Int? = nil
     /// A word on it: "In library", "Requested" and the like, in Requests.
     var tag: String? = nil
+    /// As wide as its column in a grid, rather than a row's fixed width.
+    var fill = false
     let action: () -> Void
     @Environment(\.accent) private var accent
 
@@ -97,7 +99,8 @@ struct PosterCard: View {
                 Text(title).font(Typeface.meta).foregroundStyle(Color.chalk).lineLimit(1)
                 if let subtitle { Text(subtitle).font(Typeface.label).foregroundStyle(Color.muted).lineLimit(1) }
             }
-            .frame(width: posterWidth)
+            .frame(width: fill ? nil : posterWidth)
+            .frame(maxWidth: fill ? .infinity : nil, alignment: .leading)
         }
         .buttonStyle(CardStyle())
     }

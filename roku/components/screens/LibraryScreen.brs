@@ -30,7 +30,7 @@ sub init()
     m.items = []
     m.total = 0
     m.loading = false
-    m.meta = { genres: [], decades: [], letters: [], released: [], collections: invalid }
+    m.meta = { genres: [], decades: [], letters: [], released: [], added: [], collections: invalid }
     m.at = "views"
 end sub
 
@@ -60,6 +60,13 @@ sub open__()
     loadLibrary()
 end sub
 
+' Part of the library open: from its server, and from it where Plex says which library it's in.
+function inLibrary(i as object) as boolean
+    if m.library = invalid then return true
+    if Str_(i.serverBase) <> "" and Str_(i.serverBase) <> Str_(m.library.base) then return false
+    return Str_(i.librarySectionId) = "" or Str_(i.librarySectionId) = Str_(m.library.key)
+end function
+
 function isIptv() as boolean
     return m.library <> invalid and m.library.base = "iptv:"
 end function
@@ -69,7 +76,7 @@ sub loadLibrary()
     if isIptv() then m.view = "grid"
     m.items = []
     m.total = 0
-    m.meta = { genres: [], decades: [], letters: [], released: [], collections: invalid }
+    m.meta = { genres: [], decades: [], letters: [], released: [], added: [], collections: invalid }
     m.genre = invalid
     m.decade = invalid
     paintViews()
@@ -150,8 +157,10 @@ sub paintViews()
         m.viewIds = ["home", "grid", "collections"]
     end if
     if m.libraries.Count() > 1 then
+        ' With more than one server, which one each library is on: two called Movies otherwise look the same.
+        named = Arr_(Session_().servers).Count() > 1
         for each l in m.libraries
-            labels.Push(l.title)
+            if named and l.base <> "iptv:" then labels.Push(Str_(l.title) + " · " + Str_(l.serverName)) else labels.Push(l.title)
             on.Push(l.key = m.library.key and l.base = m.library.base)
         end for
     end if
@@ -258,15 +267,12 @@ sub paintHome__()
     groups = false
     if h <> invalid then
         for each i in Arr_(h.continueWatching)
-            if (m.kind = "movie" and i.type = "movie") or (m.kind = "show" and i.type = "episode") then resumable.Push(i)
+            if ((m.kind = "movie" and i.type = "movie") or (m.kind = "show" and i.type = "episode")) and inLibrary(i) then resumable.Push(i)
         end for
-        if m.kind = "movie" then
-            added = Arr_(h.recentMovies)
-        else
-            added = Arr_(h.recentEpisodes)
-            groups = true
-        end if
     end if
+    ' This library's own newest, not Home's newest across every library.
+    added = Arr_(m.meta.added)
+    groups = m.kind = "show"
     ShowRows_(m.rows, [
         { title: "Continue Watching", items: resumable },
         { title: "Recently Added", items: added, groups: groups },

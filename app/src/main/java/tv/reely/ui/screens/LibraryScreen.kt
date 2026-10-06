@@ -157,8 +157,9 @@ fun LibraryScreen(
         val rightKind = if (kind == LibraryKind.MOVIES) it.type == "movie" else it.type == "episode"
         rightKind && here(it.serverBase, it.librarySectionId)
     }
-    val recentMovies = home.recentMovies.filter { here(it.serverBase, it.librarySectionId) }
-    val recentEpisodes = home.recentEpisodes.filter { here(it.serverBase, it.librarySectionId) }
+    // This library's own newest, not Home's newest across every library.
+    val recentMovies = browse.added
+    val recentEpisodes = browse.addedShows
     // Arriving from the tabs, nothing has the cursor yet: the tab's own home shows what it
     // starts with in the hero rather than a black screen until Down is pressed. The cursor
     // stays on the tabs.

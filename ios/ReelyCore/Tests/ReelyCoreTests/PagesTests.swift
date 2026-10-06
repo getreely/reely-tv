@@ -63,3 +63,25 @@ final class PagesTests: XCTestCase {
         XCTAssertFalse(store.detail?.busy ?? true)
     }
 }
+
+/// A phone's Settings and Search sheets: put away, back to what they opened over.
+@MainActor
+final class SheetTests: XCTestCase {
+    func testSettingsAndSearchCloseBackToWhereTheyOpened() {
+        let store = makeStore(FakePlex())
+        store.pagesLeaveSheets = true
+        store.navigate(.library(kind: "movie"))
+        store.navigate(.detail(ratingKey: "m1", serverBase: nil))
+        store.navigate(.settings)
+        XCTAssertEqual(store.route, .settings)
+        store.closeSheet()
+        XCTAssertEqual(store.route, .detail(ratingKey: "m1", serverBase: nil))
+        XCTAssertEqual(store.stack, [.library(kind: "movie"), .detail(ratingKey: "m1", serverBase: nil)])
+        // A title found in Search opens in the tab, leaving the sheet.
+        store.navigate(.search)
+        store.navigate(.detail(ratingKey: "m2", serverBase: nil))
+        XCTAssertEqual(store.stack, [.library(kind: "movie"), .detail(ratingKey: "m1", serverBase: nil), .detail(ratingKey: "m2", serverBase: nil)])
+        XCTAssertTrue(store.back())
+        XCTAssertEqual(store.route, .detail(ratingKey: "m1", serverBase: nil))
+    }
+}

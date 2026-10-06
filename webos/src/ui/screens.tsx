@@ -209,7 +209,7 @@ export function Library(props: { app: App; state: AppState; kind: Kind }) {
   const [choice, setChoice] = useState<ChoiceRequest | null>(null);
   // What the hero on the tab's home shows: the card with the cursor, else its first title.
   const [focused, setFocused] = useState<PlexItem | null>(null);
-  useRescue([browse.items.length > 0, browse.choice, browse.view, browse.released.length > 0, browse.collections != null]);
+  useRescue([browse.items.length > 0, browse.choice, browse.view, browse.released.length > 0, browse.added.length > 0, browse.addedShows.length > 0, browse.collections != null]);
   if (!libraries.length) {
     return <div class="center"><p class="note">No {kind === "movie" ? "movie" : "TV"} library on {state.plex.serverName ?? "this server"}.</p></div>;
   }
@@ -222,7 +222,9 @@ export function Library(props: { app: App; state: AppState; kind: Kind }) {
   const view = isIptvChoice(browse.choice) ? "grid" : browse.view;
   const libraryPills = libraries.length > 1
     ? libraries.map((l) => (
-        <Pill key={l.serverName + l.section.key} label={l.section.title} on={browse.choice === l} onPress={() => void app.openLibrary(kind, l)} />
+        // With more than one server, which one each library is on: two called Movies otherwise look the same.
+        <Pill key={l.serverName + l.section.key} label={state.plex.servers.length > 1 && !isIptvChoice(l) ? `${l.section.title} · ${l.serverName}` : l.section.title}
+          on={browse.choice === l} onPress={() => void app.openLibrary(kind, l)} />
       ))
     : null;
   const views = isIptvChoice(browse.choice) ? null : (
@@ -233,7 +235,9 @@ export function Library(props: { app: App; state: AppState; kind: Kind }) {
     </>
   );
   if (view === "home") {
-    const resumable = state.home.continueWatching.filter((i) => (kind === "movie" ? i.type === "movie" : i.type === "episode"));
+    // This library's: what's part-watched in it, and what's newly arrived in it.
+    const inLibrary = (i: PlexItem) => !browse.choice || ((!i.serverBase || i.serverBase === browse.choice.baseUrl) && (!i.librarySectionId || i.librarySectionId === browse.choice.section.key));
+    const resumable = state.home.continueWatching.filter((i) => (kind === "movie" ? i.type === "movie" : i.type === "episode") && inLibrary(i));
     const iptvNew = kind === "movie" ? state.home.iptvMovies : state.home.iptvShows;
     let first = true;
     const auto = () => { const was = first; first = false; return was; };
@@ -242,17 +246,17 @@ export function Library(props: { app: App; state: AppState; kind: Kind }) {
         image={app.image(i.serverBase, i.type === "episode" ? i.grandparentThumb ?? i.thumb : i.thumb, 300, 450)}
         progress={plex.resumeFraction(i)} watched={plex.isWatched(i)} onPress={() => open(app, i)} />
     );
-    const hero = focused ?? resumable[0] ?? (kind === "movie" ? state.home.recentMovies[0] : state.home.recentEpisodes[0]?.newest) ?? browse.released[0] ?? null;
+    const hero = focused ?? resumable[0] ?? (kind === "movie" ? browse.added[0] : browse.addedShows[0]?.newest) ?? browse.released[0] ?? null;
     return (
       <div class="with-hero">
         <HomeHero app={app} item={hero} fallback={kind === "movie" ? "Movies" : "TV Shows"} />
         <div class="hero-rows">
         <div class="toolbar">{views}{libraryPills}</div>
         {resumable.length ? <Row title="Continue Watching">{resumable.map((i) => poster(i, `c:${plex.listKey(i)}`))}</Row> : null}
-        {kind === "movie" && state.home.recentMovies.length ? <Row title="Recently Added">{state.home.recentMovies.map((i) => poster(i, `r:${plex.listKey(i)}`))}</Row> : null}
-        {kind === "show" && state.home.recentEpisodes.length ? (
+        {kind === "movie" && browse.added.length ? <Row title="Recently Added">{browse.added.map((i) => poster(i, `r:${plex.listKey(i)}`))}</Row> : null}
+        {kind === "show" && browse.addedShows.length ? (
           <Row title="Recently Added">
-            {state.home.recentEpisodes.map((g) => (
+            {browse.addedShows.map((g) => (
               <Card key={`r:${groupKey(g)}`} item={g.newest} onFocus={() => setFocused(g.newest)} autofocus={auto()} title={g.showTitle} sub={g.count > 1 ? `${g.count} new episodes` : plex.caption(g.newest)}
                 image={app.image(g.serverBase, g.thumb, 300, 450)} badge={g.count} onPress={() => open(app, g.newest)} />
             ))}

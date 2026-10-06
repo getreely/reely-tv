@@ -197,8 +197,32 @@ function PlexApi_LibraryMeta(l as object, filters as string, clientId as string)
         decades: PlexApi_Decades(PlexApi_Container(l.base + "/library/sections/" + l.key + "/decade?type=" + t, l.token, clientId)),
         letters: Plex_Letters(PlexApi_Container(l.base + "/library/sections/" + l.key + "/firstCharacter?type=" + t + filters, l.token, clientId)),
         released: Arr_(PlexApi_Items(l.base, l.token, clientId, "/library/sections/" + l.key + "/all?type=" + t + "&sort=originallyAvailableAt:desc", 40)),
+        added: PlexApi_LibraryAdded(l, clientId),
         collections: Arr_(PlexApi_Items(l.base, l.token, clientId, "/library/sections/" + l.key + "/collections", 500))
     }
+end function
+
+' Newest to this library, asked of the library itself: Home's row is the newest across every
+' library, which may have none of this one's. Films, or episodes gathered on their show.
+function PlexApi_LibraryAdded(l as object, clientId as string) as object
+    if l.type = "movie" then return Arr_(PlexApi_Items(l.base, l.token, clientId, "/library/sections/" + l.key + "/all?type=1&sort=addedAt:desc", 40))
+    groups = {}
+    order = []
+    offset = 0
+    while offset < 2000
+        page = PlexApi_Items(l.base, l.token, clientId, "/library/sections/" + l.key + "/all?type=4&sort=addedAt:desc", 200, offset)
+        if page = invalid then exit while
+        Plex_FoldEpisodes(groups, order, page, l.base, l.key)
+        if page.Count() < 200 or order.Count() >= 30 then exit while
+        offset = offset + 200
+    end while
+    newest = []
+    for each key in order
+        newest.Push(groups[key])
+    end for
+    return Head_(StableSort_(newest, function(a as object, b as object) as boolean
+        return a.addedAt > b.addedAt
+    end function), 30)
 end function
 
 function PlexApi_Decades(c as dynamic) as object

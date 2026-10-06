@@ -24,7 +24,7 @@ extension ReelyStore {
         setBrowse(kind) { b in
             b.choice = target; b.items = []; b.busy = true; b.error = nil
             // Another library's genres and decades aren't this one's.
-            if switching { b.genre = nil; b.decade = nil; b.genres = []; b.decades = []; b.letters = []; b.released = []; b.collections = nil }
+            if switching { b.genre = nil; b.decade = nil; b.genres = []; b.decades = []; b.letters = []; b.released = []; b.added = []; b.addedShows = []; b.collections = nil }
         }
         // The provider's titles: all here already.
         if target.baseUrl == IPTV_SOURCE { loadIptvGrid(kind); return }
@@ -40,6 +40,17 @@ extension ReelyStore {
             let released = (try? await api.items(target.baseUrl, target.token, "/library/sections/\(target.section.key)/all?type=\(type)&sort=originallyAvailableAt:desc", limit: 40)) ?? []
             let collections = (try? await api.collections(target.baseUrl, target.token, section: target.section.key)) ?? []
             if browse[kind]?.choice == target { setBrowse(kind) { $0.released = released; $0.collections = collections } }
+        }
+        Task {
+            // What's newly arrived, asked of this library itself: Home's row is the newest
+            // across every library, which may have none of this one's.
+            if kind == "movie" {
+                let added = (try? await api.recentlyAdded(target.baseUrl, target.token, section: target.section.key, type: PLEX_TYPE_MOVIE, limit: 40)) ?? []
+                if browse[kind]?.choice == target { setBrowse(kind) { $0.added = added } }
+            } else {
+                let groups = await recentEpisodeGroups(api, [target])
+                if browse[kind]?.choice == target { setBrowse(kind) { $0.addedShows = groups } }
+            }
         }
         await loadMore(kind)
     }

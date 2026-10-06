@@ -12,6 +12,9 @@ struct PhoneRoot: View {
         ("Live TV", "dot.radiowaves.left.and.right", .live), ("Requests", "plus.circle", .requests),
     ]
 
+    /// Settings or Search, or a page opened from one of them (an actor from a search): over the tabs.
+    private var sheetUp: Bool { store.stack.first == .settings || store.stack.first == .search }
+
     var body: some View {
         let selected = Binding<Route>(
             get: { tabs.contains { $0.2 == store.tab } ? store.tab : .home },
@@ -24,9 +27,10 @@ struct PhoneRoot: View {
                     .tag(route)
             }
         }
-        .sheet(isPresented: Binding(get: { store.route == .settings || store.route == .search }, set: { if !$0 { store.back() } })) {
+        .sheet(isPresented: Binding(get: { sheetUp }, set: { if !$0 { store.closeSheet() } })) {
             RouteContent(route: store.route).background(Color.ink)
         }
+        .onAppear { store.pagesLeaveSheets = true }
     }
 }
 

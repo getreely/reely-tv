@@ -42,7 +42,7 @@ struct SettingsView: View {
             .scrollContentBackground(.hidden)
             .background(Color.ink)
             .navigationTitle("Settings")
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { store.back() } } }
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { store.closeSheet() } } }
         }
         #endif
     }

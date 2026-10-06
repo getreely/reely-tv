@@ -88,6 +88,10 @@ public final class ReelyStore {
     public internal(set) var playError: String?
     public private(set) var route: Route = .home
     public private(set) var stack: [Route] = [.home]
+    /// What Settings or Search opened over.
+    private var beneath: [Route] = []
+    /// A phone shows Settings and Search as a sheet over the tabs, which a page opened from them leaves.
+    @ObservationIgnored public var pagesLeaveSheets = false
 
     public let api: PlexAPI
     public let xtream: XtreamClient
@@ -140,8 +144,25 @@ public final class ReelyStore {
     // MARK: Getting about
 
     public func navigate(_ to: Route) {
+        // On a phone Settings and Search are a sheet: a title opened from one leaves it, and opens in the tab.
+        if pagesLeaveSheets && !to.isTab && (stack.first == .settings || stack.first == .search) {
+            stack = (beneath.isEmpty ? [.home] : beneath) + [to]
+            route = to
+            beneath = []
+            return
+        }
+        // Settings and Search open over what was showing, and go back to it when put away.
+        if (to == .settings || to == .search) && route != .settings && route != .search { beneath = stack }
         route = to
         stack = to.isTab ? [to] : stack + [to]
+    }
+
+    /// Settings or Search put away (a phone's sheet closed): back to what was under it.
+    public func closeSheet() {
+        guard route == .settings || route == .search || stack.first == .settings || stack.first == .search else { return }
+        stack = beneath.isEmpty ? [.home] : beneath
+        route = stack.last ?? .home
+        beneath = []
     }
 
     @discardableResult

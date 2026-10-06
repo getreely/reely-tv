@@ -19,6 +19,9 @@ public struct Browse: Equatable, Sendable {
     public var view: View = .home
     /// The library's newest releases, for the tab's home.
     public var released: [PlexItem] = []
+    /// Newest to this library, for the tab's home: films, or episodes gathered on their show.
+    public var added: [PlexItem] = []
+    public var addedShows: [EpisodeGroup] = []
     /// The library's collections; nil until they're in.
     public var collections: [PlexItem]?
     public init() {}
