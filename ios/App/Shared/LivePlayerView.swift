@@ -43,8 +43,10 @@ final class LiveModel {
          * Left to itself, Apple's player joins a live stream as near its newest moment as it
          * can, with a few seconds in hand; a provider's stream arriving in ten-second pieces,
          * a little late now and then, ran dry every piece or two — buffering every fifteen
-         * seconds. So it sits back from the live edge and keeps more in hand, as the Fire
-         * TV's player does (thirty seconds ahead; two minutes with the larger buffer).
+         * seconds. A live stream can't be held further ahead than live itself, so what's in
+         * hand is how far back from live it sits: 25 seconds, 45 with the larger buffer. The
+         * forward buffer is only a ceiling, and matters for the archive (catch-up, Start
+         * over), which is recorded and can be fetched ahead.
          */
         item.preferredForwardBufferDuration = largerBuffer ? 120 : 30
         item.automaticallyPreservesTimeOffsetFromLive = true
