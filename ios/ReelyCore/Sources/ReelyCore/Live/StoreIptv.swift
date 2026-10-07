@@ -250,6 +250,18 @@ extension ReelyStore {
                           sessionId: randomHex(12), queue: queue.map(iptv.marked), mediaIndex: 0, textSubtitle: nil)
     }
 
+    /// Every episode of a provider's series, every season in order, for Up Next.
+    func iptvEpisodes(of episode: PlexItem) async -> [PlexItem]? {
+        guard let c = live.credentials, !c.isPlaylist, case .show(let id) = IptvKey.parse(episode.grandparentRatingKey ?? "") else { return nil }
+        var info = iptv.cachedSeries(id)
+        if info == nil { info = await xtream.seriesInfo(c, id: id) }
+        guard let info else { return nil }
+        iptv.keepSeries(id, info)
+        return (info.seasons ?? []).flatMap {
+            Vod.episodeItems(showId: id, showName: episode.grandparentTitle ?? "", poster: episode.grandparentThumb, backdrop: nil, season: $0)
+        }.map(iptv.marked)
+    }
+
     /// Where it got to, kept here: the provider keeps nothing.
     func noteIptvProgress(_ item: PlexItem, positionMs: Int, durationMs: Int) {
         iptv.watch.progress(item, positionMs: positionMs, durationMs: durationMs > 0 ? durationMs : item.durationMs, now: Int(Date().timeIntervalSince1970))

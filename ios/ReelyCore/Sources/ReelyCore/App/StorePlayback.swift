@@ -42,7 +42,11 @@ extension ReelyStore {
 
     /// A film or episode, from where it was left (or the top), with the rest of its season queued after it.
     public func play(_ item: PlexItem, resume: Bool = true, queue: [PlexItem] = [], mediaIndex: Int = 0) async {
-        if item.isIptv { playIptv(item, resume: resume, queue: queue); return }
+        if item.isIptv {
+            playIptv(item, resume: resume, queue: queue)
+            await queueRestOfShow()
+            return
+        }
         opening = item
         defer { opening = nil }
         guard let base = plex.baseFor(item.serverBase), let token = plex.tokenFor(item.serverBase) else {
@@ -93,9 +97,10 @@ extension ReelyStore {
      * order, as the Fire TV's Up Next goes on into the next season.
      */
     func queueRestOfShow() async {
-        guard let p = playing, p.item.type == "episode", nextInQueue == nil, let show = p.item.grandparentRatingKey,
-              let episodes = try? await api.episodes(p.base, p.token, of: show),
-              episodes.contains(where: { $0.ratingKey == p.item.ratingKey }) else { return }
+        guard let p = playing, p.item.type == "episode", nextInQueue == nil, let show = p.item.grandparentRatingKey else { return }
+        // A provider's series, from what the provider says of it; else Plex's.
+        let found = p.item.isIptv ? await iptvEpisodes(of: p.item) : try? await api.episodes(p.base, p.token, of: show)
+        guard let episodes = found, episodes.contains(where: { $0.ratingKey == p.item.ratingKey }) else { return }
         // Something else started meanwhile.
         guard playing?.sessionId == p.sessionId else { return }
         playing?.queue = episodes

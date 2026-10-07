@@ -1,25 +1,90 @@
-name: Release APK
+name: Release
 
-# Tag a commit and the build that comes out of it is published with the manifest the
-# app's update check reads. Run it by hand from the Actions tab when there is no tag
-# worth making.
+# Each app has its own version, kept beside it, and is released only when that changes:
+#
+#   Fire TV, Android TV, phones   app/build.gradle.kts   tag v0.58.0      (the update check reads this one)
+#   iPhone, iPad                  ios/project.yml        tag ios-v0.58.0
+#   LG                            webos/package.json     tag lg-v0.58.0
+#   Roku                          roku/package.json      tag roku-v0.58.0
+#
+# Run it by hand from the Actions tab. An app whose version has no release yet is built,
+# tested and published; the rest are left alone, so nobody is offered an update for an
+# app that didn't change. The Android release is the one marked Latest, because the app's
+# update check asks for releases/latest/download/reely-tv.apk; the others never are.
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      apps:
+        description: "Only these, again even if already released (android, ios, lg, roku, comma-separated). Empty: every app with a new version."
+        required: false
+        default: ""
 
 permissions:
   contents: write
 
 jobs:
-  # The iPhone and iPad app, unsigned: there's no Apple developer account to sign it with
-  # yet, so it's for sideloading (AltStore, Sideloadly), which signs it with the person's
-  # own Apple ID. Built on a Mac, then handed to the job that publishes everything.
-  ios:
-    runs-on: macos-latest
-    timeout-minutes: 60
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      android: ${{ steps.plan.outputs.android }}
+      ios: ${{ steps.plan.outputs.ios }}
+      lg: ${{ steps.plan.outputs.lg }}
+      roku: ${{ steps.plan.outputs.roku }}
+      android_version: ${{ steps.plan.outputs.android_version }}
+      ios_version: ${{ steps.plan.outputs.ios_version }}
+      lg_version: ${{ steps.plan.outputs.lg_version }}
+      roku_version: ${{ steps.plan.outputs.roku_version }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Which apps have a new version
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ONLY: ${{ inputs.apps }}
+        run: |
+          android=$(grep -o 'versionName = "[^"]*"' app/build.gradle.kts | head -1 | cut -d'"' -f2)
+          ios=$(grep -o 'MARKETING_VERSION: "[^"]*"' ios/project.yml | head -1 | cut -d'"' -f2)
+          lg=$(node -p 'require("./webos/package.json").version')
+          roku=$(node -p 'require("./roku/package.json").version')
+          # The LG and Roku apps carry their version in a second place each, read by the TV.
+          [ "$(node -p 'require("./webos/public/appinfo.json").version')" = "$lg" ] || { echo "::error::webos/public/appinfo.json doesn't say $lg: run webos/scripts/set-version.mjs."; exit 1; }
+          said=$(for k in major_version minor_version build_version; do grep "^$k=" roku/manifest | cut -d= -f2; done | paste -sd.)
+          [ "$said" = "$roku" ] || { echo "::error::roku/manifest says $said, not $roku: run roku/scripts/set-version.mjs."; exit 1; }
+          decide() {
+            if [ -n "$ONLY" ]; then
+              case ",${ONLY// /}," in *",$1,"*) echo true ;; *) echo false ;; esac
+            elif gh release view "$2" >/dev/null 2>&1; then
+              echo false
+            else
+              echo true
+            fi
+          }
+          {
+            echo "android=$(decide android "v$android")"
+            echo "ios=$(decide ios "ios-v$ios")"
+            echo "lg=$(decide lg "lg-v$lg")"
+            echo "roku=$(decide roku "roku-v$roku")"
+            echo "android_version=$android"
+            echo "ios_version=$ios"
+            echo "lg_version=$lg"
+            echo "roku_version=$roku"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  # The iPhone and iPad app, unsigned: there's no Apple developer account to sign it with
+  # yet, so it's for sideloading (AltStore, Sideloadly), which signs it with the person's
+  # own Apple ID.
+  ios:
+    needs: plan
+    if: needs.plan.outputs.ios == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      VERSION: ${{ needs.plan.outputs.ios_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/cache@v4
         with:
@@ -31,7 +96,6 @@ jobs:
         run: |
           set -o pipefail
           scripts/vlckit.sh
-          VERSION=$(grep -o 'versionName = "[^"]*"' ../app/build.gradle.kts | head -1 | cut -d'"' -f2)
           brew install xcodegen && xcodegen generate
           xcodebuild -quiet -project Reely.xcodeproj -scheme Reely -configuration Release \
             -destination 'generic/platform=iOS' -derivedDataPath build \
@@ -40,20 +104,30 @@ jobs:
           cp -R build/Build/Products/Release-iphoneos/Reely.app Payload/
           zip -qry out/reely-ios.ipa Payload
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: reely-ios
-          path: ios/out/reely-ios.ipa
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="ios-v$VERSION"
+          .github/scripts/notes.sh 'ios-v*' "$TAG" ios
+          echo "\`reely-ios.ipa\` is the iPhone and iPad app, unsigned, for sideloading with AltStore or Sideloadly." >> notes.md
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" --target "$GITHUB_SHA" --latest=false \
+            --title "Reely for iPhone and iPad $VERSION" --notes-file notes.md ios/out/reely-ios.ipa
 
-  build:
+  # Fire TV, Android TV and Android phones, with the manifest the app's update check reads,
+  # and the store builds, which leave updates to the store.
+  android:
+    needs: plan
+    if: needs.plan.outputs.android == 'true'
     runs-on: ubuntu-latest
-    needs: ios
-
+    env:
+      VERSION: ${{ needs.plan.outputs.android_version }}
     steps:
       - uses: actions/checkout@v4
         with:
           # The whole history, because the release notes are the commits since the last
-          # tag and a shallow clone has neither the commits nor the tags.
+          # release and a shallow clone has neither the commits nor the tags.
           fetch-depth: 0
 
       - name: Set up JDK 17
@@ -83,23 +157,6 @@ jobs:
             ~/.gradle/wrapper
           key: gradle-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: gradle-
-
-      # A release labelled v0.21.0 holding a 0.20.0 build would never be offered as an
-      # update: the app compares the versionCode in the manifest, not the name on the
-      # release page. Catch that here rather than after publishing it.
-      - name: Check the tag matches the build
-        id: version
-        run: |
-          VERSION=$(grep -o 'versionName = "[^"]*"' app/build.gradle.kts | head -1 | cut -d'"' -f2)
-          CODE=$(grep -o 'versionCode = [0-9]*' app/build.gradle.kts | head -1 | awk '{print $3}')
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Building $VERSION (versionCode $CODE)."
-          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$GITHUB_REF_NAME" != "v$VERSION" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME does not match versionName $VERSION." \
-                 "Publishing it would label the release with a version the app never reports," \
-                 "so the update check would disagree with the release page. Fix one or the other."
-            exit 1
-          fi
 
       # Without a keystore the build falls back to a debug key, and a debug key is
       # generated per machine. Android refuses to update an app whose package is signed
@@ -134,75 +191,26 @@ jobs:
             ./gradlew :app:testDebugUnitTest :app:assembleRelease :app:assembleStore :app:bundleStore --no-daemon
           fi
 
-      # The LG app, at the same version, tested as CI tests it, packaged by LG's tool.
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: |
-            webos/package-lock.json
-            roku/package-lock.json
-
-      - name: Build the LG app
-        working-directory: webos
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          npm ci
-          node scripts/set-version.mjs "$VERSION"
-          npx tsc --noEmit -p . && npm test
-          npx playwright install --with-deps chromium && npm run e2e
-          npm run package
-
-      # The Roku app, the same way: compiled, tested in the simulator, zipped for sideloading.
-      - name: Build the Roku app
-        working-directory: roku
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          npm ci
-          node scripts/set-version.mjs "$VERSION"
-          npm run check && npm test
-          npm run e2e
-          npm run package
-
       # The asset has to be named for what the app asks for: the update check derives the
       # manifest's address from the APK's by swapping the extension, so the two must sit
       # together under the same name.
-      - uses: actions/download-artifact@v4
-        with:
-          name: reely-ios
-          path: out
-
       - name: Collect artefacts
         run: |
           mkdir -p out
           cp app/build/outputs/apk/release/app-release.apk out/reely-tv.apk
           cp app/build/outputs/apk/release/reely-tv.json out/reely-tv.json
-          cp webos/out/reely-lg.ipk out/reely-lg.ipk
-          cp roku/out/reely-roku.zip out/reely-roku.zip
           cp app/build/outputs/apk/store/app-store.apk out/reely-tv-store.apk
           cp app/build/outputs/bundle/store/app-store.aab out/reely-tv-store.aab
 
-      # What changed, from the commits since the last release. Two audiences: the release
-      # page gets all of it, and the manifest gets a sentence, because the update check
-      # shows that on a television where nobody wants to read a changelog.
+      # Two audiences: the release page gets all of it, and the manifest gets a sentence,
+      # because the update check shows that on a television where nobody wants to read a
+      # changelog.
       - name: Write what changed
         run: |
-          PREVIOUS=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)
-          if [ -n "$PREVIOUS" ]; then
-            echo "Changes since $PREVIOUS:" > notes.md
-            echo >> notes.md
-            git log --no-merges --pretty='- %s' "$PREVIOUS..HEAD" >> notes.md
-          else
-            echo "Recent changes:" > notes.md
-            echo >> notes.md
-            git log --no-merges --pretty='- %s' -25 >> notes.md
-          fi
-          echo >> notes.md
-          echo "Built from \`${GITHUB_SHA}\`. Install \`reely-tv.apk\` on Fire TV, Android TV and Android phones; \`reely-tv.json\` is what the app's update check reads. \`reely-lg.ipk\` is the LG app, installed on a TV in Developer Mode. \`reely-roku.zip\` is the Roku app, sideloaded on a Roku in developer mode. \`reely-tv-store.apk\` (Amazon Appstore) and \`reely-tv-store.aab\` (Google Play) are the store builds, which leave updates to the store. \`reely-ios.ipa\` is the iPhone and iPad app, unsigned, for sideloading with AltStore or Sideloadly." >> notes.md
+          .github/scripts/notes.sh 'v[0-9]*' "v$VERSION" app gradle build.gradle.kts settings.gradle.kts gradle.properties
+          echo "Install \`reely-tv.apk\` on Fire TV, Android TV and Android phones; \`reely-tv.json\` is what the app's update check reads. \`reely-tv-store.apk\` (Amazon Appstore) and \`reely-tv-store.aab\` (Google Play) are the store builds, which leave updates to the store." >> notes.md
           python3 - <<'PY'
-          import json, re
+          import json
           lines = [l[2:].strip() for l in open("notes.md") if l.startswith("- ")]
           summary = "  ·  ".join(lines[:3])
           if len(summary) > 200:
@@ -216,15 +224,86 @@ jobs:
           cat out/reely-tv.json
           cat notes.md
 
-      - name: Publish release
+      - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          if [ "$GITHUB_REF_TYPE" = "tag" ]; then TAG="$GITHUB_REF_NAME"; else TAG="v$VERSION"; fi
+          TAG="v$VERSION"
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "$TAG" \
-            --target "$GITHUB_SHA" \
-            --title "Reely TV $VERSION" \
-            --notes-file notes.md \
-            out/reely-tv.apk out/reely-tv.json out/reely-lg.ipk out/reely-roku.zip out/reely-tv-store.apk out/reely-tv-store.aab out/reely-ios.ipa
+          gh release create "$TAG" --target "$GITHUB_SHA" --latest \
+            --title "Reely for Fire TV and Android $VERSION" --notes-file notes.md \
+            out/reely-tv.apk out/reely-tv.json out/reely-tv-store.apk out/reely-tv-store.aab
+
+  # The LG app, tested as CI tests it, packaged by LG's tool.
+  lg:
+    needs: plan
+    if: needs.plan.outputs.lg == 'true'
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.plan.outputs.lg_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: webos/package-lock.json
+
+      - name: Build the LG app
+        working-directory: webos
+        run: |
+          npm ci
+          npx tsc --noEmit -p . && npm test
+          npx playwright install --with-deps chromium && npm run e2e
+          npm run package
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="lg-v$VERSION"
+          .github/scripts/notes.sh 'lg-v*' "$TAG" webos
+          echo "\`reely-lg.ipk\` is the LG app, installed on a TV in Developer Mode." >> notes.md
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" --target "$GITHUB_SHA" --latest=false \
+            --title "Reely for LG $VERSION" --notes-file notes.md webos/out/reely-lg.ipk
+
+  # The Roku app, the same way: compiled, tested in the simulator, zipped for sideloading.
+  roku:
+    needs: plan
+    if: needs.plan.outputs.roku == 'true'
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.plan.outputs.roku_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: roku/package-lock.json
+
+      - name: Build the Roku app
+        working-directory: roku
+        run: |
+          npm ci
+          npm run check && npm test
+          npm run e2e
+          npm run package
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="roku-v$VERSION"
+          .github/scripts/notes.sh 'roku-v*' "$TAG" roku
+          echo "\`reely-roku.zip\` is the Roku app, sideloaded on a Roku in developer mode." >> notes.md
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" --target "$GITHUB_SHA" --latest=false \
+            --title "Reely for Roku $VERSION" --notes-file notes.md roku/out/reely-roku.zip

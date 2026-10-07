@@ -1,7 +1,7 @@
 {
   "name": "reely-webos",
   "private": true,
-  "version": "0.51.0",
+  "version": "0.57.27",
   "type": "module",
   "description": "Reely for LG TVs (webOS): Plex, live TV and Requests, with the remote.",
   "scripts": {

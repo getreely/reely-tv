@@ -1294,6 +1294,7 @@ export class App {
     const base = item.serverBase ?? this.current.plex.baseUrl;
     if (base === IPTV_SOURCE) {
       this.playIptv(item, resume, queue);
+      await this.queueRestOfShow();
       return;
     }
     const token = this.tokenFor(base);
@@ -1329,11 +1330,26 @@ export class App {
   private async queueRestOfShow() {
     const p = this.current.playing;
     if (!p || p.item.type !== "episode" || this.nextInQueue() || !p.item.grandparentRatingKey) return;
-    const episodes = await plex.episodesOf(p.base, p.token, p.item.grandparentRatingKey).catch(() => null);
+    const episodes = p.base === IPTV_SOURCE
+      ? await this.iptvEpisodesOf(p.item)
+      : await plex.episodesOf(p.base, p.token, p.item.grandparentRatingKey).catch(() => null);
     if (!episodes?.some((e) => e.ratingKey === p.item.ratingKey)) return;
     // Something else started meanwhile.
     if (this.current.playing?.sessionId !== p.sessionId) return;
     this.set((s) => (s.playing ? { ...s, playing: { ...s.playing, queue: episodes } } : s));
+  }
+
+  /** Every episode of a provider's series, every season in order, from what the provider says of it. */
+  private async iptvEpisodesOf(episode: PlexItem): Promise<PlexItem[] | null> {
+    const c = this.current.live.credentials;
+    const k = vod.parseKey(episode.grandparentRatingKey ?? "");
+    if (!c || !k || k.kind !== "show") return null;
+    const info = this.iptv.cachedSeries(k.id) ?? (await vod.seriesInfo(c, k.id).catch(() => null));
+    if (!info) return null;
+    this.iptv.keepSeries(k.id, info);
+    const name = episode.grandparentTitle ?? "";
+    const poster = episode.grandparentThumb ?? null;
+    return info.seasons.reduce<PlexItem[]>((list, s) => list.concat(vod.episodeItems(k.id, name, poster, null, s)), []).map(this.iptv.marked);
   }
 
   /** One of the provider's: the file from the panel, as it is; where it's left is kept on the TV. */
