@@ -3,7 +3,7 @@ schema-version = 1
 [package]
 id = "tv.reely.vega"
 title = "Reely"
-version = "0.57.28"
+version = "0.57.29"
 icon = "@image/app_icon.png"
 
 # Vega SDK 0.24 on: the OS versions the app runs on. `vega project install --fix` adds the

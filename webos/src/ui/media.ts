@@ -20,6 +20,8 @@ interface Attached {
 const attached = new WeakMap<HTMLVideoElement, Attached>();
 /** Why the last attached player gave up: "network" for a dropped connection, else "media". */
 const failures = new WeakMap<HTMLVideoElement, "network" | "media">();
+/** The status the server answered with when the attached player gave up on it, if it said. */
+const statuses = new WeakMap<HTMLVideoElement, number>();
 
 const isHls = (url: string) => /\.m3u8(\?|#|$)/i.test(url);
 const isTs = (url: string) => /\.ts(\?|#|$)/i.test(url);
@@ -39,12 +41,16 @@ export function detach(v: HTMLVideoElement) {
 /** Why [v]'s attached player gave up, when it did: a dropped connection counts as the network. */
 export const failureOf = (v: HTMLVideoElement) => failures.get(v) ?? null;
 
+/** The HTTP status that ended [v]'s stream, when the attached player saw one: 403, say, for a provider at its limit. */
+export const statusOf = (v: HTMLVideoElement) => statuses.get(v) ?? null;
+
 /** Whether the video failed because the connection did: its own error, or the attached player's. */
 export const droppedConnection = (v: HTMLVideoElement) =>
   v.error?.code === MediaError.MEDIA_ERR_NETWORK || failures.get(v) === "network";
 
-function fail(v: HTMLVideoElement, why: "network" | "media") {
+function fail(v: HTMLVideoElement, why: "network" | "media", status?: number) {
   failures.set(v, why);
+  if (typeof status === "number" && status > 0) statuses.set(v, status);
   detach(v);
   v.dispatchEvent(new Event("error"));
 }
@@ -53,6 +59,7 @@ function fail(v: HTMLVideoElement, why: "network" | "media") {
 export function setSource(v: HTMLVideoElement, url: string) {
   detach(v);
   failures.delete(v);
+  statuses.delete(v);
   // Only on Vega: an LG TV plays both itself, as it always has.
   const vega = isVega();
   if (vega && isHls(url) && !v.canPlayType("application/vnd.apple.mpegurl") && Hls.isSupported()) {
@@ -68,7 +75,7 @@ export function setSource(v: HTMLVideoElement, url: string) {
         hls.recoverMediaError();
         return;
       }
-      fail(v, data.type === Hls.ErrorTypes.NETWORK_ERROR ? "network" : "media");
+      fail(v, data.type === Hls.ErrorTypes.NETWORK_ERROR ? "network" : "media", data.response?.code);
     });
     hls.loadSource(url);
     hls.attachMedia(v);
@@ -81,7 +88,8 @@ export function setSource(v: HTMLVideoElement, url: string) {
     // and skipping about in it needs mpegts.js to know.
     const live = !/\/timeshift\//.test(url);
     const player = mpegts.createPlayer({ type: "mpegts", isLive: live, url }, { enableWorker: true, lazyLoad: false, liveBufferLatencyChasing: false });
-    player.on(mpegts.Events.ERROR, (type: string) => fail(v, type === mpegts.ErrorTypes.NETWORK_ERROR ? "network" : "media"));
+    player.on(mpegts.Events.ERROR, (type: string, _detail: string, info?: { code?: number }) =>
+      fail(v, type === mpegts.ErrorTypes.NETWORK_ERROR ? "network" : "media", info?.code));
     player.attachMediaElement(v);
     player.load();
     attached.set(v, { destroy: () => { player.pause(); player.unload(); player.detachMediaElement(); player.destroy(); } });
@@ -95,6 +103,7 @@ export function setSource(v: HTMLVideoElement, url: string) {
 export function clearSource(v: HTMLVideoElement) {
   detach(v);
   failures.delete(v);
+  statuses.delete(v);
   v.removeAttribute("src");
   v.load();
 }

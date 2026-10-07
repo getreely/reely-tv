@@ -59,15 +59,20 @@ export function ItemMenu(props: { item: PlexItem; image: string | null; actions:
   );
 }
 
-type MenuIconName = "play" | "restart" | "check" | "info" | "cross";
+export type MenuIconName = "play" | "restart" | "check" | "info" | "cross" | "plus" | "tiles" | "left" | "right" | "heart";
 
 /** Each choice's icon, as the Fire TV's menu has them. */
-function MenuIcon(props: { name: MenuIconName }) {
+export function MenuIcon(props: { name: MenuIconName }) {
   const stroke = { fill: "none", stroke: "currentColor", "stroke-width": 9, "stroke-linecap": "round" as const, "stroke-linejoin": "round" as const };
   const body = props.name === "play" ? <path d="M34 22 L78 50 L34 78 Z" fill="currentColor" />
     : props.name === "restart" ? <><path d="M30 34 A28 28 0 1 1 26 62" {...stroke} /><path d="M22 20 L30 36 L46 30" {...stroke} /></>
     : props.name === "check" ? <path d="M24 52 L42 70 L76 32" {...stroke} />
     : props.name === "info" ? <><circle cx="50" cy="50" r="32" {...stroke} /><path d="M50 46 V68" {...stroke} /><circle cx="50" cy="33" r="5" fill="currentColor" /></>
+    : props.name === "plus" ? <path d="M50 24 V76 M24 50 H76" {...stroke} />
+    : props.name === "tiles" ? <><rect x="20" y="24" width="27" height="22" rx="3" {...stroke} /><rect x="53" y="24" width="27" height="22" rx="3" {...stroke} /><rect x="20" y="54" width="27" height="22" rx="3" {...stroke} /><rect x="53" y="54" width="27" height="22" rx="3" {...stroke} /></>
+    : props.name === "left" ? <path d="M60 24 L34 50 L60 76" {...stroke} />
+    : props.name === "right" ? <path d="M40 24 L66 50 L40 76" {...stroke} />
+    : props.name === "heart" ? <path d="M50 78 L24 52 A15 15 0 0 1 50 30 A15 15 0 0 1 76 52 Z" {...stroke} />
     : <path d="M30 30 L70 70 M70 30 L30 70" {...stroke} />;
   return <svg class="menu-icon" viewBox="0 0 100 100" aria-hidden="true">{body}</svg>;
 }

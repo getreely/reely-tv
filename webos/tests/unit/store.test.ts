@@ -560,6 +560,80 @@ describe("Live TV's guide, catch-up and reminders", () => {
   });
 });
 
+describe("Multiview, on Vega", () => {
+  const ch = (id: number, name: string) => ({ streamId: id, number: id, name, icon: null, epgChannelId: null, archiveDays: 3 });
+  const [news, sport, film, kids, music] = [ch(1, "News"), ch(2, "Sport"), ch(3, "Film"), ch(4, "Kids"), ch(5, "Music")];
+  const setLive = (c: object) => (app as unknown as { setLive: (c: object) => void }).setLive(c);
+  const watching = () => {
+    setLive({ credentials: { base: "http://panel:8080", username: "me", password: "pw" }, account: { timezone: "UTC" }, channels: [news, sport, film, kids, music] });
+    app.watchChannel(0);
+  };
+  const up = () => app.state.live.multiview.map((c) => c.name);
+
+  it("adds channels beside the one playing, never twice and four at most", () => {
+    watching();
+    app.addToMultiview(news);
+    app.addToMultiview(sport);
+    app.addToMultiview(sport);
+    app.addToMultiview(film);
+    app.addToMultiview(kids);
+    app.addToMultiview(music);
+    expect(up()).toEqual(["Sport", "Film", "Kids"]);
+    app.removeFromMultiview(1);
+    expect(up()).toEqual(["Sport", "Kids"]);
+  });
+
+  it("replaces a tile; tile 0 is changing channel, and a channel beside it doesn't stay twice", () => {
+    watching();
+    app.addToMultiview(sport);
+    app.replaceInMultiview(1, film);
+    expect(up()).toEqual(["Film"]);
+    app.replaceInMultiview(1, news);
+    expect(up()).toEqual(["Film"]);
+    app.replaceInMultiview(0, film);
+    expect(app.state.live.watching).toBe(2);
+    expect(up()).toEqual([]);
+  });
+
+  it("the archive, or leaving the channel, is one picture again", () => {
+    watching();
+    app.addToMultiview(sport);
+    const now = Math.floor(Date.now() / 1000);
+    app.playCatchUp(0, { channelId: "1", start: now - 600, stop: now + 600, title: "The Report", description: null });
+    expect(up()).toEqual([]);
+    app.goLive();
+    app.addToMultiview(sport);
+    app.stopLive();
+    expect(up()).toEqual([]);
+  });
+
+  it("saves the channels in their places and opens them again, the first in the player", async () => {
+    watching();
+    app.addToMultiview(sport);
+    app.addToMultiview(film);
+    expect(app.savedMultiviewLabel()).toBeNull();
+    app.saveMultiview([2, 0, 1]);
+    expect(app.state.live.savedMultiview.map((c) => c.name)).toEqual(["Film", "News", "Sport"]);
+    expect(app.store.json<unknown[]>("savedMultiview", [])).toHaveLength(3);
+    expect(app.savedMultiviewLabel()).toBeNull();
+    app.stopLive();
+    app.watchChannel(3);
+    expect(app.savedMultiviewLabel()).toBe("Film and 2 more");
+    await app.openSavedMultiview();
+    expect(app.state.live.watching).toBe(2);
+    expect(up()).toEqual(["News", "Sport"]);
+  });
+
+  it("a single channel isn't a set to save; the layout is remembered", () => {
+    watching();
+    app.saveMultiview([0]);
+    expect(app.state.live.savedMultiview).toEqual([]);
+    app.setMultiviewLayout("focus");
+    expect(app.state.prefs.multiviewLayout).toBe("focus");
+    expect(app.store.json<{ multiviewLayout?: string }>("prefs", {}).multiviewLayout).toBe("focus");
+  });
+});
+
 describe("the provider's movies and shows", () => {
   /** A panel with two films and a series, and a Plex server that has one of the films. */
   async function withIptv(wins = false) {

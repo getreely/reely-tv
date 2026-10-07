@@ -36,6 +36,17 @@ export function focus(el: HTMLElement | null | undefined) {
   el.focus({ preventScroll: true });
   // Chromium 68 takes the options form; "nearest" keeps rows from jumping about.
   el.scrollIntoView({ block: "nearest", inline: "nearest" });
+  // Along a row, the poster comes in with the row's own margin beside it, as the first one
+  // sits: "nearest" left it flush with the edge of the screen, and grown and ringed under the
+  // cursor it was cut off there.
+  const strip = el.closest<HTMLElement>(".strip");
+  if (strip) {
+    const r = el.getBoundingClientRect();
+    const box = strip.getBoundingClientRect();
+    const margin = parseFloat(getComputedStyle(strip).paddingLeft) || 0;
+    if (r.right + margin > box.right) strip.scrollLeft += r.right + margin - box.right;
+    else if (r.left - margin < box.left) strip.scrollLeft -= box.left - (r.left - margin);
+  }
   // Under a hero, as on the Fire TV: the row with the cursor at the top of the rows, the one
   // before it wholly out of sight rather than its names showing under the hero.
   const rows = el.closest<HTMLElement>(".hero-rows");
@@ -132,6 +143,11 @@ export function move(direction: "up" | "down" | "left" | "right"): boolean {
       ? same
       : others.filter((el) => !el.closest("[data-column]"));
   }
+  // Along a row of posters, left and right stay in it: at its end they do nothing, as on the
+  // Fire TV, rather than jumping to the nearest thing that way, Settings' gear up in the
+  // corner, and on along the tabs, opening each.
+  const strip = active.closest(".strip");
+  if (strip && (direction === "left" || direction === "right")) pool = pool.filter((el) => strip.contains(el));
   const at = nextIndex(from, pool.map((el) => el.getBoundingClientRect()), direction);
   if (at < 0) return false;
   let target = pool[at];

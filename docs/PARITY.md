@@ -15,6 +15,10 @@ differences are Vega's own:
 - HLS plays through hls.js and MPEG-TS through mpegts.js, as the WebView plays neither itself.
 - Holding OK opens a poster's menu when OK comes up, if the remote doesn't repeat it.
 - Leaving the app pauses the video, and coming back picks up with a fresh stream.
+- Multiview, as on the Fire TV, which webOS can't do: hold OK on a channel for up to four at
+  once, in a grid or with the one being heard large; arrows walk the tiles, OK makes one full
+  screen, Back closes the one with the cursor, and the set can be saved. A provider that won't
+  open another channel at once is said so on its tile.
 
 None of it has been tried on a Vega device yet: building the app needs Amazon's Vega SDK (see
 `vega/README.md`).
@@ -61,7 +65,7 @@ None of it has been tried on a Vega device yet: building the app needs Amazon's 
 | Catch-up, start over, rewind and Go live | ✅ | ✅ | ✅ (coloured keys) | ✅ (catch-up tested; Start over and Go live on ✱) | 🟡 (built; not yet tried on a device) |
 | Reminders | ✅ | ✅ | ✅ | ✅ (set in the guide; when they're due, unit-tested) | 🟡 (built and unit-tested) |
 | Channel up/down, numbers on the remote | ✅ | ✅ (swipe) | ✅ | ✅ (left and right; Roku remotes have no number keys) | 🟡 (left and right on Apple TV, swipe on iPhone; numbers typed in, as the Siri remote has no number keys) |
-| Multiview | ✅ | 🟡 (through the player's menus) | — (webOS gives an app one video at a time) | — | ⬜ |
+| Multiview | ✅ | 🟡 (through the player's menus) | — (webOS gives an app one video at a time; on Vega, ✅, as above) | — | ⬜ |
 | **IPTV movies and shows** | | | | | |
 | Switch, tabs' IPTV library, Home rows, search, IPTV badge | ✅ | ✅ | ✅ | ✅ (switch, Movies tab, Home row, search and a series' page in the simulator) | 🟡 (built and unit-tested; MKV and the like play in VLC's player, the file's own sound and subtitle tracks with them) |
 | Matching with Plex, winner chosen | ✅ | ✅ | ✅ | ✅ (matching in the simulator; the winner unit-tested) | 🟡 (unit-tested) |

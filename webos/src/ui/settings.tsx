@@ -4,6 +4,7 @@ import * as xtream from "../api/xtream";
 import { useEffect, useState } from "preact/hooks";
 import { ACCENTS, BITRATE_CHOICES, HOME_ROWS, SCREENSAVER_CHOICES, SUBTITLE_SIZES, THEME_LEVELS, UP_NEXT_CHOICES } from "../app/store";
 import { clearProblem, lastProblem } from "../core/crash";
+import { isVega } from "../core/platform";
 import { focus, onKeys } from "./focus";
 import { useRescue, useReturnFocus } from "./parts";
 
@@ -400,6 +401,19 @@ function LiveSection({ kit }: { kit: Kit }) {
           />
         ) : null}
         <Setting title="Guide preview" note="Plays the highlighted channel in the guide." on={prefs.guidePreview} onPress={() => app.setGuidePreview(!prefs.guidePreview)} />
+        {isVega() ? (
+          <Choice
+            kit={kit}
+            title="Multiview layout"
+            note="Hold OK on a channel to watch more than one at once."
+            options={[
+              { value: "grid" as const, label: "Grid", note: "Every channel gets an equal share of the screen." },
+              { value: "focus" as const, label: "Focus", note: "The channel you're hearing gets most of the screen." },
+            ]}
+            selected={prefs.multiviewLayout}
+            onSelect={(layout) => app.setMultiviewLayout(layout)}
+          />
+        ) : null}
       </Group>
       <Group
         title="Movies and shows"

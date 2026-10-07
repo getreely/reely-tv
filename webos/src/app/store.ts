@@ -1,4 +1,5 @@
 import { isVega } from "../core/platform";
+import { MAX_TILES, savedLabel } from "../core/multiview";
 import * as plex from "../api/plex";
 import type { PlexDetail, PlexHomeUser, PlexItem, PlexPerson, PlexServer } from "../api/plex";
 import { namesAll, rememberedSearches, split } from "../core/searchMatch";
@@ -156,7 +157,19 @@ export interface LiveState {
   reminders: Reminder[];
   /** A reminder whose programme is starting: up on screen until it's answered. */
   due: Reminder | null;
+  /** Channels playing beside the one being watched, on Vega: Multiview, as on the Fire TV. */
+  multiview: XtreamChannel[];
+  /** The one saved set of Multiview channels, the main one first. */
+  savedMultiview: SavedChannel[];
 }
+
+/** A channel kept in the saved Multiview set: by id, its name for the menu. */
+export interface SavedChannel {
+  streamId: number;
+  name: string;
+}
+
+export type MultiviewLayout = "grid" | "focus";
 
 export type GuideStatus =
   | { kind: "idle" }
@@ -281,6 +294,8 @@ export interface Prefs {
   guidePreview: boolean;
   /** How live channels are asked for: HLS, or a continuous MPEG-TS connection. */
   streamFormat: xtream.StreamFormat;
+  /** Multiview: every channel an equal share, or the one being heard large. */
+  multiviewLayout: MultiviewLayout;
 }
 
 /** Theme music's volumes, as the Fire TV's. */
@@ -334,7 +349,7 @@ export const ACCENTS: Array<{ id: string; label: string; color: string; on: stri
 export const accentOf = (id: string | undefined) => ACCENTS.find((a) => a.id === id) ?? ACCENTS[0];
 
 export const UP_NEXT_CHOICES = [0, 5, 10, 12, 15, 20, 30];
-const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], iptvLibrary: false, pinnedLibraries: [], iptvWins: false, screensaverMinutes: 3, tourSeen: false, subtitleScale: 0.9, subtitleBackground: false, subtitlesAtStart: "plex", accent: "blue", iptvInMenus: true, themeLevel: -1, guidePreview: true, streamFormat: "m3u8" };
+const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], iptvLibrary: false, pinnedLibraries: [], iptvWins: false, screensaverMinutes: 3, tourSeen: false, subtitleScale: 0.9, subtitleBackground: false, subtitlesAtStart: "plex", accent: "blue", iptvInMenus: true, themeLevel: -1, guidePreview: true, streamFormat: "m3u8", multiviewLayout: "grid" };
 
 /** As the Fire TV offers them. */
 export const BITRATE_CHOICES = [0, 20_000, 12_000, 8_000, 4_000, 2_000];
@@ -439,7 +454,7 @@ const emptySearch = (recent: string[]): SearchState => ({
 
 const emptyLive = (): LiveState => ({
   credentials: null, account: null, categories: [], category: null, channels: [], guide: {}, favorites: [], busy: false, error: null, watching: null,
-  recent: [], catchUp: null, table: {}, guideStatus: { kind: "idle" }, reminders: [], due: null,
+  recent: [], catchUp: null, table: {}, guideStatus: { kind: "idle" }, reminders: [], due: null, multiview: [], savedMultiview: [],
 });
 
 const emptyRequests = (): RequestsState => ({
@@ -583,6 +598,7 @@ export class App {
         themeLevel: typeof prefs.themeLevel === "number" && prefs.themeLevel >= -1 && prefs.themeLevel < THEME_LEVELS.length ? prefs.themeLevel : -1,
         guidePreview: prefs.guidePreview !== false,
         streamFormat: prefs.streamFormat === "ts" ? "ts" : "m3u8",
+        multiviewLayout: prefs.multiviewLayout === "focus" ? "focus" : "grid",
       },
     }));
     const live = this.store.json<XtreamCredentials | null>("xtream", null);
@@ -591,6 +607,7 @@ export class App {
         credentials: live,
         favorites: this.store.json<number[]>("favorites", []),
         recent: this.store.json<number[]>("recentChannels", []),
+        savedMultiview: this.store.json<SavedChannel[]>("savedMultiview", []).filter((c) => typeof c?.streamId === "number"),
         reminders: this.store.json<Reminder[]>("reminders", []).filter((r) => r.start * 1000 > Date.now() - 60 * 60_000),
       });
     }
@@ -1763,7 +1780,7 @@ export class App {
     this.leaveIptvTabs();
     this.composeHome();
     this.store.remove("xtream");
-    this.set((s) => ({ ...s, live: { ...emptyLive(), favorites: s.live.favorites, recent: s.live.recent } }));
+    this.set((s) => ({ ...s, live: { ...emptyLive(), favorites: s.live.favorites, recent: s.live.recent, savedMultiview: s.live.savedMultiview } }));
   }
 
   async loadLive() {
@@ -1821,11 +1838,14 @@ export class App {
     if (!channel || !c) return;
     const url = programme ? xtream.catchUpUrl(c, channel, programme.start, programme.stop, live.account?.timezone ?? null) : null;
     this.noteWatched(channel);
-    this.setLive({ category, channels, watching: index, catchUp: programme && url ? { programme, url } : null });
+    const catchUp = programme && url ? { programme, url } : null;
+    // From the archive it's one picture; live, a channel already beside it isn't on screen twice.
+    const multiview = catchUp ? [] : live.multiview.filter((c) => c.streamId !== channel.streamId);
+    this.setLive({ category, channels, watching: index, catchUp, multiview });
   }
 
   closeCategory() {
-    this.setLive({ category: null, channels: [], watching: null, catchUp: null });
+    this.setLive({ category: null, channels: [], watching: null, catchUp: null, multiview: [] });
   }
 
   /** The guide's listings for these channels: what's been, for catch-up, and what's coming. */
@@ -1853,7 +1873,8 @@ export class App {
     const url = xtream.catchUpUrl(c, channel, programme.start, programme.stop, live.account?.timezone ?? null);
     if (!url) return false;
     this.noteWatched(channel);
-    this.setLive({ watching: index, catchUp: { programme, url } });
+    // From the archive it's one picture, as on the Fire TV: the other channels go.
+    this.setLive({ watching: index, catchUp: { programme, url }, multiview: [] });
     return true;
   }
 
@@ -1953,7 +1974,9 @@ export class App {
     const channel = this.current.live.channels[index];
     if (!channel) return;
     this.noteWatched(channel);
-    this.setLive({ watching: index, catchUp: null });
+    // A channel already beside it, now the main one: not on screen twice.
+    const multiview = this.current.live.multiview.filter((c) => c.streamId !== channel.streamId);
+    this.setLive({ watching: index, catchUp: null, multiview });
   }
 
   /** Channel up and down, round the list's ends. */
@@ -1972,7 +1995,115 @@ export class App {
   }
 
   stopLive() {
-    this.setLive({ watching: null, catchUp: null });
+    this.setLive({ watching: null, catchUp: null, multiview: [] });
+  }
+
+  // ---------------------------------------------------------------- Multiview
+
+  /** The channel the player itself is on: the one the rest sit beside. */
+  private mainChannel(): XtreamChannel | null {
+    const live = this.current.live;
+    return live.watching != null ? live.channels[live.watching] ?? null : null;
+  }
+
+  /**
+   * A channel beside the one playing, up to four in all: a 2x2 grid is where the screen
+   * runs out. Not one that's already up, nor while a programme plays from the archive.
+   */
+  addToMultiview(channel: XtreamChannel) {
+    const live = this.current.live;
+    const main = this.mainChannel();
+    if (!main || live.catchUp) return;
+    if (main.streamId === channel.streamId || live.multiview.some((c) => c.streamId === channel.streamId)) return;
+    if (live.multiview.length >= MAX_TILES - 1) return;
+    this.setLive({ multiview: [...this.current.live.multiview, channel] });
+  }
+
+  /** The extra channel at [index] (tile index + 1) taken away. */
+  removeFromMultiview(index: number) {
+    const now = this.current.live.multiview;
+    if (index < 0 || index >= now.length) return;
+    this.setLive({ multiview: now.filter((_, i) => i !== index) });
+  }
+
+  clearMultiview() {
+    this.setLive({ multiview: [] });
+  }
+
+  /**
+   * A different channel in tile [tile]. Tile 0 is the player's own channel, so replacing it
+   * is changing channel.
+   */
+  replaceInMultiview(tile: number, channel: XtreamChannel) {
+    const live = this.current.live;
+    if (tile === 0) {
+      const at = live.channels.findIndex((c) => c.streamId === channel.streamId);
+      if (at >= 0) this.watchChannel(at);
+      else {
+        // From another category, browsed in the guide: the main one's list becomes that channel alone.
+        this.noteWatched(channel);
+        this.setLive({ category: null, channels: [channel], watching: 0, catchUp: null });
+      }
+      // Not twice on screen.
+      this.setLive({ multiview: this.current.live.multiview.filter((c) => c.streamId !== channel.streamId) });
+      return;
+    }
+    const index = tile - 1;
+    if (index < 0 || index >= live.multiview.length) return;
+    if (this.mainChannel()?.streamId === channel.streamId || live.multiview.some((c) => c.streamId === channel.streamId)) return;
+    this.setLive({ multiview: live.multiview.map((c, i) => (i === index ? channel : c)) });
+  }
+
+  /**
+   * Keeps the channels up now, in their places ([order]: the tiles left to right, 0 the
+   * main one). There's one saved set: saving again replaces it.
+   */
+  saveMultiview(order: number[]) {
+    const main = this.mainChannel();
+    if (!main) return;
+    const tiles = [main, ...this.current.live.multiview];
+    const set: SavedChannel[] = [];
+    for (const t of order) {
+      const c = tiles[t];
+      if (c && !set.some((s) => s.streamId === c.streamId)) set.push({ streamId: c.streamId, name: c.name });
+    }
+    if (set.length < 2) return;
+    this.store.setJson("savedMultiview", set);
+    this.setLive({ savedMultiview: set });
+  }
+
+  /** What to call the saved set in the tile menu, or null when there's none or it's what's up. */
+  savedMultiviewLabel(): string | null {
+    const live = this.current.live;
+    const saved = live.savedMultiview;
+    if (saved.length < 2) return null;
+    const up = [this.mainChannel()?.streamId, ...live.multiview.map((c) => c.streamId)].filter((id) => id != null);
+    const same = up.length === saved.length && saved.every((s) => up.includes(s.streamId));
+    return same ? null : savedLabel(saved.map((s) => s.name));
+  }
+
+  /** The saved channels up: the first in the player, the rest beside it. One the provider has dropped is left out. */
+  async openSavedMultiview() {
+    const live = this.current.live;
+    const c = live.credentials;
+    const saved = live.savedMultiview;
+    if (!c || saved.length < 2) return;
+    let known = live.channels;
+    if (!saved.every((s) => known.some((ch) => ch.streamId === s.streamId))) {
+      known = [...known, ...(await this.everyChannel())];
+    }
+    const channels = saved.map((s) => known.find((ch) => ch.streamId === s.streamId)).filter((ch): ch is XtreamChannel => !!ch);
+    if (!channels.length || this.current.live.credentials !== c) return;
+    const [main, ...rest] = channels;
+    const at = this.current.live.channels.findIndex((ch) => ch.streamId === main.streamId);
+    this.noteWatched(main);
+    if (at >= 0) this.setLive({ watching: at, catchUp: null });
+    else this.setLive({ category: null, channels: [main], watching: 0, catchUp: null });
+    this.setLive({ multiview: rest.slice(0, MAX_TILES - 1) });
+  }
+
+  setMultiviewLayout(layout: MultiviewLayout) {
+    this.setPrefs({ multiviewLayout: layout });
   }
 
   /** Where the channel plays from: the provider's HLS, which the TV plays itself. */
@@ -2036,16 +2167,21 @@ export class App {
     }));
   }
 
-  /** Channels whose names have the words in them; the panel has no search of its own. */
-  private async channelsMatching(query: string): Promise<XtreamChannel[]> {
+  /** Every channel the provider has, asked for once. */
+  private async everyChannel(): Promise<XtreamChannel[]> {
     const c = this.current.live.credentials;
     if (!c) return [];
     this.allChannels ??= xtream.liveChannels(c).catch(() => {
       this.allChannels = null;
       return [];
     });
+    return this.allChannels;
+  }
+
+  /** Channels whose names have the words in them; the panel has no search of its own. */
+  private async channelsMatching(query: string): Promise<XtreamChannel[]> {
     const wanted = query.trim().toLowerCase();
-    return (await this.allChannels).filter((ch) => ch.name.toLowerCase().includes(wanted)).slice(0, CHANNEL_RESULTS);
+    return (await this.everyChannel()).filter((ch) => ch.name.toLowerCase().includes(wanted)).slice(0, CHANNEL_RESULTS);
   }
 
   /** What was searched kept, when something it found is opened: a search that worked. */

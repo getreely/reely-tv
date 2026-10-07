@@ -3,7 +3,7 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 const SERVER = "http://192.168.1.20:32400";
 
 /** plex.tv and one server, answering as they do; what was told to the server is kept. */
-async function fakePlex(page: Page, options: { tour?: boolean } = {}) {
+async function fakePlex(page: Page, options: { tour?: boolean; many?: boolean } = {}) {
   const timeline: string[] = [];
   // The remote's tour seen already, except where it's what's tested; kept across a reload.
   if (!options.tour) {
@@ -50,6 +50,19 @@ async function fakePlex(page: Page, options: { tour?: boolean } = {}) {
       return route.fulfill({ status: 200, contentType: "image/svg+xml", body: svg });
     }
     if (path === "/library/sections") return json(route, { MediaContainer: { Directory: [{ key: "1", title: "Movies", type: "movie" }, { key: "2", title: "TV Shows", type: "show" }] } });
+    // A full library, for rows that run off the right of the screen.
+    const titles = ["Low Orbit", "Glasshouse", "The Long Field", "Saltwater", "Night Shift", "Paper Moons", "Ironside Road", "Kestrel", "Blue Hour",
+      "Undertow", "The Quiet Year", "Harbour Lights", "Cinder", "Wild Acre", "Static", "Northern Line", "Copperhead", "The Last Ferry", "Driftwood",
+      "Marrow", "Afterglow", "Tidewater", "Second Sun", "Juniper"];
+    const movies = titles.map((title, i) => ({ ratingKey: `m${i + 1}`, type: "movie", title, year: 2025 - (i % 9), addedAt: 100 - i,
+      thumb: `/thumb/m${i + 1}`, art: `/art/m${i + 1}`, summary: `${title}: a film in the library.`, duration: 6_000_000 }));
+    if (options.many && path === "/hubs") {
+      return json(route, { MediaContainer: { Hub: [{ Metadata: [
+        ...[2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => ({ ...episode(`e${n}`, n), viewOffset: 20_000, lastViewedAt: 20 - n })),
+        ...movies.slice(0, 14).map((m, i) => ({ ...m, viewOffset: 900_000, lastViewedAt: 5 - i })),
+      ] }] } });
+    }
+    if (options.many && path === "/library/sections/1/all" && !url.searchParams.get("genre") && !url.searchParams.get("actor")) return meta(route, movies);
     if (path === "/hubs") return json(route, { MediaContainer: { Hub: [{ Metadata: [episode("e2", 2)].map((e) => ({ ...e, viewOffset: 20_000, lastViewedAt: 5 })) }] } });
     if (path === "/playlists") return meta(route, []);
     if (url.searchParams.get("actor") === "77") {
@@ -783,7 +796,7 @@ test("Live TV: sign in to a provider, pick a category, watch, change channel, fa
   // cursor on what's on now, on the channel playing.
   await press(page, "ArrowDown");
   await expect(page.locator(".guide-overlay")).toBeVisible();
-  await expect(page.locator(".player > video")).toHaveAttribute("src", /\/102\.m3u8$/);
+  await expect(page.locator(".player > .tile > video")).toHaveAttribute("src", /\/102\.m3u8$/);
   await expect(page.locator('.guide-overlay .guide-row[data-channel="102"] .programme.now:focus')).toHaveCount(1);
   await expect(page.locator(".guide-overlay .guide-about")).toContainText("OK to watch  ·  hold OK for more");
   await page.screenshot({ path: "shots/lg-live-guide-over.png" });
@@ -806,7 +819,7 @@ test("Live TV: sign in to a provider, pick a category, watch, change channel, fa
   await sport;
   await expect(page.locator(".guide-overlay .guide-category")).toHaveText("Sport");
   await expect(page.locator(".guide-overlay .programme:focus")).toHaveCount(1);
-  await expect(page.locator(".player > video")).toHaveAttribute("src", /\/101\.m3u8$/);
+  await expect(page.locator(".player > .tile > video")).toHaveAttribute("src", /\/101\.m3u8$/);
   // A held OK on what's to come: the channel's menu, with a reminder; Back puts it away.
   await page.locator('.guide-overlay .guide-row[data-channel="102"] .programme', { hasText: "Late Edition" }).focus();
   await page.keyboard.down("Enter");
@@ -851,4 +864,212 @@ test("Live TV: sign in to a provider, pick a category, watch, change channel, fa
   // Back from the archive: the guide, as it was.
   await press(page, "Escape");
   await expect(page.locator(".guide")).toBeVisible();
+});
+
+test("Multiview on Vega: hold OK for another channel beside, walk the tiles, full screen, close", async ({ page }) => {
+  await fakePlex(page);
+  // The Fire TV's Vega WebView: the page is told so before its own script runs.
+  await page.addInitScript(() => { (window as unknown as { __reelyVega: boolean }).__reelyVega = true; });
+  const PANEL = "http://panel.example:8080";
+  const cors = { "Access-Control-Allow-Origin": "*" };
+  const now = Math.floor(Date.now() / 1000);
+  const streams: string[] = [];
+  await page.route(`${PANEL}/**`, async (route) => {
+    const url = new URL(route.request().url());
+    const send = (v: unknown) => route.fulfill({ status: 200, contentType: "application/json", headers: cors, body: JSON.stringify(v) });
+    if (url.pathname.startsWith("/live/")) streams.push(url.pathname);
+    if (url.pathname === "/player_api.php") {
+      const action = url.searchParams.get("action");
+      if (!action) return send({ user_info: { auth: 1, status: "Active", max_connections: "4", active_cons: "0" }, server_info: { timezone: "UTC" } });
+      if (action === "get_live_categories") return send([{ category_id: "1", category_name: "News" }]);
+      if (action === "get_live_streams") {
+        return send([
+          { stream_id: 101, num: 101, name: "News 24", stream_icon: "", epg_channel_id: "news" },
+          { stream_id: 102, num: 102, name: "World Report", stream_icon: "", epg_channel_id: "world" },
+          { stream_id: 103, num: 103, name: "Weather Now", stream_icon: "", epg_channel_id: "weather" },
+        ]);
+      }
+      if (action === "get_simple_data_table" || action === "get_short_epg") {
+        return send({ epg_listings: [{ title: btoa("The Evening Report"), description: "", start_timestamp: String(now - 600), stop_timestamp: String(now + 1200) }] });
+      }
+    }
+    return route.fulfill({ status: 404, headers: cors });
+  });
+  const hold = async () => {
+    await page.keyboard.down("Enter");
+    await page.waitForTimeout(550);
+    await page.keyboard.down("Enter");
+    await page.keyboard.up("Enter");
+  };
+  await page.goto("/");
+  await press(page, "Enter");
+  await expect(page.getByText("Recently Added Movies")).toBeVisible({ timeout: 10_000 });
+  await page.getByRole("button", { name: "Live TV" }).click();
+  await page.getByPlaceholder("Server address").fill("panel.example:8080");
+  await page.getByPlaceholder("Username").fill("me");
+  await page.getByPlaceholder("Password").fill("secret");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "News", exact: true }).click();
+  await page.locator(".channel").first().click();
+  await expect(page.locator(".player-title")).toContainText("News 24");
+  await expect(page.locator(".player-ok:focus")).toHaveCount(1);
+  await expect.poll(() => streams.includes("/live/me/secret/101.m3u8")).toBe(true);
+
+  // Held OK on one channel: Add, Replace, and nothing to make full screen or close.
+  await hold();
+  await expect(page.locator(".tile-menu")).toContainText("News 24");
+  await expect(page.locator(".tile-menu .option")).toHaveText(["Add another channel", "Replace channel"]);
+  await expect(page.locator(".tile-menu .option:focus")).toHaveText("Add another channel");
+  await press(page, "Enter");
+  // The guide, to add: OK puts the channel beside what's playing.
+  await expect(page.locator(".guide-overlay")).toBeVisible();
+  await expect(page.locator(".guide-overlay .guide-about")).toContainText("Add: News 24");
+  await press(page, "ArrowDown");
+  await expect(page.locator(".guide-overlay .guide-about")).toContainText("Add: World Report");
+  await expect(page.locator(".guide-overlay .guide-about")).toContainText("OK to add this channel");
+  await press(page, "Enter");
+  await expect(page.locator(".guide-overlay")).toHaveCount(0);
+  await expect(page.locator(".player .tile:not(.add-tile)")).toHaveCount(2);
+  await expect.poll(() => streams.includes("/live/me/secret/102.m3u8")).toBe(true);
+  // Only the one with the cursor is heard, and outlined.
+  await expect(page.locator(".tile-frame.heard")).toContainText("News 24");
+  await expect(page.locator(".player .tile video").nth(1)).toHaveJSProperty("muted", true);
+  await page.screenshot({ path: "shots/vega-multiview.png" });
+  await press(page, "ArrowRight");
+  await expect(page.locator(".tile-frame.heard")).toContainText("World Report");
+  await expect(page.locator(".player .tile video").nth(0)).toHaveJSProperty("muted", true);
+  await expect(page.locator(".player .tile video").nth(1)).toHaveJSProperty("muted", false);
+  // OK: that one full screen, the other still running behind; OK again, back to both.
+  await press(page, "Enter");
+  await expect(page.locator(".tile.zoomed")).toHaveCount(1);
+  await press(page, "Escape");
+  await expect(page.locator(".tile.zoomed")).toHaveCount(0);
+  // The menu over the second: full screen, move, save, close.
+  await hold();
+  await expect(page.locator(".tile-menu .option")).toHaveText(["Full screen", "Add another channel", "Replace channel", "Move left", "Save these channels", "Close channel"]);
+  await press(page, "Escape");
+  await expect(page.locator(".tile-menu")).toHaveCount(0);
+  // A third channel, from the menu; the grid then offers a spare cell for a fourth.
+  await hold();
+  await page.locator(".tile-menu .option", { hasText: "Add another channel" }).focus();
+  await press(page, "Enter");
+  await page.locator('.guide-overlay .guide-row[data-channel="103"] .programme').first().focus();
+  await press(page, "Enter");
+  await expect(page.locator(".player .tile:not(.add-tile)")).toHaveCount(3);
+  await expect(page.locator(".add-tile")).toContainText("Add a channel");
+  await page.screenshot({ path: "shots/vega-multiview-three.png" });
+  // Back on a tile beside the main one closes it; on the main one, leaves the channel.
+  await press(page, "Escape");
+  await expect(page.locator(".player .tile:not(.add-tile)")).toHaveCount(2);
+  await expect(page.locator(".tile-frame.heard")).toContainText("News 24");
+  await press(page, "Escape");
+  await expect(page.locator(".channel").first()).toBeVisible();
+});
+
+test.describe("on Vega, at the size a Fire TV's WebView is", () => {
+  test.use({ viewport: { width: 960, height: 540 }, deviceScaleFactor: 2 });
+
+  /** The poster with the cursor, ring and all, wholly inside the row it scrolls in and on screen. */
+  const focusedFits = (page: Page) => page.evaluate(() => {
+    const card = document.activeElement as HTMLElement;
+    const art = card.querySelector(".art") ?? card;
+    const strip = card.closest(".strip") ?? document.body;
+    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    const ring = 0.22 * rem * 1.06;
+    const a = art.getBoundingClientRect();
+    const box = strip.getBoundingClientRect();
+    const out: string[] = [];
+    if (a.left - ring < Math.max(0, box.left) - 0.5) out.push(`left ${a.left - ring} < ${box.left}`);
+    if (a.right + ring > Math.min(innerWidth, box.right) + 0.5) out.push(`right ${a.right + ring} > ${Math.min(innerWidth, box.right)}`);
+    if (a.top - ring < box.top - 0.5) out.push(`top ${a.top - ring} < ${box.top}`);
+    if (a.bottom + ring > box.bottom + 0.5) out.push(`bottom ${a.bottom + ring} > ${box.bottom}`);
+    return { title: card.querySelector(".title")?.textContent ?? card.textContent, out };
+  });
+  /** Each row's posters and names clear of the next row's heading. */
+  const rowsOverlap = (page: Page) => page.evaluate(() => {
+    const rows = Array.from(document.querySelectorAll<HTMLElement>(".row"));
+    const out: string[] = [];
+    for (let i = 0; i + 1 < rows.length; i++) {
+      const cards = Array.from(rows[i].querySelectorAll<HTMLElement>(".card"));
+      const bottom = Math.max(...cards.map((c) => c.getBoundingClientRect().bottom));
+      const next = rows[i + 1].querySelector("h2")?.getBoundingClientRect().top ?? Infinity;
+      if (bottom > next + 0.5) out.push(`${rows[i].querySelector("h2")?.textContent}: ${bottom} > ${next}`);
+    }
+    return out;
+  });
+  /** Right along the row the cursor is in, to its end, checking each poster as it goes. */
+  const walkRight = async (page: Page, shot?: string) => {
+    const seen: string[] = [];
+    for (let i = 0; i < 40; i++) {
+      // Never out of the row: at its end, right does nothing.
+      expect(await page.evaluate(() => !!document.activeElement?.closest(".strip"))).toBe(true);
+      const fits = await focusedFits(page);
+      expect(fits.out, `${fits.title} cut off`).toEqual([]);
+      if (seen.includes(fits.title ?? "")) break;
+      seen.push(fits.title ?? "");
+      await press(page, "ArrowRight");
+      await page.waitForTimeout(160);
+    }
+    if (shot) await page.screenshot({ path: shot });
+    return seen;
+  };
+
+  test("Home and Movies: the poster with the cursor is never cut off, rows never overlap", async ({ page }) => {
+    await fakePlex(page, { many: true });
+    await page.addInitScript(() => { (window as unknown as { __reelyVega: boolean }).__reelyVega = true; });
+    await page.goto("/");
+    await press(page, "Enter");
+    await expect(page.getByText("Recently Added Movies")).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: "shots/vega-home.png" });
+    expect(await rowsOverlap(page)).toEqual([]);
+    // Continue Watching, all the way right.
+    const continuing = await walkRight(page, "shots/vega-home-right.png");
+    expect(continuing.length).toBe(15);
+    await expect(page.locator(".tab.on")).toHaveText("Home");
+    expect(await rowsOverlap(page)).toEqual([]);
+    // Down a row, and along it too.
+    for (let row = 0; row < 3; row++) {
+      await press(page, "ArrowDown");
+      await page.waitForTimeout(250);
+      expect(await rowsOverlap(page)).toEqual([]);
+      await walkRight(page, row === 0 ? "shots/vega-home-row2-right.png" : undefined);
+    }
+    // Movies: its home, then the whole library.
+    await page.getByRole("button", { name: "Movies" }).focus();
+    await press(page, "Enter");
+    await page.waitForTimeout(600);
+    await page.screenshot({ path: "shots/vega-movies.png" });
+    expect(await rowsOverlap(page)).toEqual([]);
+  });
+
+  test("a title's page, search, settings and the poster menu", async ({ page }) => {
+    await fakePlex(page, { many: true });
+    await page.addInitScript(() => { (window as unknown as { __reelyVega: boolean }).__reelyVega = true; });
+    await page.goto("/");
+    await press(page, "Enter");
+    await expect(page.getByText("Recently Added Movies")).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(400);
+    // Held OK on a poster: its menu.
+    await page.keyboard.down("Enter");
+    await page.waitForTimeout(550);
+    await page.keyboard.down("Enter");
+    await page.keyboard.up("Enter");
+    await expect(page.locator(".item-menu")).toBeVisible();
+    await page.screenshot({ path: "shots/vega-menu.png" });
+    await press(page, "Escape");
+    await expect(page.locator(".item-menu")).toHaveCount(0);
+    await press(page, "Enter");
+    await expect(page.getByRole("heading", { name: "Northbound" })).toBeVisible();
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: "shots/vega-show.png" });
+    await press(page, "Escape");
+    await page.getByRole("button", { name: "Search" }).click();
+    await page.keyboard.type("orb");
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: "shots/vega-search.png" });
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: "shots/vega-settings.png" });
+  });
 });

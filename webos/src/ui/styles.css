@@ -330,6 +330,23 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .guide-overlay .guide-head { position: sticky; top: 0; z-index: 2; }
 .guide-cats { padding: 0.6rem 3rem 0.8rem; }
 .guide-menu { z-index: 7; }
+
+/* Multiview, on Vega: tiles placed in shares of the screen, the one heard outlined. */
+.tile { position: absolute; background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.tile.zoomed { z-index: 2; }
+.tile-frame { position: absolute; box-sizing: border-box; pointer-events: none; }
+.tile-frame.heard { box-shadow: inset 0 0 0 0.19rem var(--chalk); }
+.tile-name { position: absolute; left: 0.4rem; bottom: 0.4rem; max-width: calc(100% - 0.8rem); padding: 0.2rem 0.45rem; border-radius: 0.3rem;
+  background: rgba(8, 9, 11, 0.72); color: rgba(244, 245, 247, 0.7); font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile-frame.heard .tile-name { color: var(--chalk); }
+.tile-message { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: grid; align-content: center; justify-content: center; }
+.tile-message p { max-width: 20rem; margin: 0; padding: 0.6rem 1rem; border-radius: 0.75rem; background: rgba(23, 20, 21, 0.9); font-size: 0.95rem; text-align: center; }
+.add-tile { flex-direction: column; background: rgba(8, 9, 11, 0.6); box-shadow: inset 0 0 0 0.06rem rgba(244, 245, 247, 0.22); color: rgba(244, 245, 247, 0.5); font-size: 1.05rem; font-weight: 600; }
+.add-tile.heard { box-shadow: inset 0 0 0 0.19rem var(--chalk); color: var(--chalk); }
+.add-plus { font-size: 2.6rem; line-height: 1; margin-bottom: 0.5rem; font-weight: 300; }
+.player-ok { position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 3; background: transparent; border: 0; padding: 0; opacity: 0; }
+.tile-menu { z-index: 7; }
+.tile-menu .menu-section { margin-top: 1.2rem; font-size: 0.85rem; letter-spacing: 0.09em; text-transform: uppercase; color: var(--faint); }
 /* "Starting now": a card at the bottom right, over whatever's on screen. */
 .notice-layer { background: transparent; align-content: end; justify-content: end; padding: 3rem; z-index: 40; }
 .notice { width: 34rem; padding: 1.4rem 1.8rem; border-radius: 1.2rem; background: var(--raised); border: 0.06rem solid var(--line); }

@@ -1,7 +1,7 @@
 {
   "name": "reely-vega",
   "private": true,
-  "version": "0.57.28",
+  "version": "0.57.29",
   "description": "Reely for Fire TV on Vega OS: the LG app's page in a WebView, in a small React Native shell.",
   "scripts": {
     "web": "node scripts/bundle-web.mjs",
