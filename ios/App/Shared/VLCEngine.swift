@@ -66,6 +66,13 @@ final class VLCEngine {
         player.currentVideoTrackIndex = track
     }
 
+    /// Silent or not: a Multiview tile is heard only with the cursor on it.
+    func setMuted(_ muted: Bool) {
+        // Optional or not, as VLCKit's headers have it: either way, it's set if it's there.
+        let audio: VLCAudio? = player.audio
+        audio?.isMuted = muted
+    }
+
     func seek(toMs ms: Int) { player.time = VLCTime(int: Int32(max(0, ms))) }
 
     func stop() {

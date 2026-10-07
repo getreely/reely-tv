@@ -299,6 +299,10 @@ private struct LiveSettings: View {
                 Switch_(title: "Guide preview", note: "Plays the highlighted channel in the guide.",
                         on: Binding(get: { store.prefs.guidePreview }, set: { store.prefs.guidePreview = $0 }))
                 #endif
+                Choice_(title: "Multiview layout", note: "Hold on a channel to watch more than one at once.", options: [
+                    Option(value: Prefs.MultiviewLayout.grid, label: "Grid", note: "Every channel gets an equal share of the screen."),
+                    Option(value: Prefs.MultiviewLayout.focus, label: "Focus", note: "The channel you're hearing gets most of the screen."),
+                ], selected: Binding(get: { store.prefs.multiviewLayout }, set: { store.prefs.multiviewLayout = $0 }))
             }
             Group_(title: "Movies and shows", note: c.isPlaylist
                    ? "Your provider's movies and shows need an Xtream login rather than a playlist. Sign out and sign in with your server, username and password to use them."

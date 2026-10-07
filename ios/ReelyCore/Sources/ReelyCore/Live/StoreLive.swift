@@ -37,6 +37,10 @@ public struct LiveState: Equatable, Sendable {
     /// A reminder whose programme is starting: up on screen until it's answered.
     public var due: Reminder?
     public var guideStatus: GuideStatus = .idle
+    /// Channels playing beside the one being watched: Multiview, as on the Fire TV.
+    public var multiview: [XtreamChannel] = []
+    /// The one saved set of Multiview channels, the main one first.
+    public var savedMultiview: [SavedChannel] = []
 
     public struct CatchUp: Equatable, Sendable {
         public var programme: Programme
@@ -57,6 +61,7 @@ extension ReelyStore {
         live.favorites = store.json("favoriteChannels", as: [Int].self) ?? []
         live.recent = store.json("recentChannels", as: [Int].self) ?? []
         live.reminders = store.json("reminders", as: [Reminder].self) ?? []
+        live.savedMultiview = store.json("savedMultiview", as: [SavedChannel].self) ?? []
     }
 
     /// An Xtream login: the panel's address, a username and a password.
@@ -105,8 +110,9 @@ extension ReelyStore {
         secrets.set("xtream", nil)
         Task { await xtream.forgetGuide() }
         forgetIptv()
-        let (favorites, recent, reminders) = (live.favorites, live.recent, live.reminders)
+        let (favorites, recent, reminders, saved) = (live.favorites, live.recent, live.reminders, live.savedMultiview)
         live = LiveState()
+        live.savedMultiview = saved
         live.favorites = favorites
         live.recent = recent
         live.reminders = reminders
@@ -152,6 +158,7 @@ extension ReelyStore {
     public func closeCategory() {
         live.category = nil
         live.channels = []
+        live.multiview = []
     }
 
     public func dismissLiveError() { live.error = nil }
@@ -251,9 +258,12 @@ extension ReelyStore {
 
     public func watchChannel(_ index: Int) {
         guard live.channels.indices.contains(index) else { return }
-        noteWatched(live.channels[index])
+        let channel = live.channels[index]
+        noteWatched(channel)
         live.watching = index
         live.catchUp = nil
+        // A channel already beside it, now the main one: not on screen twice.
+        live.multiview.removeAll { $0.streamId == channel.streamId }
     }
 
     /// A channel picked from another category's list (the guide over a channel): that list becomes the one open.
@@ -281,6 +291,7 @@ extension ReelyStore {
     public func stopLive() {
         live.watching = nil
         live.catchUp = nil
+        live.multiview = []
     }
 
     /// A programme that's over, from the channel's archive; or this one from its start.
@@ -292,6 +303,8 @@ extension ReelyStore {
         noteWatched(live.channels[index])
         live.watching = index
         live.catchUp = LiveState.CatchUp(programme: programme, url: url)
+        // From the archive it's one picture, as on the Fire TV.
+        live.multiview = []
         return true
     }
 

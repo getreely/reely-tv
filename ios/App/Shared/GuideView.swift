@@ -8,6 +8,11 @@ import ReelyCore
 struct GuideOverlayActions {
     let press: (Int, XtreamChannel, Programme?) -> Void
     let isFavorite: (XtreamChannel) -> Bool
+    /// Opened to put a channel in Multiview: what OK does, "Add" or "Replace with".
+    var verb: String? = nil
+    /// Multiview on offer: the held OK's menu can put the channel beside what's playing.
+    var multiview: MultiviewHooks? = nil
+    var replaces: Int? = nil
 }
 
 /**
@@ -127,6 +132,7 @@ struct GuideGrid: View {
     }
 
     private func hint(_ channel: XtreamChannel, _ p: Programme?) -> String {
+        if let verb = overlay?.verb { return "OK to \(verb.lowercased()) this channel  ·  hold OK for more" }
         if let p, p.stop <= now { return store.canCatchUp(channel, p, now: now) ? "OK to watch it again" : "Over, and not in this channel's archive" }
         // Over a channel, as on the Fire TV: OK watches; a reminder is in the held OK's menu.
         if overlay != nil { return "OK to watch  ·  hold OK for more" }
@@ -217,6 +223,12 @@ struct GuideGrid: View {
         if let overlay {
             button.contextMenu {
                 Button("Watch this channel") { overlay.press(index, channel, nil) }
+                if let multiview = overlay.multiview {
+                    // Replacing a tile never adds one, so only adding is held to the limit.
+                    Button(overlay.replaces != nil ? "Put it in that tile" : multiview.canAdd ? "Add beside what's playing" : "Up to four channels at once") {
+                        if overlay.replaces != nil || multiview.canAdd { multiview.add(channel, overlay.replaces) }
+                    }
+                }
                 if let p, p.start > now {
                     Button(store.hasReminder(channel, p) ? "Cancel the reminder" : "Remind me") { store.toggleReminder(channel, p) }
                 }
@@ -275,6 +287,9 @@ struct GuideOverlay: View {
     let playing: XtreamChannel
     let now: Int
     let onClose: () -> Void
+    /// Opened from a Multiview tile: OK puts the channel beside what's playing, or in that tile.
+    var pick: GuidePick? = nil
+    var multiview: MultiviewHooks? = nil
     @State private var category: XtreamCategory?
     @State private var channels: [XtreamChannel] = []
     @State private var loading = false
@@ -295,7 +310,10 @@ struct GuideOverlay: View {
             }
             if !channels.isEmpty {
                 GuideGrid(channels: Array(channels.prefix(60)), categoryName: category?.name ?? "", now: now,
-                          overlay: GuideOverlayActions(press: watch, isFavorite: { store.live.favorites.contains($0.streamId) }),
+                          overlay: GuideOverlayActions(press: watch, isFavorite: { store.live.favorites.contains($0.streamId) },
+                                                       verb: multiview != nil ? pick?.verb : nil,
+                                                       multiview: multiview.map { hooks in MultiviewHooks(canAdd: hooks.canAdd) { c, r in onClose(); hooks.add(c, r) } },
+                                                       replaces: pick?.replaces),
                           landOn: channels == store.live.channels ? playing.streamId : nil)
                     .id(category?.id)
             } else {
@@ -335,7 +353,15 @@ struct GuideOverlay: View {
     }
 
     private func watch(_ index: Int, _ channel: XtreamChannel, _ p: Programme?) {
-        let over = p.map { $0.stop <= now } ?? false
+        // Opened to add or replace a tile: OK puts the channel there, whatever's on it. The
+        // main tile is the player's own channel, so replacing it is changing channel, below.
+        if let pick, let multiview, pick.replaces != 0 {
+            if pick.replaces == nil && !multiview.canAdd { return }
+            onClose()
+            multiview.add(channel, pick.replaces)
+            return
+        }
+        let over = pick == nil && (p.map { $0.stop <= now } ?? false)
         if over, let p, !store.canCatchUp(channel, p, now: now) { return }
         onClose()
         if channels != store.live.channels {
