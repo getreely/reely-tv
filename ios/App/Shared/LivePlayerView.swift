@@ -382,12 +382,13 @@ struct LivePlayerView: View {
                     }
                     if spare, all.indices.contains(addSlot), zoomedTile == nil {
                         let r = all[addSlot]
-                        AddTileView(focused: place == addSlot).frame(width: r.width, height: r.height).offset(x: r.x, y: r.y)
+                        AddTileView(focused: place == addSlot).ignoresSafeArea().frame(width: r.width, height: r.height).offset(x: r.x, y: r.y)
                     }
                     #if os(iOS)
                     touchLayer(all, geo.size)
                     #endif
                 }
+                .ignoresSafeArea()
             }
             .ignoresSafeArea()
             #if os(tvOS)
@@ -445,11 +446,14 @@ struct LivePlayerView: View {
         let r = rect(of: tile, all, size)
         let heard = multi && focusedId == tile
         let failed = tile == 0 ? model.failed : tileChannel(tile).flatMap { tiles.model($0.streamId)?.failed }
+        // The picture fills its tile edge to edge, past the notch and the home bar: inside a
+        // tile, it otherwise kept to the screen's safe area, a band short at the bottom.
         return ZStack {
-            Color.black
-            surface()
+            Color.black.ignoresSafeArea()
+            surface().ignoresSafeArea()
             if multi && zoomedTile != tile {
                 TileFrame(name: tileChannel(tile)?.name ?? "", heard: heard, message: failed.map { _ in "This channel isn't playing." })
+                    .ignoresSafeArea()
             }
         }
         .frame(width: r.width, height: r.height)
@@ -480,6 +484,7 @@ struct LivePlayerView: View {
 
     private func touchArea(_ r: TileRect, place at: Int, tile: Int) -> some View {
         Color.clear
+            .ignoresSafeArea()
             .frame(width: r.width, height: r.height)
             .contentShape(Rectangle())
             .onTapGesture { tapped(at, tile) }
