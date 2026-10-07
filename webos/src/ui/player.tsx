@@ -1,3 +1,5 @@
+import { detach, droppedConnection, setSource } from "./media";
+import { isVega, onAway } from "../core/platform";
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { PlexChapter, PlexItem, PlexStream } from "../api/plex";
 import type { App, Playing, Prefs } from "../app/store";
@@ -129,16 +131,41 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
     stuckAt.current = null;
     const v = video.current;
     if (!v) return;
-    v.src = playing.url;
     const start = () => {
       if (playing.startMs > 0) v.currentTime = playing.startMs / 1000;
       void v.play().catch(() => setPaused(true));
     };
     v.addEventListener("loadedmetadata", start, { once: true });
-    v.load();
+    setSource(v, playing.url);
     return () => v.removeEventListener("loadedmetadata", start);
   }, [playing.url, playing.attempt]);
-  useEffect(() => () => { if (dropTimer.current) clearTimeout(dropTimer.current); }, []);
+  /*
+   * Out of the app and back, on Vega: the TV takes the video decoder back while the app is
+   * away, and the picture is black on return. So it pauses on leaving and, if it was
+   * playing, picks up again from where it was with a fresh stream.
+   */
+  useEffect(() => {
+    if (!isVega()) return;
+    let wasPlaying = false;
+    let at = 0;
+    return onAway((away) => {
+      const v = video.current;
+      if (!v) return;
+      if (away) {
+        wasPlaying = !v.paused;
+        at = v.currentTime * 1000;
+        v.pause();
+      } else if (wasPlaying) {
+        wasPlaying = false;
+        void app.reopen(at);
+      }
+    });
+  }, []);
+  useEffect(() => () => {
+    if (dropTimer.current) clearTimeout(dropTimer.current);
+    // hls.js or mpegts.js, on Vega: stopped with the player, or it goes on fetching.
+    if (video.current) detach(video.current);
+  }, []);
 
   useEffect(() => {
     const v = video.current!;
@@ -151,7 +178,7 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
     // Playing again: the next drop gets its full set of tries.
     const going = () => { drops.current = 0; };
     const fail = () => {
-      if (v.error?.code === MediaError.MEDIA_ERR_NETWORK) {
+      if (droppedConnection(v)) {
         const at = now();
         /*
          * The last few seconds not arriving is the end, not a lost connection: a file whose

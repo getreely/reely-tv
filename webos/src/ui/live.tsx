@@ -1,3 +1,5 @@
+import { clearSource, detach, setSource } from "./media";
+import { isVega, onAway } from "../core/platform";
 import { useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
 import type { Programme, XtreamCategory, XtreamChannel } from "../api/xtream";
 import { isOnAt, progressAt } from "../api/xtream";
@@ -272,7 +274,7 @@ function GuideGrid(props: {
           </div>
         </div>
         {state.prefs.guidePreview ? (
-          <div class="guide-preview">{previewUrl ? <video src={previewUrl} autoPlay playsInline /> : null}</div>
+          <div class="guide-preview">{previewUrl ? <PreviewVideo url={previewUrl} /> : null}</div>
         ) : null}
       </div>
       {grid()}
@@ -408,8 +410,7 @@ export function LivePlayer(props: { app: App; state: AppState; channel: XtreamCh
     if (!v || !url) return;
     setError(null);
     setWaiting(true);
-    v.src = url;
-    v.load();
+    setSource(v, url);
     void v.play().catch(() => undefined);
     setBanner(true);
     setPoke((n) => n + 1);
@@ -421,6 +422,26 @@ export function LivePlayer(props: { app: App; state: AppState; channel: XtreamCh
       v.removeEventListener("playing", ready);
       v.removeEventListener("error", fail);
     };
+  }, [url]);
+  // hls.js or mpegts.js, on Vega: stopped with the channel, or it goes on fetching.
+  useEffect(() => () => { if (video.current) detach(video.current); }, []);
+  /*
+   * Out of the app and back, on Vega: the TV takes the decoder back while it's away, and a
+   * channel can't be picked up where it was anyway. It stops on leaving and joins the
+   * channel again, as it is now, on return.
+   */
+  useEffect(() => {
+    if (!isVega()) return;
+    return onAway((away) => {
+      const v = video.current;
+      if (!v || !url) return;
+      if (away) clearSource(v);
+      else {
+        setWaiting(true);
+        setSource(v, url);
+        void v.play().catch(() => undefined);
+      }
+    });
   }, [url]);
 
   /*
@@ -520,4 +541,17 @@ export function ReminderNotice(props: { app: App; state: AppState }) {
       </div>
     </div>
   );
+}
+
+/** The channel the cursor's on, small, in the guide: played as the full-screen channel is. */
+function PreviewVideo(props: { url: string }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const v = ref.current;
+    if (!v) return;
+    setSource(v, props.url);
+    void v.play().catch(() => undefined);
+    return () => clearSource(v);
+  }, [props.url]);
+  return <video ref={ref} autoPlay playsInline />;
 }

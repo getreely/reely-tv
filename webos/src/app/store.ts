@@ -1,3 +1,4 @@
+import { isVega } from "../core/platform";
 import * as plex from "../api/plex";
 import type { PlexDetail, PlexHomeUser, PlexItem, PlexPerson, PlexServer } from "../api/plex";
 import { namesAll, rememberedSearches, split } from "../core/searchMatch";
@@ -484,6 +485,8 @@ export class App {
     private wait: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
   ) {
     plex.identity.clientId = clientId(store);
+    // On a Fire TV running Vega, Plex's dashboard and device list say so, not "LG TV".
+    if (isVega()) Object.assign(plex.identity, { platform: "Vega", device: "Fire TV", deviceName: "Reely on Fire TV" });
     this.iptv.watch = new IptvWatch(store, "iptvWatch");
   }
 

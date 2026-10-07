@@ -4,9 +4,20 @@ What Reely does, and which apps do it. The Fire TV / Android TV app is the refer
 every other app is measured against it. ✅ done and tested · 🟡 partly · ⬜ not yet ·
 — doesn't apply on that device.
 
-Newer Fire TV sticks run **Vega OS**, which doesn't run Android apps. They need their own
-app (Amazon's Vega SDK, React Native), which can reuse the LG app's TypeScript core
-(`webos/src/api`, `webos/src/app`). Fire TV sticks on Fire OS run the APK.
+Newer Fire TV sticks run **Vega OS**, which doesn't run Android apps; Fire TV sticks on Fire
+OS run the APK. The Vega app (`vega/`) is the LG app's page in a WebView, inside a small React
+Native shell, so it has everything the **LG** column below has, the remote included. The
+differences are Vega's own:
+
+- Back comes to the shell, which hands it to the page.
+- The shell closes the app.
+- A server that won't answer the page (an IPTV provider's, say) is asked by the shell instead.
+- HLS plays through hls.js and MPEG-TS through mpegts.js, as the WebView plays neither itself.
+- Holding OK opens a poster's menu when OK comes up, if the remote doesn't repeat it.
+- Leaving the app pauses the video, and coming back picks up with a fresh stream.
+
+None of it has been tried on a Vega device yet: building the app needs Amazon's Vega SDK (see
+`vega/README.md`).
 
 | Feature | Fire TV / Android TV | Android phone & tablet | LG (webOS) | Roku | iPhone, iPad and Apple TV |
 |---|---|---|---|---|---|

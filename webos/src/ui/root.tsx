@@ -1,3 +1,4 @@
+import { tell } from "../core/bridge";
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { App, AppState, Route } from "../app/store";
 import { accentOf, isConnected, isIptvChoice } from "../app/store";
@@ -68,8 +69,12 @@ const sameTab = (a: Route, b: Route) => a.name === b.name && (a.name !== "librar
 const tabOf = (stack: Route[], route: Route): Route =>
   route.name === "settings" ? route : [...stack].reverse().find((r) => r.name === "search" || r.name === "home" || r.name === "library" || r.name === "live" || r.name === "requests") ?? route;
 
-/** Leaving the app, as webOS wants it done: its own way back to the launcher, else closing. */
+/**
+ * Leaving the app, as each TV wants it done: on a Fire TV running Vega, the shell closes it
+ * (the page can't); on webOS, its own way back to the launcher; else closing.
+ */
 export function leave() {
+  if (tell({ type: "exit" })) return;
   const webOS = (window as unknown as { webOS?: { platformBack?: () => void } }).webOS;
   if (webOS?.platformBack) webOS.platformBack();
   else window.close();

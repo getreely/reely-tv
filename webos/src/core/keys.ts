@@ -1,6 +1,7 @@
 /**
- * The LG remote as the browser sees it. Arrows and OK arrive as the usual keys; Back is
- * webOS's own 461; the coloured and media keys have codes of their own.
+ * The remote as the browser sees it. Arrows and OK arrive as the usual keys. On an LG TV,
+ * Back is webOS's own 461 and the coloured and media keys have codes of their own; on a
+ * Fire TV running Vega, Back is 27 ("GoBack") and its media keys are 179, 227 and 228.
  */
 export type Action =
   | "up" | "down" | "left" | "right" | "ok" | "back"
@@ -13,7 +14,7 @@ const CODES: Record<number, Action> = {
   13: "ok",
   461: "back", 8: "back", 27: "back",
   415: "play", 19: "pause", 463: "playPause", 179: "playPause",
-  413: "stop", 412: "rewind", 417: "forward",
+  413: "stop", 412: "rewind", 417: "forward", 227: "rewind", 228: "forward",
   33: "channelUp", 34: "channelDown",
   457: "info",
   403: "red", 404: "green", 405: "yellow", 406: "blue",
@@ -33,6 +34,8 @@ export function actionOf(event: Pick<KeyboardEvent, "keyCode" | "key">): Action 
     case "Enter": return "ok";
     case "Escape": case "Backspace": case "GoBack": return "back";
     case "MediaPlayPause": return "playPause";
+    case "MediaRewind": return "rewind";
+    case "MediaFastForward": return "forward";
   }
   return null;
 }

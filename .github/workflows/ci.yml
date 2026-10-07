@@ -129,3 +129,22 @@ jobs:
           name: reely-roku
           path: roku/out/reely-roku.zip
           retention-days: 14
+
+  # The Fire TV app for Vega OS: the shell checked against Amazon's packages, its files
+  # against each other. The Vega package itself needs Amazon's SDK, installed behind a
+  # developer sign-in, so it's built on a computer that has it (see vega/README.md).
+  vega:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vega
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: vega/package-lock.json
+      - run: npm ci --legacy-peer-deps --ignore-scripts
+      - name: Typecheck and project checks
+        run: npm run typecheck && npm test

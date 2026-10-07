@@ -1,0 +1,65 @@
+schema-version = 1
+
+[package]
+id = "tv.reely.vega"
+title = "Reely"
+version = "0.57.28"
+icon = "@image/app_icon.png"
+
+# Vega SDK 0.24 on: the OS versions the app runs on. `vega project install --fix` adds the
+# module entries that go with these.
+[os.version]
+min = "1.2"
+target = "1.2"
+
+[components]
+[[components.interactive]]
+id = "tv.reely.vega.main"
+runtime-module = "/com.amazon.kepler.keplerscript.runtime.loader_2@IKeplerScript_2_0"
+launch-type = "singleton"
+categories = ["com.amazon.category.main"]
+
+[processes]
+[[processes.group]]
+component-ids = ["tv.reely.vega.main"]
+
+[wants]
+# The page, in a WebView.
+[[wants.service]]
+id = "com.amazon.webview.renderer_service"
+
+# Typing: search, sign-in to a provider, a server's address.
+[[wants.service]]
+id = "com.amazon.inputmethod.service"
+
+# Video: films, episodes and channels.
+[[wants.service]]
+id = "com.amazon.media.server"
+
+[[wants.service]]
+id = "com.amazon.mediametrics.service"
+
+[[wants.service]]
+id = "com.amazon.mediabuffer.service"
+
+[[wants.service]]
+id = "com.amazon.mediatransform.service"
+
+# Sound, and its volume and focus.
+[[wants.service]]
+id = "com.amazon.audio.stream"
+
+[[wants.service]]
+id = "com.amazon.audio.control"
+
+# Accessibility (VoiceView).
+[[wants.service]]
+id = "com.amazon.kepler.ucc.publisher"
+
+# Group IPC, for the media services.
+[[wants.service]]
+id = "com.amazon.gipc.uuid.*"
+
+[offers]
+[[offers.service]]
+id = "com.amazon.gipc.uuid.*"

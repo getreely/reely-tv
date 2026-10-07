@@ -1,3 +1,6 @@
+import { shellFetch } from "./bridge";
+import { isVega } from "./platform";
+
 /**
  * Asking servers things, with a time limit: a server that never answers mustn't leave a
  * screen waiting for ever. Errors come out as sentences somebody can read.
@@ -17,8 +20,47 @@ export interface Ask {
   failure?: string;
 }
 
-/** The fetch in use: the browser's, or a test's. */
-export let fetcher: typeof fetch = (input, init) => fetch(input, init);
+/*
+ * On Vega, the page is opened from the app's own files, and a server that doesn't allow
+ * other sites (an IPTV provider's panel, often) refuses it: the browser says only that it
+ * couldn't connect. The shell asks instead, which it can; and having had to once for a
+ * server, it asks for it from then on. A request cancelled for taking too long isn't asked
+ * again.
+ */
+const viaShell = new Set<string>();
+
+function originOf(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return url;
+  }
+}
+
+/** Whether [url]'s server is one the shell asks, having refused the page. */
+export const askedByShell = (url: string) => viaShell.has(originOf(url));
+/** [url]'s server refused the page: the shell asks it from now on. */
+export const askViaShell = (url: string) => void viaShell.add(originOf(url));
+
+export const vegaFetch = (local: typeof fetch, remote: typeof shellFetch): typeof fetch => async (input, init) => {
+  const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  const origin = originOf(url);
+  if (viaShell.has(origin)) return remote(url, init);
+  try {
+    return await local(input, init);
+  } catch (error) {
+    if (init?.signal?.aborted) throw error;
+    const answer = await remote(url, init);
+    viaShell.add(origin);
+    return answer;
+  }
+};
+
+/** Servers the shell is asking for, for tests. */
+export const forgetShellServers = () => viaShell.clear();
+
+/** The fetch in use: the browser's (with the shell behind it on Vega), or a test's. */
+export let fetcher: typeof fetch = isVega() ? vegaFetch((input, init) => fetch(input, init), shellFetch) : (input, init) => fetch(input, init);
 
 export function useFetcher(next: typeof fetch) {
   fetcher = next;

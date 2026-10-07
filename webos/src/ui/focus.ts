@@ -171,12 +171,14 @@ export function installKeys(onUnhandledBack: () => void) {
     "keyup",
     (event) => {
       if (actionOf(event) !== "ok" || !okDown) return;
-      const { el, held } = okDown;
+      const { el, held, at } = okDown;
       okDown = null;
-      if (!held && document.activeElement === el && el.isConnected) {
-        event.preventDefault();
-        el.click();
-      }
+      if (held || document.activeElement !== el || !el.isConnected) return;
+      event.preventDefault();
+      // Held as long as a hold, though the remote never repeated it (a Fire TV's may not, as
+      // an LG's does): a hold all the same, when it comes up.
+      if (Date.now() - at >= HOLD_MS) el.dispatchEvent(new CustomEvent("hold", { bubbles: true }));
+      else el.click();
     },
     true,
   );

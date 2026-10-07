@@ -12,6 +12,8 @@
     "package": "npm run build && node scripts/package.mjs"
   },
   "dependencies": {
+    "hls.js": "^1.7.3",
+    "mpegts.js": "^1.8.2",
     "preact": "^10.29.8",
     "qrcode-generator": "^1.4.4"
   },
