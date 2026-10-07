@@ -108,10 +108,13 @@ struct PosterCard: View {
 
 /// A wide card, for Continue Watching: the scene, where it was left, the show and episode.
 struct WideCard: View {
+    @Environment(\.accent) private var accent
     let title: String
     let subtitle: String?
     let url: URL?
     var progress: Double? = nil
+    /// Seen: the check in a circle, top right, as the posters and the Fire TV's episodes have it.
+    var watched = false
     let action: () -> Void
 
     var body: some View {
@@ -120,6 +123,12 @@ struct WideCard: View {
                 Artwork(url: url, aspect: 16 / 9)
                     .overlay(alignment: .bottom) {
                         if let progress { Progress(fraction: progress).padding(dp(8)) }
+                    }
+                    .overlay(alignment: .topTrailing) {
+                        if watched {
+                            Image(systemName: "checkmark").font(.system(size: dp(11), weight: .bold)).foregroundStyle(accent.onColor)
+                                .frame(width: dp(24), height: dp(24)).background(Circle().fill(accent.swiftColor)).padding(dp(6))
+                        }
                     }
                 Text(title).font(Typeface.meta).foregroundStyle(Color.chalk).lineLimit(1)
                 if let subtitle { Text(subtitle).font(Typeface.label).foregroundStyle(Color.muted).lineLimit(1) }

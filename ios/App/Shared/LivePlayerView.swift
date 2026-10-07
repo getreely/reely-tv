@@ -415,10 +415,13 @@ struct LivePlayerView: View {
             } else if banner || actions {
                 bannerView(now: now).transition(.opacity)
             }
-            #else
-            if banner { bannerView(now: now).transition(.opacity) }
             #endif
         }
+        #if os(iOS)
+        // Laid over the screen rather than in it: the controls can never make the page, and
+        // the picture with it, any bigger than the screen.
+        .overlay { if banner { bannerView(now: now).transition(.opacity) } }
+        #endif
         #if os(tvOS)
         .onExitCommand {
             if actions { hideActions() }
@@ -580,40 +583,54 @@ struct LivePlayerView: View {
      * sideways didn't count as using the controls, and they went away mid-slide.
      */
     private func actionRow(on: Programme?, favorite: Bool, startOver: Bool) -> some View {
-        HStack(spacing: 14) {
-            if catchUp != nil {
-                liveButton("Back 10 seconds", "gobackward.10") { model.skip(-10) }
-                liveButton(model.playing ? "Pause" : "Play", model.playing ? "pause.fill" : "play.fill", big: true) { model.togglePlay() }
-                liveButton("Forward 10 seconds", "goforward.10") { model.skip(10) }
-                liveButton("Go live", "dot.radiowaves.left.and.right", filled: true) { store.goLive() }
-            } else {
-                liveButton("Previous channel", "chevron.up") { stepHeard(-1, tile: multi ? focusedId : 0) }
-                liveButton("Next channel", "chevron.down") { stepHeard(1, tile: multi ? focusedId : 0) }
-                liveButton("Channels", "list.bullet", filled: true) { channels = true }
-                if tileCount < Multiview.maxTiles {
-                    liveButton("Add a channel beside this one", "square.grid.2x2") { openPick(GuidePick(replaces: nil)) }
-                }
-                if startOver, let on, let at = store.live.watching {
-                    liveButton("Start over", "backward.end.fill") { store.playCatchUp(at, on) }
-                }
-            }
-            if let shown = heardChannel {
-                liveButton(favorite ? "Remove from Favorites" : "Add to Favorites", favorite ? "heart.fill" : "heart") { store.toggleFavorite(shown) }
-            }
-            if !multi { liveButton("Channel number", "number") { askNumber = true } }
+        // The largest that fits across: an iPhone held upright has room for fewer, smaller ones.
+        // The row used to be wider than the screen there, and stretched the page, the
+        // picture with it, until the controls went away.
+        ViewThatFits(in: .horizontal) {
+            buttons(on: on, favorite: favorite, startOver: startOver, size: 50, spacing: 14)
+            buttons(on: on, favorite: favorite, startOver: startOver, size: 42, spacing: 10)
+            buttons(on: on, favorite: favorite, startOver: startOver, size: 38, spacing: 8, slim: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, dp(10))
     }
 
-    private func liveButton(_ title: String, _ symbol: String, filled: Bool = false, big: Bool = false, _ run: @escaping () -> Void) -> some View {
-        Button {
+    /// The row at one size; [slim] leaves out the channel number, which the Channels list covers.
+    private func buttons(on: Programme?, favorite: Bool, startOver: Bool, size: CGFloat, spacing: CGFloat, slim: Bool = false) -> some View {
+        HStack(spacing: spacing) {
+            if catchUp != nil {
+                liveButton("Back 10 seconds", "gobackward.10", size: size) { model.skip(-10) }
+                liveButton(model.playing ? "Pause" : "Play", model.playing ? "pause.fill" : "play.fill", size: size, big: true) { model.togglePlay() }
+                liveButton("Forward 10 seconds", "goforward.10", size: size) { model.skip(10) }
+                liveButton("Go live", "dot.radiowaves.left.and.right", size: size, filled: true) { store.goLive() }
+            } else {
+                liveButton("Previous channel", "chevron.up", size: size) { stepHeard(-1, tile: multi ? focusedId : 0) }
+                liveButton("Next channel", "chevron.down", size: size) { stepHeard(1, tile: multi ? focusedId : 0) }
+                liveButton("Channels", "list.bullet", size: size, filled: true) { channels = true }
+                if tileCount < Multiview.maxTiles {
+                    liveButton("Add a channel beside this one", "square.grid.2x2", size: size) { openPick(GuidePick(replaces: nil)) }
+                }
+                if startOver, let on, let at = store.live.watching {
+                    liveButton("Start over", "backward.end.fill", size: size) { store.playCatchUp(at, on) }
+                }
+            }
+            if let shown = heardChannel {
+                liveButton(favorite ? "Remove from Favorites" : "Add to Favorites", favorite ? "heart.fill" : "heart", size: size) { store.toggleFavorite(shown) }
+            }
+            if !multi && !slim { liveButton("Channel number", "number", size: size) { askNumber = true } }
+        }
+        .fixedSize()
+    }
+
+    private func liveButton(_ title: String, _ symbol: String, size: CGFloat, filled: Bool = false, big: Bool = false, _ run: @escaping () -> Void) -> some View {
+        let side = big ? size * 1.2 : size
+        return Button {
             run()
             showBanner(stay: true)
         } label: {
-            Image(systemName: symbol).font(.system(size: big ? 22 : 18, weight: .semibold))
+            Image(systemName: symbol).font(.system(size: side * 0.36, weight: .semibold))
                 .foregroundStyle(filled ? accent.onColor : .white)
-                .frame(width: big ? 60 : 50, height: big ? 60 : 50)
+                .frame(width: side, height: side)
                 .background(filled ? AnyShapeStyle(accent.swiftColor) : AnyShapeStyle(.ultraThinMaterial), in: Circle())
         }
         .buttonStyle(PressStyle())
