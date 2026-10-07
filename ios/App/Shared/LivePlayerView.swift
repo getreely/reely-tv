@@ -38,6 +38,33 @@ final class LiveModel {
         // MPEG-TS and the like: VLC, as the Fire TV's ExoPlayer plays them.
         if !applePlays(url) { startVLC(address); return }
         stopVLC()
+        player.replaceCurrentItem(with: nil)
+        /*
+         * A provider's .m3u8 is usually a redirect to a short-lived address of its own. Apple's
+         * player went back through it for every fresh look at the list of pieces, every few
+         * seconds, and the provider may start a new session each time; so the redirect is
+         * followed once here, and the player handed where it led.
+         */
+        Task { [weak self] in
+            let final = await LiveModel.resolved(address)
+            guard let self, self.loaded == url, !self.usingVLC else { return }
+            self.play(final, largerBuffer: largerBuffer)
+        }
+    }
+
+    /// Where [address] redirects to, if anywhere: asked once, with a short wait.
+    private static func resolved(_ address: URL) async -> URL {
+        var request = URLRequest(url: address, timeoutInterval: 8)
+        request.httpMethod = "GET"
+        // Only the start is wanted: the address it ended at, not the list itself.
+        request.setValue("bytes=0-0", forHTTPHeaderField: "Range")
+        guard let (_, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse, (200..<400).contains(http.statusCode),
+              let final = http.url else { return address }
+        return final
+    }
+
+    private func play(_ address: URL, largerBuffer: Bool) {
         let item = AVPlayerItem(url: address)
         /*
          * Left to itself, Apple's player joins a live stream as near its newest moment as it
@@ -266,6 +293,8 @@ struct LivePlayerView: View {
                 Button { close() } label: { Image(systemName: "xmark").font(.system(size: 20, weight: .semibold)) }
                     .foregroundStyle(Color.chalk).accessibilityLabel("Close")
                 Spacer()
+                // AirPlay, as the film player has it: where the sound (and, with Apple's player, the picture) goes.
+                RoutePicker().frame(width: 40, height: 40)
                 if pip.possible && !model.usingVLC {
                     Button { pip.toggle() } label: { Image(systemName: "pip.enter").font(.system(size: 20, weight: .semibold)) }
                         .foregroundStyle(Color.chalk).accessibilityLabel("Picture in picture")
