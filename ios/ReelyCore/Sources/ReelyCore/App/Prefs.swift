@@ -36,7 +36,14 @@ public struct Prefs: Codable, Equatable, Sendable {
     public var themeMusic: Bool = false
     public var themeVolume: Double = 0.10
     public var guidePreview: Bool = true
-    public var streamFormat: StreamFormat = .m3u8
+    /*
+     * How a channel is asked of the provider. MPEG-TS, played by VLC, by default: Apple's
+     * player on a provider's HLS stopped to buffer every fifteen seconds or so, however far
+     * back from live it sat, where TS played smoothly. Anyone who picks for themselves keeps
+     * what they picked; until then it's TS, including on a phone that saved HLS before.
+     */
+    public var streamFormat: StreamFormat = .ts { didSet { streamFormatChosen = true } }
+    public var streamFormatChosen = false
     public var multiviewLayout: MultiviewLayout = .grid
 
     public init() {}
@@ -66,7 +73,8 @@ public struct Prefs: Codable, Equatable, Sendable {
         themeMusic = (try? c.decode(Bool.self, forKey: .themeMusic)) ?? d.themeMusic
         themeVolume = (try? c.decode(Double.self, forKey: .themeVolume)) ?? d.themeVolume
         guidePreview = (try? c.decode(Bool.self, forKey: .guidePreview)) ?? d.guidePreview
-        streamFormat = (try? c.decode(StreamFormat.self, forKey: .streamFormat)) ?? d.streamFormat
+        streamFormatChosen = (try? c.decode(Bool.self, forKey: .streamFormatChosen)) ?? false
+        streamFormat = streamFormatChosen ? (try? c.decode(StreamFormat.self, forKey: .streamFormat)) ?? d.streamFormat : d.streamFormat
         multiviewLayout = (try? c.decode(MultiviewLayout.self, forKey: .multiviewLayout)) ?? d.multiviewLayout
     }
 }

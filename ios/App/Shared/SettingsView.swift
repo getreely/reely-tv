@@ -291,8 +291,8 @@ private struct LiveSettings: View {
             Group_(title: "Watching") {
                 if !c.isPlaylist {
                     Choice_(title: "Stream type", note: "Try the other if channels stutter or won't start.", options: [
-                        Option(value: Prefs.StreamFormat.m3u8, label: "HLS", note: "Works with most providers."),
-                        Option(value: Prefs.StreamFormat.ts, label: "MPEG-TS", note: "Starts faster with some providers."),
+                        Option(value: Prefs.StreamFormat.ts, label: "MPEG-TS", note: "The default. Plays smoothly with most providers."),
+                        Option(value: Prefs.StreamFormat.m3u8, label: "HLS", note: "Apple's own player. Can stop to buffer with some providers."),
                     ], selected: Binding(get: { store.prefs.streamFormat }, set: { store.prefs.streamFormat = $0 }))
                 }
                 #if os(tvOS)

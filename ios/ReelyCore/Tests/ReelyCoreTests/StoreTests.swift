@@ -205,4 +205,16 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(old.subtitleScale, 0.9)
         XCTAssertEqual(Accent.of("nope").id, "blue")
     }
+
+    func testLiveTvIsTsUnlessSomeonePickedOtherwise() throws {
+        XCTAssertEqual(Prefs().streamFormat, .ts)
+        // Saved as HLS before TS was the default, without anyone choosing it: TS now.
+        let before = try JSONDecoder().decode(Prefs.self, from: Data(#"{"streamFormat": "m3u8"}"#.utf8))
+        XCTAssertEqual(before.streamFormat, .ts)
+        // Chosen in Settings: kept, through a save and a read.
+        var mine = Prefs()
+        mine.streamFormat = .m3u8
+        let again = try JSONDecoder().decode(Prefs.self, from: JSONEncoder().encode(mine))
+        XCTAssertEqual(again.streamFormat, .m3u8)
+    }
 }
