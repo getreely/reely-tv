@@ -173,6 +173,8 @@ private const val AUDIO_NOTICE_MS = 9_000L
 /** Attempts at picking a film up again after the connection drops, and the wait before the first. */
 private const val RECONNECT_TRIES = 3
 private const val RECONNECT_WAIT_MS = 3_000L
+/** How near the end a connection that fails counts as the end: see onPlayerError. */
+private const val END_GRACE_MS = 15_000L
 /** Half a minute of starting again, every two seconds, while the Fire TV notices headphones have gone. */
 private const val SOUND_RETRIES = 15
 private const val SOUND_RETRY_MS = 2_000L
@@ -751,6 +753,21 @@ fun PlayerScreen(
                 // transcoder is for. Network errors are not that, and stay errors.
                 val deviceCannotPlay = playbackError.errorCode in 3_000..5_999
                 val connection = playbackError.errorCode in 2_000..2_999
+                /*
+                 * The last few seconds not arriving is the end, not a lost connection: a
+                 * file whose tail can't be read failed there every time, each fresh try
+                 * went back to the same spot, and the newest episode of a show ended on
+                 * "Lost the connection" instead of closing. Anywhere earlier — the credits
+                 * included — it reconnects and plays on, so nothing is cut short.
+                 */
+                val at = exoPlayer.currentPosition.coerceAtLeast(0)
+                val length = exoPlayer.duration.takeIf { it > 0 } ?: currentPlayback.durationMs
+                if (connection && !currentPlayback.isLive && length > 0 && at >= length - END_GRACE_MS) {
+                    error = null
+                    ended = true
+                    onEnded()
+                    return
+                }
                 // Only a Plex server can convert; an IPTV provider's file plays as it is or not at all.
                 if (deviceCannotPlay && !currentPlayback.transcoding && currentPlayback.onPlex) {
                     onDecodeFailure(exoPlayer.currentPosition.coerceAtLeast(0))

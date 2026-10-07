@@ -1,7 +1,7 @@
 {
   "name": "reely-roku",
   "private": true,
-  "version": "0.57.27",
+  "version": "0.57.28",
   "description": "Reely for Roku: Plex, live TV and Requests, with the remote.",
   "scripts": {
     "check": "bsc --project bsconfig.json",

@@ -236,6 +236,15 @@ sub onState()
         if m.p <> invalid and (code = 0 or code = -1 or code = -2) then
             at = Int(m.video.position * 1000)
             if at <= 0 then at = m.lastMs
+            ' The last few seconds not arriving is the end, not a lost connection: a file whose
+            ' tail can't be read failed there every time, and each fresh try went back to the
+            ' same spot. Anywhere earlier, the credits included, it reconnects and plays on.
+            length = Num_(m.durationMs)
+            if m.video.duration > 0 then length = m.video.duration * 1000
+            if length > 0 and at >= length - 15000 then
+                ended()
+                return
+            end if
             if m.drops < 3 then
                 m.drops = m.drops + 1
                 m.retryAt = at

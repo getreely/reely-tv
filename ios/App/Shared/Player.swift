@@ -8,6 +8,9 @@ import ReelyCore
  * reports to Plex every ten seconds, as the Fire TV makes them. A file that won't play as
  * it is goes to Plex to convert, from where it had got to.
  */
+/// How near the end a connection that fails counts as the end: see itemStatus.
+let END_GRACE_MS = 15_000
+
 @MainActor
 @Observable
 final class PlayerModel {
@@ -120,6 +123,17 @@ final class PlayerModel {
         lastProblem = PlayerModel.describe(error)
         if PlayerModel.dropped(error), let p = store?.playing {
             let at = max(positionMs, p.startMs)
+            /*
+             * The last few seconds not arriving is the end, not a lost connection: a file whose
+             * tail can't be read failed there every time, and each fresh try went back to the
+             * same spot. Anywhere earlier, the credits included, it reconnects and plays on.
+             */
+            let length = durationMs > 0 ? durationMs : p.item.durationMs
+            if length > 0 && at >= length - END_GRACE_MS {
+                failed = nil
+                ended = true
+                return
+            }
             if drops < RECONNECT_TRIES {
                 drops += 1
                 failed = "Reconnecting…"

@@ -23,6 +23,8 @@ const episodeLine = (i: PlexItem) =>
 export const SLEEP_CHOICES = [0, 15, 30, 45, 60, 90, -1];
 const END_OF_EPISODE = -1;
 // After the connection drops: fresh tries, the wait growing by this each time, then OK.
+/** How near the end a connection that fails counts as the end: see fail. */
+const END_GRACE_MS = 15_000;
 const RECONNECT_TRIES = 3;
 const RECONNECT_WAIT_MS = 3_000;
 
@@ -151,6 +153,16 @@ export function Player(props: { app: App; playing: Playing; prefs?: Prefs }) {
     const fail = () => {
       if (v.error?.code === MediaError.MEDIA_ERR_NETWORK) {
         const at = now();
+        /*
+         * The last few seconds not arriving is the end, not a lost connection: a file whose
+         * tail can't be read failed there every time, and each fresh try went back to the
+         * same spot. Anywhere earlier, the credits included, it reconnects and plays on.
+         */
+        const length = total();
+        if (length > 0 && at >= length - END_GRACE_MS) {
+          ended();
+          return;
+        }
         if (drops.current < RECONNECT_TRIES) {
           drops.current++;
           setError("Reconnecting…");
