@@ -100,6 +100,10 @@ struct VLCSurface: UIViewRepresentable {
     func makeUIView(context: Context) -> UIView {
         let host = UIView()
         host.backgroundColor = .black
+        // Only a picture: a tap is the player's, to bring its controls back. VLC's view took
+        // them for itself, and with a channel playing through VLC the controls never came back.
+        host.isUserInteractionEnabled = false
+        engine.view.isUserInteractionEnabled = false
         engine.view.frame = host.bounds
         engine.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         host.addSubview(engine.view)

@@ -46,7 +46,7 @@ struct PlayerView: View {
         ZStack {
             Color.black.ignoresSafeArea()
             if model.usingVLC, let engine = model.vlc {
-                VLCSurface(engine: engine).ignoresSafeArea()
+                VLCSurface(engine: engine).ignoresSafeArea().allowsHitTesting(false)
             } else {
                 #if os(iOS)
                 VideoSurface(player: model.player, pip: pip).ignoresSafeArea()
