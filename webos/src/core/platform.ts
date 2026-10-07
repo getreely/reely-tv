@@ -14,8 +14,13 @@ export function shell(): Shell | null {
   return (window as unknown as { ReactNativeWebView?: Shell }).ReactNativeWebView ?? null;
 }
 
-/** Running inside the Vega app's WebView. */
-export const isVega = (): boolean => shell() !== null;
+/**
+ * Running inside the Vega app's WebView. The shell marks the page before anything on it
+ * runs, as well as putting its messenger there: the page asks first thing (which server
+ * fetch to use), and mustn't take itself for an LG TV for want of the messenger yet.
+ */
+export const isVega = (): boolean =>
+  shell() !== null || (typeof window !== "undefined" && (window as unknown as { __reelyVega?: boolean }).__reelyVega === true);
 
 /**
  * [changed] when the app goes away (Home, another app) and when it comes back, once each:

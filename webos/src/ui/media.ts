@@ -77,7 +77,10 @@ export function setSource(v: HTMLVideoElement, url: string) {
   }
   if (vega && isTs(url) && !v.canPlayType("video/mp2t") && mpegts.isSupported()) {
     v.removeAttribute("src");
-    const player = mpegts.createPlayer({ type: "mpegts", isLive: true, url }, { enableWorker: true, lazyLoad: false, liveBufferLatencyChasing: false });
+    // A channel is live; a programme from its archive (catch-up, Start over) is recorded,
+    // and skipping about in it needs mpegts.js to know.
+    const live = !/\/timeshift\//.test(url);
+    const player = mpegts.createPlayer({ type: "mpegts", isLive: live, url }, { enableWorker: true, lazyLoad: false, liveBufferLatencyChasing: false });
     player.on(mpegts.Events.ERROR, (type: string) => fail(v, type === mpegts.ErrorTypes.NETWORK_ERROR ? "network" : "media"));
     player.attachMediaElement(v);
     player.load();

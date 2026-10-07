@@ -4,7 +4,7 @@ import { WebView } from '@amazon-devices/webview';
 import type { WebViewMessageEvent, WebViewMethods } from '@amazon-devices/webview/dist/types/WebViewTypes';
 import { useHideSplashScreenCallback, usePreventHideSplashScreen } from '@amazon-devices/react-native-kepler';
 import { useReportFullyDrawn } from '@amazon-devices/kepler-performance-api';
-import { BACK_PRESS, answerParts, appState, deliver, failedPart, parseMessage } from './answer';
+import { BACK_PRESS, BEFORE_PAGE, answerParts, appState, deliver, failedPart, parseMessage } from './answer';
 
 /*
  * Reely on Vega: the LG app's page (built into assets/web) in a WebView. The page does
@@ -91,6 +91,7 @@ export const App = () => {
         mediaPlaybackRequiresUserAction={false}
         thirdPartyCookiesEnabled={true}
         allowsDefaultMediaControl={true}
+        injectedJavaScriptBeforeContentLoaded={BEFORE_PAGE}
         onMessage={onMessage}
         onLoad={onLoad}
         onError={onError}

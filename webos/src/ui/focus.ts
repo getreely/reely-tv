@@ -187,6 +187,8 @@ export function installKeys(onUnhandledBack: () => void) {
     (event) => {
       const action = actionOf(event);
       if (!action) return;
+      // Backspace in a text box deletes, as typing on a keyboard expects; it's only Back elsewhere.
+      if (action === "back" && event.key === "Backspace" && document.activeElement instanceof HTMLInputElement) return;
       pressedAt = Date.now();
       // OK held down: the remote repeats it. Past HOLD_MS it's a hold, once, for whatever
       // takes one (a poster's menu); nothing else hears the repeats.

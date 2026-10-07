@@ -79,3 +79,9 @@ export const BACK_PRESS = `(function () {
 /** Script that tells the page the app went away or came back, should the WebView not say so itself. */
 export const appState = (away: boolean) =>
   `document.dispatchEvent(new CustomEvent('reely-app-state', { detail: ${away ? '"away"' : '"back"'} })); true;`;
+
+/**
+ * Run before the page's own script: marks it as Vega's, since it asks first thing, before
+ * the messenger may be there. (Smooth scrolling is left on, as the Fire TV app scrolls.)
+ */
+export const BEFORE_PAGE = `window.__reelyVega = true; true;`;

@@ -60,7 +60,8 @@ export const vegaFetch = (local: typeof fetch, remote: typeof shellFetch): typeo
 export const forgetShellServers = () => viaShell.clear();
 
 /** The fetch in use: the browser's (with the shell behind it on Vega), or a test's. */
-export let fetcher: typeof fetch = isVega() ? vegaFetch((input, init) => fetch(input, init), shellFetch) : (input, init) => fetch(input, init);
+const onVega = vegaFetch((input, init) => fetch(input, init), shellFetch);
+export let fetcher: typeof fetch = (input, init) => (isVega() ? onVega(input, init) : fetch(input, init));
 
 export function useFetcher(next: typeof fetch) {
   fetcher = next;
