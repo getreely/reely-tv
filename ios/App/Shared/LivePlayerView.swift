@@ -39,7 +39,16 @@ final class LiveModel {
         if !applePlays(url) { startVLC(address); return }
         stopVLC()
         let item = AVPlayerItem(url: address)
-        item.preferredForwardBufferDuration = largerBuffer ? 120 : 0
+        /*
+         * Left to itself, Apple's player joins a live stream as near its newest moment as it
+         * can, with a few seconds in hand; a provider's stream arriving in ten-second pieces,
+         * a little late now and then, ran dry every piece or two — buffering every fifteen
+         * seconds. So it sits back from the live edge and keeps more in hand, as the Fire
+         * TV's player does (thirty seconds ahead; two minutes with the larger buffer).
+         */
+        item.preferredForwardBufferDuration = largerBuffer ? 120 : 30
+        item.automaticallyPreservesTimeOffsetFromLive = true
+        item.configuredTimeOffsetFromLive = CMTime(seconds: largerBuffer ? 45 : 25, preferredTimescale: 1)
         observations.append(item.observe(\.status, options: [.new]) { [weak self] item, _ in
             let status = item.status
             Task { @MainActor in
