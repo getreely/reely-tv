@@ -73,7 +73,9 @@
  * isn't there, when the button still works.
  */
 - (void)allowStartingByLeaving:(id<VLCPictureInPictureWindowControlling>)controller {
-    if (@available(iOS 14.2, tvOS 14.2, *)) {
+#if TARGET_OS_IOS
+    // iPhone and iPad: Apple TV has no leaving the app with something playing.
+    if (@available(iOS 14.2, *)) {
         id inner = nil;
         @try {
             inner = [(NSObject *)controller valueForKey:@"avPipController"];
@@ -84,6 +86,7 @@
             ((AVPictureInPictureController *)inner).canStartPictureInPictureAutomaticallyFromInline = YES;
         }
     }
+#endif
 }
 
 - (void)startPictureInPicture { [self.pip startPictureInPicture]; }
