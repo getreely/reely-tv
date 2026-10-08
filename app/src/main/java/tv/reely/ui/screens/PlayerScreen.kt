@@ -1,5 +1,8 @@
 package tv.reely.ui.screens
 
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -300,6 +303,11 @@ fun PlayerScreen(
      * A television never sends a touch, so there this changes nothing.
      */
     touch: Boolean = false,
+    /**
+     * On a phone: the guide asked for, as a sheet of channels over the picture rather than
+     * the remote's grid (see TouchChannelSheet). Null on a television.
+     */
+    onTouchGuide: ((GuideRequest) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -414,6 +422,11 @@ fun PlayerScreen(
     // closing it cannot half-forget — see GuideRequest.
     var guideRequest by remember { mutableStateOf(GuideRequest.Closed) }
     val guideOpen = guideRequest.open
+    // The guide asked for: the remote's grid over the picture, or on a phone, the sheet.
+    val openGuide: (GuideRequest) -> Unit = { request ->
+        // The sheet has the categories too, so it opens with no channels open as well.
+        if (touch && onTouchGuide != null) onTouchGuide(request.copy(open = true)) else guideRequest = request
+    }
 
     // Which tile the held-OK menu is open over, if any.
     var tileMenu by remember { mutableStateOf<Int?>(null) }
@@ -1098,12 +1111,45 @@ fun PlayerScreen(
             .then(
                 if (!touch) Modifier
                 else Modifier
-                    .pointerInput(playback.url) {
+                    .pointerInput(playback.url, slotCount, zoomed, focusLayout, focusedTile, places) {
+                        /*
+                         * With several channels up, as on the iPhone: a tap hears a tile, a
+                         * double tap makes it full screen and back, a hold has its menu, and
+                         * the spare cell adds one. The place under a finger, by the tiles'
+                         * own layout; full screen, it's the one zoomed.
+                         */
+                        val gap = 3.dp.roundToPx()
+                        fun placeAt(at: Offset): Int? {
+                            if (slotCount <= 1 || zoomed != null) return focusedTile
+                            val rects = if (focusLayout) focusRects(slotCount, focusedTile, size.width, size.height, gap)
+                            else gridRects(slotCount, size.width, size.height, gap)
+                            return rects.indexOfFirst { it.contains(IntOffset(at.x.toInt(), at.y.toInt())) }.takeIf { it >= 0 }
+                        }
                         detectTapGestures(
-                            onTap = {
+                            onTap = { at ->
+                                if (slotCount > 1 && zoomed == null) {
+                                    val place = placeAt(at) ?: return@detectTapGestures
+                                    if (place == addSlot) { focusedTile = place; openGuide(GuideRequest.add(live.channels.isNotEmpty())); return@detectTapGestures }
+                                    if (place != focusedTile) { focusedTile = place; return@detectTapGestures }
+                                }
                                 if (controlsVisible) controlsVisible = false else interaction++
                             },
+                            onLongPress = { at ->
+                                if (!playback.isLive) return@detectTapGestures
+                                val place = placeAt(at) ?: return@detectTapGestures
+                                if (place == addSlot) return@detectTapGestures
+                                focusedTile = place
+                                tileMenu = tileIn(place)
+                            },
                             onDoubleTap = { at ->
+                                if (slotCount > 1) {
+                                    val place = placeAt(at) ?: return@detectTapGestures
+                                    if (place == addSlot) return@detectTapGestures
+                                    focusedTile = place
+                                    val tile = tileIn(place)
+                                    zoomed = if (zoomed == tile) null else tile
+                                    return@detectTapGestures
+                                }
                                 // Not live: there, the bar is the programme and the archive's.
                                 if (playback.isLive) return@detectTapGestures
                                 val forward = at.x > size.width / 2
@@ -1199,7 +1245,7 @@ fun PlayerScreen(
                                 }
 
                                 focusedTile == addSlot ->
-                                    guideRequest = GuideRequest.add(live.channels.isNotEmpty())
+                                    openGuide(GuideRequest.add(live.channels.isNotEmpty()))
 
                                 // Fills the screen with this one and leaves the rest
                                 // running behind it. Again, or back, returns to the grid.
@@ -1323,7 +1369,7 @@ fun PlayerScreen(
                         // one picture here. Sideways does nothing rather than surprising
                         // somebody by retuning a tile they were only walking past.
                         interaction++
-                        if (dy > 0) guideRequest = GuideRequest.browse(live.channels.isNotEmpty())
+                        if (dy > 0) openGuide(GuideRequest.browse(live.channels.isNotEmpty()))
                         return@onPreviewKeyEvent true
                     }
                 }
@@ -1344,7 +1390,7 @@ fun PlayerScreen(
                         }
 
                         Key.DirectionDown -> {
-                            guideRequest = GuideRequest.browse(live.channels.isNotEmpty())
+                            openGuide(GuideRequest.browse(live.channels.isNotEmpty()))
                             return@onPreviewKeyEvent true
                         }
 
@@ -1593,6 +1639,25 @@ fun PlayerScreen(
                 }) { TenSeconds(forward = true) }
             }
         }
+        // Live on a phone, as on the iPhone: the channel before, the channels to change to
+        // (the guide's touch way, over the picture), and the next.
+        if (controlsShowing && touch && playback.isLive && onTouchGuide != null) {
+            Row(
+                modifier = Modifier.align(Alignment.Center),
+                horizontalArrangement = Arrangement.spacedBy(36.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TouchRound(size = 60.dp, description = "Previous channel", onClick = { onStepChannel(-1); interaction++ }) {
+                    tv.reely.ui.components.ArrowGlyph(Chalk, left = true, size = 24.dp, modifier = Modifier.rotate(90f))
+                }
+                TouchRound(size = 78.dp, description = "Channels", onClick = { openGuide(GuideRequest.browse(true)) }) {
+                    tv.reely.ui.components.ChaptersGlyph(Chalk, 30.dp)
+                }
+                TouchRound(size = 60.dp, description = "Next channel", onClick = { onStepChannel(1); interaction++ }) {
+                    tv.reely.ui.components.ArrowGlyph(Chalk, left = true, size = 24.dp, modifier = Modifier.rotate(-90f))
+                }
+            }
+        }
         if (controlsShowing) {
             PlayerClock(
                 endsAtMs = if (!playback.isLive && durationMs > 0) {
@@ -1648,7 +1713,7 @@ fun PlayerScreen(
                     interaction++
                     playPause()
                 },
-                onAddChannel = { guideRequest = GuideRequest.add(live.channels.isNotEmpty()) },
+                onAddChannel = { openGuide(GuideRequest.add(live.channels.isNotEmpty())) },
                 onOpenSubtitles = { panel = Panel.SUBTITLES },
                 onOpenAudio = { panel = Panel.AUDIO },
                 onOpenStats = { panel = Panel.STATS },
@@ -1828,11 +1893,11 @@ fun PlayerScreen(
                 },
                 onAdd = {
                     tileMenu = null
-                    guideRequest = GuideRequest.add(live.channels.isNotEmpty())
+                    openGuide(GuideRequest.add(live.channels.isNotEmpty()))
                 },
                 onReplace = {
                     tileMenu = null
-                    guideRequest = GuideRequest.replace(slot, live.channels.isNotEmpty())
+                    openGuide(GuideRequest.replace(slot, live.channels.isNotEmpty()))
                 },
                 onClose = {
                     tileMenu = null

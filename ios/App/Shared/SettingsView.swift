@@ -96,6 +96,9 @@ private let SCREENSAVER_CHOICES = [0, 3, 5, 10]
 
 struct SettingsSection: View {
     @Environment(ReelyStore.self) private var store
+    /// The problem report, read as About opens: kept on the device only.
+    @State private var problem: Problem?
+    @State private var readingProblem = false
     let section: SettingsView.Section
 
     var body: some View {
@@ -253,6 +256,7 @@ struct SettingsSection: View {
             Text("Your Plex library and live TV, in one place.").font(Typeface.meta).foregroundStyle(Color.chalk)
             Text("Version \(ReelyApp.version)").font(Typeface.label).foregroundStyle(Color.muted)
         }
+        .onAppear { problem = store.lastProblem }
         #if os(tvOS)
         Group_(title: "Help") {
             Row_(title: "Take the tour again", note: "How to get around with the remote.", value: nil) {
@@ -260,6 +264,22 @@ struct SettingsSection: View {
             }
         }
         #endif
+        if let problem {
+            Group_(title: "Problem report", note: "Kept on this device only. Nothing is sent anywhere.") {
+                Row_(title: "Something went wrong",
+                     note: "\(Date(timeIntervalSince1970: TimeInterval(problem.at)).formatted(date: .abbreviated, time: .shortened))  ·  \(problem.message)",
+                     value: readingProblem ? "Hide" : "View") { readingProblem.toggle() }
+                if readingProblem {
+                    Text(problem.detail ?? problem.message).font(Typeface.geist(12)).foregroundStyle(Color.muted)
+                        .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(dp(12))
+                }
+                Row_(title: "Clear the report", note: nil, value: nil) {
+                    store.clearProblem()
+                    self.problem = nil
+                    readingProblem = false
+                }
+            }
+        }
         Group_(title: "Licenses") {
             Row_(title: "Geist", note: "The typeface.", value: "SIL Open Font License", action: nil)
             Row_(title: "VLCKit", note: "VideoLAN's player, for files and streams Apple's can't open.", value: "LGPL 2.1", action: nil)

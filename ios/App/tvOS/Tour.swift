@@ -10,8 +10,8 @@ let TOUR: [(title: String, body: String, key: String?)] = [
     ("Welcome to Reely", "A quick look at getting around with your remote. It takes a minute, and you can skip it.", nil),
     ("The top row", "Press Up to reach the tabs: Search, Home, Movies, TV Shows, Live TV and Request. Settings is the gear on the right. Moving onto a tab opens it.", "Up"),
     ("Hold for more", "Press and hold the clickpad on any poster for more: carry on or start again, mark it watched, or go to its page. On a show, it plays the next episode.", "Press and hold"),
-    ("While you watch", "Left and Right skip back and forward ten seconds. Press the clickpad for subtitles, sound, chapters and the sleep timer. Back puts them away.", "Left · Right"),
-    ("Live TV", "Left and Right change channel, and Down opens the guide over it. Press the clickpad for Start over, Favorites and a channel by its number. In the guide, choosing something to come reminds you when it starts.", "Down"),
+    ("While you watch", "Left and Right move back and forward, ten seconds a press, with a picture of where you'll land; it goes there when you stop. Press the clickpad for subtitles, sound, chapters and the sleep timer. Back puts them away.", "Left · Right"),
+    ("Live TV", "Left and Right change channel, and Down opens the guide over it. Press the clickpad for Start over, Favorites and a channel by its number; press and hold it to watch up to four channels at once. In the guide, choosing something to come reminds you when it starts.", "Down"),
     ("Can't find something?", "The Request tab finds movies and shows your server doesn't have yet and asks for them. The first time, enter your Reely address there.", nil),
     ("You're all set", "You can take this tour again from Settings, under About.", nil),
 ]

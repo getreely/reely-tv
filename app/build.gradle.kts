@@ -19,8 +19,8 @@ android {
         // Keystore-backed credential store needs API 23 and Compose is painful below it.
         minSdk = 23
         targetSdk = 34
-        versionCode = 1184
-        versionName = "0.57.27"
+        versionCode = 1185
+        versionName = "0.57.28"
         // The build from GitHub keeps itself up to date; a store's build leaves that to the store.
         buildConfigField("boolean", "SELF_UPDATE", "true")
         // Only the store build draws behind the system bars (see androidComponents below).

@@ -331,3 +331,75 @@ internal fun Field(
         modifier = modifier.fillMaxWidth(),
     )
 }
+
+/**
+ * Over a channel on a phone, as the iPhone has it: the categories, and their channels to
+ * change to, while the one playing plays on until another is chosen. On a television the
+ * guide comes up over the channel with Down; this is the touch way to it. Opened from
+ * Multiview, a channel chosen goes beside what's playing, or into the tile it was opened for.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun TouchChannelSheet(viewModel: ReelyViewModel, state: ReelyState, request: tv.reely.core.GuideRequest, onDismiss: () -> Unit) {
+    val live = state.live
+    val now by produceState(System.currentTimeMillis() / 1000) {
+        while (true) {
+            delay(30_000)
+            value = System.currentTimeMillis() / 1000
+        }
+    }
+    val playing = state.playback?.takeIf { it.isLive }?.channelIndex?.let { live.channels.getOrNull(it)?.streamId }
+    // Only adding is held to four: replacing a tile never adds one.
+    val full = request.adds && request.replaces == null && state.multiview.size >= 3
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false),
+        containerColor = SurfaceRaised,
+    ) {
+        if (request.adds) {
+            Text(
+                if (request.replaces != null) "Replace with a channel" else "Add a channel beside this one",
+                style = MaterialTheme.typography.titleLarge,
+                color = Chalk,
+                modifier = Modifier.padding(horizontal = 20.dp),
+            )
+            if (full) TouchNote("You can watch up to four channels at once.")
+        }
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(live.shownCategories, key = { it.id }) { category ->
+                TouchChip(category.name, selected = category.id == live.selectedCategory?.id, onClick = { viewModel.openCategory(category) })
+            }
+        }
+        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+            if (live.busy && live.channels.isEmpty()) {
+                item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Accent) } }
+            }
+            itemsIndexed(live.channels, key = { _, channel -> channel.streamId }) { index, channel ->
+                val listing = listingFor(state, channel)
+                Box(Modifier.background(if (channel.streamId == playing) SurfaceHigh else androidx.compose.ui.graphics.Color.Transparent)) {
+                    ChannelRow(
+                        channel = channel,
+                        favorite = channel.streamId in live.favorites,
+                        on = listing.firstOrNull { it.isOnAt(now) },
+                        next = listing.firstOrNull { it.start >= now },
+                        now = now,
+                        onPlay = {
+                            when {
+                                request.replaces != null -> { onDismiss(); viewModel.replaceInMultiview(request.replaces, channel) }
+                                request.adds -> if (!full) { onDismiss(); viewModel.addToMultiview(channel) }
+                                else -> { onDismiss(); viewModel.playChannel(index) }
+                            }
+                        },
+                        // Held, from the plain list: beside what's playing, as the TV guide's menu offers.
+                        onHold = {
+                            if (!request.adds && state.multiview.size < 3) { onDismiss(); viewModel.addToMultiview(channel) }
+                        },
+                    )
+                }
+            }
+        }
+    }
+}

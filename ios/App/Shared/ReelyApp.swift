@@ -5,6 +5,7 @@ import ReelyCore
 struct ReelyApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var store: ReelyStore
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         let defaults = DefaultsStore()
@@ -46,7 +47,17 @@ struct ReelyApp: App {
                 .environment(\.accent, Accent.of(store.prefs.accent))
                 .tint(Accent.of(store.prefs.accent).swiftColor)
                 .preferredColorScheme(.dark)
+                // The problem report: an end while open noticed at the next launch, and on
+                // iPhone and iPad, a crash as iOS reports it (see AppDelegate).
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .background { store.noteAway() }
+                    if phase == .active { store.noteBack() }
+                }
                 .task {
+                    if !ProcessInfo.processInfo.arguments.contains("-demo") { store.noteLaunched() }
+                    #if os(iOS)
+                    AppDelegate.onProblem = { [store] message, detail, at in store.recordProblem(message, detail: detail, now: at) }
+                    #endif
                     await store.start()
                     // Where a screenshot asks to be: a page opened, as somebody would open it.
                     let args = ProcessInfo.processInfo.arguments

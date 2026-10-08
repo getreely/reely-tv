@@ -51,7 +51,7 @@ None of it has been tried on a Vega device yet: building the app needs Amazon's 
 | Subtitles off at the start (forced ones still shown) | ✅ | ✅ (same setting) | ✅ | ✅ | 🟡 (built; not yet tried on a device) |
 | Find subtitles online | ✅ | ✅ | ✅ | ✅ (found, added and switched on, in the simulator) | 🟡 (built; not yet tried on a device) |
 | Skip intro and credits; Up Next; next season | ✅ | ✅ | ✅ | ✅ (Skip Intro in the simulator; Up Next and skipping in unit tests) | 🟡 (built; not yet tried on a device) |
-| Chapters, preview pictures while scrubbing | ✅ | ✅ | ✅ | 🟡 (chapters tested; preview pictures are Roku's own, from Plex's index) | 🟡 (chapters built; no preview pictures yet) |
+| Chapters, preview pictures while scrubbing | ✅ | ✅ | ✅ | 🟡 (chapters tested; preview pictures are Roku's own, from Plex's index) | 🟡 (chapters, and the picture above the bar while dragging it, or while scrubbing with left and right on Apple TV; built) |
 | Sleep timer | ✅ | ✅ | ✅ | 🟡 (offered in the player; built) | 🟡 (built; not yet tried on a device) |
 | A dropped connection picks up again: a fresh stream from where it was, three tries, then OK / Try again | ✅ | ✅ | 🟡 (built; not yet tried on a TV) | 🟡 (built; not yet tried on a device) | 🟡 (built; unit-tested) |
 | Choose where sound plays (Bluetooth headphones) | ✅ | ✅ | — | — | 🟡 (AirPlay picker in Settings on iPhone and iPad; Apple TV's own) |
@@ -61,11 +61,11 @@ None of it has been tried on a Vega device yet: building the app needs Amazon's 
 | Categories, favorites, recently watched | ✅ | ✅ | ✅ | ✅ | 🟡 (built; seen in the simulator, not yet tried on a device) |
 | Guide (grid on TV, list on phone), now and next | ✅ | ✅ | ✅ (grid) | ✅ (grid) | 🟡 (built; seen in the simulator, not yet tried on a device) |
 | A playlist's own XMLTV guide (named in it or entered at sign-in), read whole and kept; "TV guide: None" in Settings when there isn't one | ✅ | ✅ | ✅ (a gzipped guide opens on 2022 TVs and later, webOS 22 on; older ones say they can't) | ✅ (six hours back to a day and a half ahead; a gzipped guide can't be opened on a Roku, and it says so) | 🟡 (built and unit-tested) |
-| Down while watching a channel: the guide over it, the channel playing on; categories above, OK to watch (or from the archive), a channel menu with a reminder and Favorites, Back to put it away | ✅ | ⬜ (no touch way to it yet: the guide is a separate page) | ✅ | ✅ (the menu on ✱, as everywhere on a Roku; categories in it as well as above, as a Roku's grid goes round from the first channel) | 🟡 (Apple TV, seen in the simulator; on iPhone the Channels button over the channel) |
+| Down while watching a channel: the guide over it, the channel playing on; categories above, OK to watch (or from the archive), a channel menu with a reminder and Favorites, Back to put it away | ✅ | ✅ (the Channels button over the channel: categories and their channels in a sheet, the channel playing on) | ✅ | ✅ (the menu on ✱, as everywhere on a Roku; categories in it as well as above, as a Roku's grid goes round from the first channel) | 🟡 (Apple TV, seen in the simulator; on iPhone the Channels button over the channel) |
 | Catch-up, start over, rewind and Go live | ✅ | ✅ | ✅ (coloured keys) | ✅ (catch-up tested; Start over and Go live on ✱) | 🟡 (built; not yet tried on a device) |
 | Reminders | ✅ | ✅ | ✅ | ✅ (set in the guide; when they're due, unit-tested) | 🟡 (built and unit-tested) |
 | Channel up/down, numbers on the remote | ✅ | ✅ (swipe) | ✅ | ✅ (left and right; Roku remotes have no number keys) | 🟡 (left and right on Apple TV, swipe on iPhone; numbers typed in, as the Siri remote has no number keys) |
-| Multiview | ✅ | 🟡 (through the player's menus) | — (webOS gives an app one video at a time; on Vega, ✅, as above) | — | 🟡 (built: up to four, grid or focus, the tile menu on a long press or held OK, saved set; not yet tried on a device) |
+| Multiview | ✅ | ✅ (a tap hears a tile, a double tap makes it full screen, a hold has its menu; channels added from the sheet) | — (webOS gives an app one video at a time; on Vega, ✅, as above) | — | 🟡 (built: up to four, grid or focus, the tile menu on a long press or held OK, saved set; not yet tried on a device) |
 | **IPTV movies and shows** | | | | | |
 | Switch, tabs' IPTV library, Home rows, search, IPTV badge | ✅ | ✅ | ✅ | ✅ (switch, Movies tab, Home row, search and a series' page in the simulator) | 🟡 (built and unit-tested; MKV and the like play in VLC's player, the file's own sound and subtitle tracks with them) |
 | Matching with Plex, winner chosen | ✅ | ✅ | ✅ | ✅ (matching in the simulator; the winner unit-tested) | 🟡 (unit-tested) |
@@ -77,8 +77,8 @@ None of it has been tried on a Vega device yet: building the app needs Amazon's 
 | **App** | | | | | |
 | Settings (every row) | ✅ | ✅ (same rows) | ✅ (all but frame rate, buffer and Bluetooth, which webOS handles itself) | ✅ (theme music on or off: the Roku gives an app's sound no volume of its own; channels and the guide are read afresh each time Live TV opens; frame rate, buffer, Bluetooth and subtitle style are the Roku's own) | 🟡 (every row that applies; seen in the simulator) |
 | Updates from GitHub | ✅ | ✅ | — (store) | — (store) | — (store) |
-| Screensaver, remote tour | ✅ | — | ✅ | ✅ (the Roku starts the screensaver after its own idle time, set in its Settings) | 🟡 (Apple TV screensaver built; no remote tour yet) |
-| Crash report | ✅ | ✅ | ✅ (problem report) | 🟡 (problem report of what fails in background work; Roku gives apps no hook for the rest) | ⬜ |
+| Screensaver, remote tour | ✅ | — | ✅ | ✅ (the Roku starts the screensaver after its own idle time, set in its Settings) | 🟡 (Apple TV: screensaver and the remote tour, again from Settings; built) |
+| Crash report | ✅ | ✅ | ✅ (problem report) | 🟡 (problem report of what fails in background work; Roku gives apps no hook for the rest) | 🟡 (a crash as iOS reports it on iPhone and iPad, and an end while open everywhere, in Settings under About; built) |
 
 ## Look and feel
 

@@ -32,9 +32,11 @@ struct PlayerView: View {
     #endif
     @State private var findNote: String?
     @State private var adding: String?
-    #if os(iOS)
-    /// Where the finger has the bar while scrubbing: the picture goes there on letting go.
+    /// Where the bar is being taken while scrubbing (a finger on it, or left and right on the
+    /// remote): the picture goes there on letting go, or when the remote's been still a moment.
     @State private var scrubMs: Int?
+    @State private var scrubGoes: Task<Void, Never>?
+    #if os(iOS)
     /// The last tap, to tell a double tap (skip) from a single one (the controls).
     @State private var lastTap: (at: Date, left: Bool)?
     #endif
@@ -121,8 +123,21 @@ struct PlayerView: View {
         }
         .onMoveCommand { direction in
             showControls()
-            if focus == nil || focus == .play || surface {
-                if direction == .left { model.skip(-10) } else if direction == .right { model.skip(10) }
+            /*
+             * Left and right scrub, as on the Fire TV: each press moves the bar ten seconds and
+             * shows the picture there; the video goes there once the presses stop. Each press
+             * used to jump the video at once, with nothing to see of where it was going.
+             */
+            if focus == nil || focus == .play || surface, direction == .left || direction == .right {
+                let from = scrubMs ?? model.positionMs
+                scrubMs = min(max(0, from + (direction == .left ? -10_000 : 10_000)), max(0, model.durationMs - 1_000))
+                scrubGoes?.cancel()
+                scrubGoes = Task {
+                    try? await Task.sleep(nanoseconds: 900_000_000)
+                    guard !Task.isCancelled, let at = scrubMs else { return }
+                    model.seek(toMs: at)
+                    scrubMs = nil
+                }
             }
         }
         #else
@@ -270,6 +285,11 @@ struct PlayerView: View {
                     Capsule().fill(accent.swiftColor).frame(width: x, height: scrubMs == nil ? 5 : 8)
                     Circle().fill(.white).frame(width: scrubMs == nil ? 13 : 20, height: scrubMs == nil ? 13 : 20)
                         .offset(x: x - (scrubMs == nil ? 6.5 : 10))
+                    // The picture where the finger is, from the server's preview pictures.
+                    if let at = scrubMs, let template = store.playing?.playback.previewUrl {
+                        ScrubPreview(template: template, ms: at, width: 176)
+                            .position(x: min(max(x, 88), g.size.width - 88), y: -66)
+                    }
                 }
                 .frame(maxHeight: .infinity)
                 .contentShape(Rectangle())
@@ -344,12 +364,19 @@ struct PlayerView: View {
     }
 
     private var scrubber: some View {
-        VStack(spacing: dp(6)) {
+        let shown = scrubMs ?? model.positionMs
+        return VStack(spacing: dp(6)) {
             GeometryReader { g in
-                let fraction = model.durationMs > 0 ? Double(model.positionMs) / Double(model.durationMs) : 0
+                let fraction = model.durationMs > 0 ? Double(shown) / Double(model.durationMs) : 0
+                let x = g.size.width * min(1, max(0, fraction))
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.white.opacity(0.25))
-                    Capsule().fill(accent.swiftColor).frame(width: g.size.width * min(1, max(0, fraction)))
+                    Capsule().fill(accent.swiftColor).frame(width: x)
+                    // Where the remote's taking it: the picture there, above the bar.
+                    if let at = scrubMs, let template = store.playing?.playback.previewUrl {
+                        ScrubPreview(template: template, ms: at, width: dp(320))
+                            .position(x: min(max(x, dp(160)), g.size.width - dp(160)), y: -dp(110))
+                    }
                 }
                 #if os(iOS)
                 .contentShape(Rectangle())
@@ -361,9 +388,9 @@ struct PlayerView: View {
             }
             .frame(height: dp(6))
             HStack {
-                Text(clock(model.positionMs))
+                Text(clock(shown))
                 Spacer()
-                Text("-" + clock(max(0, model.durationMs - model.positionMs)))
+                Text("-" + clock(max(0, model.durationMs - shown)))
             }
             .font(Typeface.label).foregroundStyle(Color.muted).monospacedDigit()
         }
@@ -659,5 +686,38 @@ struct PanelButton: View {
                 .modifier(FocusRing(shape: Capsule()))
         }
         .buttonStyle(CardStyle())
+    }
+}
+
+/**
+ * The picture at [ms], from the server's preview pictures (Plex makes them for a file when
+ * its library has them switched on), shown above the bar while scrubbing. One every ten
+ * seconds is asked for, and the last stays up until the next comes, so it doesn't flicker;
+ * a file without them shows nothing.
+ */
+struct ScrubPreview: View {
+    /// The server's address for one, with {ms} where the time goes.
+    let template: String
+    let ms: Int
+    let width: CGFloat
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image).resizable().aspectRatio(contentMode: .fill)
+                    .frame(width: width, height: width * 9 / 16)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.white.opacity(0.85), lineWidth: 2))
+                    .shadow(color: .black.opacity(0.5), radius: 10)
+            }
+        }
+        .allowsHitTesting(false)
+        .task(id: ms / 10_000) {
+            let at = (ms / 10_000) * 10_000
+            guard let url = URL(string: template.replacingOccurrences(of: "{ms}", with: String(at))) else { return }
+            let loaded = await ImageLoader.shared.image(url)
+            if !Task.isCancelled, let loaded { image = loaded }
+        }
     }
 }

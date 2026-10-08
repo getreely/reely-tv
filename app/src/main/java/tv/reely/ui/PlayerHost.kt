@@ -6,6 +6,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.delay
 import tv.reely.ui.screens.PlayerScreen
@@ -29,6 +31,8 @@ internal fun PlayerHost(viewModel: ReelyViewModel, state: ReelyState, touch: Boo
     }
 
     val playback = state.playback ?: return
+    // On a phone, the guide over a channel is a sheet of channels; see TouchChannelSheet.
+    var touchGuide by remember { mutableStateOf<tv.reely.core.GuideRequest?>(null) }
     CompositionLocalProvider(tv.reely.ui.screens.LocalTouchPlayer provides touch) {
         PlayerScreen(
             playback = playback,
@@ -89,6 +93,10 @@ internal fun PlayerHost(viewModel: ReelyViewModel, state: ReelyState, touch: Boo
             logoUrl = viewModel::plexLogoUrl,
             modifier = Modifier.fillMaxSize(),
             touch = touch,
+            onTouchGuide = if (touch) ({ touchGuide = it }) else null,
         )
+        touchGuide?.let { request ->
+            tv.reely.ui.touch.TouchChannelSheet(viewModel, state, request, onDismiss = { touchGuide = null })
+        }
     }
 }
