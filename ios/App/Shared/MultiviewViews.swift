@@ -43,7 +43,8 @@ final class TilePlayers {
             attempts[id] = nil
         }
         for (id, url) in wanted where models[id] == nil {
-            let model = LiveModel()
+            // Only the main channel's picture leaves the app in picture in picture.
+            let model = LiveModel(pictureInPicture: false)
             model.muted = true
             model.load(url, largerBuffer: largerBuffer)
             models[id] = model

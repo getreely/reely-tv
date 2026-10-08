@@ -179,8 +179,9 @@ struct PlayerView: View {
                         if let sub = subtitleLine { Text(sub).font(Typeface.geist(13, .medium)).foregroundStyle(.white.opacity(0.7)).lineLimit(1) }
                     }
                     Spacer()
-                    if pip.possible && !model.usingVLC {
-                        Button { pip.toggle() } label: {
+                    // Apple's player's picture in picture, or with VLC playing, VLC's own.
+                    if model.usingVLC ? model.vlcPictureInPicture : pip.possible {
+                        Button { if model.usingVLC { model.vlc?.togglePictureInPicture() } else { pip.toggle() } } label: {
                             Image(systemName: "pip.enter").font(.system(size: 19, weight: .semibold)).foregroundStyle(.white).frame(width: 40, height: 40)
                         }
                         .accessibilityLabel("Picture in picture")

@@ -13,7 +13,7 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.57.37"
+    MARKETING_VERSION: "0.57.38"
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_STYLE: Automatic
     ENABLE_USER_SCRIPT_SANDBOXING: YES
@@ -25,7 +25,7 @@ targets:
     dependencies:
       - package: ReelyCore
       # VLC's engine, for what Apple's player can't open: scripts/vlckit.sh fetches it.
-      - framework: Vendor/MobileVLCKit.xcframework
+      - framework: Vendor/VLCKit.xcframework
         embed: true
     sources:
       - path: App/Shared
@@ -52,6 +52,8 @@ targets:
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: tv.reely.app
+      # VLC's picture in picture is handed its view by Objective-C (VLCPictureView).
+      SWIFT_OBJC_BRIDGING_HEADER: App/Shared/Reely-Bridging-Header.h
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       TARGETED_DEVICE_FAMILY: "1,2"
   ReelyTV:
@@ -59,7 +61,7 @@ targets:
     type: application
     dependencies:
       - package: ReelyCore
-      - framework: Vendor/TVVLCKit.xcframework
+      - framework: Vendor/VLCKit.xcframework
         embed: true
     sources:
       - path: App/Shared
@@ -84,5 +86,6 @@ targets:
         UIBackgroundModes: [audio]
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: tv.reely.tv
+      SWIFT_OBJC_BRIDGING_HEADER: App/Shared/Reely-Bridging-Header.h
       ASSETCATALOG_COMPILER_APPICON_NAME: App Icon & Top Shelf Image
       TARGETED_DEVICE_FAMILY: "3"

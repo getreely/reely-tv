@@ -16,8 +16,14 @@ final class LiveModel {
     /// VLC playing: a channel sent as bare MPEG-TS, or one Apple's player wouldn't open.
     private(set) var usingVLC = false
     @ObservationIgnored private(set) var vlc: VLCEngine?
+    /// VLC's picture in picture is ready, or running: VLC's own, since Apple's has no picture of VLC's to take.
+    private(set) var vlcPictureInPicture = false
+    private(set) var vlcPictureInPictureActive = false
+    /// False for a Multiview tile: its picture never leaves the app.
+    @ObservationIgnored private let pictureInPicture: Bool
 
-    init() {
+    init(pictureInPicture: Bool = true) {
+        self.pictureInPicture = pictureInPicture
         observations.append(player.observe(\.timeControlStatus, options: [.new]) { [weak self] p, _ in
             let status = p.timeControlStatus
             Task { @MainActor in
@@ -117,7 +123,7 @@ final class LiveModel {
     private func startVLC(_ address: URL) {
         player.pause()
         player.replaceCurrentItem(with: nil)
-        let engine = vlc ?? VLCEngine()
+        let engine = vlc ?? VLCEngine(pictureInPicture: pictureInPicture)
         vlc = engine
         usingVLC = true
         failed = nil
@@ -126,6 +132,8 @@ final class LiveModel {
             guard let self, self.usingVLC else { return }
             self.playing = engine.isPlaying
             self.waiting = !engine.isPlaying
+            if self.vlcPictureInPicture != engine.pictureInPicturePossible { self.vlcPictureInPicture = engine.pictureInPicturePossible }
+            if self.vlcPictureInPictureActive != engine.pictureInPictureActive { self.vlcPictureInPictureActive = engine.pictureInPictureActive }
             if engine.hasFailed || engine.hasEnded { self.failed = LiveModel.notPlaying }
         }
         engine.load(address, startMs: 0, cachingMs: cachingMs)
@@ -546,9 +554,12 @@ struct LivePlayerView: View {
                 Spacer()
                 // AirPlay, as the film player has it: where the sound (and, with Apple's player, the picture) goes.
                 RoutePicker().frame(width: 40, height: 40)
-                if pip.possible && !model.usingVLC {
-                    Button { pip.toggle() } label: { Image(systemName: "pip.enter").font(.system(size: 20, weight: .semibold)) }
-                        .foregroundStyle(Color.chalk).accessibilityLabel("Picture in picture")
+                // Picture in picture: Apple's player's, or with a channel playing through VLC, VLC's own.
+                if model.usingVLC ? model.vlcPictureInPicture : pip.possible {
+                    Button { if model.usingVLC { model.vlc?.togglePictureInPicture() } else { pip.toggle() } } label: {
+                        Image(systemName: "pip.enter").font(.system(size: 20, weight: .semibold))
+                    }
+                    .foregroundStyle(Color.chalk).accessibilityLabel("Picture in picture")
                 }
             }
             #endif

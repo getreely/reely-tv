@@ -26,6 +26,8 @@ final class PlayerModel {
     private(set) var usingVLC = false
     @ObservationIgnored private(set) var vlc: VLCEngine?
     /// The file's own tracks, when VLC is playing it.
+    /// VLC's picture in picture is ready: VLC's own, as Apple's has no picture of VLC's to take.
+    private(set) var vlcPictureInPicture = false
     private(set) var vlcAudio: [VLCEngine.Track] = []
     private(set) var vlcSubtitles: [VLCEngine.Track] = []
     private(set) var vlcAudioId: Int32 = -1
@@ -256,6 +258,7 @@ final class PlayerModel {
         playing = engine.isPlaying
         buffering = engine.isBuffering
         if engine.hasEnded { ended = true }
+        if vlcPictureInPicture != engine.pictureInPicturePossible { vlcPictureInPicture = engine.pictureInPicturePossible }
         if engine.hasFailed { failed = "This couldn't be played. It may be in a form even VLC can't open, or your provider's connection limit reached." }
         let audio = engine.audioTracks, subtitles = engine.subtitleTracks
         if audio != vlcAudio { vlcAudio = audio }
