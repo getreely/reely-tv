@@ -271,7 +271,10 @@ struct SettingsSection: View {
                      value: readingProblem ? "Hide" : "View") { readingProblem.toggle() }
                 if readingProblem {
                     Text(problem.detail ?? problem.message).font(Typeface.geist(12)).foregroundStyle(Color.muted)
-                        .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(dp(12))
+                        #if os(iOS)
+                        .textSelection(.enabled)
+                        #endif
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(dp(12))
                 }
                 Row_(title: "Clear the report", note: nil, value: nil) {
                     store.clearProblem()
