@@ -131,7 +131,7 @@ struct WideCard: View {
                         }
                     }
                 Text(title).font(Typeface.meta).foregroundStyle(Color.chalk).lineLimit(1)
-                if let subtitle { Text(subtitle).font(Typeface.label).foregroundStyle(Color.muted).lineLimit(1) }
+                if let subtitle, !subtitle.isEmpty { Text(subtitle).font(Typeface.label).foregroundStyle(Color.muted).lineLimit(1) }
             }
             .frame(width: wideWidth)
         }

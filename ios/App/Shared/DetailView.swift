@@ -187,7 +187,7 @@ struct DetailView: View {
         CardRow(title: page.season?.title ?? "Episodes") {
             ForEach(page.episodes) { e in
                 WideCard(title: [e.caption, e.title].compactMap { $0 }.joined(separator: "  ·  "),
-                         subtitle: e.durationMs > 0 ? formatDuration(e.durationMs) : nil,
+                         subtitle: [e.durationMs > 0 ? formatDuration(e.durationMs) : nil, formatAirDate(e.airDate)].compactMap { $0 }.joined(separator: "  ·  "),
                          url: store.imageUrl(e.serverBase, e.thumb, width: 480, height: 270),
                          progress: e.resumeFraction, watched: e.isWatched) {
                     Task { await store.play(e, resume: true, queue: page.episodes) }

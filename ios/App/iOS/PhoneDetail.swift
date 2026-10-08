@@ -228,8 +228,10 @@ struct PhoneDetail: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text([e.index.map { "\($0)." }, e.title].compactMap { $0 }.joined(separator: " "))
                                 .font(Typeface.geist(15, .semibold)).foregroundStyle(Color.chalk).lineLimit(2)
-                            if e.durationMs > 0 {
-                                Text(formatDuration(e.durationMs)).font(Typeface.geist(12, .medium)).foregroundStyle(Color.muted)
+                            // Its length, and when it first aired.
+                            let facts = [e.durationMs > 0 ? formatDuration(e.durationMs) : nil, formatAirDate(e.airDate)].compactMap { $0 }
+                            if !facts.isEmpty {
+                                Text(facts.joined(separator: "  ·  ")).font(Typeface.geist(12, .medium)).foregroundStyle(Color.muted)
                             }
                             if let summary = e.summary {
                                 Text(summary).font(Typeface.geist(13)).foregroundStyle(Color.muted).lineLimit(3).multilineTextAlignment(.leading)
