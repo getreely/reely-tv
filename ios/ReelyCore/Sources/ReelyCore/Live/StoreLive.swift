@@ -298,8 +298,11 @@ extension ReelyStore {
     @discardableResult
     public func playCatchUp(_ index: Int, _ programme: Programme) -> Bool {
         guard live.channels.indices.contains(index), let c = live.credentials,
+              // The archive as the channel plays: MPEG-TS in VLC's player, HLS in Apple's. It used
+              // to be HLS whatever the channel was, so Start over on a TS channel swapped VLC for
+              // Apple's player mid-play, which took the app down.
               let url = Xtream.catchUpUrl(c, live.channels[index], start: programme.start, stop: programme.stop,
-                                            timezone: live.account?.timezone, format: .m3u8) else { return false }
+                                            timezone: live.account?.timezone, format: prefs.streamFormat == .ts ? .ts : .m3u8) else { return false }
         noteWatched(live.channels[index])
         live.watching = index
         live.catchUp = LiveState.CatchUp(programme: programme, url: url)

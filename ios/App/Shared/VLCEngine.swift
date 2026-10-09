@@ -98,12 +98,16 @@ final class VLCEngine {
 
     func seek(toMs ms: Int) { player.time = VLCTime(int: Int32(max(0, ms))) }
 
+    /*
+     * VLCKit 4 stops in the background: the media is left where it is until the next is
+     * given, rather than taken away while the player is still letting go of it, which is
+     * what VLCKit 3 allowed and VLCKit 4 doesn't survive.
+     */
     func stop() {
         timer?.invalidate()
         timer = nil
         stoppedHere = true
-        player.stop()
-        player.media = nil
+        if player.state != .stopped && player.state != .stopping { player.stop() }
     }
 
     // MARK: The file's own tracks

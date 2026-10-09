@@ -78,6 +78,18 @@ final class MultiviewTests: XCTestCase {
         XCTAssertEqual(store.live.multiview, [])
     }
 
+    func testTheArchiveIsAskedForAsTheChannelPlays() {
+        let store = watching()
+        let now = Int(Date().timeIntervalSince1970)
+        let on = Programme(channelId: "1", start: now - 600, stop: now + 600, title: "The Report", description: nil)
+        store.prefs.streamFormat = .ts
+        XCTAssertTrue(store.playCatchUp(0, on))
+        XCTAssertTrue(store.live.catchUp?.url.hasSuffix("/1.ts") ?? false)
+        store.prefs.streamFormat = .m3u8
+        XCTAssertTrue(store.playCatchUp(0, on))
+        XCTAssertTrue(store.live.catchUp?.url.hasSuffix("/1.m3u8") ?? false)
+    }
+
     func testTheArchiveOrLeavingIsOnePictureAgain() {
         let store = watching()
         store.addToMultiview(store.live.channels[1])

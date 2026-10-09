@@ -92,14 +92,18 @@ struct RootView: View {
     private let isDemo = ProcessInfo.processInfo.arguments.contains("-demo")
 
     var body: some View {
+        // Under a player, nothing of the pages behind may show at an edge: there it was a
+        // grey strip along the bottom, the tab bar and the page under the home bar.
+        let playerUp = store.playing != nil || store.live.watching != nil
         ZStack {
-            Color.ink.ignoresSafeArea()
+            (playerUp ? Color.black : Color.ink).ignoresSafeArea()
                 .onReceive(NotificationCenter.default.publisher(for: .chooseProfile)) { _ in choosingProfile = true }
                 .onReceive(NotificationCenter.default.publisher(for: .takeTour)) { _ in touring = true }
+            // Hidden rather than taken away: where you were is kept for coming back to.
             #if os(tvOS)
-            TVRoot()
+            TVRoot().opacity(playerUp ? 0 : 1)
             #else
-            PhoneRoot()
+            PhoneRoot().opacity(playerUp ? 0 : 1).allowsHitTesting(!playerUp)
             #endif
             // Signed in to a Plex Home of several: who's watching, once.
             if store.askWho || choosingProfile { ProfilesView { store.askedWho(); choosingProfile = false }.zIndex(2) }

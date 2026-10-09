@@ -233,6 +233,8 @@ struct LivePlayerView: View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             content(now: Int(context.date.timeIntervalSince1970))
         }
+        // Black to every edge, under the home bar too.
+        .background(Color.black.ignoresSafeArea())
         .onAppear { load(); showBanner(); syncTiles() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { model.wentAway(); tiles.wentAway() }
