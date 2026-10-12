@@ -669,6 +669,19 @@ export class App {
     if (!token) return;
     const user = this.store.json<PlexHomeUser | null>("plexUser", null);
     this.setPlex({ token, user });
+    // The Plex Home's people, for switching from the profile or Settings: asked for beside
+    // connecting, and nothing lost when they can't be.
+    const account = this.store.get("plexAccountToken") ?? token;
+    void plex.homeUsers(account).then((homeUsers) => {
+      if (this.current.plex.token === token) this.setPlex({ homeUsers });
+    }).catch(() => undefined);
+    if (!user) {
+      void plex.account(token).then((found) => {
+        if (!found || this.current.plex.token !== token) return;
+        this.store.setJson("plexUser", found);
+        this.setPlex({ user: found });
+      }).catch(() => undefined);
+    }
     await this.connect(token);
   }
 
@@ -786,6 +799,11 @@ export class App {
 
   askedWho() {
     this.set((s) => ({ ...s, askWho: false }));
+  }
+
+  /** "Who's watching?" asked for: from Settings, or the profile in the corner. */
+  whoIsWatching() {
+    this.set((s) => ({ ...s, askWho: true }));
   }
 
   async switchUser(user: PlexHomeUser, pin: string | null): Promise<string | null> {

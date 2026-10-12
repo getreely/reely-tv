@@ -17,6 +17,7 @@ import { Screens, routeFor } from './screens';
 import { BACKDROP_RISE } from './surfaces';
 import { LivePlayer } from './player/live';
 import { VodPlayer } from './player/vod';
+import { ProfilePicker, ReminderCard, Screensaver, Tour, slidesFrom } from './overlays';
 import { OverlayContext, OverlayHost, Overlays } from './overlay';
 
 /*
@@ -138,9 +139,39 @@ export function Root(props: { app: App }) {
   // A tab is chosen by the cursor arriving at it along the tabs, as the Fire TV's are:
   // the arrows, not the app putting the cursor there.
   const arrowAt = useRef(0);
+  // When a button was last pressed, for the screensaver.
+  const pressedAt = useRef(Date.now());
   useTVEventHandler((event) => {
+    pressedAt.current = Date.now();
     if (event.eventKeyAction === 0 && ['left', 'right', 'up', 'down'].includes(event.eventType)) arrowAt.current = Date.now();
   });
+
+  // "Who's watching?": from the avatar or Settings, and once straight after signing in to a Plex Home.
+  const [choosingProfile, setChoosingProfile] = useState(false);
+  useEffect(() => {
+    if (!state.askWho) return;
+    setChoosingProfile(true);
+    app.askedWho();
+  }, [state.askWho]);
+
+  // The screensaver: after the minutes set without a button, never over something playing.
+  const [saver, setSaver] = useState(false);
+  useEffect(() => {
+    const t = setInterval(() => {
+      const s = app.state;
+      const minutes = s.prefs.screensaverMinutes;
+      const busy = s.playing != null || s.live.watching != null || s.live.due != null;
+      if (minutes > 0 && !busy && Date.now() - pressedAt.current > minutes * 60_000) setSaver(true);
+    }, 5_000);
+    return () => clearInterval(t);
+  }, [app]);
+
+  // Reminders, looked at every little while wherever the app is.
+  useEffect(() => {
+    const t = setInterval(() => app.checkReminders(), 15_000);
+    app.checkReminders();
+    return () => clearInterval(t);
+  }, [app]);
 
   const current = tabOf(state.stack, route);
   const focusTab = (tab: TabId = current) => focusWhenReady(tabRefs[tab]);
@@ -265,7 +296,7 @@ export function Root(props: { app: App }) {
         {(connected || route.name === 'settings') && !away ? (
           <TopBar current={current} tabRefs={tabRefs} onFocusTab={onFocusTab} onPressTab={onPressTab}
             onTabLayout={(tab, x) => { tabX.current[tab] = x; }}
-            profile={state.plex.user} onProfile={state.plex.homeUsers.length > 1 ? () => app.askedWho() : null} />
+            profile={state.plex.user} onProfile={state.plex.homeUsers.length > 1 ? () => setChoosingProfile(true) : null} />
         ) : null}
         {menuFor ? (
           <TabMenu app={app} state={state} kind={menuFor} left={tabX.current[menuFor] ?? dp(200)} top={BACKDROP_RISE}
@@ -278,6 +309,10 @@ export function Root(props: { app: App }) {
           <ItemMenu app={app} item={itemMenu} onClose={() => setItemMenu(null)} open={(item) => open(routeFor(item))}
             inContinueWatching={state.home.continueWatching.some((i) => listKey(i) === listKey(itemMenu))} />
         ) : null}
+        {state.live.due ? <ReminderCard app={app} state={state} /> : null}
+        {connected && !state.prefs.tourSeen && !choosingProfile && !state.homeBusy && !playing && !watching ? <Tour onDone={() => app.finishTour()} /> : null}
+        {choosingProfile ? <ProfilePicker app={app} state={state} onClose={() => { setChoosingProfile(false); focusTab(); }} /> : null}
+        {saver && !playing && !watching ? <Screensaver slides={slidesFrom(app, state)} onWake={() => { pressedAt.current = Date.now(); setSaver(false); }} /> : null}
         <OverlayHost overlays={overlays} />
         {confirmExit ? <ConfirmExit onStay={() => { setConfirmExit(false); focusTab(); }} onLeave={() => BackHandler.exitApp()} /> : null}
       </View>

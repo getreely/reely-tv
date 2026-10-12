@@ -67,6 +67,6 @@ export function Screens(props: { app: App; state: AppState; open: (route: Route)
     case 'live': return <Live app={app} state={state} />;
     case 'requests': return <Requests {...screen} />;
     case 'requestTitle': return <RequestTitlePage {...screen} title={state.route.title} />;
-    case 'settings': return <Settings {...screen} onProfiles={() => app.askedWho()} />;
+    case 'settings': return <Settings {...screen} onProfiles={() => app.whoIsWatching()} />;
   }
 }

@@ -8,7 +8,7 @@ import type { Page, Route } from "@playwright/test";
 export const SERVER = "http://192.168.1.20:32400";
 
 /** plex.tv and one server, answering as they do; what was told to the server is kept. */
-export async function fakePlex(page: Page, options: { tour?: boolean; many?: boolean; big?: boolean } = {}) {
+export async function fakePlex(page: Page, options: { tour?: boolean; many?: boolean; big?: boolean; home?: boolean } = {}) {
   const timeline: string[] = [];
   // The remote's tour seen already, except where it's what's tested; kept across a reload.
   if (!options.tour) {
@@ -30,8 +30,14 @@ export async function fakePlex(page: Page, options: { tour?: boolean; many?: boo
     if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "*", "Access-Control-Allow-Methods": "*" } });
     if (url.pathname === "/api/v2/pins") return json(route, { id: 7, code: "WXYZ" });
     if (url.pathname.startsWith("/api/v2/pins/")) return json(route, { authToken: ++claims >= 2 ? "account-token" : null });
-    if (url.pathname === "/api/v2/user") return json(route, { uuid: "me", title: "Taylor" });
-    if (url.pathname === "/api/v2/home/users") return json(route, { users: [] });
+    if (url.pathname === "/api/v2/user") return json(route, options.home ? { uuid: "u1", title: "Sam" } : { uuid: "me", title: "Taylor" });
+    if (url.pathname === "/api/v2/home/users") {
+      return json(route, { users: options.home ? [
+        { uuid: "u1", title: "Sam", admin: true, protected: false, restricted: false, thumb: null },
+        { uuid: "u2", title: "Alex", admin: false, protected: true, restricted: false, thumb: null },
+        { uuid: "u3", title: "Kids", admin: false, protected: false, restricted: true, thumb: null },
+      ] : [] });
+    }
     if (url.pathname === "/api/v2/resources") {
       return json(route, [{ name: "Living Room", provides: "server", owned: true, accessToken: "server-token",
         connections: [{ uri: SERVER, address: "192.168.1.20", port: 32400, local: true, relay: false }] }]);
