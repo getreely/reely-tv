@@ -12,7 +12,16 @@ URL="https://amzndevresources.com/vega/media-player/$RELEASE.tar.gz"
 SHA256="cc652c54357e071a2a9af9031bc8963e6c4ef3b234f7e729e411c7bf43a1e44e"
 OUT="src/hls"
 
+# hls.js's XMLHttpRequest loader, exported for the app: Amazon's build loads with fetch,
+# and on the stick fetch's arrayBuffer() never settles, so no segment ever arrives (the
+# playlists, read as text, do). Vega's XMLHttpRequest takes 'arraybuffer' directly.
+export_xhr_loader() {
+  local mjs="$OUT/player/hlsjsplayer/dist/hls.mjs"
+  grep -q '^export { XhrLoader };$' "$mjs" || printf '\nexport { XhrLoader };\n' >> "$mjs"
+}
+
 if [ -f "$OUT/.release" ] && [ "$(cat "$OUT/.release")" = "$RELEASE" ]; then
+  export_xhr_loader
   echo "hls.js for Vega is already built ($RELEASE)."
   exit 0
 fi
@@ -46,5 +55,6 @@ cp "$work"/hls.js/dist/hls.mjs "$OUT/player/hlsjsplayer/dist/"
 for f in "$OUT"/*.ts "$OUT"/player/*.ts "$OUT"/player/hlsjsplayer/*.ts "$OUT"/polyfills/*.ts; do
   grep -q '@ts-nocheck' "$f" || sed -i '1i // @ts-nocheck' "$f"
 done
+export_xhr_loader
 echo "$RELEASE" > "$OUT/.release"
 echo "hls.js for Vega built into $OUT."

@@ -186,7 +186,7 @@ export class Engine {
     if (isHls(url)) {
       polyfill();
       (globalThis as unknown as { gmedia: unknown }).gmedia = this.player;
-      const Hls = (HlsLib as unknown as { Hls: new (config: object) => HlsInstance; Events: Record<string, string>; ErrorTypes: Record<string, string> });
+      const Hls = (HlsLib as unknown as { Hls: new (config: object) => HlsInstance; Events: Record<string, string>; ErrorTypes: Record<string, string>; XhrLoader: unknown });
       const hls = new Hls.Hls({
         enableWorker: false,
         lowLatencyMode: false,
@@ -194,6 +194,9 @@ export class Engine {
         maxBufferLength: bufferSeconds,
         maxMaxBufferLength: bufferSeconds * 2,
         startPosition: startMs > 0 ? startMs / 1000 : -1,
+        // Segments through XMLHttpRequest: fetch's arrayBuffer() never settles on the stick,
+        // so with Amazon's default no segment ever arrived (scripts/hlsjs.sh exports it).
+        fLoader: Hls.XhrLoader,
         debug: hlsLogger(this.id),
       });
       // Each step once, to the log: where a stream that won't start got to.
