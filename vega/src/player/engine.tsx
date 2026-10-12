@@ -46,6 +46,23 @@ export type EngineEvent = 'playing' | 'pause' | 'waiting' | 'timeupdate' | 'ende
 /** How long a stream the player opens itself waits for its picture to have somewhere to go. */
 const SURFACE_WAIT_MS = 2_000;
 
+/** How long a new player waits for those being let go: past that, it starts regardless. */
+const LET_GO_WAIT_MS = 3_000;
+
+/**
+ * Players being let go, which a new one waits for: the stick plays so many at once, and a
+ * channel opened while the last one's was still being let go never started.
+ */
+let lettingGo: Promise<unknown> = Promise.resolve();
+function letGo(p: VideoPlayer): Promise<void> {
+  const done = p.deinitialize().then(() => undefined, () => undefined);
+  lettingGo = Promise.all([lettingGo, done]);
+  return done;
+}
+function within(p: Promise<unknown>, ms: number): Promise<void> {
+  return Promise.race([p.then(() => undefined, () => undefined), new Promise<void>((done) => setTimeout(() => done(), ms))]);
+}
+
 /** How long skips in a stream that can't be sought in settle before it's asked for again. */
 const RESTART_SETTLE_MS = 600;
 
@@ -115,6 +132,16 @@ export class Engine {
   private hls: HlsInstance | null = null;
   private ready: Promise<void>;
   private surface: string | null = null;
+  /** The surface the player itself has been given, which can be behind [surface]. */
+  private bound: string | null = null;
+  /** Whether this player has been given a stream to open itself (not through hls.js). */
+  private sourced = false;
+  /** Where that stream was opened from, for opening it again on another surface. */
+  private openedFrom = 0;
+  /** Opens one at a time, each counted, so one asked for meanwhile replaces the one waiting. */
+  private opening: Promise<void> = Promise.resolve();
+  private asked = 0;
+  private inFlight = 0;
   private url: string | null = null;
   private listeners = new Map<EngineEvent, Set<() => void>>();
   private failureListeners = new Set<(f: EngineFailure) => void>();
@@ -148,7 +175,7 @@ export class Engine {
 
   /** [p] made ready, and listened to for as long as it's the one in use. */
   private setUp(p: VideoPlayer): Promise<void> {
-    return p.initialize().then(() => {
+    return within(lettingGo, LET_GO_WAIT_MS).then(() => p.initialize()).then(() => {
       p.autoplay = false;
       p.muted = this.mutedNow;
       for (const event of ['playing', 'pause', 'waiting', 'timeupdate', 'ended', 'loadedmetadata'] as EngineEvent[]) {
@@ -177,9 +204,10 @@ export class Engine {
   }
 
   /**
-   * A fresh player on the same surface. Vega's player carries the position its last source
-   * was at into the next ("resumed position") and seeks there, which a stream that can't be
-   * sought in fails on: so such a stream gets a player with nothing to carry.
+   * A fresh player on the same surface, the old one let go first. Vega's player opens one
+   * stream of its own: given a second, it carries the first's position into it ("resumed
+   * position") and a live channel never got past buffering, as a channel opened without its
+   * surface never did. A fresh player, its surface given before the stream, starts each time.
    */
   private async renew() {
     const old = this.player;
@@ -189,23 +217,35 @@ export class Engine {
       // Not started.
     }
     this.unloadSource();
-    if (this.surface) {
+    if (this.bound) {
       try {
-        old.clearSurfaceHandle(this.surface);
+        old.clearSurfaceHandle(this.bound);
       } catch {
         // Let go already.
       }
     }
+    this.bound = null;
+    this.sourced = false;
+    void letGo(old);
     const fresh = new VideoPlayer();
     this.player = fresh;
     this.ready = this.setUp(fresh).then(() => {
       if (this.gone || fresh !== this.player) return;
-      if (this.surface) fresh.setSurfaceHandle(this.surface);
+      if (this.surface) this.bind(this.surface);
       if (this.captionsHandle) (fresh as unknown as { setCaptionViewHandle?: (h: string) => void }).setCaptionViewHandle?.(this.captionsHandle);
     });
-    void old.deinitialize().catch(() => undefined);
     await this.ready;
     say(`player ${this.id} renewed`);
+  }
+
+  /** The player given [handle] to draw on. */
+  private bind(handle: string) {
+    try {
+      this.player.setSurfaceHandle(handle);
+      this.bound = handle;
+    } catch (e) {
+      console.warn('[reely] surface', e);
+    }
   }
 
   on(event: EngineEvent, handler: () => void): () => void {
@@ -235,11 +275,20 @@ export class Engine {
    * Plays [url] from [startMs] in: HLS through hls.js, anything else as it is. With
    * [options].restart, [url] already starts at [startMs] and can't be sought in.
    */
-  async open(url: string, startMs = 0, options: OpenOptions = {}) {
+  open(url: string, startMs = 0, options: OpenOptions = {}): Promise<void> {
+    const ticket = ++this.asked;
+    this.inFlight++;
+    const run = this.opening.then(() => this.openNow(ticket, url, startMs, options)).finally(() => { this.inFlight--; });
+    this.opening = run.catch(() => undefined);
+    return run;
+  }
+
+  private async openNow(ticket: number, url: string, startMs: number, options: OpenOptions) {
+    const stale = () => this.gone || ticket !== this.asked;
     await this.ready;
-    if (this.gone) return;
-    if (options.restart && this.url) await this.renew();
-    if (this.gone) return;
+    if (stale()) return;
+    if (this.sourced || (options.restart && this.url)) await this.renew();
+    if (stale()) return;
     this.unloadSource();
     this.url = url;
     this.restart = options.restart ?? null;
@@ -309,8 +358,11 @@ export class Engine {
       // A stream the player opens itself waits for its picture to have somewhere to go:
       // opened first, it got as far as "playing after buffering" and stayed there.
       const mine = this.restarts;
-      await this.surfaceReady(SURFACE_WAIT_MS);
-      if (this.gone || mine !== this.restarts) return;
+      await this.surfaceReady(SURFACE_WAIT_MS, stale);
+      if (stale() || mine !== this.restarts) return;
+      if (this.surface && this.bound !== this.surface) this.bind(this.surface);
+      this.sourced = true;
+      this.openedFrom = startMs;
       this.player.src = url;
       if (startMs > 0 && !this.restart) this.player.currentTime = startMs / 1000;
     }
@@ -318,9 +370,9 @@ export class Engine {
   }
 
   /** Resolves once a surface is attached, or after [ms] regardless. */
-  private async surfaceReady(ms: number) {
+  private async surfaceReady(ms: number, stale: () => boolean) {
     const until = Date.now() + ms;
-    while (!this.surface && !this.gone && Date.now() < until) {
+    while (!this.surface && !stale() && Date.now() < until) {
       await new Promise<void>((done) => setTimeout(() => done(), 50));
     }
     if (!this.surface) say(`player ${this.id} opens with no surface yet`);
@@ -354,6 +406,7 @@ export class Engine {
     this.base = this.pendingAt;
     this.url = url;
     this.lastTime = -1;
+    this.sourced = true;
     this.player.src = url;
     this.player.play();
   }
@@ -520,12 +573,17 @@ export class Engine {
   attachSurface(handle: string) {
     this.surface = handle;
     void this.ready.then(() => {
-      if (this.gone || this.surface !== handle) return;
-      try {
-        this.player.setSurfaceHandle(handle);
-      } catch (e) {
-        console.warn('[reely] surface', e);
+      if (this.gone || this.surface !== handle || this.bound === handle) return;
+      // A stream the player opened itself stays with the surface it started on: moved to
+      // another (the guide's preview going full screen) it stood still, so it starts again
+      // there, on a fresh player.
+      // (One being opened binds whatever surface there is by then itself.)
+      if (this.sourced && this.url && !this.restart && this.inFlight === 0) {
+        say(`player ${this.id} moves to another surface`);
+        void this.open(this.url, this.openedFrom);
+        return;
       }
+      this.bind(handle);
     });
   }
 
@@ -534,7 +592,8 @@ export class Engine {
     if (this.surface !== handle) return;
     this.surface = null;
     void this.ready.then(() => {
-      if (this.gone) return;
+      if (this.gone || this.bound !== handle) return;
+      this.bound = null;
       try {
         this.player.clearSurfaceHandle(handle);
       } catch {
@@ -577,7 +636,7 @@ export class Engine {
     }
     this.unloadSource();
     await this.ready.catch(() => undefined);
-    await this.player.deinitialize().catch(() => undefined);
+    await letGo(this.player);
   }
 }
 
