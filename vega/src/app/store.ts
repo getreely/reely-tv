@@ -1560,12 +1560,15 @@ export class App {
       this.set((s) => ({ ...s, playing: { ...p, url, direct: false, startMs: positionMs } }));
       return true;
     }
-    // Plex's continuous stream wouldn't play either: its HLS, through hls.js, as a last resort.
+    // Plex's continuous stream wouldn't play either: its HLS, through hls.js, as a last resort,
+    // once the continuous one's conversion has stopped (started alongside it, every segment 404'd).
     if (p.viaHls) return false;
-    void plex.stopTranscode(p.base, p.token, p.sessionId);
-    const sessionId = randomHex(12);
-    const url = this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, burn, p.playback.videoCodec, positionMs, true);
-    this.set((s) => ({ ...s, playing: { ...p, url, startMs: positionMs, sessionId, viaHls: true } }));
+    void plex.stopTranscode(p.base, p.token, p.sessionId).then(() => {
+      if (this.current.playing?.sessionId !== p.sessionId) return;
+      const sessionId = randomHex(12);
+      const url = this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, burn, p.playback.videoCodec, positionMs, true);
+      this.set((s) => ({ ...s, playing: { ...p, url, startMs: positionMs, sessionId, viaHls: true } }));
+    });
     return true;
   }
 

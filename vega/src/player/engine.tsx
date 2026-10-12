@@ -258,6 +258,10 @@ export class Engine {
     } else {
       this.player.src = url;
       if (startMs > 0 && !this.restart) this.player.currentTime = startMs / 1000;
+      // A stream that starts where it's wanted: no seek in it. Vega's player keeps a seek
+      // asked of the source before (a file that wouldn't play, at the resume point) and
+      // would make it here, where it fails and takes playback down with it.
+      else if (this.restart) this.clearPendingSeek();
     }
     this.player.play();
   }
@@ -286,7 +290,16 @@ export class Engine {
     this.lastTime = -1;
     say(`player ${this.id} asks again from ${Math.round(this.base / 1000)}s`);
     this.player.src = url;
+    this.clearPendingSeek();
     this.player.play();
+  }
+
+  private clearPendingSeek() {
+    try {
+      this.player.currentTime = 0;
+    } catch {
+      // Nothing pending.
+    }
   }
 
   /** The same address again: a dropped connection's fresh stream. */
