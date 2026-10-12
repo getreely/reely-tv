@@ -29,8 +29,12 @@ function polyfill() {
   MiscPolyfill.install();
 }
 
-/** How far ahead hls.js keeps, in seconds: Settings' Buffer, Normal or Larger. */
-let bufferSeconds = 50;
+/**
+ * How far ahead hls.js keeps, in seconds: Settings' Buffer, Normal or Larger. Kept short,
+ * as Amazon's own hls.js player for Vega keeps it: every second of it is unpacked on the
+ * JavaScript thread the remote's presses wait on, and filling a long one froze the controls.
+ */
+let bufferSeconds = 12;
 export function setBufferSeconds(seconds: number) {
   bufferSeconds = seconds;
 }
@@ -79,18 +83,6 @@ function described(url: string) {
  */
 function say(line: string) {
   console.warn(`[reely] ${line}`);
-}
-
-/** hls.js's own account of what it's doing, its first lines for each stream: enough to see where one stops. */
-function hlsLogger(id: number) {
-  let left = 150;
-  const out = (level: string) => (...parts: unknown[]) => {
-    if (left <= 0) return;
-    left--;
-    say(`player ${id} hls.js ${level}: ${parts.map((p) => (typeof p === 'string' ? p : safeText(p))).join(' ').slice(0, 300)}`);
-  };
-  const quiet = () => undefined;
-  return { trace: quiet, debug: quiet, log: out('log'), info: out('info'), warn: out('warn'), error: out('error') };
 }
 
 function safeText(value: unknown) {
@@ -193,11 +185,12 @@ export class Engine {
         backBufferLength: 30,
         maxBufferLength: bufferSeconds,
         maxMaxBufferLength: bufferSeconds * 2,
+        // And no more than this much of it in hand, however high the bitrate.
+        maxBufferSize: 30 * 1000 * 1000,
         startPosition: startMs > 0 ? startMs / 1000 : -1,
         // Segments through XMLHttpRequest: fetch's arrayBuffer() never settles on the stick,
         // so with Amazon's default no segment ever arrived (scripts/hlsjs.sh exports it).
         fLoader: Hls.XhrLoader,
-        debug: hlsLogger(this.id),
       });
       // Each step once, to the log: where a stream that won't start got to.
       const steps = ['MEDIA_ATTACHED', 'MANIFEST_PARSED', 'BUFFER_CREATED', 'FRAG_LOADED', 'FRAG_BUFFERED'];

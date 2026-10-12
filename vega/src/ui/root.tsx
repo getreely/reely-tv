@@ -166,7 +166,7 @@ export function Root(props: { app: App }) {
   }, [playingSomething]);
 
   // Settings' Buffer, for every stream opened from now on.
-  useEffect(() => setBufferSeconds(state.prefs.largerBuffer ? 120 : 50), [state.prefs.largerBuffer]);
+  useEffect(() => setBufferSeconds(state.prefs.largerBuffer ? 30 : 12), [state.prefs.largerBuffer]);
 
   // "Who's watching?": from the avatar or Settings, and once straight after signing in to a Plex Home.
   const [choosingProfile, setChoosingProfile] = useState(false);
