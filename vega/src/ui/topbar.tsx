@@ -69,7 +69,11 @@ const NavTab = React.forwardRef<View, { label: string; icon?: 'search' | 'gear';
               : props.icon === 'gear' ? <GearGlyph color={tint} size={20} />
               : <Text style={{ color: tint, fontSize: dp(16), lineHeight: dp(21), fontWeight: props.selected ? '600' : '400' }}>{props.label}</Text>}
             {props.selected && !focused ? (
-              <View style={{ position: 'absolute', left: '50%', bottom: dp(2), width: dp(18), height: dp(3), marginLeft: -dp(9), borderRadius: dp(1.5), backgroundColor: accent.color }} />
+              // Centered by a strip across the tab rather than left: 50% and a margin back:
+              // Vega placed that a quarter of the way along.
+              <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: dp(2), alignItems: 'center' }}>
+                <View style={{ width: dp(18), height: dp(3), borderRadius: dp(1.5), backgroundColor: accent.color }} />
+              </View>
             ) : null}
           </>
         )}
