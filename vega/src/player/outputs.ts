@@ -186,7 +186,7 @@ class Outputs {
     }
     // Pairing finishes by its own event; connecting waits for it, as a stick's Settings does.
     for (let i = 0; i < 20 && !this.state.paired.some((p) => p.id === id); i++) {
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise<void>((r) => setTimeout(() => r(), 500));
       await this.refresh();
     }
     if (!this.state.paired.some((p) => p.id === id)) {
