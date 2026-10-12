@@ -95,9 +95,10 @@ export function InfoPanel(props: { playing: Playing; onClose: () => void }) {
   const p = props.playing.playback;
   const audio = p.audioStreams.find((s) => s.selected) ?? p.audioStreams[0];
   const rows: Array<[string, string | null]> = [
-    ['Quality', props.playing.direct ? 'Original' : 'Adjusted for this TV'],
+    // Both kept as they are, only passed on by Plex: still the original.
+    ['Quality', props.playing.direct ? 'Original' : props.playing.plan?.video === 'copy' && props.playing.plan.audio === 'copy' ? 'Original, streamed by Plex' : 'Adjusted for this TV'],
     // Why Plex converts it, when the file itself is what this TV can't play.
-    ['Converted because', props.playing.direct ? null : props.playing.reason ?? null],
+    ['Why', props.playing.direct ? null : props.playing.reason ?? null],
     ['Picture', p.videoCodec ? describeCodec(p.videoCodec) : null],
     ['Sound', audio?.label ?? (p.audioCodec ? `${p.audioCodec.toUpperCase()}${p.audioChannels ? `  ·  ${channelLayout(p.audioChannels)}` : ''}` : null)],
     ['File', p.container ? p.container.toUpperCase() : null],

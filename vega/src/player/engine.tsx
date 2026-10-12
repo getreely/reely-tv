@@ -63,9 +63,6 @@ function within(p: Promise<unknown>, ms: number): Promise<void> {
   return Promise.race([p.then(() => undefined, () => undefined), new Promise<void>((done) => setTimeout(() => done(), ms))]);
 }
 
-/** How long skips in a stream that can't be sought in settle before it's asked for again. */
-const RESTART_SETTLE_MS = 600;
-
 /** How a stream that can't be sought in is played: asked for again from wherever's wanted. */
 export interface OpenOptions {
   /** The stream's address from [ms] in; null if it's no longer wanted. */
@@ -389,10 +386,15 @@ export class Engine {
     this.switching = true;
     this.pendingAt = Math.max(0, ms);
     this.flowing = false;
+    // Held where it is at once, rather than playing on while the new stream's asked for.
+    try {
+      this.player.pause();
+    } catch {
+      // Not started.
+    }
     this.emit('waiting');
-    // A run of skips is one: asked for once they stop, from where they ended.
-    await new Promise<void>((done) => setTimeout(() => done(), RESTART_SETTLE_MS));
-    if (mine !== this.restarts || this.gone) return;
+    // Asked for straight away: the scrubber has already waited for the presses to stop,
+    // and Skip Intro is one press. A jump made meanwhile replaces this one (mine).
     const url = await restart(this.pendingAt).catch(() => null);
     if (mine !== this.restarts || this.gone) return;
     if (!url) {

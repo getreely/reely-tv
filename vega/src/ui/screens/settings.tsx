@@ -30,7 +30,7 @@ const SECTIONS: Array<[SectionId, string]> = [
 
 const MODES: Array<[PlaybackMode, string, string]> = [
   ['auto', 'Automatic', 'Plays the original file. Plex converts it only when needed.'],
-  ['direct', 'Original only', 'Always plays the original file. Some may not play.'],
+  ['direct', 'Original only', "Always plays the original file. Some may not play, and MKV files can't be skipped through."],
   ['transcode', 'Always convert', 'Plex converts everything. Uses more of your server.'],
 ];
 const bitrateLabel = (kbps: number) => (kbps <= 0 ? 'Original' : `Up to ${kbps / 1000} Mbps`);
@@ -276,7 +276,7 @@ function FormatsGroup() {
     FORMATS.filter((f) => f.kind === kind && !!answers?.[f.label] === yes).map((f) => f.label).join(', ') || 'None';
   const line = (kind: 'video' | 'audio') => `Plays as it is: ${list(kind, true)}.\nConverted by Plex: ${list(kind, false)}.`;
   return (
-    <Group title="This TV" note="As the Fire TV answers. Each title is asked about again when it plays, at its own size and HDR; whatever this TV can't play, your Plex server converts.">
+    <Group title="This TV" note="As the Fire TV answers. Each title is asked about again when it plays, at its own size and HDR; whatever this TV can't play, your Plex server converts. MKV files come through Plex as they are, so you can skip through them.">
       {/* Rows the cursor stops on, so going down brings them into view; nothing to change here. */}
       <Setting title="Video" value={answers ? null : 'Checking…'} note={answers ? line('video') : null} onPress={() => undefined} focusKey="formats:video" />
       <Setting title="Sound" value={answers ? null : 'Checking…'} note={answers ? line('audio') : null} onPress={() => undefined} focusKey="formats:sound" />

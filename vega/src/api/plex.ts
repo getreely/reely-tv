@@ -869,7 +869,7 @@ export function streamUrl(
   const bitrate = maxBitrateKbps > 0 ? `&maxVideoBitrate=${maxBitrateKbps}` : "";
   return (
     `${base}/video/:/transcode/universal/start.mkv?path=${enc(`/library/metadata/${ratingKey}`)}&mediaIndex=${mediaIndex}&partIndex=0` +
-    `&protocol=http&offset=${Math.max(0, Math.floor(offsetMs / 1000))}&directPlay=0&directStream=${plan.video === "copy" ? 1 : 0}&directStreamAudio=${plan.audio === "copy" ? 1 : 0}` +
+    `&protocol=http&offset=${Math.max(0, Math.floor(offsetMs / 1000))}&fastSeek=1&directPlay=0&directStream=${plan.video === "copy" ? 1 : 0}&directStreamAudio=${plan.audio === "copy" ? 1 : 0}` +
     `&subtitles=${subtitles}&subtitleSize=${subtitleSize}&audioBoost=100&videoQuality=100&videoResolution=${resolution}${bitrate}` +
     `&session=${sessionId}&location=lan` +
     `&X-Plex-Client-Profile-Name=Generic&X-Plex-Platform=Generic&X-Plex-Client-Profile-Extra=${enc(streamProfile(plan))}` +

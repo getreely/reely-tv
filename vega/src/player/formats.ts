@@ -21,8 +21,15 @@ export interface Verdict {
   reason: string | null;
 }
 
-/** Files the stick's own player opens (Vega's pipeline): MP4 and QuickTime, Matroska, WebM, MPEG-TS. */
-const CONTAINERS = ['mp4', 'm4v', 'mov', 'mkv', 'webm', 'ts', 'mpegts'];
+/**
+ * Files the stick plays as they are: MP4 and QuickTime. The stick's player reads a file
+ * from the network as a stream, and in that mode its Matroska reader can't go elsewhere
+ * in one ("Seek failed. Internal error 0" on the stick, at once, for every skip and every
+ * scrub), so MKV, WebM and MPEG-TS come through Plex as a stream instead, with whatever
+ * this TV plays copied as it is, and going elsewhere asks Plex for it from there: as
+ * Plex's own apps on televisions whose players can't seek in them.
+ */
+const CONTAINERS = ['mp4', 'm4v', 'mov'];
 
 /** How long the TV is given to answer one question: none is taken as a no, and Plex converts. */
 const ASK_MS = 3_000;
@@ -198,7 +205,7 @@ export async function checkPlayback(p: PlexPlayback): Promise<Verdict> {
   };
   const reason = !videoOk && v ? `This TV can't play ${describeVideo(v)} video`
     : !audioOk && sound ? `This TV can't play ${named(sound.codec)} sound`
-      : !containerOk ? `This TV can't open ${p.container ? p.container.toUpperCase() : 'these'} files`
+      : !containerOk ? `Plex streams ${p.container ? p.container.toUpperCase() : 'these'} files so you can skip through them`
         : null;
   return { direct: videoOk && audioOk && containerOk, plan, reason };
 }
