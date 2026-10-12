@@ -136,14 +136,29 @@ export function LivePlayer(props: { app: App; state: AppState; channel: XtreamCh
     return () => off.forEach((o) => o());
   }, [engine]);
 
+  // The clock and the bar, twice a second while the controls show them; otherwise only now
+  // and then, for what's on. Each tick draws the whole player again, the guide over it too,
+  // and on the stick that ran constantly behind every press.
+  const controlsShown = useRef(controls);
+  controlsShown.current = controls;
   useEffect(() => {
+    let ticks = 0;
     const t = setInterval(() => {
-      setNowMs(Date.now());
-      setPositionMs(engine.positionMs);
+      ticks++;
+      if (controlsShown.current || ticks % 60 === 0) {
+        setNowMs(Date.now());
+        setPositionMs(engine.positionMs);
+      }
       if (!panel && Date.now() - lastPress.current > CONTROLS_MS) setControls(false);
     }, 500);
     return () => clearInterval(t);
   }, [engine, panel]);
+  // Brought up, they show the time as it is, not as it was at the last tick.
+  useEffect(() => {
+    if (!controls) return;
+    setNowMs(Date.now());
+    setPositionMs(engine.positionMs);
+  }, [controls]);
 
   // Out of the app and back: a channel has moved on meanwhile, so it rejoins it; a
   // programme from the archive carries on from where it was, by the clock.
@@ -434,7 +449,7 @@ export function LivePlayer(props: { app: App; state: AppState; channel: XtreamCh
 
   return (
     <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: '#000000', zIndex: 40 }}>
-      <Tile rect={rectOf(0)} name={single ? null : channel.name} focused={!single && shownZoom == null && focusedId === 0}>
+      <Tile rect={rectOf(0)} name={single ? null : channel.name} focused={!single && shownZoom == null && focusedId === 0} aspect={aspectOf(engine)}>
         <VideoSurface engine={engine} style={{ flex: 1 }} captions />
       </Tile>
       {tiles.map((c, i) => (
@@ -594,15 +609,30 @@ function liveCaptions(tracks: Array<{ id: number; name: string; lang?: string }>
   }) as unknown as PlexStream);
 }
 
-/** Where a tile is drawn: only the one being heard is outlined, with its name in the corner. */
-function Tile(props: { rect: { left: number; top: number; width: number; height: number }; name: string | null; focused: boolean; children: React.ReactNode }) {
+/** A stream's own shape once its first frame is in; sixteen by nine until then, as the Fire TV has it. */
+function aspectOf(engine: Engine): number {
+  const size = engine.videoSize;
+  return size && size.width > 0 && size.height > 0 ? size.width / size.height : 16 / 9;
+}
+
+/**
+ * Where a tile is drawn: only the one being heard is outlined, with its name in the corner,
+ * both on the picture itself rather than the whole cell (MultiView.kt's TileFrame): a
+ * sixteen-by-nine channel in a taller cell has black above and below it, outside the ring.
+ */
+function Tile(props: { rect: { left: number; top: number; width: number; height: number }; name: string | null; focused: boolean; aspect?: number; children: React.ReactNode }) {
   const r = props.rect;
   const hidden = r.width <= 0 || r.height <= 0;
+  // Whichever edge runs out first is the one the picture is bounded by.
+  const ratio = props.aspect && Number.isFinite(props.aspect) && props.aspect > 0 ? props.aspect : 16 / 9;
+  const byWidth = r.width / ratio <= r.height;
+  const pictureWidth = byWidth ? r.width : r.height * ratio;
+  const pictureHeight = byWidth ? r.width / ratio : r.height;
   return (
     <View pointerEvents="none" style={{ position: 'absolute', left: r.left, top: r.top, width: hidden ? 1 : r.width, height: hidden ? 1 : r.height, opacity: hidden ? 0 : 1, backgroundColor: '#000000', overflow: 'hidden' }}>
       {props.children}
-      {props.name != null ? (
-        <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderWidth: props.focused ? dp(3) : 0, borderColor: color.chalk }}>
+      {props.name != null && !hidden ? (
+        <View style={{ position: 'absolute', left: (r.width - pictureWidth) / 2, top: (r.height - pictureHeight) / 2, width: pictureWidth, height: pictureHeight, borderWidth: props.focused ? dp(3) : 0, borderColor: color.chalk }}>
           <View style={{ position: 'absolute', left: dp(6), bottom: dp(6), maxWidth: '80%', borderRadius: dp(5), backgroundColor: 'rgba(8, 9, 11, 0.72)', paddingHorizontal: dp(7), paddingVertical: dp(3) }}>
             <Text numberOfLines={1} style={{ color: props.focused ? color.chalk : 'rgba(242, 244, 247, 0.7)', fontSize: dp(14), lineHeight: dp(19) }}>{props.name}</Text>
           </View>
@@ -647,7 +677,7 @@ function ExtraTile(props: { app: App; channel: XtreamChannel; rect: { left: numb
     };
   }, [engine]);
   return (
-    <Tile rect={props.rect} name={props.channel.name} focused={props.focused}>
+    <Tile rect={props.rect} name={props.channel.name} focused={props.focused} aspect={aspectOf(engine)}>
       <VideoSurface engine={engine} style={{ flex: 1 }} />
       {failure ? (
         <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>

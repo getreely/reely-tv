@@ -138,6 +138,20 @@ export function clock(epochSeconds: number): string {
 export const timeRange = (p: Programme) => `${clock(p.start)} – ${clock(p.stop)}`;
 
 /** One channel and what it's showing across the window. */
+/**
+ * The rows of a guide worth drawing: those around the cursor. A category can hold hundreds
+ * of channels, and drawing every row, programmes and all, at every press of up or down
+ * was what made the guide slow on the stick.
+ */
+export function rowsNear(count: number, index: number): { from: number; to: number } {
+  return { from: Math.max(0, index - 6), to: Math.min(count, index + 11) };
+}
+
+/** Room for the rows above those drawn, so each drawn row stays where it would be. */
+export function RowsAbove(props: { rows: number; gap: number }) {
+  return props.rows > 0 ? <View style={{ height: props.rows * (ROW_HEIGHT + props.gap) - props.gap }} /> : null;
+}
+
 export function GuideRow(props: {
   channel: XtreamChannel; listing: Programme[]; windowStart: number; windowEnd: number; now: number; focusTime: number;
   current: boolean; catchUpFrom: number | null; reminded: Set<number>; favorite: boolean;
@@ -240,6 +254,7 @@ export function Guide(props: { app: App; state: AppState }) {
   const channel = channels[Math.min(index, channels.length - 1)] ?? null;
   const listing = channel ? listingOf(channel) : [];
   const selected = listing.find((p) => isOnAt(p, focusTime)) ?? null;
+  const near = rowsNear(channels.length, index);
 
   // The time window follows the cursor, a little behind it; the rows keep its channel in view.
   const offset = Math.max(0, widthFor(focusTime - windowStart) - dp(150));
@@ -354,9 +369,10 @@ export function Guide(props: { app: App; state: AppState }) {
                 </View>
               </View>
               <ScrollView ref={rows} scrollEnabled={false} showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: dp(6) }}>
-                {channels.map((c, i) => (
+                <RowsAbove rows={near.from} gap={dp(6)} />
+                {channels.slice(near.from, near.to).map((c, k) => (
                   <GuideRow key={c.streamId} channel={c} listing={listingOf(c)} windowStart={windowStart} windowEnd={windowEnd} now={now}
-                    focusTime={focusTime} current={i === index && gridFocused} catchUpFrom={c.archiveDays > 0 ? now - c.archiveDays * 86400 : null}
+                    focusTime={focusTime} current={near.from + k === index && gridFocused} catchUpFrom={c.archiveDays > 0 ? now - c.archiveDays * 86400 : null}
                     reminded={new Set(reminders.filter((r) => r.streamId === c.streamId).map((r) => r.start))}
                     favorite={live.favorites.includes(c.streamId)} offset={offset} />
                 ))}

@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { ScrollView, View } from 'react-native';
 import { TVFocusGuideView } from '@amazon-devices/react-native-kepler';
+import type { App } from '../../app/store';
 import type { PlexItem } from '../../api/plex';
 import * as plex from '../../api/plex';
 import { sourceTag } from '../../api/vod';
 import { CastCircle, ChannelCard, PosterCard } from '../cards';
 import { ActionButton, EmptyNote, TextField } from '../controls';
 import { FocusRow } from '../focus';
+import { type FocusSignal, useFocused, useFocusSignal } from '../focussignal';
 import { GRID_CARD_WIDTH, GRID_COLUMN_GAP, GRID_COLUMNS, GRID_MARGIN, GRID_ROW_GAP } from '../grid';
 import { hasItemMenu } from '../itemmenu';
 import { HeroBackdrop } from '../surfaces';
@@ -37,7 +39,7 @@ function Row(props: { children: React.ReactNode; gap?: number }) {
 export function Search(props: ScreenProps) {
   const { app, state } = props;
   const search = state.search;
-  const [focused, setFocused] = useState<PlexItem | null>(null);
+  const focus = useFocusSignal<PlexItem>();
   const open = (item: PlexItem) => {
     app.rememberSearch();
     props.open(item);
@@ -47,7 +49,7 @@ export function Search(props: ScreenProps) {
     <PosterCard key={`${prefix}:${plex.listKey(item)}`} focusKey={`${prefix}:${plex.listKey(item)}`} width={GRID_CARD_WIDTH}
       title={plex.rowTitle(item)} subtitle={episodeLine(item)} image={app.image(item.serverBase, posterArt(item), 300, 450)} tag={sourceTag(item)}
       progress={plex.resumeFraction(item)} watched={plex.isWatched(item)}
-      onFocus={() => setFocused(item)} onPress={() => open(item)} onHold={hold(item)} />
+      onFocus={() => focus.set(item)} onPress={() => open(item)} onHold={hold(item)} />
   );
   const grid = (prefix: string, items: PlexItem[]) => {
     const rows: PlexItem[][] = [];
@@ -85,7 +87,7 @@ export function Search(props: ScreenProps) {
 
   return (
     <View style={{ flex: 1 }}>
-      <HeroBackdrop url={focused ? app.image(focused.serverBase, focused.art ?? focused.thumb, 1920, 1080) : null} />
+      <SearchBackdrop app={app} focus={focus} />
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: GRID_MARGIN, paddingTop: dp(20), paddingBottom: dp(160), gap: dp(12) }}>
         <View style={{ gap: dp(10), paddingBottom: dp(8), paddingHorizontal: dp(4) }}>
           <TextField label="Search" value={search.query} onChange={(q) => void app.setQuery(q)} focusKey="search-box" first
@@ -133,7 +135,7 @@ export function Search(props: ScreenProps) {
               <Row>
                 {search.collections.map((c) => (
                   <PosterCard key={`collection:${plex.listKey(c)}`} focusKey={`collection:${plex.listKey(c)}`} title={c.title} subtitle={plex.caption(c)}
-                    image={app.image(c.serverBase, c.thumb, 300, 450)} tag={sourceTag(c)} onFocus={() => setFocused(c)} onPress={() => open(c)} />
+                    image={app.image(c.serverBase, c.thumb, 300, 450)} tag={sourceTag(c)} onFocus={() => focus.set(c)} onPress={() => open(c)} />
                 ))}
               </Row>
             </FocusRow>
@@ -151,4 +153,10 @@ export function Search(props: ScreenProps) {
       </ScrollView>
     </View>
   );
+}
+
+/** The focused result's artwork behind the page: drawn again on its own as the cursor moves. */
+function SearchBackdrop(props: { app: App; focus: FocusSignal<PlexItem> }) {
+  const focused = useFocused(props.focus);
+  return <HeroBackdrop url={focused ? props.app.image(focused.serverBase, focused.art ?? focused.thumb, 1920, 1080) : null} />;
 }

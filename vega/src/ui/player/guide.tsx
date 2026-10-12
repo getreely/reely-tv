@@ -10,7 +10,7 @@ import { MenuHeading, MenuItem, MenuLayer, useBack } from '../menus';
 import { Gradient } from '../surfaces';
 import { Text } from '../text';
 import { color, dp } from '../theme';
-import { CHANNEL_COLUMN, GuideRow, NowLine, ROW_HEIGHT, WINDOW, clock, timeRange, widthFor } from '../screens/live';
+import { CHANNEL_COLUMN, GuideRow, NowLine, ROW_HEIGHT, RowsAbove, WINDOW, clock, rowsNear, timeRange, widthFor } from '../screens/live';
 
 /*
  * The guide, raised over a channel that keeps playing behind it (GuideOverlay.kt). Nothing
@@ -74,6 +74,7 @@ export function GuideOverlay(props: {
   const channel = channels[Math.min(index, channels.length - 1)] ?? null;
   const onNow = channel ? listingOf(channel).find((p) => isOnAt(p, focusTime)) ?? null : null;
   const offset = Math.max(0, widthFor(focusTime - windowStart) - dp(150));
+  const near = rowsNear(channels.length, index);
 
   // Another category's channels, browsed here without leaving the one playing.
   const browse = async (c: XtreamCategory) => {
@@ -200,9 +201,10 @@ export function GuideOverlay(props: {
                     </View>
                   </View>
                   <ScrollView ref={rows} scrollEnabled={false} showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: ROW_GAP }}>
-                    {channels.map((c, i) => (
+                    <RowsAbove rows={near.from} gap={ROW_GAP} />
+                    {channels.slice(near.from, near.to).map((c, k) => (
                       <GuideRow key={c.streamId} channel={c} listing={listingOf(c)} windowStart={windowStart} windowEnd={windowEnd} now={now}
-                        focusTime={focusTime} current={i === index && !inCategories} catchUpFrom={c.archiveDays > 0 ? now - c.archiveDays * 86400 : null}
+                        focusTime={focusTime} current={near.from + k === index && !inCategories} catchUpFrom={c.archiveDays > 0 ? now - c.archiveDays * 86400 : null}
                         reminded={new Set(reminders.filter((r) => r.streamId === c.streamId).map((r) => r.start))}
                         favorite={live.favorites.includes(c.streamId)} offset={offset} />
                     ))}

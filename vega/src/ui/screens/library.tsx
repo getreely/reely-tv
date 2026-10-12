@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { FlatList, ScrollView, View } from 'react-native';
 import { TVFocusGuideView } from '@amazon-devices/react-native-kepler';
-import type { Kind } from '../../app/store';
+import type { App, Kind } from '../../app/store';
 import { isConnected, isIptvChoice } from '../../app/store';
 import type { PlexItem } from '../../api/plex';
 import * as plex from '../../api/plex';
@@ -9,6 +9,7 @@ import { sourceTag } from '../../api/vod';
 import { formatDuration } from '../../core/quality';
 import { PosterCard, PosterPlaceholder } from '../cards';
 import { ChoicePanel, type ChoiceRequest } from '../choice';
+import { type FocusSignal, useFocused, useFocusSignal } from '../focussignal';
 import { Chip, EmptyNote, ErrorNote } from '../controls';
 import { FocusRow, FocusWithinContext, Press, focusWhenReady, useAccent } from '../focus';
 import { hasItemMenu } from '../itemmenu';
@@ -63,7 +64,7 @@ export function Library(props: ScreenProps & { kind: Kind }) {
   const { app, state, kind } = props;
   const browse = state.browse[kind];
   const showingIptv = isIptvChoice(browse.choice);
-  const [focused, setFocused] = useState<PlexItem | null>(null);
+  const focus = useFocusSignal<PlexItem>();
   const [choosing, setChoosing] = useState<ChoiceRequest | null>(null);
   const sortChip = useRef<View>(null);
   const decadeChip = useRef<View>(null);
@@ -74,7 +75,7 @@ export function Library(props: ScreenProps & { kind: Kind }) {
 
   // The provider's library is a grid only.
   const view = showingIptv ? 'grid' : browse.view;
-  useEffect(() => setFocused(null), [view, browse.choice]);
+  useEffect(() => focus.set(null), [view, browse.choice, focus]);
   // The first card takes the cursor arriving at a view, and not again: a re-sort or a
   // filter leaves it on the chip that asked for it.
   const viewKey = `${view}|${browse.choice ? `${browse.choice.baseUrl}|${browse.choice.section.key}` : ''}`;
@@ -97,8 +98,8 @@ export function Library(props: ScreenProps & { kind: Kind }) {
   const resumable = state.home.continueWatching.filter((i) => (kind === 'movie' ? i.type === 'movie' : i.type === 'episode') && here(i));
   const iptvNew = kind === 'movie' ? state.home.iptvMovies : state.home.iptvShows;
   // Arriving from the tabs, the tab's own home shows what it starts with in the hero.
-  const hero = focused ?? (view !== 'home' ? null
-    : resumable[0] ?? (kind === 'movie' ? browse.added[0] : browse.addedShows[0]?.newest) ?? browse.released[0] ?? null);
+  const fallback = view !== 'home' ? null
+    : resumable[0] ?? (kind === 'movie' ? browse.added[0] : browse.addedShows[0]?.newest) ?? browse.released[0] ?? null;
 
   const image = (item: PlexItem, path: string | null | undefined) => app.image(item.serverBase, path, 300, 450);
   const hold = (item: PlexItem) => (hasItemMenu(item) ? () => props.hold(item) : undefined);
@@ -112,28 +113,10 @@ export function Library(props: ScreenProps & { kind: Kind }) {
     <PosterCard key={`${prefix}:${plex.listKey(item)}`} focusKey={`${prefix}:${plex.listKey(item)}`} first={isFirst()}
       title={title} subtitle={subtitle} image={image(item, art)} tag={sourceTag(item)}
       progress={plex.resumeFraction(item)} watched={plex.isWatched(item)}
-      onFocus={() => { landed(); setFocused(item); }} onPress={() => props.open(item)} onHold={hold(item)} />
+      onFocus={() => { landed(); focus.set(item); }} onPress={() => props.open(item)} onHold={hold(item)} />
   );
 
-  const heroBlock = (
-    <View style={{ height: HERO_HEIGHT, paddingHorizontal: dp(40), paddingVertical: dp(8) }}>
-      {hero ? (() => {
-        // As on Home: an episode goes under its show's name, with its own title among the details.
-        const isEpisode = hero.type === 'episode' && !!hero.grandparentTitle;
-        const playable = hero.type === 'movie' || hero.type === 'episode';
-        return (
-          <HeroText
-            title={isEpisode ? hero.grandparentTitle! : hero.title}
-            facts={[plex.caption(hero), isEpisode ? hero.title : null, playable ? formatDuration(hero.durationMs) || null : null].filter((f): f is string => !!f)}
-            summary={hero.summary}
-            style={{ maxWidth: dp(700) }}
-          />
-        );
-      })() : (
-        <Text style={{ color: color.chalk, fontSize: dp(28), lineHeight: dp(34), fontWeight: '700' }}>{sectionTitle ?? kindTitle}</Text>
-      )}
-    </View>
-  );
+  const heroBlock = <LibraryHero app={app} focus={focus} fallback={fallback} title={sectionTitle ?? kindTitle} />;
 
   const body = (() => {
     if (view === 'home') {
@@ -153,7 +136,7 @@ export function Library(props: ScreenProps & { kind: Kind }) {
                   <PosterCard key={key} focusKey={key} first={isFirst()} title={g.showTitle}
                     subtitle={g.count > 1 ? `${g.count} new episodes` : plex.caption(g.newest)}
                     image={app.image(g.serverBase, g.thumb, 300, 450)} badge={g.count}
-                    onFocus={() => { landed(); setFocused(g.newest); }} onPress={() => props.open(g.newest)} onHold={() => props.hold(g.newest)} />
+                    onFocus={() => { landed(); focus.set(g.newest); }} onPress={() => props.open(g.newest)} onHold={() => props.hold(g.newest)} />
                 );
               })}
             </PosterRow>
@@ -186,7 +169,7 @@ export function Library(props: ScreenProps & { kind: Kind }) {
                 : collections.map((c, i) => (
                   <PosterCard key={plex.listKey(c)} focusKey={plex.listKey(c)} first={arriving && i === 0} width={CARD_WIDTH}
                     title={c.title} subtitle={plex.caption(c)} image={image(c, c.thumb)}
-                    onFocus={() => { landed(); setFocused(c); }} onPress={() => props.open(c)} />
+                    onFocus={() => { landed(); focus.set(c); }} onPress={() => props.open(c)} />
                 ))}
             </TVFocusGuideView>
           </FocusRow>
@@ -306,7 +289,7 @@ export function Library(props: ScreenProps & { kind: Kind }) {
                       progress={plex.resumeFraction(item)} watched={plex.isWatched(item)}
                       onFocus={() => {
                         landed();
-                        setFocused(item);
+                        focus.set(item);
                         // The next page is in before it's reached.
                         const b = app.state.browse[kind];
                         if (index >= b.items.length - LOAD_AHEAD && b.total > b.items.length && !b.busy) void app.loadMore(kind);
@@ -319,7 +302,7 @@ export function Library(props: ScreenProps & { kind: Kind }) {
           />
         </FocusRow>
         {showRail ? (
-          <LetterRail letters={browse.letters.map((l) => l.letter)} current={focused ? letterOf(focused) : null} onJump={(l) => void jump(l)} />
+          <LetterRail letters={browse.letters.map((l) => l.letter)} focus={focus} onJump={(l) => void jump(l)} />
         ) : null}
       </View>
     );
@@ -327,7 +310,6 @@ export function Library(props: ScreenProps & { kind: Kind }) {
 
   return (
     <View style={{ flex: 1 }}>
-      <HeroBackdrop url={hero ? app.image(hero.serverBase, hero.art ?? hero.thumb, 1920, 1080) : null} />
       {heroBlock}
       <View style={{ flex: 1 }}>{body}</View>
       {choosing ? <ChoicePanel request={choosing} onClose={() => setChoosing(null)} /> : null}
@@ -340,8 +322,39 @@ export function Library(props: ScreenProps & { kind: Kind }) {
  * column reaches it; OK on a letter moves the cursor to that letter's first title. Letters
  * with nothing under them are shown, so the rail keeps its shape, but can't be chosen.
  */
-function LetterRail(props: { letters: string[]; current: string | null; onJump: (letter: string) => void }) {
+/** The title with the cursor over its artwork, at the top of the tab: drawn again on its own as the cursor moves. */
+function LibraryHero(props: { app: App; focus: FocusSignal<PlexItem>; fallback: PlexItem | null; title: string }) {
+  const { app } = props;
+  const hero = useFocused(props.focus) ?? props.fallback;
+  return (
+    <>
+      <HeroBackdrop url={hero ? app.image(hero.serverBase, hero.art ?? hero.thumb, 1920, 1080) : null} />
+      <View style={{ height: HERO_HEIGHT, paddingHorizontal: dp(40), paddingVertical: dp(8) }}>
+        {hero ? (() => {
+          // As on Home: an episode goes under its show's name, with its own title among the details.
+          const isEpisode = hero.type === 'episode' && !!hero.grandparentTitle;
+          const playable = hero.type === 'movie' || hero.type === 'episode';
+          return (
+            <HeroText
+              title={isEpisode ? hero.grandparentTitle! : hero.title}
+              facts={[plex.caption(hero), isEpisode ? hero.title : null, playable ? formatDuration(hero.durationMs) || null : null].filter((f): f is string => !!f)}
+              summary={hero.summary}
+              style={{ maxWidth: dp(700) }}
+            />
+          );
+        })() : (
+          <Text style={{ color: color.chalk, fontSize: dp(28), lineHeight: dp(34), fontWeight: '700' }}>{props.title}</Text>
+        )}
+      </View>
+    </>
+  );
+}
+
+function LetterRail(props: { letters: string[]; focus: FocusSignal<PlexItem>; onJump: (letter: string) => void }) {
   const accent = useAccent();
+  // The letter of the title with the cursor: drawn again on its own as the cursor moves.
+  const focused = useFocused(props.focus);
+  const current = focused ? letterOf(focused) : null;
   // Plex names the letter as it has it; match it back up.
   const present = new Map(props.letters.map((l) => [l.toUpperCase(), l]));
   return (
@@ -350,8 +363,8 @@ function LetterRail(props: { letters: string[]; current: string | null; onJump: 
         const available = present.get(letter);
         const label = (focused: boolean) => (
           <Text style={{
-            color: focused ? color.ink : !available ? 'rgba(127, 135, 146, 0.5)' : letter === props.current ? accent.color : color.muted,
-            fontSize: dp(11), lineHeight: dp(12), fontWeight: focused || letter === props.current ? '700' : '500',
+            color: focused ? color.ink : !available ? 'rgba(127, 135, 146, 0.5)' : letter === current ? accent.color : color.muted,
+            fontSize: dp(11), lineHeight: dp(12), fontWeight: focused || letter === current ? '700' : '500',
           }}>{letter}</Text>
         );
         if (!available) {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { Image, View } from 'react-native';
 import type { App, AppState, HomeRowId, Route } from '../../app/store';
 import { isConnected, requestBadge, shownRequestRows } from '../../app/store';
@@ -10,6 +10,7 @@ import { sourceTag } from '../../api/vod';
 import type { RequestTitle } from '../../api/reely';
 import { formatDuration } from '../../core/quality';
 import { PosterCard } from '../cards';
+import { type FocusSignal, useFocused, useFocusSignal } from '../focussignal';
 import { ActionButton, EmptyNote, ErrorNote } from '../controls';
 import { hasItemMenu } from '../itemmenu';
 import { PosterRow, Rows } from '../rows';
@@ -73,56 +74,17 @@ function ReadyCard(props: { app: App; title: RequestTitle; more: number }) {
 }
 
 export function Home(props: ScreenProps) {
-  const { app, state } = props;
-  const [focused, setFocused] = useState<PlexItem | null>(null);
-  if (!isConnected(state)) return <PlexSignIn app={app} state={state} />;
-  const home = state.home;
-  const hidden = new Set<HomeRowId>(state.prefs.hiddenRows);
-  const shows = (id: HomeRowId) => !hidden.has(id);
-  // Arriving from the tabs, the hero shows what the page starts with rather than nothing.
-  const hero = focused
-    ?? (shows('continueWatching') ? home.continueWatching[0] : undefined)
-    ?? (shows('recentEpisodes') ? home.recentEpisodes[0]?.newest : undefined)
-    ?? (shows('recentMovies') ? home.recentMovies[0] : undefined)
-    ?? null;
-  const image = (item: PlexItem, path: string | null | undefined) => app.image(item.serverBase, path, 300, 450);
-  let first = true;
-  const isFirst = () => {
-    const was = first;
-    first = false;
-    return was;
-  };
-  const poster = (item: PlexItem, title: string, subtitle: string | null, art: string | null | undefined) => (
-    <PosterCard key={plex.listKey(item)} focusKey={plex.listKey(item)} first={isFirst()}
-      title={title} subtitle={subtitle} image={image(item, art)} tag={sourceTag(item)}
-      progress={plex.resumeFraction(item)} watched={plex.isWatched(item)}
-      onFocus={() => setFocused(item)} onPress={() => props.open(item)}
-      onHold={hasItemMenu(item) ? () => props.hold(item) : undefined} />
-  );
-  const group = (g: EpisodeGroup) => (
-    <PosterCard key={`g:${g.serverBase}|${g.showRatingKey}`} focusKey={`g:${g.serverBase}|${g.showRatingKey}`} first={isFirst()}
-      title={g.showTitle} subtitle={g.count > 1 ? `${g.count} new episodes` : plex.caption(g.newest)}
-      image={app.image(g.serverBase, g.thumb, 300, 450)} badge={g.count}
-      onFocus={() => setFocused(g.newest)} onPress={() => props.open(g.newest)} onHold={() => props.hold(g.newest)} />
-  );
-  const requestRows = shownRequestRows(state.requests);
-  const reelyRow = (title: string, ids: string[]) => {
-    const titles = interleave(ids.map((id) => requestRows.find((r) => r.id === id)?.titles ?? []));
-    if (!titles.length) return null;
-    return (
-      <PosterRow key={title} title={title}>
-        {titles.map((t) => (
-          <PosterCard key={`${t.kind}:${t.tmdbId}`} focusKey={`${t.kind}:${t.tmdbId}`} first={isFirst()}
-            title={t.title} subtitle={t.year != null ? String(t.year) : null} image={t.poster} tag={requestBadge(state.requests, t) ?? null}
-            onPress={() => props.openRequest(t)} />
-        ))}
-      </PosterRow>
-    );
-  };
+  if (!isConnected(props.state)) return <PlexSignIn app={props.app} state={props.state} />;
+  return <HomePage {...props} />;
+}
+
+/** The title with the cursor, large over its artwork: drawn again on its own as the cursor moves. */
+function HomeHero(props: { app: App; focus: FocusSignal<PlexItem>; fallback: PlexItem | null }) {
+  const { app } = props;
+  const hero = useFocused(props.focus) ?? props.fallback;
   const isEpisode = hero?.type === 'episode' && !!hero.grandparentTitle;
-  const ready = state.requests.ready[0];
   return (
-    <View style={{ flex: 1 }}>
+    <>
       <HeroBackdrop url={hero ? app.image(hero.serverBase, hero.art ?? hero.thumb, 1920, 1080) : null} />
       <View style={{ height: HERO_HEIGHT, paddingHorizontal: EDGE, paddingVertical: dp(6) }}>
         {hero ? (
@@ -138,44 +100,107 @@ export function Home(props: ScreenProps) {
           <Text style={[type.display, { fontSize: dp(28), lineHeight: dp(34) }]}>Home</Text>
         )}
       </View>
-      <Rows style={{ flex: 1 }}>
-        {state.homeError ? <ErrorNote message={state.homeError} style={{ marginHorizontal: EDGE }} /> : null}
-        {ready ? <ReadyCard app={app} title={ready} more={state.requests.ready.length - 1} /> : null}
-        {home.continueWatching.length && shows('continueWatching') ? (
-          <PosterRow title="Continue Watching">
-            {home.continueWatching.map((i) => poster(i, plex.rowTitle(i), episodeLine(i), posterArt(i)))}
-          </PosterRow>
-        ) : null}
-        {home.recentEpisodes.length && shows('recentEpisodes') ? (
-          <PosterRow title="Recently Added Episodes">{home.recentEpisodes.map(group)}</PosterRow>
-        ) : null}
-        {home.recentMovies.length && shows('recentMovies') ? (
-          <PosterRow title="Recently Added Movies">{home.recentMovies.map((i) => poster(i, i.title, plex.caption(i), i.thumb))}</PosterRow>
-        ) : null}
-        {home.iptvMovies.length && shows('iptvMovies') ? (
-          <PosterRow title="New Movies on IPTV">{home.iptvMovies.map((i) => poster(i, i.title, plex.caption(i), i.thumb))}</PosterRow>
-        ) : null}
-        {home.iptvShows.length && shows('iptvShows') ? (
-          <PosterRow title="New Shows on IPTV">{home.iptvShows.map((i) => poster(i, i.title, plex.caption(i), i.thumb))}</PosterRow>
-        ) : null}
-        {home.watchlist.length && shows('watchlist') ? (
-          <PosterRow title="Watchlist">{home.watchlist.map((i) => poster(i, i.title, plex.caption(i), i.thumb))}</PosterRow>
-        ) : null}
-        {home.playlists.length && shows('playlists') ? (
-          <PosterRow title="Playlists">
-            {home.playlists.map((p) => (
-              <PosterCard key={plex.listKey(p)} focusKey={plex.listKey(p)} first={isFirst()} title={p.title}
-                subtitle={p.leafCount === 1 ? '1 item' : `${p.leafCount} items`} image={image(p, p.thumb)}
-                onFocus={() => setFocused(p)} onPress={() => props.open(p)} />
-            ))}
-          </PosterRow>
-        ) : null}
-        {reelyRow('Trending', ['movies', 'shows'])}
-        {reelyRow('Popular', ['popularMovies', 'popularShows'])}
-        {homeIsEmpty(home) && !state.homeBusy ? (
-          <EmptyNote text="Nothing to show yet. Watch something and it will appear here." style={{ marginHorizontal: EDGE, marginVertical: dp(20) }} />
-        ) : null}
-      </Rows>
+    </>
+  );
+}
+
+function HomePage(props: ScreenProps) {
+  const { app, state } = props;
+  const focus = useFocusSignal<PlexItem>();
+  // The page's actions as they are now, without making the rows anew when they're new functions.
+  const actions = useRef(props);
+  actions.current = props;
+  const home = state.home;
+  const hiddenRows = state.prefs.hiddenRows;
+  const hidden = new Set<HomeRowId>(hiddenRows);
+  const shows = (id: HomeRowId) => !hidden.has(id);
+  // Arriving from the tabs, the hero shows what the page starts with rather than nothing.
+  const fallback = (shows('continueWatching') ? home.continueWatching[0] : undefined)
+    ?? (shows('recentEpisodes') ? home.recentEpisodes[0]?.newest : undefined)
+    ?? (shows('recentMovies') ? home.recentMovies[0] : undefined)
+    ?? null;
+  // The rows, made again only when what's in them changes: not as the cursor moves.
+  const rows = useMemo(() => {
+    const image = (item: PlexItem, path: string | null | undefined) => app.image(item.serverBase, path, 300, 450);
+    let first = true;
+    const isFirst = () => {
+      const was = first;
+      first = false;
+      return was;
+    };
+    const poster = (item: PlexItem, title: string, subtitle: string | null, art: string | null | undefined) => (
+      <PosterCard key={plex.listKey(item)} focusKey={plex.listKey(item)} first={isFirst()}
+        title={title} subtitle={subtitle} image={image(item, art)} tag={sourceTag(item)}
+        progress={plex.resumeFraction(item)} watched={plex.isWatched(item)}
+        onFocus={() => focus.set(item)} onPress={() => actions.current.open(item)}
+        onHold={hasItemMenu(item) ? () => actions.current.hold(item) : undefined} />
+    );
+    const group = (g: EpisodeGroup) => (
+      <PosterCard key={`g:${g.serverBase}|${g.showRatingKey}`} focusKey={`g:${g.serverBase}|${g.showRatingKey}`} first={isFirst()}
+        title={g.showTitle} subtitle={g.count > 1 ? `${g.count} new episodes` : plex.caption(g.newest)}
+        image={app.image(g.serverBase, g.thumb, 300, 450)} badge={g.count}
+        onFocus={() => focus.set(g.newest)} onPress={() => actions.current.open(g.newest)} onHold={() => actions.current.hold(g.newest)} />
+    );
+    const requestRows = shownRequestRows(state.requests);
+    const reelyRow = (title: string, ids: string[]) => {
+      const titles = interleave(ids.map((id) => requestRows.find((r) => r.id === id)?.titles ?? []));
+      if (!titles.length) return null;
+      return (
+        <PosterRow key={title} title={title}>
+          {titles.map((t) => (
+            <PosterCard key={`${t.kind}:${t.tmdbId}`} focusKey={`${t.kind}:${t.tmdbId}`} first={isFirst()}
+              title={t.title} subtitle={t.year != null ? String(t.year) : null} image={t.poster} tag={requestBadge(state.requests, t) ?? null}
+              onPress={() => actions.current.openRequest(t)} />
+          ))}
+        </PosterRow>
+      );
+    };
+    const ready = state.requests.ready[0];
+    return (
+        <Rows style={{ flex: 1 }}>
+          {state.homeError ? <ErrorNote message={state.homeError} style={{ marginHorizontal: EDGE }} /> : null}
+          {ready ? <ReadyCard app={app} title={ready} more={state.requests.ready.length - 1} /> : null}
+          {home.continueWatching.length && shows('continueWatching') ? (
+            <PosterRow title="Continue Watching">
+              {home.continueWatching.map((i) => poster(i, plex.rowTitle(i), episodeLine(i), posterArt(i)))}
+            </PosterRow>
+          ) : null}
+          {home.recentEpisodes.length && shows('recentEpisodes') ? (
+            <PosterRow title="Recently Added Episodes">{home.recentEpisodes.map(group)}</PosterRow>
+          ) : null}
+          {home.recentMovies.length && shows('recentMovies') ? (
+            <PosterRow title="Recently Added Movies">{home.recentMovies.map((i) => poster(i, i.title, plex.caption(i), i.thumb))}</PosterRow>
+          ) : null}
+          {home.iptvMovies.length && shows('iptvMovies') ? (
+            <PosterRow title="New Movies on IPTV">{home.iptvMovies.map((i) => poster(i, i.title, plex.caption(i), i.thumb))}</PosterRow>
+          ) : null}
+          {home.iptvShows.length && shows('iptvShows') ? (
+            <PosterRow title="New Shows on IPTV">{home.iptvShows.map((i) => poster(i, i.title, plex.caption(i), i.thumb))}</PosterRow>
+          ) : null}
+          {home.watchlist.length && shows('watchlist') ? (
+            <PosterRow title="Watchlist">{home.watchlist.map((i) => poster(i, i.title, plex.caption(i), i.thumb))}</PosterRow>
+          ) : null}
+          {home.playlists.length && shows('playlists') ? (
+            <PosterRow title="Playlists">
+              {home.playlists.map((p) => (
+                <PosterCard key={plex.listKey(p)} focusKey={plex.listKey(p)} first={isFirst()} title={p.title}
+                  subtitle={p.leafCount === 1 ? '1 item' : `${p.leafCount} items`} image={image(p, p.thumb)}
+                  onFocus={() => focus.set(p)} onPress={() => actions.current.open(p)} />
+              ))}
+            </PosterRow>
+          ) : null}
+          {reelyRow('Trending', ['movies', 'shows'])}
+          {reelyRow('Popular', ['popularMovies', 'popularShows'])}
+          {homeIsEmpty(home) && !state.homeBusy ? (
+            <EmptyNote text="Nothing to show yet. Watch something and it will appear here." style={{ marginHorizontal: EDGE, marginVertical: dp(20) }} />
+          ) : null}
+        </Rows>
+    );
+  }, [app, home, hiddenRows, state.requests, state.homeError, state.homeBusy, focus]);
+  return (
+    <View style={{ flex: 1 }}>
+      <HomeHero app={app} focus={focus} fallback={fallback} />
+      {rows}
     </View>
   );
 }
