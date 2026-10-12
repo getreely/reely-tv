@@ -17,6 +17,7 @@ import { Screens, routeFor } from './screens';
 import { BACKDROP_RISE } from './surfaces';
 import { LivePlayer } from './player/live';
 import { VodPlayer } from './player/vod';
+import { checkCodecs } from '../player/codecs';
 import { setBufferSeconds } from '../player/engine';
 import { outputs } from '../player/outputs';
 import { ProfilePicker, ReminderCard, Screensaver, Tour, UpdatePrompt, slidesFrom } from './overlays';
@@ -147,6 +148,12 @@ export function Root(props: { app: App }) {
     pressedAt.current = Date.now();
     if (event.eventKeyAction === 0 && ['left', 'right', 'up', 'down'].includes(event.eventType)) arrowAt.current = Date.now();
   });
+
+  // What the stick decodes, asked once Home is up: what plays as it is follows its answers.
+  useEffect(() => {
+    const t = setTimeout(() => void checkCodecs(), 3_000);
+    return () => clearTimeout(t);
+  }, []);
 
   // A newer version, looked for once a little after starting, as on the Fire TV.
   useEffect(() => {

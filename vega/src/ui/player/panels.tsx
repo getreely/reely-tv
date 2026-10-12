@@ -2,6 +2,8 @@ import React from 'react';
 import { Image, View } from 'react-native';
 import type { PlexChapter, PlexOnlineSubtitle, PlexStream } from '../../api/plex';
 import type { Playing, Prefs } from '../../app/store';
+import { IPTV_SOURCE } from '../../api/vod';
+import { whyConverted } from '../../player/canplay';
 import { MinusGlyph, MoonGlyph, PlusGlyph, SearchGlyph } from '../glyphs';
 import { MenuHeading, MenuItem, MenuLayer, MenuSection } from '../menus';
 import { Text } from '../text';
@@ -95,6 +97,8 @@ export function InfoPanel(props: { playing: Playing; onClose: () => void }) {
   const audio = p.audioStreams.find((s) => s.selected) ?? p.audioStreams[0];
   const rows: Array<[string, string | null]> = [
     ['Quality', props.playing.direct ? 'Original' : 'Adjusted for this TV'],
+    // Why Plex converts it, when the file itself is what this TV can't play.
+    ['Converted because', props.playing.direct || props.playing.base === IPTV_SOURCE ? null : whyConverted(p)],
     ['Picture', p.videoCodec ? p.videoCodec.toUpperCase() : null],
     ['Sound', audio?.label ?? (p.audioCodec ? `${p.audioCodec.toUpperCase()}${p.audioChannels ? `  ·  ${channelLayout(p.audioChannels)}` : ''}` : null)],
     ['File', p.container ? p.container.toUpperCase() : null],

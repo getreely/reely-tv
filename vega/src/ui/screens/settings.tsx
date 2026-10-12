@@ -6,6 +6,7 @@ import { ACCENTS, BITRATE_CHOICES, HOME_ROWS, SCREENSAVER_CHOICES, SUBTITLE_SIZE
 import { VERSION } from '../../app/version';
 import * as xtream from '../../api/xtream';
 import { clearProblem, lastProblem } from '../../core/crash';
+import { PROBES, checkCodecs, codecAnswers, decodes, onCodecs } from '../../player/codecs';
 import { frameRateRefused, onFrameRateChange } from '../../player/display';
 import { outputs, type OutputsState } from '../../player/outputs';
 import { ChoicePanel, type ChoiceRequest } from '../choice';
@@ -255,7 +256,35 @@ function Playback({ kit }: { kit: Kit }) {
           options={[{ value: -1, label: 'Off' }, ...THEME_LEVELS.map(([label], i) => ({ value: i, label }))]}
           selected={prefs.themeLevel} onSelect={(level) => app.setThemeLevel(level)} />
       </Group>
+      <FormatsGroup />
     </>
+  );
+}
+
+/**
+ * What this stick decodes, as it answered when asked (codecs.ts): those play as they are,
+ * the rest Plex converts first. Asked again from here.
+ */
+function FormatsGroup() {
+  const [answers, setAnswers] = useState(codecAnswers);
+  const [checking, setChecking] = useState(false);
+  useEffect(() => onCodecs(() => setAnswers(codecAnswers())), []);
+  // A format canplay.ts looks up by its codec goes by decodes(); HEVC 4K is the stick's answer alone.
+  const plays = (key: string) => (PROBES[key].prefixes.length ? decodes(PROBES[key].prefixes[0]) : !!answers?.[key]);
+  const list = (kind: 'video' | 'audio', yes: boolean) => Object.keys(PROBES)
+    .filter((k) => PROBES[k].kind === kind && plays(k) === yes).map((k) => PROBES[k].label).join(', ') || 'None';
+  const line = (kind: 'video' | 'audio') => `Plays as it is: ${list(kind, true)}.\nConverted by Plex: ${list(kind, false)}.`;
+  return (
+    <Group title="This TV" note="As the Fire TV answered when asked. Whatever it plays, Reely sends as it is; the rest your Plex server converts first.">
+      <Setting title="Video" value={answers ? null : 'Checking…'} note={answers ? line('video') : null} />
+      <Setting title="Sound" value={answers ? null : 'Checking…'} note={answers ? line('audio') : null} />
+      <Setting title="Check again" value={checking ? 'Checking…' : null}
+        onPress={() => {
+          if (checking) return;
+          setChecking(true);
+          void checkCodecs(true).finally(() => setChecking(false));
+        }} />
+    </Group>
   );
 }
 

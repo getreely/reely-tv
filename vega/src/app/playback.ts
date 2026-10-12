@@ -19,7 +19,14 @@ const CONTAINERS: Record<string, string> = {
 };
 
 const VIDEO: Record<string, string> = { h264: "avc1.640028", hevc: "hev1.1.6.L120.90", h265: "hev1.1.6.L120.90", vp9: "vp09.00.10.08", av1: "av01.0.08M.08" };
-const AUDIO: Record<string, string> = { aac: "mp4a.40.2", mp3: "mp4a.69", ac3: "ac-3", eac3: "ec-3", opus: "opus", flac: "flac" };
+const AUDIO: Record<string, string> = { aac: "mp4a.40.2", mp3: "mp4a.69", ac3: "ac-3", eac3: "ec-3", opus: "opus", flac: "flac", dca: "dtsc", dts: "dtsc", truehd: "mlpa" };
+
+/** A codec as Plex names it, as a person would. */
+const NAMES: Record<string, string> = {
+  h264: "H.264", hevc: "HEVC", h265: "HEVC", vp9: "VP9", av1: "AV1", mpeg2video: "MPEG-2", vc1: "VC-1",
+  aac: "AAC", mp3: "MP3", ac3: "Dolby Digital", eac3: "Dolby Digital Plus", truehd: "Dolby TrueHD", dca: "DTS", dts: "DTS", flac: "FLAC", opus: "Opus",
+};
+const named = (codec: string) => NAMES[codec] ?? codec.toUpperCase();
 
 export interface Plan {
   direct: boolean;
@@ -31,9 +38,9 @@ export function plan(p: Pick<PlexPlayback, "container" | "videoCodec" | "audioCo
   const container = p.container ? CONTAINERS[p.container] : undefined;
   if (!container) return { direct: false, reason: `The TV can't open ${p.container ? p.container.toUpperCase() : "this"} files` };
   const video = p.videoCodec ? VIDEO[p.videoCodec] : undefined;
-  if (p.videoCodec && !video) return { direct: false, reason: `The TV can't play ${p.videoCodec.toUpperCase()} video` };
+  if (p.videoCodec && !video) return { direct: false, reason: `The TV can't play ${named(p.videoCodec)} video` };
   const audio = p.audioCodec ? AUDIO[p.audioCodec] : undefined;
-  if (p.audioCodec && !audio) return { direct: false, reason: `The TV can't play ${p.audioCodec.toUpperCase()} sound` };
+  if (p.audioCodec && !audio) return { direct: false, reason: `The TV can't play ${named(p.audioCodec)} sound` };
   const codecs = [video, audio].filter(Boolean).join(", ");
   const mime = codecs ? `${container}; codecs="${codecs}"` : container;
   if (canPlay(mime)) return { direct: true, reason: null };
@@ -41,6 +48,9 @@ export function plan(p: Pick<PlexPlayback, "container" | "videoCodec" | "audioCo
   // in it is asked about instead, as it would be in an MP4; the TV says yes to that, and
   // it's tried as it is. Should it not play after all, the player has Plex convert it then.
   if (container === CONTAINERS.mkv && codecs && canPlay(`video/mp4; codecs="${codecs}"`)) return { direct: true, reason: null };
+  // Which of the two this TV said no to.
+  if (p.videoCodec && video && !canPlay(`video/mp4; codecs="${video}"`)) return { direct: false, reason: `The TV can't play ${named(p.videoCodec)} video` };
+  if (p.audioCodec && audio && !canPlay(`video/mp4; codecs="${audio}"`)) return { direct: false, reason: `The TV can't play ${named(p.audioCodec)} sound` };
   return { direct: false, reason: "The TV can't play this file as it is" };
 }
 
