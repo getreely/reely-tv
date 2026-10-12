@@ -711,8 +711,8 @@ test("Live TV from an M3U playlist: its own XMLTV guide is read, as on the Fire 
   await page.getByPlaceholder("Playlist address").fill("http://lists.example/tv.m3u");
   await page.getByRole("button", { name: "Add playlist" }).click();
   await page.getByRole("button", { name: "News", exact: true }).click();
-  await expect(page.locator(".channel").first()).toContainText("Playlist Evening News");
-  await page.getByRole("button", { name: "Guide" }).click();
+  // A category opens into its guide, as on the Fire TV.
+  await expect(page.locator(".guide")).toContainText("Playlist Evening News");
   await expect(page.getByText("Playlist Late Show")).toBeVisible();
   // Read once, whole, and kept.
   expect(guides).toBe(1);
@@ -794,11 +794,12 @@ test("Live TV: sign in to a provider, pick a category, watch, change channel, fa
   await expect(page.locator(".category-tile").first()).toBeFocused();
   await page.screenshot({ path: "shots/lg-live-categories.png" });
   await page.getByRole("button", { name: "News", exact: true }).click();
-  await expect(page.locator(".channel").first()).toContainText("The Evening Report");
+  // A category opens into its guide, as on the Fire TV: no list of channels first.
+  await expect(page.locator(".guide [data-autofocus]")).toContainText("The Evening Report");
   await page.screenshot({ path: "shots/lg-live.png" });
   // Watching: the stream is the provider's HLS; down goes to the next channel.
   const stream = page.waitForRequest((r) => r.url().includes("/live/me/secret/101.m3u8"));
-  await page.locator(".channel").first().click();
+  await page.locator(".guide [data-autofocus]").click();
   await stream;
   await expect(page.locator(".player-title")).toContainText("News 24");
   const next = page.waitForRequest((r) => r.url().includes("/live/me/secret/102.m3u8"));
@@ -856,15 +857,14 @@ test("Live TV: sign in to a provider, pick a category, watch, change channel, fa
   await expect(page.locator(".guide-overlay")).toHaveCount(0);
   await expect(page.locator(".player-title")).toContainText("News 24");
   await press(page, "Escape");
-  // Off the channel: its category's list; Back again, the categories, Favorites offered.
-  await expect(page.locator(".channel").first()).toBeVisible();
+  // Off the channel: its category's guide; Back again, the categories, Favorites offered.
+  await expect(page.locator(".guide")).toBeVisible();
   await press(page, "Escape");
   await expect(page.getByRole("button", { name: "Favorites" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Recently watched" })).toBeVisible();
 
   // The guide: time across. What's over plays from the archive; what's to come, a reminder.
   await page.getByRole("button", { name: "News", exact: true }).click();
-  await page.getByRole("button", { name: "Guide" }).click();
   await expect(page.locator(".guide")).toBeVisible();
   await expect(page.locator(".programme", { hasText: "Morning Briefing" }).first()).toBeVisible();
   await page.locator(".programme", { hasText: "Late Edition" }).first().focus();
@@ -929,7 +929,7 @@ test("Multiview on Vega: hold OK for another channel beside, walk the tiles, ful
   await page.getByPlaceholder("Password").fill("secret");
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.getByRole("button", { name: "News", exact: true }).click();
-  await page.locator(".channel").first().click();
+  await page.locator(".guide [data-autofocus]").click();
   await expect(page.locator(".player-title")).toContainText("News 24");
   await expect(page.locator(".player-ok:focus")).toHaveCount(1);
   await expect.poll(() => streams.includes("/live/me/secret/101.m3u8")).toBe(true);
@@ -982,7 +982,7 @@ test("Multiview on Vega: hold OK for another channel beside, walk the tiles, ful
   await expect(page.locator(".player .tile:not(.add-tile)")).toHaveCount(2);
   await expect(page.locator(".tile-frame.heard")).toContainText("News 24");
   await press(page, "Escape");
-  await expect(page.locator(".channel").first()).toBeVisible();
+  await expect(page.locator(".guide")).toBeVisible();
 });
 
 test.describe("on Vega, at the size a Fire TV's WebView is", () => {

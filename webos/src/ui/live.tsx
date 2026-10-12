@@ -2,7 +2,7 @@ import { clearSource, detach, setSource } from "./media";
 import { isVega, onAway } from "../core/platform";
 import { useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
 import type { Programme, XtreamCategory, XtreamChannel } from "../api/xtream";
-import { isOnAt, progressAt } from "../api/xtream";
+import { isOnAt } from "../api/xtream";
 import type { App, AppState } from "../app/store";
 import { focus, onKeys } from "./focus";
 import { Pill, Spinner, useRescue, useReturnFocus } from "./parts";
@@ -56,7 +56,7 @@ function LiveSignIn(props: { app: App; state: AppState }) {
   );
 }
 
-export function Live(props: { app: App; state: AppState; guide?: boolean; onGuide?: (on: boolean) => void }) {
+export function Live(props: { app: App; state: AppState }) {
   const { app, state } = props;
   const live = state.live;
   const [now, setNow] = useState(Math.floor(Date.now() / 1000));
@@ -90,36 +90,10 @@ export function Live(props: { app: App; state: AppState; guide?: boolean; onGuid
       </div>
     );
   }
-  const guide = props.guide ?? false;
+  // As on the Fire TV, a category opens into its guide, which says which category it is.
   return (
     <div>
-      <div class="toolbar">
-        <h2 class="page-title inline">{live.category.name}</h2>
-        <Pill label="Channels" on={!guide} onPress={() => props.onGuide?.(false)} />
-        <Pill label="Guide" on={guide} onPress={() => props.onGuide?.(true)} />
-      </div>
-      {live.busy && !live.channels.length ? <div class="center" style={{ height: "12rem" }}><Spinner /></div> : null}
-      {guide ? <GuideGrid app={app} state={state} now={now} /> : (
-      <div class="list">
-        {live.channels.map((ch, i) => {
-          const listing = live.guide[ch.streamId] ?? [];
-          const on = listing.find((p) => isOnAt(p, now));
-          const next = listing.find((p) => p.start >= now);
-          const fav = live.favorites.includes(ch.streamId);
-          return (
-            <button key={ch.streamId} class="channel" data-focus data-autofocus={i === 0 ? "" : undefined} onClick={() => app.watchChannel(i)}>
-              <div class="logo">{ch.icon ? <img src={ch.icon} alt="" /> : ch.name.slice(0, 3)}</div>
-              <div>
-                <div class="name">{[ch.number > 0 ? ch.number : null, ch.name].filter(Boolean).join("  ")}{fav ? "  ♥" : ""}</div>
-                {on ? <div class="facts">{on.title}</div> : null}
-                {on ? <div class="scrub"><i style={{ width: `${(progressAt(on, now) ?? 0) * 100}%` }} /></div> : null}
-                {next ? <div class="facts" style={{ color: "var(--faint)" }}>Next: {time(next.start)} {next.title}</div> : null}
-              </div>
-            </button>
-          );
-        })}
-      </div>
-      )}
+      {live.busy && !live.channels.length ? <div class="center" style={{ height: "12rem" }}><Spinner /></div> : <GuideGrid app={app} state={state} now={now} />}
     </div>
   );
 }

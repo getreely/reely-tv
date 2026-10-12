@@ -88,8 +88,6 @@ export function Root(props: { app: App }) {
   const [menuFor, setMenuFor] = useState<PlexItem | null>(null);
   // The menu OK on Movies or TV Shows drops, and where: under the tab that opened it.
   const [tabMenu, setTabMenu] = useState<{ kind: Kind; left: number; top: number; tab: HTMLElement } | null>(null);
-  // Kept here, so coming back from a channel finds the guide still up.
-  const [guide, setGuide] = useState(false);
   const [saver, setSaver] = useState(false);
   // The screensaver: after the minutes set without a button, never over something playing.
   useEffect(() => {
@@ -234,7 +232,7 @@ export function Root(props: { app: App }) {
         ) : route.name === "detail" ? (
           <Detail app={app} state={state} onPlay={onPlay} />
         ) : route.name === "live" ? (
-          <Live app={app} state={state} guide={guide} onGuide={setGuide} />
+          <Live app={app} state={state} />
         ) : route.name === "requests" ? (
           <Requests app={app} state={state} />
         ) : route.name === "requestTitle" ? (
