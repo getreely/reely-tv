@@ -19,7 +19,7 @@ id = "/com.amazon.vega.os@IVega_1_2"
 [components]
 [[components.interactive]]
 id = "tv.reely.vega.main"
-runtime-module = "/com.amazon.kepler.keplerscript.runtime.loader_2@IKeplerScript_2_0"
+runtime-module = "/com.amazon.kepler.runtime.react_native_kepler_4@IReactNativeKepler_0"
 launch-type = "singleton"
 categories = ["com.amazon.category.main"]
 
@@ -28,17 +28,20 @@ categories = ["com.amazon.category.main"]
 component-ids = ["tv.reely.vega.main"]
 
 [wants]
-# The page, in a WebView.
-[[wants.service]]
-id = "com.amazon.webview.renderer_service"
-
 # Typing: search, sign-in to a provider, a server's address.
 [[wants.service]]
 id = "com.amazon.inputmethod.service"
 
-# Video: films, episodes and channels.
+# Video: films, episodes and channels, in Amazon's own player.
 [[wants.service]]
 id = "com.amazon.media.server"
+
+[[wants.service]]
+id = "com.amazon.media.playersession.service"
+
+# Captions.
+[[wants.privilege]]
+id = "com.amazon.devconf.privilege.accessibility"
 
 [[wants.service]]
 id = "com.amazon.mediametrics.service"
@@ -67,3 +70,22 @@ id = "com.amazon.gipc.uuid.*"
 [offers]
 [[offers.service]]
 id = "com.amazon.gipc.uuid.*"
+
+[needs]
+[[needs.module]]
+id = "/com.amazon.kepler.kepler_media_controls_1@IKeplerMediaControls_0"
+
+[[needs.module]]
+id = "/com.amazon.kepler.keplermediadescriptor_1@IKeplermediadescriptor_1"
+
+[[needs.module]]
+id = "/com.amazon.kepler.async_storage__async_storage_2@IAsyncStorage__AsyncStorage_1"
+
+[[needs.module]]
+id = "/com.amazon.kepler.keplerscript_4@IKeplerScript_0"
+
+[[needs.module]]
+id = "/com.amazon.kepler.svg_3@ISVG_0"
+
+[[needs.module]]
+id = "/com.amazon.kepler.w3cmedia_2@IW3cmedia_3"

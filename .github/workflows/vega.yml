@@ -1,12 +1,17 @@
 name: Vega
 
-# Reely for Fire TV sticks on Vega OS, built with Amazon's Vega SDK: the LG app's page, built
-# and copied into the React Native shell (vega/), packaged as .vpkg for each kind of device.
-# The SDK is Amazon's (Program Materials License, https://developer.amazon.com/support/legal/pml),
-# installed here unattended; it needs no Amazon login to build. Installing on a stick, which
-# needs developer mode, is in vega/README.md.
+# Reely for Fire TV sticks on Vega OS (vega/): its own React Native app, built with Amazon's
+# Vega SDK and packaged as .vpkg for each kind of device. The SDK, and the hls.js build its
+# video player uses (vega/scripts/hlsjs.sh), are Amazon's (Program Materials License,
+# https://developer.amazon.com/support/legal/pml), fetched here unattended; neither needs an
+# Amazon login. Installing on a stick, which needs developer mode, is in vega/README.md.
 on:
   workflow_dispatch:
+    inputs:
+      test:
+        description: "Also publish the packages as the 'vega-test' pre-release, to try on a stick before a release."
+        type: boolean
+        default: false
   workflow_call:
   push:
     paths:
@@ -17,6 +22,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,16 +37,13 @@ jobs:
           source ~/vega/env
           vega --version
           vega sdk list-installed || true
-      - name: The page (the LG app, built)
-        working-directory: webos
-        run: npm ci
       - name: Build
         working-directory: vega
         run: |
           source ~/vega/env
           set +e
           # The manifest's module entries, as this SDK wants them, then the build.
-          { npm ci --legacy-peer-deps && vega project update-manifest && npm run build:release; } > build.log 2>&1
+          { npm ci && npm run typecheck && vega project update-manifest && npm run build:release; } > build.log 2>&1
           status=$?
           cat build.log
           ls -la build/*/ 2>/dev/null
@@ -53,3 +57,18 @@ jobs:
           name: reely-vega
           path: vega/build/*/*.vpkg
           if-no-files-found: error
+      - name: Test build
+        if: ${{ inputs.test }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p out
+          for f in $(find vega/build -path '*-release/*.vpkg'); do
+            arch=$(basename "$(dirname "$f")" | sed -E 's/-(release|debug)$//')
+            cp "$f" "out/reely-vega-$arch.vpkg"
+          done
+          ls -la out
+          gh release delete vega-test --yes --cleanup-tag 2>/dev/null || true
+          gh release create vega-test --target "$GITHUB_SHA" --prerelease --latest=false \
+            --title "Reely for Vega: test build" \
+            --notes "A build of the new Vega app to try on a stick, not a release. Built from \`$GITHUB_SHA\`." out/*.vpkg

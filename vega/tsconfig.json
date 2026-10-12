@@ -1,16 +1,10 @@
 {
+  "extends": "@react-native/typescript-config",
   "compilerOptions": {
-    "target": "esnext",
-    "module": "commonjs",
-    "lib": ["es2019"],
-    "jsx": "react-native",
+    "types": ["jest", "@amazon-devices/react-native-kepler"],
     "strict": true,
-    "moduleResolution": "node",
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "resolveJsonModule": true,
-    "noEmit": true,
-    "types": []
+    "noUnusedLocals": true
   },
-  "include": ["src", "index.js"]
+  "include": ["src", "index.js", "test"],
+  "exclude": ["src/hls"]
 }

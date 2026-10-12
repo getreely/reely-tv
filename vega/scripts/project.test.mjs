@@ -1,7 +1,7 @@
 // The project's own files agree with each other, as the Vega build needs them to.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 
 const read = (f) => readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
 
@@ -17,14 +17,20 @@ test("the version is the same in package.json and the manifest", () => {
   assert.match(read("manifest.toml"), new RegExp(`version = "${pkg.version.replace(/\./g, "\\.")}"`));
 });
 
-test("the WebView's services are all wanted", () => {
+test("React Native 0.83's runtime, and the media services the player needs", () => {
   const manifest = read("manifest.toml");
-  for (const id of ["com.amazon.webview.renderer_service", "com.amazon.media.server", "com.amazon.inputmethod.service", "com.amazon.audio.stream"]) {
+  assert.ok(manifest.includes('runtime-module = "/com.amazon.kepler.runtime.react_native_kepler_4@IReactNativeKepler_0"'));
+  for (const id of ["com.amazon.media.server", "com.amazon.mediabuffer.service", "com.amazon.mediatransform.service", "com.amazon.audio.stream", "com.amazon.inputmethod.service"]) {
     assert.ok(manifest.includes(`id = "${id}"`), id);
   }
 });
 
-test("the shell opens the page bundle-web puts in assets", () => {
-  assert.ok(read("src/App.tsx").includes("file:///pkg/assets/web/index.html"));
-  assert.ok(read("scripts/bundle-web.mjs").includes(`"assets", "web"`));
+test("Geist, a file per weight named for its family", () => {
+  for (const weight of ["Regular", "Medium", "SemiBold", "Bold"]) assert.ok(existsSync(new URL(`../assets/fonts/Geist-${weight}.ttf`, import.meta.url)), weight);
+});
+
+test("Amazon's hls.js is checked against the release it was written for", () => {
+  const script = read("scripts/hlsjs.sh");
+  assert.match(script, /SHA256="[0-9a-f]{64}"/);
+  assert.match(read(".gitignore"), /^src\/hls\/$/m);
 });
