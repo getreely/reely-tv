@@ -65,7 +65,17 @@ type HlsInstance = {
  * One picture: its player, what it's playing, and the surface it's drawn on. Made by
  * [useEngine] for a screen, kept for as long as the screen is, and let go with it.
  */
+let made = 0;
+
+/** Where a stream comes from, for the log: the host and the kind of file, never who's asking. */
+function described(url: string) {
+  const m = /^[a-z]+:\/\/([^/?#:]+)[^?#]*?(\.[a-z0-9]{2,4})?(?:[?#]|$)/i.exec(url);
+  return m ? `${m[1]} ${m[2] ?? ''}`.trim() : 'stream';
+}
+
 export class Engine {
+  /** Which player this is: a surface belongs to one, and a new one gets a new surface. */
+  readonly id = ++made;
   readonly player = new VideoPlayer();
   private hls: HlsInstance | null = null;
   private ready: Promise<void>;
@@ -81,7 +91,10 @@ export class Engine {
       this.player.autoplay = false;
       this.player.muted = !!options.muted;
       for (const event of ['playing', 'pause', 'waiting', 'timeupdate', 'ended', 'loadedmetadata'] as EngineEvent[]) {
-        this.player.addEventListener(event, () => this.emit(event));
+        this.player.addEventListener(event, () => {
+          if (event === 'playing') console.log(`[reely] player ${this.id} playing`);
+          this.emit(event);
+        });
       }
       this.player.addEventListener('error', () => this.fail({ kind: 'media', status: null, detail: this.player.error?.message ?? 'The player stopped.' }));
     });
@@ -105,6 +118,7 @@ export class Engine {
 
   private fail(f: EngineFailure) {
     if (this.gone) return;
+    console.warn(`[reely] player ${this.id} stopped: ${f.kind} ${f.status ?? ''} ${f.detail}`);
     this.failureListeners.forEach((h) => h(f));
   }
 
@@ -115,6 +129,7 @@ export class Engine {
     this.unloadSource();
     this.url = url;
     this.recovered = false;
+    console.log(`[reely] player ${this.id} opens ${described(url)}${isHls(url) ? ' (HLS)' : ''}${this.surface ? '' : ', no surface yet'}`);
     if (isHls(url)) {
       polyfill();
       (globalThis as unknown as { gmedia: unknown }).gmedia = this.player;
@@ -207,18 +222,38 @@ export class Engine {
     }
   }
 
+  /** The surface it's drawn on: given once the player's ready, as Vega's player needs. */
   attachSurface(handle: string) {
     this.surface = handle;
-    this.player.setSurfaceHandle(handle);
+    void this.ready.then(() => {
+      if (this.gone || this.surface !== handle) return;
+      try {
+        this.player.setSurfaceHandle(handle);
+      } catch (e) {
+        console.warn('[reely] surface', e);
+      }
+    });
   }
 
+  /** A surface going: let go only if it's the one in use, not an old one closing after a new one opened. */
   detachSurface(handle: string) {
-    if (this.surface === handle) this.surface = null;
-    this.player.clearSurfaceHandle(handle);
+    if (this.surface !== handle) return;
+    this.surface = null;
+    void this.ready.then(() => {
+      if (this.gone) return;
+      try {
+        this.player.clearSurfaceHandle(handle);
+      } catch {
+        // Let go already.
+      }
+    });
   }
 
   attachCaptions(handle: string) {
-    (this.player as unknown as { setCaptionViewHandle?: (h: string) => void }).setCaptionViewHandle?.(handle);
+    void this.ready.then(() => {
+      if (this.gone) return;
+      (this.player as unknown as { setCaptionViewHandle?: (h: string) => void }).setCaptionViewHandle?.(handle);
+    });
   }
 
   private unloadSource() {
@@ -265,11 +300,11 @@ export function VideoSurface(props: { engine: Engine; style?: StyleProp<ViewStyl
   const { engine } = props;
   return (
     <View style={[{ backgroundColor: '#000000', overflow: 'hidden' }, props.style]} pointerEvents="none">
-      <KeplerVideoSurfaceView style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
+      <KeplerVideoSurfaceView key={engine.id} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
         onSurfaceViewCreated={(handle: string) => engine.attachSurface(handle)}
         onSurfaceViewDestroyed={(handle: string) => engine.detachSurface(handle)} />
       {props.captions ? (
-        <KeplerCaptionsView style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} show
+        <KeplerCaptionsView key={engine.id} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} show
           onCaptionViewCreated={(handle: string) => engine.attachCaptions(handle)} />
       ) : null}
     </View>

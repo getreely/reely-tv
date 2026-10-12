@@ -30,9 +30,13 @@ export function useBack(handler: () => boolean, active = true) {
 
 /**
  * Whether OK has been pressed afresh since the menu opened. Most menus open on a held OK
- * and arrive with it still down: its release mustn't press the first row.
+ * and arrive with it still down: its release mustn't press the first row. Vega doesn't
+ * always pass OK's going down to the app, so a moment after opening counts as afresh too.
  */
 const FreshPress = createContext<() => boolean>(() => true);
+
+/** How long after a menu opens a release of OK is still the one that opened it. */
+const HELD_RELEASE_MS = 700;
 
 export function MenuScrim(props: { strength?: number }) {
   const s = props.strength ?? 1;
@@ -53,9 +57,11 @@ export function MenuLayer(props: { onClose: () => void; width?: number; scrim?: 
     return true;
   });
   const fresh = useRef(false);
+  const openedAt = useRef(Date.now());
   useTVEventHandler((event) => {
     if ((event.eventType === 'select' || event.eventType === 'enter') && event.eventKeyAction === 0) fresh.current = true;
   });
+  const pressedAfresh = () => fresh.current || Date.now() - openedAt.current > HELD_RELEASE_MS;
   const width = props.width ?? MENU_WIDTH;
   return (
     <Overlay>
@@ -68,7 +74,7 @@ export function MenuLayer(props: { onClose: () => void; width?: number; scrim?: 
           opacity: arrival.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
           transform: [{ translateX: arrival.interpolate({ inputRange: [0, 1], outputRange: [0, dp(64)] }) }],
         }, props.style]}>
-        <FreshPress.Provider value={() => fresh.current}>
+        <FreshPress.Provider value={pressedAfresh}>
           <TVFocusGuideView autoFocus trapFocusUp trapFocusDown trapFocusLeft trapFocusRight style={{ flex: 1 }}>
             <ScrollView contentContainerStyle={{ paddingHorizontal: dp(28), paddingVertical: dp(28), gap: dp(4) }}>
               {props.children}
