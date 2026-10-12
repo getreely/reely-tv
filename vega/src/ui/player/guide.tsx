@@ -10,7 +10,7 @@ import { MenuHeading, MenuItem, MenuLayer, useBack } from '../menus';
 import { Gradient } from '../surfaces';
 import { Text } from '../text';
 import { color, dp } from '../theme';
-import { CHANNEL_COLUMN, GuideRow, NowLine, ROW_HEIGHT, RowsAbove, WINDOW, clock, rowsNear, timeRange, widthFor } from '../screens/live';
+import { CHANNEL_COLUMN, GuideRow, NowLine, ROW_HEIGHT, RowsAbove, TABLE_REST_MS, WINDOW, clock, rowsNear, timeRange, widthFor } from '../screens/live';
 
 /*
  * The guide, raised over a channel that keeps playing behind it (GuideOverlay.kt). Nothing
@@ -63,9 +63,13 @@ export function GuideOverlay(props: {
     const t = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 30_000);
     return () => clearInterval(t);
   }, []);
+  // Only the rows around the cursor, once it rests: see App.loadTable.
   useEffect(() => {
-    if (channels.length) void app.loadTable(channels);
-  }, [channels]);
+    if (!channels.length) return;
+    const { from, to } = rowsNear(channels.length, index);
+    const t = setTimeout(() => void app.loadTable(channels.slice(from, to)), TABLE_REST_MS);
+    return () => clearTimeout(t);
+  }, [channels, index]);
   useEffect(() => {
     rows.current?.scrollTo({ y: Math.max(0, index * (ROW_HEIGHT + ROW_GAP) - (ROW_HEIGHT + ROW_GAP) / 2), animated: true });
   }, [index, channels]);

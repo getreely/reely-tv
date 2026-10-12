@@ -2081,20 +2081,38 @@ export class App {
   }
 
   /** The guide's listings for these channels: what's been, for catch-up, and what's coming. */
+  /**
+   * The listings for [channels]: a guide asks for the rows around its cursor, once it
+   * rests (as the Fire TV fetches the channel being looked at). Asked for a whole category
+   * at once, four at a time with the app drawn again after each four, the guide crawled
+   * on the stick while it filled in. They're kept in once, together.
+   */
   async loadTable(channels: XtreamChannel[]) {
     const c = this.current.live.credentials;
     if (!c) return;
     if (xtream.isPlaylist(c)) return this.fromPlaylistGuide(channels);
-    const wanted = channels.filter((ch) => !this.current.live.table[ch.streamId]);
-    for (let i = 0; i < wanted.length; i += 4) {
-      const batch = wanted.slice(i, i + 4);
-      const found = await Promise.all(batch.map((ch) => xtream.epgTable(c, ch.streamId).catch(() => [] as Programme[])));
-      if (this.current.live.credentials !== c) return;
-      const table = { ...this.current.live.table };
-      batch.forEach((ch, n) => { table[ch.streamId] = found[n]; });
-      this.setLive({ table });
+    const wanted = channels.filter((ch) => !this.current.live.table[ch.streamId] && !this.tableAsked.has(ch.streamId));
+    if (!wanted.length) return;
+    wanted.forEach((ch) => this.tableAsked.add(ch.streamId));
+    const found: Array<[number, Programme[]]> = [];
+    try {
+      for (let i = 0; i < wanted.length; i += 4) {
+        const batch = wanted.slice(i, i + 4);
+        const got = await Promise.all(batch.map((ch) => xtream.epgTable(c, ch.streamId).catch(() => [] as Programme[])));
+        batch.forEach((ch, n) => found.push([ch.streamId, got[n]]));
+        if (this.current.live.credentials !== c) return;
+      }
+    } finally {
+      wanted.forEach((ch) => this.tableAsked.delete(ch.streamId));
     }
+    if (this.current.live.credentials !== c) return;
+    const table = { ...this.current.live.table };
+    for (const [id, listing] of found) table[id] = listing;
+    this.setLive({ table });
   }
+
+  /** Channels whose listings are on their way, so a guide resting again doesn't ask twice. */
+  private tableAsked = new Set<number>();
 
   /**
    * A programme that's over, from the channel's archive; or this one from its start. From
@@ -2227,13 +2245,18 @@ export class App {
     const c = this.current.live.credentials;
     if (!c) return;
     if (xtream.isPlaylist(c)) return this.fromPlaylistGuide(channels);
+    // Six at a time, and kept in once at the end: the app drawn again after every six was
+    // most of what made opening a category slow on the stick.
+    const found: Array<[number, Programme[]]> = [];
     for (let i = 0; i < channels.length; i += 6) {
       const batch = channels.slice(i, i + 6);
-      const found = await Promise.all(batch.map((ch) => xtream.shortEpg(c, ch.streamId, 2).catch(() => [] as Programme[])));
-      const guide = { ...this.current.live.guide };
-      batch.forEach((ch, n) => { guide[ch.streamId] = found[n]; });
-      this.setLive({ guide });
+      const got = await Promise.all(batch.map((ch) => xtream.shortEpg(c, ch.streamId, 2).catch(() => [] as Programme[])));
+      batch.forEach((ch, n) => found.push([ch.streamId, got[n]]));
+      if (this.current.live.credentials !== c) return;
     }
+    const guide = { ...this.current.live.guide };
+    for (const [id, listing] of found) guide[id] = listing;
+    this.setLive({ guide });
   }
 
   toggleFavorite(channel: XtreamChannel) {

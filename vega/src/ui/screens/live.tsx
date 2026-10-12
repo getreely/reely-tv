@@ -138,6 +138,9 @@ export function clock(epochSeconds: number): string {
 export const timeRange = (p: Programme) => `${clock(p.start)} – ${clock(p.stop)}`;
 
 /** One channel and what it's showing across the window. */
+/** How long the cursor rests on a row before the listings around it are asked for. */
+export const TABLE_REST_MS = 300;
+
 /**
  * The rows of a guide worth drawing: those around the cursor. A category can hold hundreds
  * of channels, and drawing every row, programmes and all, at every press of up or down
@@ -247,9 +250,13 @@ export function Guide(props: { app: App; state: AppState }) {
   const buttons = useRef<View>(null);
 
   // The listings for these channels, the guide's own where it has them.
+  // Only the rows around the cursor, once it rests: see App.loadTable.
   useEffect(() => {
-    if (channels.length) void app.loadTable(channels);
-  }, [channels]);
+    if (!channels.length) return;
+    const { from, to } = rowsNear(channels.length, index);
+    const t = setTimeout(() => void app.loadTable(channels.slice(from, to)), TABLE_REST_MS);
+    return () => clearTimeout(t);
+  }, [channels, index]);
   const listingOf = (c: XtreamChannel) => live.table[c.streamId] ?? live.guide[c.streamId] ?? [];
   const channel = channels[Math.min(index, channels.length - 1)] ?? null;
   const listing = channel ? listingOf(channel) : [];
