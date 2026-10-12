@@ -38,7 +38,8 @@ jobs:
         run: |
           source ~/vega/env
           set +e
-          { npm ci --legacy-peer-deps && npm run build:release; } > build.log 2>&1
+          # The manifest's module entries, as this SDK wants them, then the build.
+          { npm ci --legacy-peer-deps && vega project update-manifest && npm run build:release; } > build.log 2>&1
           status=$?
           cat build.log
           ls -la build/*/ 2>/dev/null

@@ -12,6 +12,10 @@ icon = "@image/app_icon.png"
 min = "1.2"
 target = "1.2"
 
+# Generated from [os.version] by `vega project update-manifest` (the build runs it too).
+[[needs.module]]
+id = "/com.amazon.vega.os@IVega_1_2"
+
 [components]
 [[components.interactive]]
 id = "tv.reely.vega.main"
