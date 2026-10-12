@@ -210,3 +210,42 @@ export async function signedInLive(page: Page) {
     if (!localStorage.getItem("reely:xtream")) localStorage.setItem("reely:xtream", JSON.stringify({ base: panel, username: "me", password: "secret" }));
   }, PANEL);
 }
+
+/** Reely, the owner's requesting app, as the LG app's tests have it: what's asked for is kept. */
+export async function fakeReely(page: Page) {
+  const REELY = "http://192.168.1.5:8788";
+  const asked: unknown[] = [];
+  const cors = { "Access-Control-Allow-Origin": "http://localhost:5199", "Access-Control-Allow-Credentials": "true", "Access-Control-Allow-Headers": "*", "Access-Control-Allow-Methods": "*" };
+  const send = (route: Route, value: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", headers: cors, body: JSON.stringify(value) });
+  await page.route(`${REELY}/**`, async (route) => {
+    const req = route.request();
+    if (req.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
+    const path = new URL(req.url()).pathname;
+    if (path === "/api/v1/auth/plex/token") return send(route, { status: "ok" });
+    if (path === "/api/v1/explore") {
+      return send(route, {
+        movies: [
+          { tmdbId: 603, kind: "movie", title: "The Matrix", year: 1999 },
+          { tmdbId: 27205, kind: "movie", title: "Inception", year: 2010, poster: null },
+          { tmdbId: 1, kind: "movie", title: "Arrival", year: 2016 },
+        ],
+        shows: [{ tmdbId: 1399, kind: "show", title: "Game of Thrones", year: 2011 }, { tmdbId: 2, kind: "show", title: "Severance", year: 2022 }],
+      });
+    }
+    if (path === "/api/v1/movies") return send(route, { movies: [{ tmdbId: 603, filePath: "/m.mkv" }] });
+    if (path === "/api/v1/shows") return send(route, { shows: [{ tmdbId: 1399, onDisk: 10, aired: 73, wanted: 63 }] });
+    if (path === "/api/v1/requests" && req.method() === "GET") return send(route, { requests: [] });
+    if (path === "/api/v1/auth/me") return send(route, { user: { role: "user", defaultLibraryId: 3 } });
+    if (path === "/api/v1/libraries") return send(route, { libraries: [{ id: 3, name: "TV", kind: "shows" }] });
+    if (path === "/api/v1/preview/show/1399") {
+      return send(route, { inLibraries: [], preview: { tmdbId: 1399, kind: "show", title: "Game of Thrones", year: 2011, overview: "Nine noble families fight for control over the lands of Westeros.",
+        seasons: [{ number: 1, name: "Season 1", episodes: [{}] }, { number: 2, name: "Season 2", episodes: [{}] }, { number: 3, name: "Season 3", episodes: [{}] }] } });
+    }
+    if (path === "/api/v1/requests" && req.method() === "POST") {
+      asked.push(JSON.parse(req.postData() ?? "{}"));
+      return send(route, { id: 1, status: "pending" }, 201);
+    }
+    return send(route, { error: "no" }, 404);
+  });
+  return { asked };
+}

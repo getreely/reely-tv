@@ -10,6 +10,8 @@ import { Library } from './screens/library';
 import { Live } from './screens/live';
 import { Detail } from './screens/detail';
 import { Person, Playlist } from './screens/lists';
+import { Search } from './screens/search';
+import { RequestTitlePage, Requests } from './screens/requests';
 import { canDirect } from '../player/canplay';
 
 /*
@@ -67,12 +69,12 @@ export function Screens(props: { app: App; state: AppState; open: (route: Route)
     case 'home': return <Home {...screen} />;
     case 'library': return <Library {...screen} kind={state.route.kind} />;
     case 'detail': case 'collection': return <Detail {...screen} />;
-    case 'search': return <Coming name="Search" />;
+    case 'search': return <Search {...screen} />;
     case 'person': return <Person {...screen} person={state.route.person} />;
     case 'playlist': return <Playlist {...screen} item={state.route.item} playAll={playAll} />;
     case 'live': return <Live app={app} state={state} />;
-    case 'requests': return <Coming name="Request" />;
-    case 'requestTitle': return <Coming name={state.route.title.title} />;
+    case 'requests': return <Requests {...screen} />;
+    case 'requestTitle': return <RequestTitlePage {...screen} title={state.route.title} />;
     case 'settings': return <Coming name="Settings" />;
   }
 }
