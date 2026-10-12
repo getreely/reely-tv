@@ -27,9 +27,15 @@ neither by itself. On an LG TV, the TV's own player still plays both, as before.
   on Windows.
 - A free Amazon Developer account: <https://developer.amazon.com>
 - Node.js 18 or later.
-- The **Vega SDK**. Sign in at
-  <https://developer.amazon.com/docs/vega/0.21/install-vega-sdk.html>, run its installer, and
-  open a new terminal afterwards so `vega` is on the path.
+- The **Vega CLI and SDK**, from Amazon's installer (no sign-in needed):
+
+  ```bash
+  curl -fsSL https://sdk-installer.vega.labcollab.net/get_vvm.sh | bash
+  ```
+
+  Open a new terminal afterwards. `vega --version` should say Vega CLI 1.4 or later, with
+  `vega devmode` in `vega --help`: an older `vega` (from an SDK downloaded before 0.24) has no
+  `devmode` or `update`, so run the installer again to replace it.
 
 ## Build it
 
