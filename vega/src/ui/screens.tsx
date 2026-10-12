@@ -1,16 +1,14 @@
 import React from 'react';
-import { View } from 'react-native';
 import type { App, AppState, Route } from '../app/store';
 import type { PlexItem } from '../api/plex';
 import type { RequestTitle } from '../api/reely';
-import { Text } from './text';
-import { dp, EDGE, type } from './theme';
 import { Home } from './screens/home';
 import { Library } from './screens/library';
 import { Live } from './screens/live';
 import { Detail } from './screens/detail';
 import { Person, Playlist } from './screens/lists';
 import { Search } from './screens/search';
+import { Settings } from './screens/settings';
 import { RequestTitlePage, Requests } from './screens/requests';
 import { canDirect } from '../player/canplay';
 
@@ -36,12 +34,6 @@ function shuffled<T>(items: T[]): T[] {
   }
   return out;
 }
-
-const Coming = (props: { name: string }) => (
-  <View style={{ flex: 1, paddingHorizontal: EDGE, paddingTop: dp(20) }}>
-    <Text style={type.headline}>{props.name}</Text>
-  </View>
-);
 
 export function Screens(props: { app: App; state: AppState; open: (route: Route) => void; openMenu: (item: PlexItem) => void }) {
   const { app, state } = props;
@@ -75,6 +67,6 @@ export function Screens(props: { app: App; state: AppState; open: (route: Route)
     case 'live': return <Live app={app} state={state} />;
     case 'requests': return <Requests {...screen} />;
     case 'requestTitle': return <RequestTitlePage {...screen} title={state.route.title} />;
-    case 'settings': return <Coming name="Settings" />;
+    case 'settings': return <Settings {...screen} onProfiles={() => app.askedWho()} />;
   }
 }

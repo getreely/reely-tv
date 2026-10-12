@@ -34,3 +34,8 @@ test("Amazon's hls.js is checked against the release it was written for", () => 
   assert.match(script, /SHA256="[0-9a-f]{64}"/);
   assert.match(read(".gitignore"), /^src\/hls\/$/m);
 });
+
+test("the version the app shows is package.json's", () => {
+  const pkg = JSON.parse(read("package.json"));
+  assert.ok(read("src/app/version.ts").includes(`'${pkg.version}'`));
+});
