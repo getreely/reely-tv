@@ -71,7 +71,18 @@ Once, to put the stick in developer mode:
    **7 times**. Then go back to **Developer Options → Developer Mode → Continue**. The TV
    shows a 6-character code, which lasts 5 minutes.
 3. On the computer, run `vega devmode enable-device --code <the code>`. The stick restarts.
-4. Run `vega device list` and check that the stick is listed.
+4. The stick starts out reachable only by USB. To reach it over Wi-Fi instead, note its IP
+   address under **Settings → My Fire TV → About → Network**, then go to **Developer Options →
+   Connection Mode**, choose **TCP/IP** on port **5555** and select **Continue**. The stick
+   restarts. Then, on the computer:
+
+   ```bash
+   vega exec vda connect <the stick's IP>:5555
+   vega exec vda devices      # the stick, followed by "device"
+   ```
+
+   If it isn't listed, `vega exec vda kill-server` and connect again. The computer and the
+   stick need the same network, with port 5555 open between them.
 
 Then, to install a release, with nothing to build: download `reely-vega-armv7.vpkg` from the
 latest `vega-v…` release on <https://github.com/getreely/reely-tv/releases>, and with the
