@@ -60,7 +60,7 @@ export const App = () => {
         response.headers.forEach((value: string, key: string) => {
           headers[key] = value;
         });
-        for (const part of answerParts(message.id, text, { status: response.status, statusText: response.statusText, headers })) inject(deliver(part));
+        for (const part of answerParts(message.id, text, { status: response.status, statusText: response.statusText, headers, url: response.url || message.url })) inject(deliver(part));
       } catch (error) {
         inject(deliver(failedPart(message.id, error instanceof Error ? error.message : 'Network request failed')));
       }

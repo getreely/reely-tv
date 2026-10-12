@@ -25,6 +25,8 @@ export interface AnswerPart {
   status?: number;
   statusText?: string;
   headers?: Record<string, string>;
+  /** Where the answer came from, after any redirects: a provider's channel is often sent on to another server. */
+  url?: string;
   error?: string;
 }
 
@@ -38,7 +40,7 @@ export const PART_CHARS = 256 * 1024;
 export function answerParts(
   id: number,
   text: string,
-  head: { status: number; statusText?: string; headers?: Record<string, string> },
+  head: { status: number; statusText?: string; headers?: Record<string, string>; url?: string },
   size = PART_CHARS,
 ): AnswerPart[] {
   const of = Math.max(1, Math.ceil(text.length / size));

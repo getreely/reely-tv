@@ -13,6 +13,7 @@ import { Live, LivePlayer, ReminderNotice } from "./live";
 import { collectionKey, ListPageView, personKey, Search } from "./search";
 import { Settings } from "./settings";
 import { ItemMenu } from "./menu";
+import { TabMenu } from "./tabmenu";
 import { HoldContext, Pill } from "./parts";
 import type { PlexItem } from "../api/plex";
 import { listKey } from "../api/plex";
@@ -85,6 +86,8 @@ export function Root(props: { app: App }) {
   const [state, setState] = useState<AppState>(app.state);
   const [choosingProfile, setChoosingProfile] = useState(false);
   const [menuFor, setMenuFor] = useState<PlexItem | null>(null);
+  // The menu OK on Movies or TV Shows drops, and where: under the tab that opened it.
+  const [tabMenu, setTabMenu] = useState<{ kind: Kind; left: number; top: number; tab: HTMLElement } | null>(null);
   // Kept here, so coming back from a channel finds the guide still up.
   const [guide, setGuide] = useState(false);
   const [saver, setSaver] = useState(false);
@@ -185,7 +188,19 @@ export function Root(props: { app: App }) {
             key={label}
             class={"tab" + (sameTab(tabOf(state.stack, route), target) ? " on" : "")}
             data-focus
-            onClick={() => app.navigate(target)}
+            onClick={(e) => {
+              const { stack, route: at } = app.state;
+              // From a page under the tab (a show's, say), OK goes back to the tab itself.
+              const under = sameTab(tabOf(stack, at), target) && !sameTab(at, target);
+              if (!sameTab(at, target)) app.navigate(target);
+              // Otherwise, as on the Fire TV, a library's tab opens its menu: its home, the
+              // whole library, its collections, and the other libraries.
+              if (target.name === "library" && !under) {
+                const tab = e.currentTarget;
+                const at = tab.getBoundingClientRect();
+                setTabMenu({ kind: target.kind, left: at.left, top: at.bottom + 6, tab });
+              }
+            }}
             // Moving onto a tab opens it, as the Fire TV's do.
             onFocus={(e) => { if (arrowedOnto(e.currentTarget) && !sameTab(tabOf(app.state.stack, app.state.route), target)) app.navigate(target); }}
           >
@@ -256,6 +271,12 @@ export function Root(props: { app: App }) {
       {state.live.due ? <ReminderNotice app={app} state={state} /> : null}
       {/* The tour, once, when there's a library to get around. */}
       {connected && !state.prefs.tourSeen && !choosingProfile && !state.homeBusy ? <Tour onDone={() => app.finishTour()} /> : null}
+      {tabMenu && route.name === "library" ? (
+        <TabMenu app={app} state={state} kind={tabMenu.kind} left={tabMenu.left} top={tabMenu.top}
+          // Into what was picked, as a page arrived at.
+          onPicked={() => { setTabMenu(null); arrived(); setTimeout(rescue, 0); }}
+          onClose={() => { const tab = tabMenu.tab; setTabMenu(null); setTimeout(() => focus(tab), 0); }} />
+      ) : null}
       {menuFor ? (
         <ItemMenu item={menuFor} image={app.image(menuFor.serverBase, menuFor.art ?? menuFor.thumb, 960, 540)} actions={menuActions} onClose={() => setMenuFor(null)} />
       ) : null}

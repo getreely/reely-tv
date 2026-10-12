@@ -539,7 +539,22 @@ test("arrows move along a row and down to the next; Back from a tab goes Home", 
   await expect(page.getByRole("heading", { name: "Recently Released" })).toBeVisible();
   await expect(page.locator(".tab:focus")).toHaveText("Movies");
   await page.screenshot({ path: "shots/lg-movies-home.png" });
-  await page.getByRole("button", { name: "All", exact: true }).click();
+  // OK on the tab drops its menu, as on the Fire TV: the tab's home, the library, its collections.
+  await press(page, "Enter");
+  await expect(page.locator(".tab-menu .menu-section")).toHaveText(["In Movies"]);
+  await expect(page.locator(".tab-menu .option")).toHaveText(["Home", "Library", "Collections"]);
+  await expect(page.locator(".tab-menu .option:focus")).toHaveText("Home");
+  await page.screenshot({ path: "shots/lg-movies-menu.png" });
+  // Back puts it away, onto the tab; OK again, and Library has the whole of it.
+  await press(page, "Escape");
+  await expect(page.locator(".tab-menu")).toHaveCount(0);
+  await expect(page.locator(".tab:focus")).toHaveText("Movies");
+  await press(page, "Enter");
+  await press(page, "ArrowDown");
+  await expect(page.locator(".tab-menu .option:focus")).toHaveText("Library");
+  await press(page, "Enter");
+  await expect(page.locator(".tab-menu")).toHaveCount(0);
+  await expect(page.locator(".page-heading")).toHaveText("Movies");
   await expect(page.locator(".grid .card").first()).toBeVisible();
   // The grid's first poster under the cursor, its ring whole at the top of the page.
   await page.locator(".grid .card").first().focus();
@@ -774,6 +789,10 @@ test("Live TV: sign in to a provider, pick a category, watch, change channel, fa
   await page.getByPlaceholder("Password").fill("secret");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("button", { name: "News", exact: true })).toBeVisible();
+  // The categories as tiles, each in its own color, under a heading, as on the Fire TV.
+  await expect(page.locator(".live-title")).toHaveText("Live TV");
+  await expect(page.locator(".category-tile").first()).toBeFocused();
+  await page.screenshot({ path: "shots/lg-live-categories.png" });
   await page.getByRole("button", { name: "News", exact: true }).click();
   await expect(page.locator(".channel").first()).toContainText("The Evening Report");
   await page.screenshot({ path: "shots/lg-live.png" });
@@ -1041,6 +1060,14 @@ test.describe("on Vega, at the size a Fire TV's WebView is", () => {
     await page.waitForTimeout(600);
     await page.screenshot({ path: "shots/vega-movies.png" });
     expect(await rowsOverlap(page)).toEqual([]);
+    // Its menu, hanging from the tab, as on the Fire TV.
+    await expect(page.locator(".tab-menu .option:focus")).toHaveText("Home");
+    await page.screenshot({ path: "shots/vega-movies-menu.png" });
+    await press(page, "ArrowDown");
+    await press(page, "Enter");
+    await expect(page.locator(".page-heading")).toBeVisible();
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: "shots/vega-movies-library.png" });
   });
 
   test("a title's page, search, settings and the poster menu", async ({ page }) => {

@@ -83,13 +83,25 @@ export function setSource(v: HTMLVideoElement, url: string) {
     return;
   }
   if (vega && isTs(url) && !v.canPlayType("video/mp2t") && mpegts.isSupported()) {
-    v.removeAttribute("src");
     // A channel is live; a programme from its archive (catch-up, Start over) is recorded,
     // and skipping about in it needs mpegts.js to know.
     const live = !/\/timeshift\//.test(url);
+    // A server that has refused the page already: the channel as HLS, through the shell.
+    if (live && askedByShell(url)) return setSource(v, url.replace(/\.ts(\?|#|$)/i, ".m3u8$1"));
+    v.removeAttribute("src");
     const player = mpegts.createPlayer({ type: "mpegts", isLive: live, url }, { enableWorker: true, lazyLoad: false, liveBufferLatencyChasing: false });
-    player.on(mpegts.Events.ERROR, (type: string, _detail: string, info?: { code?: number }) =>
-      fail(v, type === mpegts.ErrorTypes.NETWORK_ERROR ? "network" : "media", info?.code));
+    player.on(mpegts.Events.ERROR, (type: string, _detail: string, info?: { code?: number }) => {
+      // No answer the page could see: a provider that won't answer an app's page. A stream
+      // can't come through the shell, but the same channel as HLS can, a piece at a time.
+      // (mpegts.js says -1 when the request itself failed, with no status at all.)
+      const refused = type === mpegts.ErrorTypes.NETWORK_ERROR && !((info?.code ?? 0) > 0);
+      if (refused && live && !askedByShell(url)) {
+        askViaShell(url);
+        setSource(v, url.replace(/\.ts(\?|#|$)/i, ".m3u8$1"));
+        return;
+      }
+      fail(v, type === mpegts.ErrorTypes.NETWORK_ERROR ? "network" : "media", info?.code);
+    });
     player.attachMediaElement(v);
     player.load();
     attached.set(v, { destroy: () => { player.pause(); player.unload(); player.detachMediaElement(); player.destroy(); } });
@@ -152,7 +164,9 @@ class ShellLoader extends Base {
         stats.loading.first = stats.loading.first || now;
         stats.loading.end = now;
         stats.loaded = stats.total = typeof data === "string" ? data.length : data.byteLength;
-        callbacks.onSuccess({ url: context.url, data }, stats, context, null);
+        // The address it came from in the end: a channel's playlist is often sent on to another
+        // server, and its pieces are named from there.
+        callbacks.onSuccess({ url: response.url || context.url, data }, stats, context, null);
       })
       .catch(() => callbacks.onError({ code: 0, text: "Couldn't connect" }, context, null, stats));
   }

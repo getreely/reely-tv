@@ -70,13 +70,23 @@ export function Live(props: { app: App; state: AppState; guide?: boolean; onGuid
   if (!live.category) {
     return (
       <div>
-        {live.error ? <p class="note error" style={{ margin: "0 3rem" }}>{live.error}</p> : null}
-        <div class="list">
-          {app.shownCategories().map((c, i) => (
-            <button key={c.id} class="list-row" data-focus data-autofocus={i === 0 ? "" : undefined} onClick={() => void app.openCategory(c)}>{c.name}</button>
-          ))}
+        {/* As on the Fire TV (LiveCategoriesScreen): a heading, how many, then a tile each in its own color. */}
+        <div class="live-head">
+          <h1 class="live-title">Live TV</h1>
+          <div class="facts">{`${live.categories.length} categories` + (live.favorites.length ? `  ·  ${live.favorites.length} favorites` : "")}</div>
         </div>
-        {live.busy && !live.categories.length ? <div class="center" style={{ height: "12rem" }}><Spinner /></div> : null}
+        {live.error ? <p class="note error" style={{ margin: "0 3rem" }}>{live.error}</p> : null}
+        {!live.busy && !live.categories.length ? <p class="note" style={{ margin: "0 3rem" }}>Your provider didn't list any channels.</p> : null}
+        <div class="category-tiles">
+          {live.busy && !live.categories.length
+            ? Array.from({ length: 12 }, (_, i) => <div key={i} class="category-tile placeholder" />)
+            : app.shownCategories().map((c, i) => (
+              <button key={c.id} class="category-tile" data-focus data-autofocus={i === 0 ? "" : undefined}
+                style={tileTint(channelTint(c.id))} onClick={() => void app.openCategory(c)}>
+                <span>{c.name}</span>
+              </button>
+            ))}
+        </div>
       </div>
     );
   }
@@ -128,6 +138,13 @@ export function channelTint(id: string): string {
   let hash = 7;
   for (const c of id) hash = (Math.imul(hash, 31) + c.charCodeAt(0)) | 0;
   return palette[((hash % palette.length) + palette.length) % palette.length];
+}
+
+/** A category tile's color, as custom properties: the tint at each end of its gradient, and its glow. */
+function tileTint(hex: string): Record<string, string> {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const at = (a: number) => `rgba(${r}, ${g}, ${b}, ${a})`;
+  return { "--tint-from": at(0.46), "--tint-to": at(0.16), "--tint-from-on": at(0.62), "--tint-to-on": at(0.26), "--tint-glow": at(0.6) };
 }
 
 /**

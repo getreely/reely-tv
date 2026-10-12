@@ -16,6 +16,8 @@ export interface ShellAnswer {
   status?: number;
   statusText?: string;
   headers?: Record<string, string>;
+  /** Where the answer came from, after any redirects. */
+  url?: string;
   error?: string;
 }
 
@@ -109,7 +111,11 @@ export function shellFetch(url: string, init: RequestInit = {}, binary = false):
         const empty = status === 204 || status === 205 || status === 304;
         // Bytes (a piece of video) come as base64, the bridge carrying only text.
         const body = empty ? null : binary ? fromBase64(text) : text;
-        resolve(new Response(body, { status, statusText: head.statusText ?? "", headers: head.headers ?? {} }));
+        const response = new Response(body, { status, statusText: head.statusText ?? "", headers: head.headers ?? {} });
+        // A made Response has no address of its own; this one's is where the shell ended up,
+        // which is what a playlist's relative addresses are read against.
+        Object.defineProperty(response, "url", { value: head.url ?? url });
+        resolve(response);
       },
       reject: (error) => {
         signal?.removeEventListener("abort", aborted);

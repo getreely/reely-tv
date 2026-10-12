@@ -220,20 +220,10 @@ export function Library(props: { app: App; state: AppState; kind: Kind }) {
   };
   // The provider's library is a grid only; Plex's open on the tab's own home, as the Fire TV's do.
   const view = isIptvChoice(browse.choice) ? "grid" : browse.view;
-  const libraryPills = libraries.length > 1
-    ? libraries.map((l) => (
-        // With more than one server, which one each library is on: two called Movies otherwise look the same.
-        <Pill key={l.serverName + l.section.key} label={state.plex.servers.length > 1 && !isIptvChoice(l) ? `${l.section.title} · ${l.serverName}` : l.section.title}
-          on={browse.choice === l} onPress={() => void app.openLibrary(kind, l)} />
-      ))
-    : null;
-  const views = isIptvChoice(browse.choice) ? null : (
-    <>
-      <Pill label="Home" on={view === "home"} onPress={() => app.setLibraryView(kind, "home")} />
-      <Pill label="All" on={view === "grid"} onPress={() => app.setLibraryView(kind, "grid")} />
-      <Pill label="Collections" on={view === "collections"} onPress={() => app.setLibraryView(kind, "collections")} />
-    </>
-  );
+  // Which part of the library and which library are in the tab's menu (tabmenu.tsx), as on
+  // the Fire TV; the page says which it is.
+  const heading = isIptvChoice(browse.choice) ? `IPTV ${kind === "movie" ? "Movies" : "TV Shows"}`
+    : browse.choice?.section.title ?? `All ${kind === "movie" ? "Movies" : "TV Shows"}`;
   if (view === "home") {
     // This library's: what's part-watched in it, and what's newly arrived in it.
     const inLibrary = (i: PlexItem) => !browse.choice || ((!i.serverBase || i.serverBase === browse.choice.baseUrl) && (!i.librarySectionId || i.librarySectionId === browse.choice.section.key));
@@ -251,7 +241,6 @@ export function Library(props: { app: App; state: AppState; kind: Kind }) {
       <div class="with-hero">
         <HomeHero app={app} item={hero} fallback={kind === "movie" ? "Movies" : "TV Shows"} />
         <div class="hero-rows">
-        <div class="toolbar">{views}{libraryPills}</div>
         {resumable.length ? <Row title="Continue Watching">{resumable.map((i) => poster(i, `c:${plex.listKey(i)}`))}</Row> : null}
         {kind === "movie" && browse.added.length ? <Row title="Recently Added">{browse.added.map((i) => poster(i, `r:${plex.listKey(i)}`))}</Row> : null}
         {kind === "show" && browse.addedShows.length ? (
@@ -273,7 +262,7 @@ export function Library(props: { app: App; state: AppState; kind: Kind }) {
     const collections = browse.collections;
     return (
       <div>
-        <div class="toolbar">{views}{libraryPills}</div>
+        <h2 class="page-heading">Collections</h2>
         {collections == null ? <div class="center" style={{ height: "12rem" }}><Spinner /></div>
           : !collections.length ? <p class="note" style={{ margin: "1rem 3rem" }}>No collections in {browse.choice?.section.title ?? "this library"} yet. Collections made in Plex show up here.</p>
           : (
@@ -288,10 +277,7 @@ export function Library(props: { app: App; state: AppState; kind: Kind }) {
   }
   return (
     <div>
-      <div class="toolbar">
-        {views}
-        {libraryPills}
-      </div>
+      <h2 class="page-heading">{heading}</h2>
       {/* As on the Fire TV: sort, the watched filter, the decade, then the genres, in one row
           that runs off to the right. Sort and decade open their lists from the right. */}
       <div class="toolbar chips">
