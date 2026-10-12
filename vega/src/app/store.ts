@@ -1367,11 +1367,17 @@ export class App {
       plex.related(base, token, ratingKey).then((related) => this.setDetail(key, { related }));
       plex.trailers(base, token, ratingKey).then((trailers) => this.setDetail(key, { trailers }));
       if (plex.isShow(detail)) {
-        const seasons = (await plex.children(base, token, ratingKey)).filter((i) => i.type === "season");
-        // The season it's up to (or the episode it was opened on), else the first proper one.
+        // The episode it was opened on is asked for alongside, for the season it's in.
+        const [children, opened] = await Promise.all([
+          plex.children(base, token, ratingKey),
+          episodeKey ? plex.items(base, token, `/library/metadata/${episodeKey}`, 1).then((found) => found[0] ?? null).catch(() => null) : Promise.resolve(null),
+        ]);
+        const seasons = children.filter((i) => i.type === "season");
+        // The episode's own season, else the season it's up to, else the first proper one.
+        const own = opened?.parentRatingKey ? seasons.find((s) => s.ratingKey === opened.parentRatingKey) : undefined;
         const upTo = seasons.find((s) => s.ratingKey === detail.onDeckSeasonKey);
         const first = seasons.find((s) => (s.index ?? 0) > 0) ?? seasons[0] ?? null;
-        await this.loadSeason(key, base, token, upTo ?? first, episodeKey ?? detail.onDeckKey, seasons);
+        await this.loadSeason(key, base, token, own ?? upTo ?? first, episodeKey ?? detail.onDeckKey, seasons);
       } else {
         this.setDetail(key, { busy: false });
       }

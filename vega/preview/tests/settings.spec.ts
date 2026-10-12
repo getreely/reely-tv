@@ -1,5 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { fakePlex, press, signedIn } from './fake';
+import { readFileSync } from 'node:fs';
+
+/** The app's version as it is now: the one an update is newer than. */
+const VERSION = /'([\d.]+)'/.exec(readFileSync(new URL('../../src/app/version.ts', import.meta.url), 'utf8'))![1];
 
 test('Settings: the sections down the left, each shown as the cursor reaches it, a list to choose from', async ({ page }) => {
   page.on('pageerror', (e) => console.log('pageerror:', e.message));
@@ -54,7 +58,7 @@ test('Updates: a newer Vega release said at start, with how to install it, and i
   await page.goto('/');
   await expect(page.getByText('Continue Watching')).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText('A new version is available')).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText('Version 0.59.0 is ready (21 MB). You have 0.58.5.')).toBeVisible();
+  await expect(page.getByText(`Version 0.59.0 is ready (21 MB). You have ${VERSION}.`)).toBeVisible();
   await page.waitForTimeout(400);
   await page.screenshot({ path: 'shots/update-prompt.png' });
   // The cursor is on Later, not left on the poster behind.

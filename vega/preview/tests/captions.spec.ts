@@ -1,0 +1,44 @@
+import { expect, test } from '@playwright/test';
+import { fakePanel, fakePlex, press, signedIn, signedInLive } from './fake';
+
+test('TS channel: captions off at start, on and off from Subtitles', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('reely:prefs', JSON.stringify({ tourSeen: true, streamFormat: 'ts' })));
+  await fakePlex(page);
+  await fakePanel(page);
+  await signedIn(page);
+  await signedInLive(page);
+  await page.goto('/');
+  await expect(page.getByText('Continue Watching')).toBeVisible({ timeout: 20_000 });
+  await press(page, 'ArrowRight', 3);
+  await expect(page.getByText('5 categories')).toBeVisible({ timeout: 10_000 });
+  await press(page, 'ArrowDown');
+  await press(page, 'Enter');
+  await expect(page.getByText('The Evening Report').first()).toBeVisible({ timeout: 10_000 });
+  await page.waitForTimeout(400);
+  await press(page, 'Enter');
+  await page.waitForTimeout(800);
+  await expect(page.getByText('[CAPTIONS FROM THE STREAM]')).toHaveCount(0);
+  await press(page, 'Enter');
+  await page.waitForTimeout(400);
+  await press(page, 'ArrowRight', 3);
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: 'shots/cc-focus.png' });
+  await press(page, 'Enter');
+  await page.waitForTimeout(900);
+  await expect(page.getByText('Closed captions (EN)')).toBeVisible();
+  await page.screenshot({ path: 'shots/cc-panel.png' });
+  await press(page, 'ArrowDown');
+  await press(page, 'Enter');
+  await page.waitForTimeout(600);
+  await expect(page.getByText('[CAPTIONS FROM THE STREAM]')).toBeVisible();
+  await page.screenshot({ path: 'shots/cc-on.png' });
+  // The cursor's back on Subtitles: the panel again, Off above the captions in use.
+  await press(page, 'Enter');
+  await page.waitForTimeout(900);
+  await press(page, 'ArrowUp');
+  await page.screenshot({ path: 'shots/cc-panel-on.png' });
+  await press(page, 'Enter');
+  await page.waitForTimeout(600);
+  await expect(page.getByText('[CAPTIONS FROM THE STREAM]')).toHaveCount(0);
+  await page.screenshot({ path: 'shots/cc-off.png' });
+});

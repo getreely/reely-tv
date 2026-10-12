@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
 import { KeplerCaptionsView, KeplerVideoSurfaceView, VideoPlayer } from '@amazon-devices/react-native-w3cmedia';
 import * as HlsLib from '../hls/player/hlsjsplayer/dist/hls.mjs';
@@ -37,7 +37,7 @@ export function setBufferSeconds(seconds: number) {
 
 const isHls = (url: string) => /\.m3u8(\?|#|$)/i.test(url) || /\/video\/:\/transcode\/universal\/start\.m3u8/.test(url);
 
-export type EngineEvent = 'playing' | 'pause' | 'waiting' | 'timeupdate' | 'ended' | 'error' | 'loadedmetadata';
+export type EngineEvent = 'playing' | 'pause' | 'waiting' | 'timeupdate' | 'ended' | 'error' | 'loadedmetadata' | 'captions';
 
 /** Why playback stopped for good: the network (try a fresh stream) or the media itself. */
 export interface EngineFailure {
@@ -85,6 +85,12 @@ export class Engine {
   private failureListeners = new Set<(f: EngineFailure) => void>();
   private recovered = false;
   private gone = false;
+  /** Whether the picture's moving: told as 'playing' when it starts, as Vega's player doesn't always say. */
+  private flowing = false;
+  private lastTime = -1;
+  private watch: ReturnType<typeof setInterval> | null = null;
+  /** The stream's own closed captions, chosen in Subtitles: off until they are. */
+  private captionChoice = -1;
 
   constructor(options: { muted?: boolean } = {}) {
     this.ready = this.player.initialize().then(() => {
@@ -92,9 +98,19 @@ export class Engine {
       this.player.muted = !!options.muted;
       for (const event of ['playing', 'pause', 'waiting', 'timeupdate', 'ended', 'loadedmetadata'] as EngineEvent[]) {
         this.player.addEventListener(event, () => {
-          if (event === 'playing') console.log(`[reely] player ${this.id} playing`);
+          if (event === 'playing') {
+            if (!this.flowing) console.log(`[reely] player ${this.id} playing`);
+            this.flowing = true;
+          }
+          if (event === 'waiting' || event === 'pause') this.flowing = false;
           this.emit(event);
         });
+      }
+      // A caption track the stream brings is kept hidden unless it's the one chosen.
+      try {
+        (this.player.textTracks as unknown as { addEventListener?: (t: string, h: () => void) => void }).addEventListener?.('addtrack', () => this.applyCaptions());
+      } catch {
+        // No captions here.
       }
       this.player.addEventListener('error', () => this.fail({ kind: 'media', status: null, detail: this.player.error?.message ?? 'The player stopped.' }));
     });
@@ -129,6 +145,11 @@ export class Engine {
     this.unloadSource();
     this.url = url;
     this.recovered = false;
+    this.flowing = false;
+    this.lastTime = -1;
+    this.captionChoice = -1;
+    this.emit('captions');
+    this.watchFlow();
     console.log(`[reely] player ${this.id} opens ${described(url)}${isHls(url) ? ' (HLS)' : ''}${this.surface ? '' : ', no surface yet'}`);
     if (isHls(url)) {
       polyfill();
@@ -142,8 +163,21 @@ export class Engine {
         maxMaxBufferLength: bufferSeconds * 2,
         startPosition: startMs > 0 ? startMs / 1000 : -1,
       });
+      // Each step once, to the log: where a stream that won't start got to.
+      const steps = ['MEDIA_ATTACHED', 'MANIFEST_PARSED', 'BUFFER_CREATED', 'FRAG_LOADED', 'FRAG_BUFFERED'];
+      for (const step of steps) {
+        let told = false;
+        hls.on(Hls.Events[step], () => {
+          if (told) return;
+          told = true;
+          console.log(`[reely] player ${this.id} hls ${step}`);
+        });
+      }
       hls.on(Hls.Events.ERROR, (_e, data) => {
-        if (!data?.fatal) return;
+        if (!data?.fatal) {
+          console.warn(`[reely] player ${this.id} hls ${data?.type} ${data?.details}${data?.error ? `: ${String(data.error)}` : ''}`);
+          return;
+        }
         // A decode hiccup gets one try at carrying on, as hls.js suggests; the network,
         // and anything after that, is the screen's to handle with a fresh stream.
         if (data.type === Hls.ErrorTypes.MEDIA_ERROR && !this.recovered) {
@@ -211,7 +245,10 @@ export class Engine {
   /** Subtitles a channel's stream carries, where hls.js found any; -1 is off. */
   get subtitleTracks() { return this.hls?.subtitleTracks ?? []; }
   get subtitleTrack() { return this.hls?.subtitleTrack ?? -1; }
-  set subtitleTrack(id: number) { if (this.hls) this.hls.subtitleTrack = id; }
+  set subtitleTrack(id: number) {
+    if (this.hls) this.hls.subtitleTrack = id;
+    this.emit('captions');
+  }
   /** The picture's size once its first frame is in, for Playback info. */
   get videoSize(): { width: number; height: number } | null {
     try {
@@ -220,6 +257,75 @@ export class Engine {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * The picture counted as playing once its clock moves, and as stalled when it stops while
+   * it should be going: Vega's player can play on without ever saying 'playing'.
+   */
+  private watchFlow() {
+    if (this.watch) return;
+    this.watch = setInterval(() => {
+      if (this.gone) return;
+      let now = -1;
+      try {
+        now = this.player.paused ? -1 : this.player.currentTime || 0;
+      } catch {
+        return;
+      }
+      if (now < 0) {
+        this.lastTime = -1;
+        return;
+      }
+      const moved = this.lastTime >= 0 && now > this.lastTime + 0.05;
+      this.lastTime = now;
+      if (moved && !this.flowing) {
+        this.flowing = true;
+        console.log(`[reely] player ${this.id} playing`);
+        this.emit('playing');
+      }
+    }, 500);
+  }
+
+  /** The stream's own closed captions (a channel's, in MPEG-TS): their names, in order. */
+  get captionTracks(): Array<{ id: number; name: string; lang?: string }> {
+    return this.nativeCaptions().map((t, i) => ({ id: i, name: t.label ?? '', lang: t.language || undefined }));
+  }
+  get captionTrack() { return this.captionChoice; }
+  /** One of [captionTracks] shown, or -1 for none. */
+  set captionTrack(i: number) {
+    this.captionChoice = i;
+    this.applyCaptions();
+    this.emit('captions');
+  }
+  /** Whether anything's to be drawn in the captions view: hls.js's subtitles or the stream's captions. */
+  get captionsShowing() { return this.captionChoice >= 0 || (this.hls?.subtitleTrack ?? -1) >= 0; }
+
+  private nativeCaptions(): Array<{ kind?: string; label?: string; language?: string; mode?: string }> {
+    try {
+      const list = this.player.textTracks as unknown as ArrayLike<{ kind?: string; label?: string; language?: string; mode?: string }>;
+      const out = [];
+      for (let i = 0; i < (list?.length ?? 0); i++) {
+        const t = list[i];
+        if (t && (t.kind === 'captions' || t.kind === 'subtitles')) out.push(t);
+      }
+      return out;
+    } catch {
+      return [];
+    }
+  }
+
+  private applyCaptions() {
+    // hls.js's own subtitle tracks are its to show; these are the stream's.
+    if (this.hls) return;
+    this.nativeCaptions().forEach((t, i) => {
+      try {
+        const want = i === this.captionChoice ? 'showing' : 'hidden';
+        if (t.mode !== want) t.mode = want;
+      } catch {
+        // Gone meanwhile.
+      }
+    });
   }
 
   /** The surface it's drawn on: given once the player's ready, as Vega's player needs. */
@@ -273,6 +379,8 @@ export class Engine {
   async release() {
     if (this.gone) return;
     this.gone = true;
+    if (this.watch) clearInterval(this.watch);
+    this.watch = null;
     try {
       this.player.pause();
     } catch {
@@ -295,16 +403,21 @@ export function useEngine(options: { muted?: boolean } = {}): Engine {
   return engine.current;
 }
 
-/** Where [engine]'s picture is drawn, and its captions over it. */
+/** Where [engine]'s picture is drawn, and its captions over it when some are chosen. */
 export function VideoSurface(props: { engine: Engine; style?: StyleProp<ViewStyle>; captions?: boolean }) {
   const { engine } = props;
+  const [showing, setShowing] = useState(engine.captionsShowing);
+  useEffect(() => {
+    setShowing(engine.captionsShowing);
+    return engine.on('captions', () => setShowing(engine.captionsShowing));
+  }, [engine]);
   return (
     <View style={[{ backgroundColor: '#000000', overflow: 'hidden' }, props.style]} pointerEvents="none">
-      <KeplerVideoSurfaceView key={engine.id} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
+      <KeplerVideoSurfaceView key={`video:${engine.id}`} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
         onSurfaceViewCreated={(handle: string) => engine.attachSurface(handle)}
         onSurfaceViewDestroyed={(handle: string) => engine.detachSurface(handle)} />
       {props.captions ? (
-        <KeplerCaptionsView key={engine.id} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} show
+        <KeplerCaptionsView key={`captions:${engine.id}`} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} show={showing}
           onCaptionViewCreated={(handle: string) => engine.attachCaptions(handle)} />
       ) : null}
     </View>

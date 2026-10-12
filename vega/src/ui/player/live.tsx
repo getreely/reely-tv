@@ -513,9 +513,15 @@ export function LivePlayer(props: { app: App; state: AppState; channel: XtreamCh
       ) : null}
 
       {panel === 'subtitles' ? (
-        <SubtitlesPanel streams={liveTracks(engine.subtitleTracks, engine.subtitleTrack)} prefs={prefs} onClose={closePanel}
+        <SubtitlesPanel prefs={prefs} onClose={closePanel}
+          streams={engine.subtitleTracks.length ? liveTracks(engine.subtitleTracks, engine.subtitleTrack) : liveCaptions(engine.captionTracks, engine.captionTrack)}
           none="This channel doesn't carry subtitles."
-          onPick={(id) => { closePanel(); engine.subtitleTrack = Number(id) - 1; }} onFind={null}
+          onPick={(id) => {
+            closePanel();
+            // hls.js's subtitles when the stream lists any; otherwise the channel's own closed captions.
+            if (engine.subtitleTracks.length) engine.subtitleTrack = Number(id) - 1;
+            else engine.captionTrack = Number(id) - 1;
+          }} onFind={null}
           onSize={(step) => app.nudgeSubtitleScale(step)} onBackground={() => app.setSubtitleBackground(!prefs.subtitleBackground)} />
       ) : null}
       {panel === 'audio' ? (
@@ -570,6 +576,15 @@ function liveTracks(tracks: Array<{ id: number; name: string; lang?: string }>, 
   return tracks.map((t, i) => ({
     id: String(i + 1),
     label: t.name || (t.lang ? t.lang.toUpperCase() : `${audio ? 'Track' : 'Subtitles'} ${i + 1}`),
+    selected: i === on,
+  }) as unknown as PlexStream);
+}
+
+/** A channel's own closed captions (MPEG-TS carries them in the picture), as the Subtitles panel lists them. */
+function liveCaptions(tracks: Array<{ id: number; name: string; lang?: string }>, on: number): PlexStream[] {
+  return tracks.map((t, i) => ({
+    id: String(i + 1),
+    label: t.name || (tracks.length > 1 ? `Closed captions ${i + 1}` : 'Closed captions') + (t.lang ? ` (${t.lang.toUpperCase()})` : ''),
     selected: i === on,
   }) as unknown as PlexStream);
 }
