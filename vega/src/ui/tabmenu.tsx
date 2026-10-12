@@ -5,7 +5,7 @@ import type { App, AppState, Kind, LibraryView } from '../app/store';
 import { isIptvChoice } from '../app/store';
 import type { LibraryChoice } from '../app/home';
 import { MenuItem, MenuSection } from './menus';
-import { color, dp } from './theme';
+import { color, dp, SCREEN_WIDTH } from './theme';
 
 /*
  * The panel a library's tab drops when it's chosen (TabMenu.kt): where in the library to
@@ -37,7 +37,7 @@ export function TabMenu(props: { app: App; state: AppState; kind: Kind; left: nu
   };
   // Which server a library is on, only when there's more than one to tell apart.
   const named = (l: LibraryChoice) => (isIptvChoice(l) ? `IPTV ${title}` : state.plex.servers.length > 1 ? `${l.section.title} — ${l.serverName}` : l.section.title);
-  const left = Math.max(0, Math.min(props.left, 1920 - TAB_MENU_WIDTH));
+  const left = Math.max(0, Math.min(props.left, SCREEN_WIDTH - TAB_MENU_WIDTH));
   return (
     <View style={{ position: 'absolute', left, top: props.top + dp(4), width: TAB_MENU_WIDTH, zIndex: 20, borderRadius: dp(16), overflow: 'hidden', backgroundColor: 'rgba(16, 18, 22, 0.97)', borderWidth: dp(1), borderColor: color.glassEdge, padding: dp(10) }}>
       <TVFocusGuideView autoFocus trapFocusUp trapFocusDown trapFocusLeft trapFocusRight style={{ gap: dp(2) }}>

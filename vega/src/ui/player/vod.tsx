@@ -16,7 +16,7 @@ import { Press, focusWhenReady } from '../focus';
 import { useBack } from '../menus';
 import { sheet } from '../surfaces';
 import { Text } from '../text';
-import { dp, type } from '../theme';
+import { dp, SCREEN_HEIGHT, SCREEN_WIDTH, type } from '../theme';
 import { Controls, PlayerClock, type PanelName, type ScrubNudge } from './controls';
 import { AudioPanel, ChaptersPanel, FindSubtitlesPanel, InfoPanel, SleepPanel, SubtitlesPanel, type Finding, type Sleep } from './panels';
 import { UpNextScreen, WINDOW_END, WINDOW_TOP, WINDOW_WIDTH } from './upnext';
@@ -407,10 +407,10 @@ export function VodPlayer(props: { app: App; state: AppState; playing: Playing }
       ) : null}
       <Animated.View style={{
         position: 'absolute', zIndex: 1,
-        left: shrink.interpolate({ inputRange: [0, 1], outputRange: [0, 1920 - WINDOW_END - WINDOW_WIDTH] }),
+        left: shrink.interpolate({ inputRange: [0, 1], outputRange: [0, SCREEN_WIDTH - WINDOW_END - WINDOW_WIDTH] }),
         top: shrink.interpolate({ inputRange: [0, 1], outputRange: [0, WINDOW_TOP] }),
-        width: shrink.interpolate({ inputRange: [0, 1], outputRange: [1920, WINDOW_WIDTH] }),
-        height: shrink.interpolate({ inputRange: [0, 1], outputRange: [1080, windowHeight] }),
+        width: shrink.interpolate({ inputRange: [0, 1], outputRange: [SCREEN_WIDTH, WINDOW_WIDTH] }),
+        height: shrink.interpolate({ inputRange: [0, 1], outputRange: [SCREEN_HEIGHT, windowHeight] }),
       }}>
         <VideoSurface engine={engine} style={{ flex: 1 }} />
       </Animated.View>

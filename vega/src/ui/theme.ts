@@ -1,12 +1,20 @@
-import { StyleSheet, type TextStyle } from 'react-native';
+import { Dimensions, StyleSheet, type TextStyle } from 'react-native';
 
 /*
- * The Fire TV app's look (Theme.kt), at Vega's size. Vega lays the screen out in 1920 by
- * 1080; the Fire TV's Compose screens are 960 by 540 dp. So every size here is the Fire
- * TV's, doubled: `dp(n)` is n Fire TV dp.
+ * The Fire TV app's look (Theme.kt), at Vega's size. The Fire TV's Compose screens are 960
+ * by 540 dp, and `dp(n)` is n of those, scaled to the screen as this device lays it out:
+ * a Vega stick lays a 1080p screen out as 960 wide, as Android TV does, so 1 to 1; the
+ * browser preview lays it out as 1920, so 2 to 1. It's read from the screen rather than
+ * assumed, which drew everything twice the size on a stick.
  */
 
-export const dp = (n: number) => n * 2;
+const window = Dimensions.get('window');
+/** The screen as this device lays it out. */
+export const SCREEN_WIDTH = window.width > 0 ? window.width : 960;
+export const SCREEN_HEIGHT = window.height > 0 ? window.height : 540;
+const SCALE = SCREEN_WIDTH / 960;
+
+export const dp = (n: number) => n * SCALE;
 
 export const color = {
   ink: '#08090B',

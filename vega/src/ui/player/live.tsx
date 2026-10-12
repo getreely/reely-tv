@@ -14,7 +14,7 @@ import { ArrowGlyph, CrossGlyph, HeartGlyph, PlayGlyph, PlusGlyph, TilesGlyph } 
 import { MenuHeading, MenuItem, MenuLayer, MenuSection, useBack } from '../menus';
 import { sheet } from '../surfaces';
 import { Text } from '../text';
-import { color, dp, type } from '../theme';
+import { color, dp, SCREEN_HEIGHT, SCREEN_WIDTH, type } from '../theme';
 import { timeRange } from '../screens/live';
 import { Controls, PlayerClock, type PanelName, type ScrubNudge } from './controls';
 import { GuideOverlay, type GuideMode } from './guide';
@@ -40,7 +40,7 @@ const CHANNEL_DIGITS = 5;
 /** How close to now counts as live: a bar let go this near the live point stays live. */
 const LIVE_SLACK_MS = 20_000;
 const TILE_GAP = dp(3);
-const SCREEN = { width: 1920, height: 1080 };
+const SCREEN = { width: SCREEN_WIDTH, height: SCREEN_HEIGHT };
 const NOT_PLAYING = "This channel isn't playing. It may be off air, or your provider's connection limit reached.";
 const REFUSED_SAYS = "Your provider won't open this channel right now: it may be at its limit of connections. Close Reely on any other screen and try again.";
 /** A dropped channel is tried this many more times before it's given up on. */

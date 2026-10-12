@@ -54,7 +54,7 @@ test('Updates: a newer Vega release said at start, with how to install it, and i
   await page.goto('/');
   await expect(page.getByText('Continue Watching')).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText('A new version is available')).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText('Version 0.59.0 is ready (21 MB). You have 0.58.4.')).toBeVisible();
+  await expect(page.getByText('Version 0.59.0 is ready (21 MB). You have 0.58.5.')).toBeVisible();
   await page.waitForTimeout(400);
   await page.screenshot({ path: 'shots/update-prompt.png' });
   // The cursor is on Later, not left on the poster behind.
