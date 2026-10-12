@@ -9,7 +9,9 @@ export type HWEvent = { eventType: string; eventKeyAction?: number };
 
 const KEYS: Record<string, string> = {
   ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Enter: 'select', Escape: 'back',
-  MediaPlayPause: 'playpause', ' ': 'playpause', MediaRewind: 'rewind', MediaFastForward: 'fastforward',
+  MediaPlayPause: 'playpause', ' ': 'playpause', MediaRewind: 'rewind', MediaFastForward: 'forward', i: 'info', m: 'menu', ',': 'rewind', '.': 'forward',
+  PageUp: 'channel_up', PageDown: 'channel_down',
+  ...Object.fromEntries(Array.from({ length: 10 }, (_, n) => [String(n), `num_${n}`])),
 };
 
 const listeners = new Set<(e: HWEvent) => void>();

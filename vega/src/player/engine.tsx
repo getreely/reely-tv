@@ -51,6 +51,8 @@ type HlsInstance = {
   destroy(): void;
   audioTracks: Array<{ id: number; name: string; lang?: string }>;
   audioTrack: number;
+  subtitleTracks?: Array<{ id: number; name: string; lang?: string }>;
+  subtitleTrack?: number;
 };
 
 /**
@@ -174,6 +176,16 @@ export class Engine {
   /** Sound tracks hls.js found in the stream, for a channel with more than one language. */
   get audioTracks() { return this.hls?.audioTracks ?? []; }
   set audioTrack(id: number) { if (this.hls) this.hls.audioTrack = id; }
+  get audioTrack() { return this.hls?.audioTrack ?? -1; }
+  /** Subtitles a channel's stream carries, where hls.js found any; -1 is off. */
+  get subtitleTracks() { return this.hls?.subtitleTracks ?? []; }
+  get subtitleTrack() { return this.hls?.subtitleTrack ?? -1; }
+  set subtitleTrack(id: number) { if (this.hls) this.hls.subtitleTrack = id; }
+  /** The picture's size once its first frame is in, for Playback info. */
+  get videoSize(): { width: number; height: number } | null {
+    const v = this.player as unknown as { videoWidth?: number; videoHeight?: number };
+    return v.videoWidth && v.videoHeight ? { width: v.videoWidth, height: v.videoHeight } : null;
+  }
 
   attachSurface(handle: string) {
     this.surface = handle;

@@ -125,9 +125,9 @@ export const ROW_HEIGHT = dp(78);
 const CARD_GAP = dp(5);
 /** How much of a block stays for its label before the label is pushed off its end. */
 const LABEL_MIN_WIDTH = dp(130);
-const WINDOW = 6 * 3600;
+export const WINDOW = 6 * 3600;
 
-const widthFor = (seconds: number) => (Math.max(0, seconds) / 60) * MINUTE;
+export const widthFor = (seconds: number) => (Math.max(0, seconds) / 60) * MINUTE;
 
 export function clock(epochSeconds: number): string {
   const d = new Date(epochSeconds * 1000);
@@ -138,7 +138,7 @@ export function clock(epochSeconds: number): string {
 export const timeRange = (p: Programme) => `${clock(p.start)} – ${clock(p.stop)}`;
 
 /** One channel and what it's showing across the window. */
-function GuideRow(props: {
+export function GuideRow(props: {
   channel: XtreamChannel; listing: Programme[]; windowStart: number; windowEnd: number; now: number; focusTime: number;
   current: boolean; catchUpFrom: number | null; reminded: Set<number>; favorite: boolean;
   /** How far along in time the grid has slid, in width. */
@@ -385,12 +385,13 @@ export function Guide(props: { app: App; state: AppState }) {
 }
 
 /** The line marking now, with the dot that makes a grid read as a guide. */
-function NowLine(props: { left: number }) {
+export function NowLine(props: { left: number; top?: number }) {
   if (props.left < CHANNEL_COLUMN) return null;
+  const top = props.top ?? dp(22);
   return (
     <>
-      <View pointerEvents="none" style={{ position: 'absolute', left: props.left, top: dp(22), bottom: 0, width: dp(2), backgroundColor: 'rgba(242, 244, 247, 0.8)' }} />
-      <View pointerEvents="none" style={{ position: 'absolute', left: props.left - dp(4), top: dp(22), width: dp(10), height: dp(10), borderRadius: dp(5), backgroundColor: color.chalk }} />
+      <View pointerEvents="none" style={{ position: 'absolute', left: props.left, top, bottom: 0, width: dp(2), backgroundColor: 'rgba(242, 244, 247, 0.8)' }} />
+      <View pointerEvents="none" style={{ position: 'absolute', left: props.left - dp(4), top, width: dp(10), height: dp(10), borderRadius: dp(5), backgroundColor: color.chalk }} />
     </>
   );
 }

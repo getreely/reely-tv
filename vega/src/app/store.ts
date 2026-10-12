@@ -148,7 +148,7 @@ export interface LiveState {
   /** Channels watched lately, newest first, by stream id. */
   recent: number[];
   /** A programme from the archive playing instead of the channel live. */
-  catchUp: { programme: Programme; url: string } | null;
+  catchUp: CatchUp | null;
   /** The guide's listings, what's been as well as what's coming, by stream id. */
   table: Record<number, Programme[]>;
   /** A playlist's own guide: being read, read when, or what went wrong; "none" when it names none. */
@@ -160,6 +160,18 @@ export interface LiveState {
   multiview: XtreamChannel[];
   /** The one saved set of Multiview channels, the main one first. */
   savedMultiview: SavedChannel[];
+}
+
+/**
+ * A programme out of a channel's archive: [from] is the moment (epoch seconds) its address
+ * starts at, so moving through it opens it again from there rather than seeking in the
+ * provider's stream. [behindLive]: rewound from the channel live, with Go live to come back.
+ */
+export interface CatchUp {
+  programme: Programme;
+  url: string;
+  from: number;
+  behindLive: boolean;
 }
 
 /** A channel kept in the saved Multiview set: by id, its name for the menu. */
@@ -1907,14 +1919,14 @@ export class App {
    * becomes the one open, all at once, so what's playing never points into the wrong list.
    * A programme that's over plays from the archive.
    */
-  watchIn(category: XtreamCategory, channels: XtreamChannel[], index: number, programme: Programme | null = null) {
+  watchIn(category: XtreamCategory | null, channels: XtreamChannel[], index: number, programme: Programme | null = null) {
     const live = this.current.live;
     const channel = channels[index];
     const c = live.credentials;
     if (!channel || !c) return;
     const url = programme ? xtream.catchUpUrl(c, channel, programme.start, programme.stop, live.account?.timezone ?? null) : null;
     this.noteWatched(channel);
-    const catchUp = programme && url ? { programme, url } : null;
+    const catchUp = programme && url ? { programme, url, from: programme.start, behindLive: false } : null;
     // From the archive it's one picture; live, a channel already beside it isn't on screen twice.
     const multiview = catchUp ? [] : live.multiview.filter((c) => c.streamId !== channel.streamId);
     this.setLive({ category, channels, watching: index, catchUp, multiview });
@@ -1940,18 +1952,59 @@ export class App {
     }
   }
 
-  /** A programme that's over, from the channel's archive; or this one from its start. */
-  playCatchUp(index: number, programme: Programme): boolean {
+  /**
+   * A programme that's over, from the channel's archive; or this one from its start. From
+   * [from] (epoch seconds) in, to the minute, as the provider's archive is addressed.
+   */
+  playCatchUp(index: number, programme: Programme, from = programme.start, behindLive = false): boolean {
     const live = this.current.live;
     const channel = live.channels[index];
     const c = live.credentials;
     if (!channel || !c) return false;
-    const url = xtream.catchUpUrl(c, channel, programme.start, programme.stop, live.account?.timezone ?? null);
+    const start = Math.max(programme.start, Math.min(Math.floor(from / 60) * 60, programme.stop - 60));
+    const url = xtream.catchUpUrl(c, channel, start, programme.stop, live.account?.timezone ?? null);
     if (!url) return false;
-    this.noteWatched(channel);
+    if (live.watching !== index) this.noteWatched(channel);
     // From the archive it's one picture, as on the Fire TV: the other channels go.
-    this.setLive({ watching: index, catchUp: { programme, url }, multiview: [] });
+    this.setLive({ watching: index, catchUp: { programme, url, from: start, behindLive }, multiview: [] });
     return true;
+  }
+
+  /** What's on the channel playing, when its archive can start it again from the beginning. */
+  startOverProgramme(now = Math.floor(Date.now() / 1000)): Programme | null {
+    return this.rewindableAt(now);
+  }
+
+  /** The channel playing, and its programme at [at], when the archive still holds that. */
+  private rewindableAt(at: number): Programme | null {
+    const live = this.current.live;
+    const channel = live.watching != null ? live.channels[live.watching] : null;
+    if (!channel) return null;
+    const listing = live.table[channel.streamId] ?? live.guide[channel.streamId] ?? [];
+    const programme = listing.find((p) => xtream.isOnAt(p, at)) ?? null;
+    return programme && this.canCatchUp(channel, programme) ? programme : null;
+  }
+
+  /** The programme on now, from its beginning, out of the channel's archive; Go live comes back. */
+  startOver(): boolean {
+    const programme = this.startOverProgramme();
+    const at = this.current.live.watching;
+    return programme != null && at != null && this.playCatchUp(at, programme, programme.start, true);
+  }
+
+  /**
+   * Back to [at] (epoch seconds), a moment behind now, out of the archive: the programme on
+   * then, from there. By the clock, so a bar let go from before the programme changed still
+   * goes where it meant.
+   */
+  timeshiftTo(at: number): boolean {
+    const live = this.current.live;
+    const index = live.watching;
+    if (index == null) return false;
+    const held = live.catchUp && xtream.isOnAt(live.catchUp.programme, at) ? live.catchUp.programme : null;
+    const programme = held ?? this.rewindableAt(at);
+    if (!programme) return false;
+    return this.playCatchUp(index, programme, at, live.catchUp ? live.catchUp.behindLive : true);
   }
 
   /** Back to the channel as it is now. */

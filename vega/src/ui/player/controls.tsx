@@ -4,7 +4,7 @@ import { TVFocusGuideView, useTVEventHandler } from '@amazon-devices/react-nativ
 import type { PlexChapter } from '../../api/plex';
 import { ActionButton } from '../controls';
 import { Press, useAccent } from '../focus';
-import { ChaptersGlyph, InfoGlyph, MoonGlyph, PauseGlyph, PlayGlyph, SkipGlyph, SpeakerGlyph, SubtitleGlyph } from '../glyphs';
+import { ChaptersGlyph, InfoGlyph, MoonGlyph, PauseGlyph, PlayGlyph, PlusGlyph, RestartGlyph, SkipGlyph, SpeakerGlyph, SubtitleGlyph } from '../glyphs';
 import { Gradient, TransportButton } from '../surfaces';
 import { Text } from '../text';
 import { color, dp, type } from '../theme';
@@ -72,6 +72,8 @@ function Scrubber(props: {
   chapters: PlexChapter[];
   nudge: ScrubNudge | null;
   onNudgeUsed: () => void;
+  /** The furthest the bar goes: now, live or behind it. */
+  limitMs?: number | null;
 }) {
   const accent = useAccent();
   const [focused, setFocused] = useState(false);
@@ -82,7 +84,7 @@ function Scrubber(props: {
   const commit = useRef<ReturnType<typeof setTimeout> | null>(null);
   const repeats = useRef({ at: 0, direction: 0, count: 0 });
   const total = Math.max(1, props.durationMs);
-  const furthest = Math.max(0, props.durationMs - 1_000);
+  const furthest = Math.max(0, props.limitMs != null ? Math.min(props.limitMs, props.durationMs) : props.durationMs - 1_000);
 
   const settle = (to: number) => {
     if (commit.current) clearTimeout(commit.current);
@@ -216,7 +218,20 @@ export function Controls(props: {
   sleeping: boolean;
   skipLabel: string | null; skipRef: React.RefObject<View | null>; onSkipPrompt: () => void; onSkipFocus: (focused: boolean) => void;
   onPress: () => void;
+  /** A channel: LIVE by its name, and Multiview's button. */
+  live?: boolean;
+  /** Whether there's a bar: always, but for a live channel that can't be rewound. */
+  showBar?: boolean;
+  limitMs?: number | null;
+  /** Behind live: back to the channel as it is now, where Skip Intro would sit. */
+  onGoLive?: (() => void) | null;
+  goLiveRef?: React.RefObject<View | null>;
+  onGoLiveFocus?: (focused: boolean) => void;
+  onAddChannel?: (() => void) | null;
+  /** Live: the programme on now from its beginning, where the channel keeps an archive. */
+  onStartOver?: (() => void) | null;
 }) {
+  const accent = useAccent();
   const press = (f: () => void) => () => { props.onPress(); f(); };
   return (
     <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}>
@@ -224,18 +239,31 @@ export function Controls(props: {
       {/* Inside the television's safe area: 48 dp at the sides, 27 at the bottom. */}
       <View style={{ paddingHorizontal: dp(48), paddingTop: dp(20), paddingBottom: dp(24), gap: dp(12) }}>
         {/* Skip Intro, right-aligned above the bar, when there's one to offer. */}
+        {props.onGoLive && !props.skipLabel ? (
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+            <ActionButton pressRef={props.goLiveRef} label="Go live" emphasised onPress={press(props.onGoLive)}
+              onFocus={() => props.onGoLiveFocus?.(true)} onBlur={() => props.onGoLiveFocus?.(false)} />
+          </View>
+        ) : null}
         {props.skipLabel ? (
           <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
             <ActionButton pressRef={props.skipRef} label={props.skipLabel} emphasised onPress={props.onSkipPrompt} onFocus={() => props.onSkipFocus(true)} />
           </View>
         ) : null}
-        <Scrubber positionMs={props.positionMs} durationMs={props.durationMs} bufferedMs={props.bufferedMs} barRef={props.barRef}
-          onFocusChange={props.onBarFocus} onSeekTo={props.onSeekTo} onTogglePlay={props.onTogglePlay} onScrub={props.onScrub}
-          previewUrl={props.previewUrl} chapters={props.chapters} nudge={props.nudge} onNudgeUsed={props.onNudgeUsed} />
+        {props.showBar !== false ? (
+          <Scrubber positionMs={props.positionMs} durationMs={props.durationMs} bufferedMs={props.bufferedMs} barRef={props.barRef}
+            onFocusChange={props.onBarFocus} onSeekTo={props.onSeekTo} onTogglePlay={props.onTogglePlay} onScrub={props.onScrub}
+            previewUrl={props.previewUrl} chapters={props.chapters} nudge={props.nudge} onNudgeUsed={props.onNudgeUsed} limitMs={props.limitMs} />
+        ) : null}
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           {/* What's playing, weighted as the options opposite, so the transport sits in the middle. */}
           <View style={{ flex: 1, paddingRight: dp(16) }}>
-            <Text numberOfLines={1} style={[type.body, { fontWeight: '600' }]}>{props.title}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              {props.live ? (
+                <Text style={[type.label, { color: color.ink, fontWeight: '700', letterSpacing: dp(1.2), marginRight: dp(8), borderRadius: dp(6), overflow: 'hidden', backgroundColor: accent.color, paddingHorizontal: dp(7), paddingVertical: dp(1) }]}>LIVE</Text>
+              ) : null}
+              <Text numberOfLines={1} style={[type.body, { fontWeight: '600', flexShrink: 1 }]}>{props.title}</Text>
+            </View>
             {props.subtitle ? <Text numberOfLines={1} style={[type.label, { color: color.muted }]}>{props.subtitle}</Text> : null}
           </View>
           <TVFocusGuideView autoFocus style={{ flexDirection: 'row', alignItems: 'center', gap: dp(16) }}>
@@ -250,6 +278,9 @@ export function Controls(props: {
           </TVFocusGuideView>
           <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'flex-end' }}>
             <TVFocusGuideView autoFocus style={{ flexDirection: 'row', alignItems: 'center', gap: dp(10) }}>
+              {props.onAddChannel ? (
+                <TransportButton diameter={SMALL_BUTTON} onPress={press(props.onAddChannel)} glyph={(t) => <PlusGlyph color={t} size={16} />} />
+              ) : null}
               {props.chapters.length ? (
                 <TransportButton ref={props.panelRefs.chapters} diameter={SMALL_BUTTON} onPress={press(() => props.onOpen('chapters'))} glyph={(t) => <ChaptersGlyph color={t} size={16} />} />
               ) : null}
@@ -257,6 +288,9 @@ export function Controls(props: {
               <TransportButton ref={props.panelRefs.audio} diameter={SMALL_BUTTON} onPress={press(() => props.onOpen('audio'))} glyph={(t) => <SpeakerGlyph color={t} size={16} />} />
               <TransportButton ref={props.panelRefs.sleep} diameter={SMALL_BUTTON} filled={props.sleeping} onPress={press(() => props.onOpen('sleep'))} glyph={(t) => <MoonGlyph color={t} size={16} />} />
               <TransportButton ref={props.panelRefs.info} diameter={SMALL_BUTTON} onPress={press(() => props.onOpen('info'))} glyph={(t) => <InfoGlyph color={t} size={16} />} />
+              {props.onStartOver ? (
+                <TransportButton diameter={SMALL_BUTTON} onPress={press(props.onStartOver)} glyph={(t) => <RestartGlyph color={t} size={16} />} />
+              ) : null}
             </TVFocusGuideView>
           </View>
         </View>

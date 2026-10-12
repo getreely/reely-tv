@@ -19,14 +19,14 @@ const Note = (props: { text: string }) => (
 );
 
 export function SubtitlesPanel(props: {
-  streams: PlexStream[]; prefs: Prefs; onClose: () => void;
+  streams: PlexStream[]; prefs: Prefs; onClose: () => void; none?: string;
   onPick: (id: string) => void; onFind: (() => void) | null; onSize: (step: 1 | -1) => void; onBackground: () => void;
 }) {
   const on = props.streams.find((s) => s.selected) ?? null;
   return (
     <MenuLayer onClose={props.onClose}>
       <MenuHeading title="Subtitles" />
-      {!props.streams.length ? <Note text="No subtitles are available for this video." /> : null}
+      {!props.streams.length ? <Note text={props.none ?? 'No subtitles are available for this video.'} /> : null}
       {props.streams.length ? <MenuItem label="Off" checked={!on} preferred={!on} onPress={() => props.onPick('0')} /> : null}
       {props.streams.map((s) => <MenuItem key={s.id} label={s.label} checked={s === on} preferred={s === on} onPress={() => props.onPick(s.id)} />)}
       {props.onFind ? <MenuItem label="Find subtitles online" icon={(c) => <SearchGlyph color={c} size={20} />} onPress={props.onFind} preferred={!props.streams.length} /> : null}
@@ -73,9 +73,11 @@ const SLEEP_MINUTES = [30, 60, 90];
  * The sleep timer: off, a time from now, or the end of what's playing. The choice made is
  * marked, with when it will stop.
  */
-export function SleepPanel(props: { sleep: Sleep; onPick: (minutes: number | null) => void; onClose: () => void }) {
+export function SleepPanel(props: { sleep: Sleep; onPick: (minutes: number | null) => void; onClose: () => void; live?: boolean }) {
   const chosen = !props.sleep ? null : props.sleep.endOfEpisode ? 0 : -1;
-  const options: Array<[number | null, string]> = [[null, 'Off'], ...SLEEP_MINUTES.map((m): [number, string] => [m, `In ${m} minutes`]), [0, 'At the end of this episode']];
+  // A channel has no end to wait for.
+  const options: Array<[number | null, string]> = [[null, 'Off'], ...SLEEP_MINUTES.map((m): [number, string] => [m, `In ${m} minutes`]),
+    ...(props.live ? [] : [[0, 'At the end of this episode'] as [number, string]])];
   return (
     <MenuLayer onClose={props.onClose}>
       <MenuHeading title="Sleep timer" subtitle={props.sleep?.atMs ? `Stops at ${clockTime(props.sleep.atMs)}.` : null} />

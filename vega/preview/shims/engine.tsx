@@ -12,7 +12,11 @@ export class Engine {
   bufferedMs = 0;
   audioTracks: Array<{ id: number; name: string; lang?: string }> = [];
   audioTrack = 0;
+  subtitleTracks: Array<{ id: number; name: string; lang?: string }> = [];
+  subtitleTrack = -1;
+  videoSize: { width: number; height: number } | null = null;
   muted = false;
+  url: string | null = null;
   private listeners = new Map<string, Set<Handler>>();
   private timer: ReturnType<typeof setInterval> | null = null;
   on(event: string, h: Handler) {
@@ -23,8 +27,11 @@ export class Engine {
   }
   onFailure(_h: (f: unknown) => void) { return () => undefined; }
   private emit(event: string) { this.listeners.get(event)?.forEach((h) => h()); }
-  async open(_url: string, startMs = 0) {
+  async open(url: string, startMs = 0) {
+    this.url = url;
+    this.videoSize = { width: 1920, height: 1080 };
     this.positionMs = startMs;
+    this.emit('opened');
     this.durationMs = 6_000_000;
     if (this.timer) clearInterval(this.timer);
     this.timer = setInterval(() => {
@@ -47,6 +54,13 @@ export function useEngine() {
   return engine;
 }
 
-export function VideoSurface(props: { style?: object }) {
-  return <View style={[{ backgroundColor: '#000' }, props.style]} />;
+// A stand-in picture: each address its own colour, so tiles side by side can be told apart.
+export function VideoSurface(props: { engine?: Engine; style?: object }) {
+  const [url, setUrl] = React.useState(props.engine?.url ?? null);
+  React.useEffect(() => props.engine?.on('opened', () => setUrl(props.engine!.url)), [props.engine]);
+  let hash = 0;
+  for (const ch of url ?? '') hash = (hash * 31 + ch.charCodeAt(0)) | 0;
+  const hue = Math.abs(hash) % 360;
+  const background = url ? `linear-gradient(135deg, hsl(${hue}, 45%, 22%), hsl(${(hue + 40) % 360}, 50%, 12%))` : '#000';
+  return <View style={[{ backgroundColor: '#000', backgroundImage: background } as object, props.style]} />;
 }

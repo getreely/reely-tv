@@ -39,6 +39,9 @@ const NOTICE_MS = 2_500;
 /** How long before the end of the intro Skip Intro stops being offered. */
 const INTRO_GRACE_MS = 500;
 
+export const FORWARD = ['forward', 'fastforward', 'skip_forward'];
+export const BACKWARD = ['rewind', 'skip_backward'];
+
 const episodeLine = (i: PlexItem) => [caption(i), i.title].filter(Boolean).join('  ·  ');
 
 export function VodPlayer(props: { app: App; state: AppState; playing: Playing }) {
@@ -337,8 +340,14 @@ export function VodPlayer(props: { app: App; state: AppState; playing: Playing }
       showControls();
       return;
     }
-    if (t === 'fastforward' || t === 'rewind') {
-      startScrub(t === 'fastforward' ? 1 : -1, 30_000);
+    // Vega names these forward and rewind; a remote's skip keys go the same way.
+    if (FORWARD.includes(t) || BACKWARD.includes(t)) {
+      startScrub(FORWARD.includes(t) ? 1 : -1, 30_000);
+      return;
+    }
+    if (t === 'info') {
+      showControls();
+      openPanel('info');
       return;
     }
     if (!controls) {
