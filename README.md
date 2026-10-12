@@ -23,6 +23,10 @@ After that, Reely updates itself: **Settings → Updates → Check for updates**
 Android 6 or later is needed, which covers Fire OS 6 and every current Fire TV and Android TV
 device.
 
+Newer Fire TV sticks that run **Vega OS** (the Fire TV Stick 4K Select and later) don't run
+Android apps. Reely has an app of its own for them, the same app built for Vega: see
+[`vega/README.md`](vega/README.md) for putting it on one.
+
 ## What it does
 
 ### Plex

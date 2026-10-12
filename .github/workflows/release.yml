@@ -347,7 +347,7 @@ jobs:
             cp "$f" "out/reely-vega-$arch.vpkg"
           done
           ls -la out
-          .github/scripts/notes.sh 'vega-v*' "$TAG" vega webos/src
+          .github/scripts/notes.sh 'vega-v*' "$TAG" vega
           {
             echo
             echo "For Fire TV sticks on Vega OS (the Fire TV Stick 4K Select and later), installed with Amazon's Vega tools on a stick in developer mode: see vega/README.md."

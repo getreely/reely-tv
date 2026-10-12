@@ -592,17 +592,50 @@ function Tile(props: { rect: { left: number; top: number; width: number; height:
   );
 }
 
-/** A channel beside the main one, in a player of its own, heard only while it's looked at. */
+/** A tile's channel dropped is tried this many more times before it says so. */
+const TILE_RETRIES = 3;
+
+/**
+ * A channel beside the main one, in a player of its own, heard only while it's looked at.
+ * One that drops is tried again a few times; one the provider won't open, or that won't
+ * play, says so on the tile rather than sitting black.
+ */
 function ExtraTile(props: { app: App; channel: XtreamChannel; rect: { left: number; top: number; width: number; height: number }; heard: boolean; focused: boolean }) {
   const engine: Engine = useEngine({ muted: true });
   const url = props.app.channelUrl(props.channel);
+  const [failure, setFailure] = useState<string | null>(null);
+  const attempts = useRef(0);
   useEffect(() => {
     if (url) void engine.open(url);
   }, [url]);
   useEffect(() => { engine.muted = !props.heard; }, [props.heard]);
+  useEffect(() => {
+    let retry: ReturnType<typeof setTimeout> | null = null;
+    const off = [
+      engine.on('playing', () => { attempts.current = 0; setFailure(null); }),
+      engine.onFailure((f) => {
+        if (f.status != null && REFUSED.includes(f.status)) setFailure("Your provider won't open another channel at once.");
+        else if (attempts.current < TILE_RETRIES) {
+          attempts.current++;
+          retry = setTimeout(() => void engine.reload(), 3_000 * attempts.current);
+        } else setFailure("This channel isn't playing.");
+      }),
+    ];
+    return () => {
+      off.forEach((o) => o());
+      if (retry) clearTimeout(retry);
+    };
+  }, [engine]);
   return (
     <Tile rect={props.rect} name={props.channel.name} focused={props.focused}>
       <VideoSurface engine={engine} style={{ flex: 1 }} />
+      {failure ? (
+        <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={[sheet(12), { maxWidth: dp(320), paddingHorizontal: dp(16), paddingVertical: dp(10) }]}>
+            <Text style={type.meta}>{failure}</Text>
+          </View>
+        </View>
+      ) : null}
     </Tile>
   );
 }

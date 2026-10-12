@@ -3,23 +3,23 @@
 Newer Fire TV sticks (the Fire TV Stick 4K Select and later) run **Vega OS**, which doesn't
 run Android apps, so the APK can't be installed on them. This is the Vega app.
 
-It is the LG app (`../webos`) in a WebView, inside a small React Native shell (`src/`). The
-LG app already matches the Fire TV app screen for screen: every page and setting, the remote
-(arrows, OK, Back, holding OK for a poster's menu), Live TV, IPTV and Requests. So the Vega
-app does too, and fixes to one are fixes to both.
+It's a React Native app of its own, built for Vega with Amazon's SDK, and it looks and works
+like the Fire TV app screen for screen: Home and its hero, Movies and TV Shows with their
+library grids, title pages, search, the player with its panels, Skip Intro and Up Next, Live
+TV with the guide, catch-up and Multiview, IPTV movies and shows, Requests, Settings,
+profiles, the tour and the screensaver. The remote works as it does on the Fire TV: arrows,
+OK, Back, holding OK for a menu, play/pause, rewind and fast-forward, and number keys for a
+channel.
 
-The shell does what a page can't do on its own:
+- **`src/api`, `src/core`, `src/app`**: Plex, the IPTV provider, Reely and everything the
+  screens do with them, in plain TypeScript (`src/app/store.ts` holds it together).
+- **`src/ui`**: the screens, drawn with React Native's views at the Fire TV's sizes, and the
+  remote's focus moving between them as Vega's focus engine does it.
+- **`src/player`**: Vega's own video player (W3C Media), with Amazon's build of hls.js for HLS:
+  Plex's conversions and live channels. Several at once for Multiview.
 
-- **Closes the app** when Back is pressed at Home.
-- **Passes Back to the page.** Vega tells the shell, not the page.
-- **Asks servers that don't answer other sites.** The page runs from the app's own files, so
-  an IPTV provider that only answers its own site refuses it. The shell's requests aren't held
-  to that.
-- **Tells the page when the app goes away and comes back.** Vega takes the video decoder back
-  while it's away, so the page pauses and then picks up again with a fresh stream.
-
-The page plays HLS through hls.js and MPEG-TS through mpegts.js, because the WebView plays
-neither by itself. On an LG TV, the TV's own player still plays both, as before.
+Vega has no way for an app to update itself, so there's no update prompt: a new version is
+installed as below, or from the Appstore once it's there.
 
 ## What you need
 
@@ -44,11 +44,12 @@ git clone https://github.com/getreely/reely-tv.git
 cd reely-tv/vega
 vega project install --fix    # lines Amazon's packages and the manifest up with your SDK
 npm install
-npm run build:release         # builds the page (../webos), then the Vega package
+npm run build:release         # fetches Amazon's hls.js, then builds the Vega package
 ```
 
-`npm run build:release` runs `scripts/bundle-web.mjs` first. That builds the LG app and copies
-it into `assets/web`, where the shell opens it.
+`npm run build:release` runs `scripts/hlsjs.sh` first. That fetches Amazon's build of hls.js for
+Vega (checked against its checksum) and builds it into `src/hls`. It isn't kept in this
+repository, as it's under Amazon's own licence.
 
 ## Try it without a Vega stick
 
@@ -106,9 +107,20 @@ vega device launch-app --dir .
 
 ## Checks
 
-- `npm run typecheck`: the shell against Amazon's packages.
-- `npm test`: the project's files agree with each other: `app.json`, `manifest.toml` and
-  `package.json`.
-- The bridge between the page and the shell is tested with the LG app's tests:
-  `cd ../webos && npm test` (`tests/unit/vega.test.ts`).
+- `npm run typecheck`: the app against Amazon's packages.
+- `npm test`: the project's files agree with each other: `app.json`, `manifest.toml`,
+  `package.json` and the version the app shows in Settings.
+- `preview/`: the screens in a browser, through react-native-web, driven with the keyboard as
+  the remote by Playwright against a stand-in Plex, IPTV provider and Reely. Each test saves
+  screenshots in `preview/shots`, which is how each screen is checked against the Fire TV's.
+
+  ```bash
+  cd preview
+  npm install
+  npx playwright test
+  ```
+
+  The keyboard as the remote: the arrows, Enter (OK), Escape (Back), the space bar
+  (play/pause), comma and full stop (rewind and fast-forward), `m` (the Menu key), `i` (Info)
+  and the number keys.
 - `vega project doctor`, with the SDK installed: Amazon's own check of the project.

@@ -5,24 +5,23 @@ every other app is measured against it. ✅ done and tested · 🟡 partly · �
 — doesn't apply on that device.
 
 Newer Fire TV sticks run **Vega OS**, which doesn't run Android apps; Fire TV sticks on Fire
-OS run the APK. The Vega app (`vega/`) is the LG app's page in a WebView, inside a small React
-Native shell, so it has everything the **LG** column below has, the remote included. The
-differences are Vega's own:
+OS run the APK. The Vega app (`vega/`) is its own React Native app, built with Amazon's Vega
+SDK and its native video player, and made to look and work like the Fire TV app screen for
+screen, at the Fire TV's sizes, with the same remote. It isn't a column below because it
+does everything the Fire TV column does, with these differences, all Vega's own:
 
-- Back comes to the shell, which hands it to the page.
-- The shell closes the app.
-- A server that won't answer the page (an IPTV provider's, say) is asked by the shell instead.
-- HLS plays through hls.js and MPEG-TS through mpegts.js, as the WebView plays neither itself.
-- Holding OK opens a poster's menu when OK comes up, if the remote doesn't repeat it.
-- Leaving the app pauses the video, and coming back picks up with a fresh stream.
-- Multiview, as on the Fire TV, which webOS can't do: hold OK on a channel for up to four at
-  once, in a grid or with the one being heard large; arrows walk the tiles, OK makes one full
-  screen, Back closes the one with the cursor, and the set can be saved. A provider that won't
-  open another channel at once is said so on its tile.
+- **No update prompt.** Vega gives an app no way to install a new version of itself; a new
+  one is installed from a computer (see `vega/README.md`), or from the Appstore.
+- **No frame rate matching or choice of where sound plays.** Vega switches the screen's mode
+  and picks the sound output itself.
+- **The Menu key** opens a poster's or a tile's menu as well as holding OK does.
+- **A channel's own subtitles and sound tracks** are those hls.js finds in its stream: a
+  channel played as MPEG-TS lists none.
 
-None of it has been tried on a Vega device yet. GitHub builds it with Amazon's Vega SDK, and
-each `vega-v…` release has the package for Fire TV sticks; putting it on one needs the stick in
-developer mode (see `vega/README.md`).
+Each screen has been checked in a browser against the Fire TV's (`vega/preview`: the screens
+through react-native-web, driven by the keyboard as the remote, with screenshots), but **not
+yet on a Vega stick**. GitHub builds it with the Vega SDK; each `vega-v…` release has the
+package for Fire TV sticks, and the `vega-test` pre-release has the latest build.
 
 | Feature | Fire TV / Android TV | Android phone & tablet | LG (webOS) | Roku | iPhone, iPad and Apple TV |
 |---|---|---|---|---|---|
@@ -66,7 +65,7 @@ developer mode (see `vega/README.md`).
 | Catch-up, start over, rewind and Go live | ✅ | ✅ | ✅ (coloured keys) | ✅ (catch-up tested; Start over and Go live on ✱) | 🟡 (built; not yet tried on a device) |
 | Reminders | ✅ | ✅ | ✅ | ✅ (set in the guide; when they're due, unit-tested) | 🟡 (built and unit-tested) |
 | Channel up/down, numbers on the remote | ✅ | ✅ (swipe) | ✅ | ✅ (left and right; Roku remotes have no number keys) | 🟡 (left and right on Apple TV, swipe on iPhone; numbers typed in, as the Siri remote has no number keys) |
-| Multiview | ✅ | ✅ (a tap hears a tile, a double tap makes it full screen, a hold has its menu; channels added from the sheet) | — (webOS gives an app one video at a time; on Vega, ✅, as above) | — | 🟡 (built: up to four, grid or focus, the tile menu on a long press or held OK, saved set; not yet tried on a device) |
+| Multiview | ✅ | ✅ (a tap hears a tile, a double tap makes it full screen, a hold has its menu; channels added from the sheet) | — (webOS gives an app one video at a time) | — | 🟡 (built: up to four, grid or focus, the tile menu on a long press or held OK, saved set; not yet tried on a device) |
 | **IPTV movies and shows** | | | | | |
 | Switch, tabs' IPTV library, Home rows, search, IPTV badge | ✅ | ✅ | ✅ | ✅ (switch, Movies tab, Home row, search and a series' page in the simulator) | 🟡 (built and unit-tested; MKV and the like play in VLC's player, the file's own sound and subtitle tracks with them) |
 | Matching with Plex, winner chosen | ✅ | ✅ | ✅ | ✅ (matching in the simulator; the winner unit-tested) | 🟡 (unit-tested) |
@@ -104,4 +103,5 @@ screen of the LG and Roku apps measured against the Fire TV's screenshots.
 | Fire TV / Android TV and phone | `app/src/test` | `./gradlew :app:testDebugUnitTest` (Robolectric, Compose UI tests, screenshots with `-Pscreenshots`) |
 | LG | `webos/` | `npm test` (unit, 168) and `npm run e2e` (browser, the built app as the TV opens it); `npm run package` makes `reely-lg.ipk` |
 | iPhone, iPad and Apple TV | `ios/` | `scripts/vlckit.sh` fetches VLC's engine (VideoLAN's builds, checksums checked); `swift test` in `ios/ReelyCore` (the core, on Linux or a Mac); GitHub builds both apps on a Mac and posts simulator screenshots of each screen (`.github/workflows/ios.yml`) |
+| Fire TV on Vega OS | `vega/` | `npm run typecheck`, `npm test` (the project's files agree); `cd preview && npx playwright test` (the screens in a browser through react-native-web, the keyboard as the remote, against a stand-in Plex, IPTV provider and Reely, with screenshots); GitHub builds the packages with the Vega SDK (`.github/workflows/vega.yml`) |
 | Roku | `roku/` | `npm run check` (BrighterScript compile), `npm test` (unit, 275, BrightScript simulator) and `npm run e2e` (the app in the SceneGraph simulator, driven by the remote protocol, against a stand-in Plex); `npm run package` makes `reely-roku.zip` |

@@ -177,7 +177,17 @@ export class Engine {
     return this.positionMs;
   }
   seek(ms: number) { this.player.currentTime = Math.max(0, ms / 1000); }
-  set muted(on: boolean) { this.player.muted = on; }
+  /** Before the player's ready this is kept, and set once it is: Vega's player isn't there to be told yet. */
+  set muted(on: boolean) {
+    void this.ready.then(() => {
+      if (this.gone) return;
+      try {
+        this.player.muted = on;
+      } catch {
+        // Let go meanwhile.
+      }
+    });
+  }
 
   /** Sound tracks hls.js found in the stream, for a channel with more than one language. */
   get audioTracks() { return this.hls?.audioTracks ?? []; }
@@ -189,8 +199,12 @@ export class Engine {
   set subtitleTrack(id: number) { if (this.hls) this.hls.subtitleTrack = id; }
   /** The picture's size once its first frame is in, for Playback info. */
   get videoSize(): { width: number; height: number } | null {
-    const v = this.player as unknown as { videoWidth?: number; videoHeight?: number };
-    return v.videoWidth && v.videoHeight ? { width: v.videoWidth, height: v.videoHeight } : null;
+    try {
+      const v = this.player as unknown as { videoWidth?: number; videoHeight?: number };
+      return v.videoWidth && v.videoHeight ? { width: v.videoWidth, height: v.videoHeight } : null;
+    } catch {
+      return null;
+    }
   }
 
   attachSurface(handle: string) {
