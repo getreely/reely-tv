@@ -320,7 +320,7 @@ export function Guide(props: { app: App; state: AppState }) {
           <Text numberOfLines={1} style={{ color: color.muted, fontSize: dp(14), lineHeight: dp(18) }}>{statusLine}</Text>
           {selected?.description ? <Text numberOfLines={2} style={{ color: color.muted, fontSize: dp(14), lineHeight: dp(19), marginTop: dp(4) }}>{selected.description}</Text> : null}
           <TVFocusGuideView autoFocus style={{ flexDirection: 'row', gap: dp(10), marginTop: dp(10) }}>
-            <View ref={buttons}><ActionButton label="Categories" onPress={() => app.closeCategory()} /></View>
+            <ActionButton pressRef={buttons} label="Categories" onPress={() => app.closeCategory()} />
             <ActionButton label="Now" onPress={jumpToNow} />
             <ActionButton label={live.guideStatus.kind === 'updating' ? 'Loading…' : 'Refresh'} onPress={() => void app.refreshGuide()} />
           </TVFocusGuideView>

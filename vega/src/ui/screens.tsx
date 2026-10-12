@@ -6,6 +6,7 @@ import type { RequestTitle } from '../api/reely';
 import { Text } from './text';
 import { dp, EDGE, type } from './theme';
 import { Home } from './screens/home';
+import { Library } from './screens/library';
 import { Live } from './screens/live';
 
 /*
@@ -35,7 +36,7 @@ export function Screens(props: { app: App; state: AppState; open: (route: Route)
   const screen = { app, state, open, openRequest, hold: props.openMenu };
   switch (state.route.name) {
     case 'home': return <Home {...screen} />;
-    case 'library': return <Coming name={state.route.kind === 'movie' ? 'Movies' : 'TV Shows'} />;
+    case 'library': return <Library {...screen} kind={state.route.kind} />;
     case 'detail': return <Coming name="Title" />;
     case 'search': return <Coming name="Search" />;
     case 'person': return <Coming name={state.route.person.name} />;

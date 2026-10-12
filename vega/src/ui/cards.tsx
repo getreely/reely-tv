@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Image, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Animated, Image, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Text } from './text';
 import { CardLift, CardRing, Press, useAccent } from './focus';
 import { CheckGlyph } from './glyphs';
@@ -12,7 +12,7 @@ import { color, dp } from './theme';
 
 export const POSTER_CORNER = dp(12);
 export const WIDE_CORNER = dp(14);
-const POSTER_CAPTION_HEIGHT = dp(40);
+export const POSTER_CAPTION_HEIGHT = dp(40);
 const EPISODE_CAPTION_HEIGHT = dp(44);
 
 /** How far through something is: a rounded bar just inside the bottom of the artwork. */
@@ -67,6 +67,8 @@ export interface PosterProps {
   width?: number;
   tag?: string | null;
   preferred?: boolean; first?: boolean; focusKey?: string;
+  /** For putting the cursor on it: the A–Z rail's jump. */
+  pressRef?: React.Ref<View>;
 }
 
 /** A poster. The badge carries "six new episodes", so a show that dropped a season reads as one arrival. */
@@ -76,7 +78,7 @@ export function PosterCard(props: PosterProps) {
   const width = dp(props.width ?? 132);
   const badge = props.badge ?? null;
   return (
-    <Press onPress={props.onPress} onHold={props.onHold} preferred={props.preferred} first={props.first} focusKey={props.focusKey}
+    <Press ref={props.pressRef} onPress={props.onPress} onHold={props.onHold} preferred={props.preferred} first={props.first} focusKey={props.focusKey}
       onFocusChange={(on) => { setFocused(on); if (on) props.onFocus?.(); }}>
       {() => (
         <CardLift focused={focused} style={{ width, padding: dp(4) }}>
@@ -212,5 +214,27 @@ export function ChannelCard(props: { name: string; number: number; logo?: string
         </>
       )}
     </Press>
+  );
+}
+
+/** A poster's shape while the titles are on their way, breathing as the Fire TV's shimmer does. */
+export function PosterPlaceholder(props: { width?: number }) {
+  const pulse = React.useRef(new Animated.Value(0.5)).current;
+  React.useEffect(() => {
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 0.5, duration: 700, useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+  return (
+    <Animated.View style={{ width: dp(props.width ?? 132), padding: dp(4), opacity: pulse }}>
+      <View style={{ width: '100%', aspectRatio: 2 / 3, borderRadius: POSTER_CORNER, backgroundColor: 'rgba(242, 244, 247, 0.07)' }} />
+      <View style={{ height: POSTER_CAPTION_HEIGHT, paddingTop: dp(9), gap: dp(6) }}>
+        <View style={{ width: '70%', height: dp(10), borderRadius: dp(5), backgroundColor: 'rgba(242, 244, 247, 0.07)' }} />
+        <View style={{ width: '40%', height: dp(8), borderRadius: dp(4), backgroundColor: 'rgba(242, 244, 247, 0.05)' }} />
+      </View>
+    </Animated.View>
   );
 }

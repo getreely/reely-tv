@@ -33,6 +33,9 @@ const focusables = (root: ParentNode = document) =>
 /** The guide trapping the cursor, if the focused element is in one: the innermost. */
 const trapOf = (el: Element | null) => el?.closest<HTMLElement>('[data-trap="1"]') ?? null;
 
+/** Where focus entering a guide goes, for guides that name it. */
+const destinationsOf = new WeakMap<HTMLElement, HTMLElement[]>();
+
 /** Which element each remembering guide last had focused. */
 const remembered = new WeakMap<HTMLElement, HTMLElement>();
 
@@ -51,6 +54,14 @@ function move(direction: Direction) {
   const at = nextIndex(active.getBoundingClientRect(), others.map((el) => el.getBoundingClientRect()), direction);
   if (at < 0) return;
   let target = others[at];
+  // Into a guide with destinations from outside it: its destination, not the nearest.
+  for (let g = target.closest<HTMLElement>('[data-destinations="1"]'); g; g = g.parentElement?.closest<HTMLElement>('[data-destinations="1"]') ?? null) {
+    const to = destinationsOf.get(g)?.find((d) => d && d.isConnected);
+    if (!g.contains(active) && to) {
+      target = to;
+      break;
+    }
+  }
   // A guide trapping this direction keeps the cursor in it.
   const held = active.closest<HTMLElement>(`[data-trap-${direction}="1"]`);
   if (held && !held.contains(target)) return;
@@ -74,6 +85,7 @@ if (typeof window !== 'undefined') {
       el = el.parentElement?.closest<HTMLElement>('[data-autofocus="1"]') ?? null;
     }
   });
+  // Ahead of the page's own handlers, as the stick tells the app of a key before a press.
   window.addEventListener('keydown', (e) => {
     const type = KEYS[e.key];
     if (!type) return;
@@ -83,14 +95,11 @@ if (typeof window !== 'undefined') {
       e.preventDefault();
       move(type);
     }
-  });
+  }, true);
   window.addEventListener('keyup', (e) => {
     const type = KEYS[e.key];
     if (type) listeners.forEach((l) => l({ eventType: type, eventKeyAction: 1 }));
-    // OK presses what has the cursor, on its release, as Vega's Pressable does.
-    const active = document.activeElement as HTMLElement | null;
-    if (e.key === 'Enter' && active && active.getAttribute('tabindex') === '0' && active.tagName !== 'INPUT') active.click();
-  });
+  }, true);
   // hasTVPreferredFocus: a newly drawn element marked preferred takes focus, as on the stick.
   const seen = new WeakSet<Element>();
   new MutationObserver(() => {
@@ -108,7 +117,15 @@ export const TVFocusGuideView = React.forwardRef<unknown, any>(function TVFocusG
     trap: trap ? '1' : '0', autofocus: autoFocus ? '1' : '0',
     trapUp: trapFocusUp ? '1' : '0', trapDown: trapFocusDown ? '1' : '0', trapLeft: trapFocusLeft ? '1' : '0', trapRight: trapFocusRight ? '1' : '0',
   };
-  return <View ref={ref} {...rest} dataSet={dataSet} />;
+  const node = useRef<HTMLElement | null>(null);
+  if (node.current) destinationsOf.set(node.current, (destinations ?? []) as HTMLElement[]);
+  const setRef = (el: HTMLElement | null) => {
+    node.current = el;
+    if (el) destinationsOf.set(el, (destinations ?? []) as HTMLElement[]);
+    if (typeof ref === 'function') ref(el);
+    else if (ref) (ref as React.MutableRefObject<unknown>).current = el;
+  };
+  return <View ref={setRef as never} {...rest} dataSet={{ ...dataSet, destinations: destinations ? '1' : '0' }} />;
 });
 
 export const FocusManager = {

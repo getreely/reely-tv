@@ -314,7 +314,7 @@ export const iptvChoice = (kind: Kind): LibraryChoice => ({
   serverName: "IPTV", baseUrl: IPTV_SOURCE, token: "", section: { key: `iptv-${kind}`, title: "IPTV", type: kind },
 });
 export const isIptvChoice = (c: LibraryChoice | null) => c?.baseUrl === IPTV_SOURCE;
-const IPTV_SORTS: Record<string, vod.Sort> = { "titleSort:asc": "TITLE", "addedAt:desc": "ADDED", "originallyAvailableAt:desc": "RELEASED", "rating:desc": "RATED" };
+const IPTV_SORTS: Record<string, vod.Sort> = { "titleSort:asc": "TITLE", "addedAt:desc": "ADDED", "originallyAvailableAt:desc": "RELEASED", "originallyAvailableAt:asc": "OLDEST", "rating:desc": "RATED", "lastViewedAt:desc": "WATCHED" };
 
 /** Home's rows, as Settings lists them. */
 export type HomeRowId = "continueWatching" | "recentEpisodes" | "recentMovies" | "watchlist" | "playlists" | "iptvMovies" | "iptvShows";

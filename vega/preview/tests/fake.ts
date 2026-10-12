@@ -8,7 +8,7 @@ import type { Page, Route } from "@playwright/test";
 export const SERVER = "http://192.168.1.20:32400";
 
 /** plex.tv and one server, answering as they do; what was told to the server is kept. */
-export async function fakePlex(page: Page, options: { tour?: boolean; many?: boolean } = {}) {
+export async function fakePlex(page: Page, options: { tour?: boolean; many?: boolean; big?: boolean } = {}) {
   const timeline: string[] = [];
   // The remote's tour seen already, except where it's what's tested; kept across a reload.
   if (!options.tour) {
@@ -61,13 +61,29 @@ export async function fakePlex(page: Page, options: { tour?: boolean; many?: boo
       "Marrow", "Afterglow", "Tidewater", "Second Sun", "Juniper"];
     const movies = titles.map((title, i) => ({ ratingKey: `m${i + 1}`, type: "movie", title, year: 2025 - (i % 9), addedAt: 100 - i,
       thumb: `/thumb/m${i + 1}`, art: `/art/m${i + 1}`, summary: `${title}: a film in the library.`, duration: 6_000_000 }));
-    if (options.many && path === "/hubs") {
+    if ((options.many || options.big) && path === "/hubs") {
       return json(route, { MediaContainer: { Hub: [{ Metadata: [
         ...[2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => ({ ...episode(`e${n}`, n), viewOffset: 20_000, lastViewedAt: 20 - n })),
         ...movies.slice(0, 14).map((m, i) => ({ ...m, viewOffset: 900_000, lastViewedAt: 5 - i })),
       ] }] } });
     }
-    if (options.many && path === "/library/sections/1/all" && !url.searchParams.get("genre") && !url.searchParams.get("actor")) return meta(route, movies);
+    // A library big enough for the A–Z rail: the same films again under other names.
+    const big = [...movies, ...titles.flatMap((title, i) => ["Return to ", "After "].map((pre, j) => ({ ...movies[i], ratingKey: `b${j}${i}`, title: `${pre}${title}` })))]
+      .sort((a, b) => a.title.localeCompare(b.title));
+    if (options.big && path === "/library/sections/1/firstCharacter") {
+      const counts = new Map<string, number>();
+      for (const m of big) counts.set(m.title[0].toUpperCase(), (counts.get(m.title[0].toUpperCase()) ?? 0) + 1);
+      return json(route, { MediaContainer: { Directory: [...counts].map(([title, size]) => ({ key: title, title, size })) } });
+    }
+    if (options.big && path === "/library/sections/1/collections") {
+      return meta(route, [{ ratingKey: "c1", type: "collection", title: "Space Films", childCount: 3, thumb: "/thumb/m1" }, { ratingKey: "c2", type: "collection", title: "Sea Stories", childCount: 4, thumb: "/thumb/m4" }]);
+    }
+    if (options.big && path === "/library/sections/1/all" && !url.searchParams.get("genre") && !url.searchParams.get("actor")) {
+      const start = Number(url.searchParams.get("X-Plex-Container-Start") ?? 0);
+      const size = Number(url.searchParams.get("X-Plex-Container-Size") ?? big.length);
+      return json(route, { MediaContainer: { totalSize: big.length, size: Math.min(size, big.length - start), Metadata: big.slice(start, start + size) } });
+    }
+    if ((options.many || options.big) && path === "/library/sections/1/all" && !url.searchParams.get("genre") && !url.searchParams.get("actor")) return meta(route, movies);
     if (path === "/hubs") return json(route, { MediaContainer: { Hub: [{ Metadata: [episode("e2", 2)].map((e) => ({ ...e, viewOffset: 20_000, lastViewedAt: 5 })) }] } });
     if (path === "/playlists") return meta(route, []);
     if (url.searchParams.get("actor") === "77") {

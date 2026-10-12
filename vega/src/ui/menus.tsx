@@ -4,6 +4,7 @@ import { Text } from './text';
 import { TVFocusGuideView, useTVEventHandler } from '@amazon-devices/react-native-kepler';
 import { Press, useAccent } from './focus';
 import { CheckGlyph } from './glyphs';
+import { Overlay } from './overlay';
 import { Gradient } from './surfaces';
 import { color, dp, type } from './theme';
 
@@ -57,6 +58,7 @@ export function MenuLayer(props: { onClose: () => void; width?: number; scrim?: 
   });
   const width = props.width ?? MENU_WIDTH;
   return (
+    <Overlay>
     <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, zIndex: 50 }}>
       <MenuScrim strength={props.scrim} />
       <Animated.View
@@ -75,6 +77,7 @@ export function MenuLayer(props: { onClose: () => void; width?: number; scrim?: 
         </FreshPress.Provider>
       </Animated.View>
     </View>
+    </Overlay>
   );
 }
 

@@ -16,6 +16,7 @@ import { TopBar, type TabId } from './topbar';
 import { Screens, routeFor } from './screens';
 import { BACKDROP_RISE } from './surfaces';
 import { LivePlayer } from './player/live';
+import { OverlayContext, OverlayHost, Overlays } from './overlay';
 
 /*
  * The app around its screens (ReelyApp.kt): the top bar, the page under it, what Back
@@ -214,10 +215,12 @@ export function Root(props: { app: App }) {
     focusTab('home');
   }, []);
 
+  const overlays = useRef(new Overlays()).current;
   const connected = isConnected(state);
   const watching = state.live.watching != null && !!state.live.channels[state.live.watching];
   return (
     <AccentContext.Provider value={accentValue}>
+      <OverlayContext.Provider value={overlays}>
       <View style={{ flex: 1, backgroundColor: color.ink }}>
         <ScreenContext.Provider value={memory}>
           {/* Kept while a channel plays over it, so the guide is as it was on the way back,
@@ -241,8 +244,10 @@ export function Root(props: { app: App }) {
           <ItemMenu app={app} item={itemMenu} onClose={() => setItemMenu(null)} open={(item) => open(routeFor(item))}
             inContinueWatching={state.home.continueWatching.some((i) => listKey(i) === listKey(itemMenu))} />
         ) : null}
+        <OverlayHost overlays={overlays} />
         {confirmExit ? <ConfirmExit onStay={() => { setConfirmExit(false); focusTab(); }} onLeave={() => BackHandler.exitApp()} /> : null}
       </View>
+      </OverlayContext.Provider>
     </AccentContext.Provider>
   );
 }
