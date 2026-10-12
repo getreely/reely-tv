@@ -351,7 +351,7 @@ jobs:
           {
             echo
             echo "For Fire TV sticks on Vega OS (the Fire TV Stick 4K Select and later), installed with Amazon's Vega tools on a stick in developer mode: see vega/README.md."
-            echo "\`reely-vega-armv7.vpkg\` is for Fire TV sticks, \`reely-vega-aarch64.vpkg\` for the Vega Virtual Device."
+            echo "\`reely-vega-armv7.vpkg\` is for Fire TV sticks, \`reely-vega-aarch64.vpkg\` and \`reely-vega-x86_64.vpkg\` for the Vega Virtual Device."
           } >> notes.md
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$TAG" --target "$GITHUB_SHA" --latest=false \
