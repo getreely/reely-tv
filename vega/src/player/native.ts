@@ -1,13 +1,9 @@
 /*
- * Amazon's optional native modules, loaded when first wanted rather than at start: one the
- * stick hasn't got, or won't load, is null, and what uses it says so instead of failing.
+ * Amazon's optional native modules, for Play sound on (Connectivity Controller) and Match
+ * frame rate (Graphics). Not built in: Amazon's display library is a required system part
+ * once it's in the app, and a stick without it won't open the app at all, so both stay out
+ * until they can be tried on a stick. Settings says where the Fire TV's own settings are.
  */
-export function optionalModule<T>(name: 'connectivity' | 'graphics'): T | null {
-  try {
-    // Named in full for the bundler, which only bundles what it can see.
-    if (name === 'connectivity') return require('@amazon-devices/kepler-connectivity-controller') as T;
-    return require('@amazon-devices/kepler-graphics') as T;
-  } catch {
-    return null;
-  }
+export function optionalModule<T>(_name: 'connectivity' | 'graphics'): T | null {
+  return null;
 }

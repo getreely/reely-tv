@@ -448,11 +448,13 @@ function FrameRateRow({ kit }: { kit: Kit }) {
   const { app, state } = kit;
   const [refused, setRefused] = useState(frameRateRefused);
   useEffect(() => onFrameRateChange(() => setRefused(frameRateRefused())), []);
+  // Where Reely can't switch the TV itself, the Fire TV does it: said so, nothing to toggle.
+  if (refused) {
+    return <Setting title="Match frame rate" value="Fire TV Settings" note="Set on the Fire TV itself: turn on Match Original Frame Rate in its Display settings." />;
+  }
   return (
     <Setting title="Match frame rate" on={state.prefs.matchFrameRate} onPress={() => app.setMatchFrameRate(!state.prefs.matchFrameRate)}
-      note={refused && state.prefs.matchFrameRate
-        ? "This Fire TV doesn't let apps switch the TV. Turn on Match Original Frame Rate in the Fire TV's Display settings instead."
-        : 'Smoother motion. The screen may blink as it switches.'} />
+      note="Smoother motion. The screen may blink as it switches." />
   );
 }
 
@@ -479,7 +481,7 @@ function SoundGroup({ kit }: { kit: Kit }) {
     return (
       <Group title="Sound">
         <Setting title="Play sound on" value="Fire TV Settings"
-          note="This Fire TV doesn't let apps choose. Pair and choose headphones in the Fire TV's own Settings, under Bluetooth; Reely plays through them." />
+          note="Chosen on the Fire TV itself: pair and pick headphones in its own Settings, under Bluetooth, and Reely plays through them." />
       </Group>
     );
   }

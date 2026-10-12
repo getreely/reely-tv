@@ -59,12 +59,12 @@ test('Sound: headphones paired with the stick chosen and connected, and new ones
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('reely:prefs') ?? '{}').audioOutput)).toBe('bt-3');
 });
 
-test("Sound on a stick that won't let apps choose: where to do it instead", async ({ page }) => {
+test("Sound and frame rate as the Fire TV sets them: where to do it", async ({ page }) => {
   page.on('pageerror', (e) => console.log('pageerror:', e.message));
   await fakePlex(page);
   await signedIn(page);
   await openSettings(page);
-  await expect(page.getByText("This Fire TV doesn't let apps choose.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Chosen on the Fire TV itself", { exact: false })).toBeVisible();
   await page.waitForTimeout(300);
   await page.screenshot({ path: 'shots/sound-fallback.png' });
 });

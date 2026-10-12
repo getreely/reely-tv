@@ -11,8 +11,10 @@
 
 import { optionalModule } from './native';
 
-type AccModule = typeof import('@amazon-devices/kepler-connectivity-controller');
-type Controller = InstanceType<AccModule['ConnectivityController']>;
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// The shape of Amazon's module, as much of it as this uses; the module itself isn't built in.
+type AccModule = any;
+type Controller = any;
 type Basic = { identity: string; name: string; category: string };
 
 export interface Output {
@@ -79,10 +81,10 @@ class Outputs {
     }
     try {
       const client = new m.ConnectivityController({
-        onAccessoryDiscoveryStateChange: (state) => {
+        onAccessoryDiscoveryStateChange: (state: number) => {
           if (Number(state) !== 1) this.set({ searching: false });
         },
-        onAccessoryDiscovery: (b) => {
+        onAccessoryDiscovery: (b: Basic) => {
           const info = b as Basic;
           if (info.category !== AUDIO || this.state.paired.some((p) => p.id === info.identity)) return;
           if (this.state.found.some((f) => f.id === info.identity)) return;
@@ -90,9 +92,9 @@ class Outputs {
         },
         onAccessoryAutopairStateChange: () => undefined,
         onAccessoryAutopair: () => undefined,
-        onAccessoryPairingRequest: (b, request) => void this.answer((b as Basic).identity, request.message),
+        onAccessoryPairingRequest: (b: Basic, request: any) => void this.answer((b as Basic).identity, request.message),
         onAccessoryPairingStateChange: () => void this.refresh(),
-        onAccessoryConnectionStateChange: (b, state) => {
+        onAccessoryConnectionStateChange: (b: Basic, state: number) => {
           const id = (b as Basic).identity;
           const n = Number(state);
           if (n === 1 || n === 2 || n === 5) this.waiting.get(id)?.(n === 1);

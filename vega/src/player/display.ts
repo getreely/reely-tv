@@ -8,7 +8,9 @@
 
 import { optionalModule } from './native';
 
-type GraphicsModule = typeof import('@amazon-devices/kepler-graphics');
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// Amazon's display module, not built in (see native.ts).
+type GraphicsModule = any;
 
 let mod: GraphicsModule | null | undefined;
 function load(): GraphicsModule | null {
@@ -83,7 +85,7 @@ function refuse() {
 }
 
 /** Asks for the change and waits for the display to say it took; a failure is a refusal. */
-function apply(m: GraphicsModule, config: ReturnType<GraphicsModule['Display']['getCurrentConfig']>, rate: number): Promise<boolean> {
+function apply(m: GraphicsModule, config: any, rate: number): Promise<boolean> {
   return new Promise((resolve) => {
     let sub: { unsubscribe(): void } | null = null;
     const done = (ok: boolean) => {

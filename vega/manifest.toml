@@ -3,7 +3,7 @@ schema-version = 1
 [package]
 id = "tv.reely.vega"
 title = "Reely"
-version = "0.58.2"
+version = "0.58.3"
 icon = "@image/app_icon.png"
 
 # Vega SDK 0.24 on: the OS versions the app runs on. `vega project install --fix` adds the
@@ -62,31 +62,6 @@ id = "com.amazon.audio.control"
 # Accessibility (VoiceView).
 [[wants.service]]
 id = "com.amazon.kepler.ucc.publisher"
-
-# Headphones and speakers: Play sound on, as on the Fire TV. Wanted, not needed: a stick
-# that doesn't grant these leaves Reely working, and Settings says where to pair instead.
-[[wants.service]]
-id = "com.amazon.connectivity.control"
-
-[[wants.privilege]]
-id = "com.amazon.acc.privilege.access"
-
-[[wants.privilege]]
-id = "com.amazon.acc.privilege.discover"
-
-[[wants.privilege]]
-id = "com.amazon.acc.privilege.pair"
-
-[[wants.privilege]]
-id = "com.amazon.acc.privilege.connect"
-
-# Finding headphones nearby asks for this too, as Bluetooth scanning can tell where you are.
-[[wants.privilege]]
-id = "com.amazon.location.privilege.access.fine"
-
-# Match frame rate: switching the TV to the film's own rate. Wanted, not needed, likewise.
-[[wants.privilege]]
-id = "com.amazon.graphics.privilege.display.manager"
 
 # Group IPC, for the media services.
 [[wants.service]]
