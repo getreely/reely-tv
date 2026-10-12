@@ -13,8 +13,10 @@ does everything the Fire TV column does, with these differences, all Vega's own:
 - **Updates are found, not installed.** As on the Fire TV, a new version is said at start and
   in Settings, About; Vega gives an app no way to install itself, so the notice has a code for
   the release and the command that installs it from a computer (see `vega/README.md`).
-- **No frame rate matching or choice of where sound plays.** Vega switches the screen's mode
-  and picks the sound output itself.
+- **Play sound on and Match frame rate depend on the stick.** Both are built, through
+  Amazon's Bluetooth and display APIs, but each needs a privilege the stick may keep for its
+  own Settings. Where it's granted they work as on the Fire TV; where it isn't, Settings says
+  where the Fire TV's own setting is.
 - **The Menu key** opens a poster's or a tile's menu as well as holding OK does.
 - **A channel's own subtitles and sound tracks** are those hls.js finds in its stream: a
   channel played as MPEG-TS lists none.

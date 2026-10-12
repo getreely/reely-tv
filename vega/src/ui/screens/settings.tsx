@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { TVFocusGuideView, useTVEventHandler } from '@amazon-devices/react-native-kepler';
 import type { App, AppState, GuideStatus, PlaybackMode } from '../../app/store';
@@ -6,6 +6,8 @@ import { ACCENTS, BITRATE_CHOICES, HOME_ROWS, SCREENSAVER_CHOICES, SUBTITLE_SIZE
 import { VERSION } from '../../app/version';
 import * as xtream from '../../api/xtream';
 import { clearProblem, lastProblem } from '../../core/crash';
+import { frameRateRefused, onFrameRateChange } from '../../player/display';
+import { outputs, type OutputsState } from '../../player/outputs';
 import { ChoicePanel, type ChoiceRequest } from '../choice';
 import { Chip, ErrorNote } from '../controls';
 import { Press, focusWhenReady, useAccent } from '../focus';
@@ -227,7 +229,9 @@ function Playback({ kit }: { kit: Kit }) {
             { value: true, label: 'Larger', note: 'Keeps up to two minutes ahead. Takes a moment longer to start.' },
           ]}
           selected={prefs.largerBuffer} onSelect={(on) => app.setLargerBuffer(on)} />
+        <FrameRateRow kit={kit} />
       </Group>
+      <SoundGroup kit={kit} />
       <Group title="Subtitles">
         <Choice kit={kit} title="At the start" note="Whether movies and episodes start with subtitles on."
           options={[
@@ -436,6 +440,82 @@ function PlexSection({ kit, onProfiles }: { kit: Kit; onProfiles: () => void }) 
         <Setting pressRef={firstOne()} title="Sign out of Plex" onPress={() => app.signOut()} />
       </Group>
     </>
+  );
+}
+
+/** Match frame rate, and when the stick won't let Reely switch the TV, where its own setting is. */
+function FrameRateRow({ kit }: { kit: Kit }) {
+  const { app, state } = kit;
+  const [refused, setRefused] = useState(frameRateRefused);
+  useEffect(() => onFrameRateChange(() => setRefused(frameRateRefused())), []);
+  return (
+    <Setting title="Match frame rate" on={state.prefs.matchFrameRate} onPress={() => app.setMatchFrameRate(!state.prefs.matchFrameRate)}
+      note={refused && state.prefs.matchFrameRate
+        ? "This Fire TV doesn't let apps switch the TV. Turn on Match Original Frame Rate in the Fire TV's Display settings instead."
+        : 'Smoother motion. The screen may blink as it switches.'} />
+  );
+}
+
+function useOutputs(): OutputsState {
+  const [s, set] = useState(outputs.state);
+  useEffect(() => {
+    const off = outputs.subscribe(set);
+    void outputs.start();
+    return () => { off(); };
+  }, []);
+  return s;
+}
+
+/**
+ * Sound (the Fire TV's Play sound on): headphones and speakers paired with the stick, the
+ * one chosen connected; finding and pairing new ones. Where the stick doesn't let Reely do
+ * this, where to do it in the Fire TV's own Settings.
+ */
+function SoundGroup({ kit }: { kit: Kit }) {
+  const { app, state } = kit;
+  const o = useOutputs();
+  const chosen = state.prefs.audioOutput;
+  if (o.available === false) {
+    return (
+      <Group title="Sound">
+        <Setting title="Play sound on" value="Fire TV Settings"
+          note="This Fire TV doesn't let apps choose. Pair and choose headphones in the Fire TV's own Settings, under Bluetooth; Reely plays through them." />
+      </Group>
+    );
+  }
+  if (o.available == null) {
+    return (
+      <Group title="Sound">
+        <Setting title="Play sound on" value="Looking…" />
+      </Group>
+    );
+  }
+  const gone = chosen != null && !o.paired.some((p) => p.id === chosen);
+  const options = [
+    { value: null as string | null, label: 'Automatic', note: 'Wherever the Fire TV sends sound.' },
+    ...o.paired.map((p) => ({ value: p.id as string | null, label: p.name, note: p.connected ? 'Bluetooth, connected' : 'Paired. Connects when something plays.' })),
+    ...(gone ? [{ value: chosen, label: state.prefs.audioOutputName ?? 'Your last choice', note: 'Not found. The TV is used instead.' }] : []),
+  ];
+  const busyName = o.busy ? (o.paired.find((p) => p.id === o.busy) ?? o.found.find((f) => f.id === o.busy))?.name : null;
+  const failedName = o.failed ? (o.paired.find((p) => p.id === o.failed) ?? o.found.find((f) => f.id === o.failed))?.name : null;
+  return (
+    <Group title="Sound">
+      <Choice kit={kit} title="Play sound on" options={options} selected={chosen}
+        note={busyName ? `Connecting ${busyName}…` : failedName ? `${failedName} didn't connect. Are they on and nearby?`
+          : 'Headphones and speakers paired with this Fire TV. When the one chosen isn\'t there, the TV.'}
+        onSelect={(id) => {
+          const name = o.paired.find((p) => p.id === id)?.name ?? null;
+          app.setAudioOutput(id, name);
+          if (id) void outputs.connect(id);
+        }} />
+      <Setting title="Pair new headphones" value={o.searching ? 'Looking…' : o.found.length ? `${o.found.length} found` : null}
+        note="Put them in pairing mode first, then press OK." onPress={() => void outputs.search()} />
+      {o.code ? <Setting title="Type this code on them" value={o.code} /> : null}
+      {o.found.map((f) => (
+        <Setting key={f.id} title={f.name} value={o.busy === f.id ? 'Pairing…' : o.failed === f.id ? "Didn't pair" : 'Pair'}
+          onPress={() => void outputs.pair(f.id).then((ok) => { if (ok) app.setAudioOutput(f.id, f.name); })} />
+      ))}
+    </Group>
   );
 }
 

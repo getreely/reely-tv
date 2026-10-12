@@ -18,6 +18,7 @@ import { BACKDROP_RISE } from './surfaces';
 import { LivePlayer } from './player/live';
 import { VodPlayer } from './player/vod';
 import { setBufferSeconds } from '../player/engine';
+import { outputs } from '../player/outputs';
 import { ProfilePicker, ReminderCard, Screensaver, Tour, UpdatePrompt, slidesFrom } from './overlays';
 import { OverlayContext, OverlayHost, Overlays } from './overlay';
 
@@ -152,6 +153,17 @@ export function Root(props: { app: App }) {
     const t = setTimeout(() => void app.checkForUpdateAtStart(), 8_000);
     return () => clearTimeout(t);
   }, []);
+
+  // On the way into something playing, the headphones chosen connected if they're paired
+  // but not connected, as after the TV was off. If they don't answer, the TV carries on.
+  const playingSomething = !!state.playing || state.live.watching != null;
+  useEffect(() => {
+    const wanted = state.prefs.audioOutput;
+    if (!playingSomething || !wanted) return;
+    void outputs.start().then((ok) => {
+      if (ok && outputs.state.paired.some((p) => p.id === wanted && !p.connected)) void outputs.connect(wanted);
+    });
+  }, [playingSomething]);
 
   // Settings' Buffer, for every stream opened from now on.
   useEffect(() => setBufferSeconds(state.prefs.largerBuffer ? 120 : 50), [state.prefs.largerBuffer]);

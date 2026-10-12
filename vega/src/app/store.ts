@@ -277,6 +277,11 @@ export interface Prefs {
   skipCredits: boolean;
   /** Keeps up to two minutes ahead rather than about fifty seconds: for a slow or unsteady connection. */
   largerBuffer: boolean;
+  /** The TV to the film's own frame rate while it plays, where the stick allows it. */
+  matchFrameRate: boolean;
+  /** The headphones or speaker chosen to play on, by the stick's id for it, and its name. */
+  audioOutput: string | null;
+  audioOutputName: string | null;
   /** Up Next's count before the next episode plays; 0 waits to be asked. */
   upNextSeconds: number;
   /** Home's rows switched off, by id. */
@@ -364,7 +369,7 @@ export const ACCENTS: Array<{ id: string; label: string; color: string; on: stri
 export const accentOf = (id: string | undefined) => ACCENTS.find((a) => a.id === id) ?? ACCENTS[0];
 
 export const UP_NEXT_CHOICES = [0, 5, 10, 12, 15, 20, 30];
-const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, largerBuffer: false, upNextSeconds: 12, hiddenRows: [], iptvLibrary: false, pinnedLibraries: [], iptvWins: false, screensaverMinutes: 3, tourSeen: false, subtitleScale: 0.9, subtitleBackground: false, subtitlesAtStart: "plex", accent: "blue", iptvInMenus: true, themeLevel: -1, guidePreview: true, streamFormat: "m3u8", multiviewLayout: "grid" };
+const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, largerBuffer: false, matchFrameRate: true, audioOutput: null, audioOutputName: null, upNextSeconds: 12, hiddenRows: [], iptvLibrary: false, pinnedLibraries: [], iptvWins: false, screensaverMinutes: 3, tourSeen: false, subtitleScale: 0.9, subtitleBackground: false, subtitlesAtStart: "plex", accent: "blue", iptvInMenus: true, themeLevel: -1, guidePreview: true, streamFormat: "m3u8", multiviewLayout: "grid" };
 
 /** As the Fire TV offers them. */
 export const BITRATE_CHOICES = [0, 20_000, 12_000, 8_000, 4_000, 2_000];
@@ -665,6 +670,9 @@ export class App {
         skipIntros: prefs.skipIntros === true,
         skipCredits: prefs.skipCredits === true,
         largerBuffer: prefs.largerBuffer === true,
+        matchFrameRate: prefs.matchFrameRate !== false,
+        audioOutput: typeof prefs.audioOutput === "string" ? prefs.audioOutput : null,
+        audioOutputName: typeof prefs.audioOutputName === "string" ? prefs.audioOutputName : null,
         upNextSeconds: typeof prefs.upNextSeconds === "number" ? Math.max(0, Math.min(30, prefs.upNextSeconds)) : DEFAULT_PREFS.upNextSeconds,
         hiddenRows: Array.isArray(prefs.hiddenRows) ? prefs.hiddenRows.filter((r) => HOME_ROWS.some(([id]) => id === r)) : [],
         iptvLibrary: prefs.iptvLibrary === true,
@@ -1527,7 +1535,7 @@ export class App {
     const startMs = resume && marked.viewOffsetMs > 0 ? marked.viewOffsetMs : 0;
     const playback: plex.PlexPlayback = {
       url, subtitles: [], markers: [], audioCodec: null, audioChannels: 0, previewUrl: null, chapters: [], partId: null,
-      audioStreams: [], subtitleStreams: [], container: k.extension, videoCodec: null,
+      audioStreams: [], subtitleStreams: [], container: k.extension, videoCodec: null, frameRate: null,
     };
     this.set((s) => ({ ...s, playError: null, playing: { item: marked, base: IPTV_SOURCE, token: "", playback, url, direct: true, startMs, sessionId: randomHex(12), queue, mediaIndex: 0, textSubtitle: null } }));
   }
@@ -2542,6 +2550,15 @@ export class App {
 
   setSkipCredits(skipCredits: boolean) {
     this.setPrefs({ skipCredits });
+  }
+
+  setMatchFrameRate(matchFrameRate: boolean) {
+    this.setPrefs({ matchFrameRate });
+  }
+
+  /** Where sound plays: headphones by id (kept whether they connect now or not), or null for the stick's choice. */
+  setAudioOutput(id: string | null, name: string | null) {
+    this.setPrefs({ audioOutput: id, audioOutputName: id ? name : null });
   }
 
   setLargerBuffer(largerBuffer: boolean) {

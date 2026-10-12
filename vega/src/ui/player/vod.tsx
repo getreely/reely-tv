@@ -10,6 +10,7 @@ import { ask } from '../../core/http';
 import { cueAt, parseSubtitles, type Cue } from '../../core/subtitles';
 import { canDirect } from '../../player/canplay';
 import { useEngine, VideoSurface } from '../../player/engine';
+import { matchFrameRate, restoreFrameRate } from '../../player/display';
 import { ActionButton, Spinner } from '../controls';
 import { Press, focusWhenReady } from '../focus';
 import { useBack } from '../menus';
@@ -133,6 +134,13 @@ export function VodPlayer(props: { app: App; state: AppState; playing: Playing }
     setBuffering(true);
     void engine.open(playing.url, playing.startMs);
   }, [playing.url, playing.attempt]);
+
+  // The TV to the film's own frame rate, when Settings says so and the stick allows it;
+  // back to what it was when the player goes.
+  useEffect(() => {
+    if (prefs.matchFrameRate) void matchFrameRate(playback.frameRate);
+  }, [key]);
+  useEffect(() => () => void restoreFrameRate(), []);
 
   // Text subtitles, read once and drawn over the picture at the size and background chosen.
   const textSub = playing.textSubtitle;

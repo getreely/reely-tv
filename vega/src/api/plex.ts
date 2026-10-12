@@ -168,6 +168,8 @@ export interface PlexPlayback {
   subtitleStreams: PlexStream[];
   container: string | null;
   videoCodec: string | null;
+  /** Frames a second, as the file has them (23.976, 25, 59.94…); null when Plex doesn't say. */
+  frameRate: number | null;
 }
 
 export interface PlexExtra {
@@ -691,7 +693,28 @@ export function parsePlayback(metadata: any, base: string, token: string, mediaI
     subtitleStreams: streamsOf(streams, SUBTITLE_STREAM),
     container: str(media.container).toLowerCase() || null,
     videoCodec: str(media.videoCodec).toLowerCase() || null,
+    frameRate: frameRateOf(streams, str(media.videoFrameRate)),
   };
+}
+
+const VIDEO_STREAM = 1;
+
+/**
+ * The video's frames a second: the video stream's own figure, or failing that Plex's
+ * word for it on the media ("24p", "PAL", "NTSC", "60p").
+ */
+export function frameRateOf(streams: any[], label: string): number | null {
+  const video = streams.find((s) => Number(s.streamType) === VIDEO_STREAM);
+  const exact = Number(video?.frameRate);
+  if (Number.isFinite(exact) && exact > 0) return exact;
+  switch (label.toLowerCase()) {
+    case "24p": return 23.976;
+    case "pal": return 25;
+    case "ntsc": return 29.97;
+    case "50p": return 50;
+    case "60p": return 59.94;
+    default: return null;
+  }
 }
 
 export function streamsOf(streams: any[], type: number): PlexStream[] {
