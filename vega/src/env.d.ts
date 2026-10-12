@@ -2,8 +2,8 @@
 declare function atob(data: string): string;
 declare function btoa(data: string): string;
 
-// URL and URLSearchParams in full, as react-native-url-polyfill (loaded first, in index.js)
-// makes them: React Native's own types stop short.
+// URL and URLSearchParams in full, as src/core/url.ts (loaded first, in index.js) makes them:
+// React Native's own types stop short.
 interface URL {
   readonly origin: string;
   protocol: string;

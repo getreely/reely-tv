@@ -22,7 +22,6 @@ export default defineConfig({
       // Amazon's optional modules (Bluetooth, the display): stand-ins a test can switch on.
       { find: /^\.\/native$/, replacement: here('shims/native.ts') },
       { find: /^@amazon-devices\/react-native-w3cmedia$/, replacement: here('shims/w3cmedia.ts') },
-      { find: 'react-native-url-polyfill/auto', replacement: here('shims/empty.ts') },
       { find: /^react$/, replacement: here('node_modules/react') },
       { find: /^react-dom$/, replacement: here('node_modules/react-dom') },
     ],
