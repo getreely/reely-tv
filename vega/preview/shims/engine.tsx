@@ -35,6 +35,8 @@ export class Engine {
   private emit(event: string) { this.listeners.get(event)?.forEach((h) => h()); }
   async open(url: string, startMs = 0) {
     this.url = url;
+    // For tests: what was asked of Plex.
+    (window as unknown as { lastOpened?: string }).lastOpened = url;
     this.captionChoice = -1;
     this.emit('captions');
     this.videoSize = { width: 1920, height: 1080 };

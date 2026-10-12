@@ -1,4 +1,5 @@
 import { MAX_TILES, savedLabel } from "../core/multiview";
+import type { PlaybackCheck } from "../player/canplay";
 import * as plex from "../api/plex";
 import type { PlexDetail, PlexHomeUser, PlexItem, PlexPerson, PlexServer } from "../api/plex";
 import { namesAll, rememberedSearches, split } from "../core/searchMatch";
@@ -129,6 +130,12 @@ export interface Playing {
   textSubtitle: plex.PlexSubtitle | null;
   /** How many times it's been asked for afresh after the connection dropped; see reopen. */
   attempt?: number;
+  /** What Plex's conversion keeps and makes again, as the TV answered for this title. */
+  plan?: plex.ConvertPlan;
+  /** What it's made of instead if the file, said to play as it is, then doesn't. */
+  fallbackPlan?: plex.ConvertPlan;
+  /** Why it's converted, for Playback info; null when it plays as it is or was asked to be converted. */
+  reason?: string | null;
 }
 
 /** As the Fire TV offers them; 0.9 is its standard. */
@@ -1517,7 +1524,7 @@ export class App {
    * Plays [item] from where it was left, or the top. [direct] is asked of the TV's own
    * player: the file as it is when it can, else Plex's conversion.
    */
-  async play(item: PlexItem, resume: boolean, direct: (p: plex.PlexPlayback) => boolean, queue: PlexItem[] = [], mediaIndex = 0) {
+  async play(item: PlexItem, resume: boolean, direct: PlaybackCheck, queue: PlexItem[] = [], mediaIndex = 0) {
     const base = item.serverBase ?? this.current.plex.baseUrl;
     if (base === IPTV_SOURCE) {
       this.playIptv(item, resume, queue);
@@ -1538,10 +1545,15 @@ export class App {
       // The subtitles Plex has on for this file: text ones the app draws over the file as it
       // is; picture ones (PGS) only Plex's conversion can put in.
       const { text, burn } = subtitlePlan(playback);
-      const asIs = mode === "direct" ? true : mode === "transcode" || burn ? false : direct(playback);
+      // The TV asked about this title as it is: its picture and its sound.
+      const [verdict, fallbackPlan] = await Promise.all([direct.check(playback), direct.fallback(playback)]);
+      const asIs = mode === "direct" ? true : mode === "transcode" || burn ? false : verdict.direct;
+      const reason = mode === "direct" || mode === "transcode" ? null : burn ? "Plex draws in these subtitles" : verdict.reason;
       const startMs = resume && item.viewOffsetMs > 0 && !(item.durationMs > 0 && item.viewOffsetMs >= item.durationMs * 0.95) ? item.viewOffsetMs : 0;
-      const url = asIs ? playback.url : this.converted(base, token, item.ratingKey, sessionId, mediaIndex, burn ? "burn" : "none", playback.videoCodec, startMs);
-      this.set((s) => ({ ...s, playError: null, playing: { item, base, token, playback, url, direct: asIs, startMs, sessionId, queue, mediaIndex, textSubtitle: text } }));
+      // Always convert: the sound made again (in surround where the TV takes it), the picture copied where it can be.
+      const plan = mode === "transcode" ? fallbackPlan : verdict.plan;
+      const url = asIs ? playback.url : this.converted(base, token, item.ratingKey, sessionId, mediaIndex, burn ? "burn" : "none", plan, startMs);
+      this.set((s) => ({ ...s, playError: null, playing: { item, base, token, playback, url, direct: asIs, startMs, sessionId, queue, mediaIndex, textSubtitle: text, plan, fallbackPlan, reason } }));
       await this.queueRestOfShow();
     } catch (error) {
       this.set((s) => ({ ...s, playError: readable(error) }));
@@ -1592,7 +1604,7 @@ export class App {
     const startMs = resume && marked.viewOffsetMs > 0 ? marked.viewOffsetMs : 0;
     const playback: plex.PlexPlayback = {
       url, subtitles: [], markers: [], audioCodec: null, audioChannels: 0, previewUrl: null, chapters: [], partId: null,
-      audioStreams: [], subtitleStreams: [], container: k.extension, videoCodec: null, frameRate: null,
+      audioStreams: [], subtitleStreams: [], container: k.extension, videoCodec: null, frameRate: null, video: null,
     };
     this.set((s) => ({ ...s, playError: null, playing: { item: marked, base: IPTV_SOURCE, token: "", playback, url, direct: true, startMs, sessionId: randomHex(12), queue, mediaIndex: 0, textSubtitle: null } }));
   }
@@ -1604,8 +1616,9 @@ export class App {
     if (!p || p.base === IPTV_SOURCE) return false;
     const burn = subtitlePlan(p.playback).burn ? "burn" : "none";
     if (p.direct) {
-      const url = this.converted(p.base, p.token, p.item.ratingKey, p.sessionId, p.mediaIndex, burn, p.playback.videoCodec, positionMs);
-      this.set((s) => ({ ...s, playing: { ...p, url, direct: false, startMs: positionMs } }));
+      const plan = p.fallbackPlan ?? plex.BASIC_PLAN;
+      const url = this.converted(p.base, p.token, p.item.ratingKey, p.sessionId, p.mediaIndex, burn, plan, positionMs);
+      this.set((s) => ({ ...s, playing: { ...p, url, direct: false, startMs: positionMs, plan, reason: "It didn't play as it is on this TV" } }));
       return true;
     }
     return false;
@@ -1624,7 +1637,7 @@ export class App {
     const old = p.sessionId;
     this.set((s) => ({ ...s, playing: s.playing === p ? { ...p, sessionId, startMs: ms } : s.playing }));
     setTimeout(() => void plex.stopTranscode(p.base, p.token, old), 2_000);
-    return this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, subtitlePlan(p.playback).burn ? "burn" : "none", p.playback.videoCodec, ms);
+    return this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, subtitlePlan(p.playback).burn ? "burn" : "none", p.plan ?? plex.BASIC_PLAN, ms);
   }
 
   /**
@@ -1648,7 +1661,7 @@ export class App {
     const sessionId = randomHex(12);
     const url = p.direct
       ? found?.url ?? p.url
-      : this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, subtitlePlan(p.playback).burn ? "burn" : "none", p.playback.videoCodec, positionMs);
+      : this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, subtitlePlan(p.playback).burn ? "burn" : "none", p.plan ?? plex.BASIC_PLAN, positionMs);
     this.set((s) => ({ ...s, playing: { ...p, url, startMs: positionMs, sessionId, attempt } }));
   }
 
@@ -1658,10 +1671,10 @@ export class App {
    * [offsetMs], which the TV's own player plays (HLS would go through hls.js, on the thread
    * the controls wait on).
    */
-  private converted(base: string, token: string, ratingKey: string, sessionId: string, mediaIndex: number, subtitles: "burn" | "none", _videoCodec: string | null, offsetMs: number) {
+  private converted(base: string, token: string, ratingKey: string, sessionId: string, mediaIndex: number, subtitles: "burn" | "none", plan: plex.ConvertPlan, offsetMs: number) {
     const kbps = this.current.prefs.maxBitrateKbps;
     const resolution = kbps >= 20_000 ? "3840x2160" : kbps === 0 || kbps >= 8_000 ? "1920x1080" : "1280x720";
-    return plex.streamUrl(base, token, ratingKey, sessionId, kbps, resolution, mediaIndex, subtitles, Math.round(this.current.prefs.subtitleScale * 100), offsetMs);
+    return plex.streamUrl(base, token, ratingKey, sessionId, kbps, resolution, mediaIndex, subtitles, Math.round(this.current.prefs.subtitleScale * 100), offsetMs, plan);
   }
 
   /**
@@ -1670,7 +1683,7 @@ export class App {
    * track other than the file's own first; with neither, the file plays as it is again
    * when the TV can. Undefined leaves that one as it is; subtitles "0" turns them off.
    */
-  async chooseStreams(audioId: string | undefined, subtitleId: string | undefined, positionMs: number, canDirect: (p: plex.PlexPlayback) => boolean) {
+  async chooseStreams(audioId: string | undefined, subtitleId: string | undefined, positionMs: number, canDirect: PlaybackCheck) {
     const p = this.current.playing;
     if (!p) return;
     if (p.playback.partId != null) await plex.selectStream(p.base, p.token, p.playback.partId, audioId ?? null, subtitleId ?? null);
@@ -1681,7 +1694,12 @@ export class App {
     const { text, burn } = subtitlePlan(playback);
     const otherSound = audioStreams.length > 1 && !audioStreams[0].selected && audioStreams.some((s) => s.selected);
     const mode = this.current.prefs.playbackMode;
-    const asIs = mode === "transcode" ? false : !burn && !otherSound && (mode === "direct" || canDirect(playback));
+    // The TV asked again, about the sound now chosen.
+    const verdict = await canDirect.check(playback);
+    if (this.current.playing !== p) return;
+    const asIs = mode === "transcode" ? false : !burn && !otherSound && (mode === "direct" || verdict.direct);
+    const reason = mode === "direct" || mode === "transcode" ? null : burn ? "Plex draws in these subtitles"
+      : otherSound && verdict.direct ? "Plex plays the sound track chosen" : verdict.reason;
     // A conversion running for the old choice stops; the new one starts afresh.
     if (!p.direct) void plex.stopTranscode(p.base, p.token, p.sessionId);
     const sessionId = randomHex(12);
@@ -1691,8 +1709,9 @@ export class App {
       this.set((s) => ({ ...s, playing: { ...p, playback, textSubtitle: text } }));
       return;
     }
-    const url = asIs ? playback.url : this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, burn ? "burn" : "none", playback.videoCodec, positionMs);
-    this.set((s) => ({ ...s, playing: { ...p, playback, url, direct: asIs, startMs: positionMs, sessionId, textSubtitle: text } }));
+    const plan = mode === "transcode" ? p.fallbackPlan ?? plex.BASIC_PLAN : verdict.plan;
+    const url = asIs ? playback.url : this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, burn ? "burn" : "none", plan, positionMs);
+    this.set((s) => ({ ...s, playing: { ...p, playback, url, direct: asIs, startMs: positionMs, sessionId, textSubtitle: text, plan, reason } }));
   }
 
   /** Subtitles online for what's playing, in the TV's language, found by the Plex server. */
@@ -1710,7 +1729,7 @@ export class App {
    * Has the server fetch [subtitle] and add it to the file, then plays on with it: the
    * file's subtitles are read again and the new one is picked, and kept with Plex.
    */
-  async addFoundSubtitle(subtitle: plex.PlexOnlineSubtitle, language: string, positionMs: number, canDirect: (p: plex.PlexPlayback) => boolean): Promise<string | null> {
+  async addFoundSubtitle(subtitle: plex.PlexOnlineSubtitle, language: string, positionMs: number, canDirect: PlaybackCheck): Promise<string | null> {
     const p = this.current.playing;
     if (!p) return null;
     const added = await plex.addSubtitle(p.base, p.token, p.item.ratingKey, subtitle, language);

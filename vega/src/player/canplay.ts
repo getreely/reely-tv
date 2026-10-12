@@ -1,24 +1,13 @@
 import type { PlexPlayback } from '../api/plex';
-import { plan, type CanPlay } from '../app/playback';
-import { decodes } from './codecs';
+import { checkPlayback, fallbackPlan, type Verdict } from './formats';
 
 /*
- * What the stick's own player opens as it is (Vega's media pipeline), in MP4, MKV, WebM or
- * MPEG-TS: the video and sound in it as the stick itself says it decodes them (codecs.ts),
- * H.264, HEVC, AAC and Dolby Digital until it's been asked. Anything else Plex converts
- * first, as the Fire TV does when its decoders say no.
+ * The questions app.play asks of this TV (formats.ts): whether a title plays as it is,
+ * and, for one that said it would and then didn't, what Plex should make of it instead.
  */
-const CONTAINERS = ['video/mp4', 'video/x-matroska', 'video/webm', 'video/mp2t'];
+export interface PlaybackCheck {
+  check: (p: PlexPlayback) => Promise<Verdict>;
+  fallback: typeof fallbackPlan;
+}
 
-export const vegaCanPlay: CanPlay = (mime) => {
-  const [container, rest] = mime.split(';');
-  if (!CONTAINERS.includes(container.trim())) return false;
-  const codecs = /codecs="([^"]*)"/.exec(rest ?? '')?.[1]?.split(',').map((c) => c.trim()).filter(Boolean) ?? [];
-  return codecs.every(decodes);
-};
-
-/** Whether Plex's file plays as it is here: the question app.play asks. */
-export const canDirect = (p: PlexPlayback) => plan(p, vegaCanPlay).direct;
-
-/** Why it doesn't, for Playback info; null when it does. */
-export const whyConverted = (p: PlexPlayback) => plan(p, vegaCanPlay).reason;
+export const canDirect: PlaybackCheck = { check: checkPlayback, fallback: fallbackPlan };

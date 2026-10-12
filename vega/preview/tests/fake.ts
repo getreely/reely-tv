@@ -146,7 +146,10 @@ export async function fakePlex(page: Page, options: { tour?: boolean; many?: boo
     if (path === "/library/metadata/e2") {
       return meta(route, [{ ...episode("e2", 2), duration: 600_000,
         Marker: [{ type: "intro", startTimeOffset: 0, endTimeOffset: 90_000 }, { type: "credits", startTimeOffset: 120_000, endTimeOffset: 600_000 }],
-        Media: [{ container: "mkv", videoCodec: "h264", audioCodec: "dca", Part: [{ id: 5, key: "/library/parts/5/file.mkv", Stream: [] }] }] }]);
+        Media: [{ container: "mkv", videoCodec: "h264", audioCodec: "dca", Part: [{ id: 5, key: "/library/parts/5/file.mkv", Stream: [
+          { id: 50, streamType: 1, codec: "h264", profile: "high", level: 41, width: 1920, height: 1080, bitDepth: 8, frameRate: 23.976 },
+          { id: 51, streamType: 2, displayTitle: "English (DTS 5.1)", language: "English", selected: true, codec: "dca", channels: 6 },
+        ] }] }] }]);
     }
     if (path === "/library/metadata/e3") {
       return meta(route, [{ ...episode("e3", 3), Media: [{ container: "mp4", videoCodec: "h264", audioCodec: "aac", Part: [{ id: 6, key: "/library/parts/6/file.mp4", Stream: [] }] }] }]);

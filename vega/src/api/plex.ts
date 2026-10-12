@@ -153,7 +153,50 @@ export interface PlexStream {
   /** Only the parts in another language: shown even with subtitles off. */
   forced: boolean;
   label: string;
+  /** A sound track's format, as Plex names it (aac, ac3, eac3, dca, truehd…), and its shape. */
+  codec?: string | null;
+  channels?: number;
+  samplingRate?: number;
+  profile?: string | null;
 }
+
+/** The picture as the file has it: what the TV is asked about before it's played as it is. */
+export interface PlexVideoInfo {
+  codec: string;
+  /** Plex's word for it: "high", "main", "main 10", "profile 2"… */
+  profile: string | null;
+  /** As Plex gives it: 41 for H.264 4.1, 150 for HEVC 5.0 (or 5 / 5.0 from some servers). */
+  level: number | null;
+  width: number;
+  height: number;
+  bitDepth: number;
+  frameRate: number | null;
+  bitrateKbps: number;
+  /** HDR10 (pq) or HLG, from the colour transfer; null for SDR. */
+  transfer: "pq" | "hlg" | null;
+  bt2020: boolean;
+  /** Dolby Vision, when there's a layer of it: its profile, level and what its base layer is (1 HDR10, 2 SDR, 4 HLG, 0 none). */
+  dovi: { profile: number; level: number; compat: number } | null;
+}
+
+/**
+ * What Plex's conversion keeps and what it makes again: the picture copied when the TV
+ * plays it, else made H.264; the sound copied when the TV plays it, else made surround
+ * (Dolby, the ones the TV plays, for more than two channels) or stereo AAC.
+ */
+export interface ConvertPlan {
+  video: "copy" | "convert";
+  /** The source's own video codec, copied as it is when [video] is copy. */
+  videoCodec: string | null;
+  audio: "copy" | "surround" | "stereo";
+  /** The source's own sound codec, copied as it is when [audio] is copy. */
+  audioCodec: string | null;
+  /** Surround formats the TV plays, best first (eac3, ac3). */
+  surround: string[];
+}
+
+/** Until a title's been asked about: the picture copied as H.264 or HEVC, stereo AAC. */
+export const BASIC_PLAN: ConvertPlan = { video: "copy", videoCodec: null, audio: "stereo", audioCodec: null, surround: [] };
 
 export interface PlexPlayback {
   url: string;
@@ -170,6 +213,8 @@ export interface PlexPlayback {
   videoCodec: string | null;
   /** Frames a second, as the file has them (23.976, 25, 59.94…); null when Plex doesn't say. */
   frameRate: number | null;
+  /** The picture's details, for asking the TV whether it plays it. */
+  video: PlexVideoInfo | null;
 }
 
 export interface PlexExtra {
@@ -694,6 +739,32 @@ export function parsePlayback(metadata: any, base: string, token: string, mediaI
     container: str(media.container).toLowerCase() || null,
     videoCodec: str(media.videoCodec).toLowerCase() || null,
     frameRate: frameRateOf(streams, str(media.videoFrameRate)),
+    video: videoInfoOf(streams, media),
+  };
+}
+
+/** The video stream's details, as Plex has read them from the file. */
+export function videoInfoOf(streams: any[], media: any): PlexVideoInfo | null {
+  const v = streams.find((s) => Number(s.streamType) === VIDEO_STREAM);
+  const codec = (str(v?.codec) || str(media?.videoCodec)).toLowerCase();
+  if (!codec) return null;
+  const level = Number(v?.level);
+  const trc = str(v?.colorTrc).toLowerCase();
+  const doviProfile = Number(v?.DOVIProfile);
+  return {
+    codec,
+    profile: str(v?.profile).toLowerCase() || null,
+    level: Number.isFinite(level) && level > 0 ? level : null,
+    width: Number(v?.width) || Number(media?.width) || 1920,
+    height: Number(v?.height) || Number(media?.height) || 1080,
+    bitDepth: Number(v?.bitDepth) || 8,
+    frameRate: frameRateOf(streams, str(media?.videoFrameRate)),
+    bitrateKbps: Number(v?.bitrate) || Number(media?.bitrate) || 0,
+    transfer: trc === "smpte2084" ? "pq" : trc === "arib-std-b67" ? "hlg" : null,
+    bt2020: str(v?.colorPrimaries).toLowerCase().startsWith("bt2020"),
+    dovi: isSet(v?.DOVIPresent) && doviProfile > 0
+      ? { profile: doviProfile, level: Number(v?.DOVILevel) || 6, compat: Number(v?.DOVIBLCompatID) || 0 }
+      : null,
   };
 }
 
@@ -727,6 +798,10 @@ export function streamsOf(streams: any[], type: number): PlexStream[] {
       external: !!str(s.key),
       forced: isSet(s?.forced),
       label: str(s.displayTitle) || str(s.language) || (type === AUDIO_STREAM ? "Sound" : "Subtitles"),
+      codec: str(s.codec).toLowerCase() || null,
+      channels: Number(s.channels) || 0,
+      samplingRate: Number(s.samplingRate) || 0,
+      profile: str(s.profile).toLowerCase() || null,
     }));
 }
 
@@ -789,24 +864,39 @@ export async function reportTimeline(
  */
 export function streamUrl(
   base: string, token: string, ratingKey: string, sessionId: string, maxBitrateKbps: number, resolution: string, mediaIndex = 0,
-  subtitles: "burn" | "none" = "burn", subtitleSize = 100, offsetMs = 0,
+  subtitles: "burn" | "none" = "burn", subtitleSize = 100, offsetMs = 0, plan: ConvertPlan = BASIC_PLAN,
 ): string {
   const bitrate = maxBitrateKbps > 0 ? `&maxVideoBitrate=${maxBitrateKbps}` : "";
   return (
     `${base}/video/:/transcode/universal/start.mkv?path=${enc(`/library/metadata/${ratingKey}`)}&mediaIndex=${mediaIndex}&partIndex=0` +
-    `&protocol=http&offset=${Math.max(0, Math.floor(offsetMs / 1000))}&directPlay=0&directStream=1&directStreamAudio=0` +
+    `&protocol=http&offset=${Math.max(0, Math.floor(offsetMs / 1000))}&directPlay=0&directStream=${plan.video === "copy" ? 1 : 0}&directStreamAudio=${plan.audio === "copy" ? 1 : 0}` +
     `&subtitles=${subtitles}&subtitleSize=${subtitleSize}&audioBoost=100&videoQuality=100&videoResolution=${resolution}${bitrate}` +
     `&session=${sessionId}&location=lan` +
-    `&X-Plex-Client-Profile-Name=Generic&X-Plex-Platform=Generic&X-Plex-Client-Profile-Extra=${enc(STREAM_PROFILE)}` +
+    `&X-Plex-Client-Profile-Name=Generic&X-Plex-Platform=Generic&X-Plex-Client-Profile-Extra=${enc(streamProfile(plan))}` +
     `&X-Plex-Client-Identifier=${enc(identity.clientId)}&X-Plex-Product=${enc(PRODUCT)}&X-Plex-Token=${token}`
   );
 }
 
-/** What the continuous stream may be: the picture as it is where the TV plays it, stereo AAC. */
-export const STREAM_PROFILE =
-  "add-settings(DirectPlayStreamSelection=true)" +
-  "+add-transcode-target(type=videoProfile&context=streaming&protocol=http&container=mkv&videoCodec=h264%2Chevc&audioCodec=aac)" +
-  "+add-limitation(scope=videoAudioCodec&scopeName=aac&type=upperBound&name=audio.channels&value=2)";
+/**
+ * What the continuous stream may be, as [plan] has it: the picture copied where the TV plays
+ * it (H.264, HEVC, or the file's own when the TV said it plays that), else made H.264; the
+ * sound copied, or made Dolby surround the TV plays, or stereo AAC, which every TV plays.
+ */
+export function streamProfile(plan: ConvertPlan): string {
+  const video = plan.video === "copy" ? unique(["h264", "hevc", plan.videoCodec]) : ["h264"];
+  const audio = plan.audio === "copy" ? unique([plan.audioCodec, "aac"]) : plan.audio === "surround" ? unique([...plan.surround, "aac"]) : ["aac"];
+  const limits = audio.map((codec) => {
+    const most = codec === "aac" && plan.audio !== "copy" ? 2 : codec === "ac3" || codec === "eac3" ? 6 : 0;
+    return most ? `+add-limitation(scope=videoAudioCodec&scopeName=${codec}&type=upperBound&name=audio.channels&value=${most})` : "";
+  });
+  return "add-settings(DirectPlayStreamSelection=true)" +
+    `+add-transcode-target(type=videoProfile&context=streaming&protocol=http&container=mkv&videoCodec=${video.join("%2C")}&audioCodec=${audio.join("%2C")})` +
+    limits.join("");
+}
+
+function unique(list: Array<string | null | undefined>): string[] {
+  return [...new Set(list.filter((x): x is string => !!x))];
+}
 
 export async function stopTranscode(base: string, token: string, sessionId: string): Promise<void> {
   try {
