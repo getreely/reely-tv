@@ -1,7 +1,7 @@
 {
   "name": "reely-vega",
   "private": true,
-  "version": "0.58.20",
+  "version": "0.58.21",
   "description": "Reely for Fire TV on Vega OS: its own React Native app, with Amazon's native video player.",
   "scripts": {
     "hls": "bash scripts/hlsjs.sh",

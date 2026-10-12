@@ -247,7 +247,7 @@ export function Controls(props: {
         ) : null}
         {props.skipLabel ? (
           <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
-            <ActionButton pressRef={props.skipRef} label={props.skipLabel} emphasised onPress={props.onSkipPrompt} onFocus={() => props.onSkipFocus(true)} />
+            <ActionButton pressRef={props.skipRef} label={props.skipLabel} emphasised compact onPress={props.onSkipPrompt} onFocus={() => props.onSkipFocus(true)} />
           </View>
         ) : null}
         {props.showBar !== false ? (

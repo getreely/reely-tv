@@ -10,14 +10,15 @@ import { color, dp, type } from './theme';
  * pill with dark text.
  */
 
-export function ActionButton(props: { label: string; onPress: () => void; emphasised?: boolean; preferred?: boolean; first?: boolean; focusKey?: string; style?: StyleProp<ViewStyle>; onFocus?: () => void; onBlur?: () => void; pressRef?: React.Ref<View> }) {
+/** [compact]: a smaller pill, for one that sits over the picture (Skip Intro). */
+export function ActionButton(props: { label: string; onPress: () => void; emphasised?: boolean; compact?: boolean; preferred?: boolean; first?: boolean; focusKey?: string; style?: StyleProp<ViewStyle>; onFocus?: () => void; onBlur?: () => void; pressRef?: React.Ref<View> }) {
   const accent = useAccent();
   const [focused, setFocused] = useState(false);
   const c = pillColors(focused, accent.color, false, props.emphasised);
   return (
     <Press ref={props.pressRef} onPress={props.onPress} preferred={props.preferred} first={props.first} focusKey={props.focusKey} onFocusChange={(on) => { setFocused(on); if (on) props.onFocus?.(); else props.onBlur?.(); }}
-      style={[{ borderRadius: 999, backgroundColor: c.fill, paddingHorizontal: dp(22), paddingVertical: dp(12), alignItems: 'center', justifyContent: 'center', transform: [{ scale: focused ? 1.04 : 1 }] }, props.style]}>
-      {() => <Text numberOfLines={1} style={{ color: c.text, fontSize: dp(16), lineHeight: dp(20), fontWeight: focused ? '600' : '500' }}>{props.label}</Text>}
+      style={[{ borderRadius: 999, backgroundColor: c.fill, paddingHorizontal: dp(props.compact ? 16 : 22), paddingVertical: dp(props.compact ? 8 : 12), alignItems: 'center', justifyContent: 'center', transform: [{ scale: focused ? 1.04 : 1 }] }, props.style]}>
+      {() => <Text numberOfLines={1} style={{ color: c.text, fontSize: dp(props.compact ? 14 : 16), lineHeight: dp(props.compact ? 18 : 20), fontWeight: focused ? '600' : '500' }}>{props.label}</Text>}
     </Press>
   );
 }

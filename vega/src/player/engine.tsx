@@ -142,6 +142,7 @@ export class Engine {
   private opening: Promise<void> = Promise.resolve();
   private asked = 0;
   private inFlight = 0;
+  private reportUntil = 0;
   private url: string | null = null;
   private listeners = new Map<EngineEvent, Set<() => void>>();
   private failureListeners = new Set<(f: EngineFailure) => void>();
@@ -443,6 +444,9 @@ export class Engine {
     return this.positionMs;
   }
   seek(ms: number) {
+    // Each jump, and how the player stands for a few seconds after, to the log.
+    say(`player ${this.id} seeks to ${Math.round(ms / 1000)}s from ${Math.round(this.positionMs / 1000)}s${this.restart ? ', asking Plex from there' : ''}`);
+    this.reportUntil = Date.now() + 10_000;
     if (this.restart) void this.restartAt(ms);
     else this.player.currentTime = Math.max(0, ms / 1000);
   }
@@ -489,7 +493,7 @@ export class Engine {
     this.watch = setInterval(() => {
       if (this.gone) return;
       // How it stands, every two seconds for a stream's first half-minute: for the log.
-      if (++this.ticks % 4 === 0 && Date.now() - this.openedAt < 30_000) this.report();
+      if (++this.ticks % 4 === 0 && (Date.now() - this.openedAt < 30_000 || Date.now() < this.reportUntil)) this.report();
       if (this.switching) {
         this.lastTime = -1;
         return;
@@ -517,11 +521,11 @@ export class Engine {
 
   private report() {
     try {
-      const p = this.player as unknown as { paused: boolean; currentTime: number; readyState?: number; buffered: { length: number; start(i: number): number; end(i: number): number } };
+      const p = this.player as unknown as { paused: boolean; currentTime: number; readyState?: number; seeking?: boolean; buffered: { length: number; start(i: number): number; end(i: number): number } };
       const ranges: string[] = [];
       for (let i = 0; i < p.buffered.length; i++) ranges.push(`${p.buffered.start(i).toFixed(1)}-${p.buffered.end(i).toFixed(1)}`);
       const h = this.hls as unknown as { streamController?: { state?: string }; currentLevel?: number; levels?: unknown[] } | null;
-      say(`player ${this.id} at ${(p.currentTime || 0).toFixed(1)}s ${p.paused ? 'paused' : 'going'} ready=${p.readyState ?? '?'} buffered=[${ranges.join(',')}]` +
+      say(`player ${this.id} at ${(p.currentTime || 0).toFixed(1)}s ${p.paused ? 'paused' : 'going'}${p.seeking ? ' seeking' : ''} ready=${p.readyState ?? '?'} buffered=[${ranges.join(',')}]` +
         (h ? ` hls=${h.streamController?.state ?? '?'} level=${h.currentLevel ?? '?'}/${h.levels?.length ?? 0}` : '') + (this.surface ? '' : ' no surface'));
     } catch (e) {
       say(`player ${this.id} status unreadable: ${safeText(e)}`);

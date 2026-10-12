@@ -475,7 +475,7 @@ export function VodPlayer(props: { app: App; state: AppState; playing: Playing }
       {/* Skip Intro on its own, bottom right, with the controls away. */}
       {skipLabel && !showing && !upNext && !panel ? (
         <View style={{ position: 'absolute', right: dp(48), bottom: dp(27), zIndex: 5 }}>
-          <ActionButton pressRef={skipRef} label={skipLabel} emphasised preferred onPress={skip} onFocus={() => { skipFocused.current = true; }} />
+          <ActionButton pressRef={skipRef} label={skipLabel} emphasised compact preferred onPress={skip} onFocus={() => { skipFocused.current = true; }} />
         </View>
       ) : null}
 
