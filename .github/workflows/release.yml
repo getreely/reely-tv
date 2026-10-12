@@ -6,6 +6,7 @@ name: Release
 #   iPhone, iPad                  ios/project.yml        tag ios-v0.58.0
 #   LG                            webos/package.json     tag lg-v0.58.0
 #   Roku                          roku/package.json      tag roku-v0.58.0
+#   Fire TV on Vega OS            vega/package.json      tag vega-v0.58.0
 #
 # Run it by hand from the Actions tab. An app whose version has no release yet is built,
 # tested and published; the rest are left alone, so nobody is offered an update for an
@@ -15,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       apps:
-        description: "Only these, again even if already released (android, ios, lg, roku, comma-separated). Empty: every app with a new version."
+        description: "Only these, again even if already released (android, ios, lg, roku, vega, comma-separated). Empty: every app with a new version."
         required: false
         default: ""
 
@@ -30,10 +31,12 @@ jobs:
       ios: ${{ steps.plan.outputs.ios }}
       lg: ${{ steps.plan.outputs.lg }}
       roku: ${{ steps.plan.outputs.roku }}
+      vega: ${{ steps.plan.outputs.vega }}
       android_version: ${{ steps.plan.outputs.android_version }}
       ios_version: ${{ steps.plan.outputs.ios_version }}
       lg_version: ${{ steps.plan.outputs.lg_version }}
       roku_version: ${{ steps.plan.outputs.roku_version }}
+      vega_version: ${{ steps.plan.outputs.vega_version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -47,6 +50,8 @@ jobs:
           ios=$(grep -o 'MARKETING_VERSION: "[^"]*"' ios/project.yml | head -1 | cut -d'"' -f2)
           lg=$(node -p 'require("./webos/package.json").version')
           roku=$(node -p 'require("./roku/package.json").version')
+          vega=$(node -p 'require("./vega/package.json").version')
+          grep -q "^version = \"$vega\"" vega/manifest.toml || { echo "::error::vega/manifest.toml doesn't say $vega."; exit 1; }
           # The LG and Roku apps carry their version in a second place each, read by the TV.
           [ "$(node -p 'require("./webos/public/appinfo.json").version')" = "$lg" ] || { echo "::error::webos/public/appinfo.json doesn't say $lg: run webos/scripts/set-version.mjs."; exit 1; }
           said=$(for k in major_version minor_version build_version; do grep "^$k=" roku/manifest | cut -d= -f2; done | paste -sd.)
@@ -65,10 +70,12 @@ jobs:
             echo "ios=$(decide ios "ios-v$ios")"
             echo "lg=$(decide lg "lg-v$lg")"
             echo "roku=$(decide roku "roku-v$roku")"
+            echo "vega=$(decide vega "vega-v$vega")"
             echo "android_version=$android"
             echo "ios_version=$ios"
             echo "lg_version=$lg"
             echo "roku_version=$roku"
+            echo "vega_version=$vega"
           } | tee -a "$GITHUB_OUTPUT"
 
   # The iPhone and iPad app, unsigned: there's no Apple developer account to sign it with
@@ -307,3 +314,45 @@ jobs:
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$TAG" --target "$GITHUB_SHA" --latest=false \
             --title "Reely for Roku $VERSION" --notes-file notes.md roku/out/reely-roku.zip
+
+  # Fire TV sticks on Vega OS: built with Amazon's Vega SDK by the Vega workflow, a package
+  # for each kind of device, installed with the Vega tools (vega/README.md).
+  vega_build:
+    needs: plan
+    if: needs.plan.outputs.vega == 'true'
+    uses: ./.github/workflows/vega.yml
+
+  vega:
+    needs: [plan, vega_build]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.plan.outputs.vega_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: reely-vega
+          path: vpkg
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="vega-v$VERSION"
+          mkdir -p out
+          # One file per kind of device, named for it: reely-vega-armv7.vpkg and so on.
+          for f in $(find vpkg -name '*.vpkg'); do
+            arch=$(basename "$(dirname "$f")" | sed -E 's/-(release|debug)$//')
+            cp "$f" "out/reely-vega-$arch.vpkg"
+          done
+          ls -la out
+          .github/scripts/notes.sh 'vega-v*' "$TAG" vega webos/src
+          {
+            echo
+            echo "For Fire TV sticks on Vega OS (the Fire TV Stick 4K Select and later), installed with Amazon's Vega tools on a stick in developer mode: see vega/README.md."
+            echo "\`reely-vega-armv7.vpkg\` is for Fire TV sticks, \`reely-vega-aarch64.vpkg\` for the Vega Virtual Device."
+          } >> notes.md
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" --target "$GITHUB_SHA" --latest=false \
+            --title "Reely for Fire TV on Vega $VERSION" --notes-file notes.md out/*.vpkg
