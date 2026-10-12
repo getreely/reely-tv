@@ -315,7 +315,9 @@ export function Root(props: { app: App }) {
             {playing ? null : <Screens app={app} state={state} open={open} openMenu={setItemMenu} key={`${key}:${returns}`} />}
           </TVFocusGuideView>
         </ScreenContext.Provider>
-        {(connected || route.name === 'settings') && !away ? (
+        {/* The tabs whenever there's somewhere to go: Live TV is the provider's, and doesn't
+            wait on Plex finding its server, or on signing in to Plex at all. */}
+        {(connected || !!state.plex.token || !!state.live.credentials || route.name === 'settings') && !away ? (
           <TopBar current={current} tabRefs={tabRefs} onFocusTab={onFocusTab} onPressTab={onPressTab}
             onTabLayout={(tab, x) => { tabX.current[tab] = x; }}
             profile={state.plex.user} onProfile={state.plex.homeUsers.length > 1 ? () => setChoosingProfile(true) : null} />

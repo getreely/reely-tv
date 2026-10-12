@@ -6,7 +6,7 @@ import { stableSort } from "../core/sort";
 import { isTextCodec } from "../core/subtitles";
 import { readable } from "../core/http";
 import { Store, clientId } from "../core/storage";
-import { emptyHome, loadHome, recentEpisodeGroups, type EpisodeGroup, type HomeRows, type LibraryChoice } from "./home";
+import { choiceId, emptyHome, loadHome, recentEpisodeGroups, type EpisodeGroup, type HomeRows, type LibraryChoice } from "./home";
 import { randomHex } from "../core/storage";
 import * as reely from "../api/reely";
 import * as xtream from "../api/xtream";
@@ -510,6 +510,18 @@ export const shownRequestRows = (r: RequestsState) => reely.shownRows(r.rows, (t
 
 export const isConnected = (s: AppState) => !!s.plex.baseUrl && !!s.plex.serverToken;
 
+/** The server in use, kept for the next start: whose it is, where it answered, and its libraries. */
+interface SavedConnection {
+  token: string;
+  serverName: string;
+  baseUrl: string;
+  serverToken: string;
+  libraries: LibraryChoice[];
+}
+
+/** Whose kept Home rows they are: this account, on this server. */
+const homeOwner = (token: string, baseUrl: string) => `${token}|${baseUrl}`;
+
 /** How long a sign-in code is asked about before it's given up as expired. */
 const PIN_TRIES = 300;
 const PIN_EVERY_MS = 2_000;
@@ -721,6 +733,23 @@ export class App {
         this.setPlex({ user: found });
       }).catch(() => undefined);
     }
+    // The server used last time, straight away, with last time's Home on it while it's
+    // fetched afresh, as the Fire TV starts (restorePlex): looking for it from scratch
+    // asked plex.tv, then every server the account can use, before anything showed.
+    const saved = this.store.json<SavedConnection | null>("connection", null);
+    if (saved && saved.token === token && saved.baseUrl && saved.serverToken && saved.libraries?.length) {
+      this.setPlex({ serverName: saved.serverName, baseUrl: saved.baseUrl, serverToken: saved.serverToken, libraries: saved.libraries });
+      const kept = this.store.json<{ owner: string; rows: HomeRows } | null>("homeKept", null);
+      if (kept && kept.owner === homeOwner(token, saved.baseUrl) && kept.rows) {
+        this.plexHome = { ...emptyHome(), ...kept.rows };
+        this.composeHome();
+      }
+      void this.refreshHome();
+      void this.loadIptv();
+      // The servers and their libraries looked over again behind it, without a word.
+      void this.connect(token, true);
+      return;
+    }
     await this.connect(token);
   }
 
@@ -773,20 +802,26 @@ export class App {
   signOut() {
     if (this.retry) clearTimeout(this.retry);
     this.retry = null;
-    for (const key of ["plexToken", "plexAccountToken", "plexUser", "server"]) this.store.remove(key);
+    for (const key of ["plexToken", "plexAccountToken", "plexUser", "server", "connection", "homeKept"]) this.store.remove(key);
     const fresh = initialState();
     // What's kept on the TV rather than the account stays: recent searches and playback choices.
     this.set((s) => ({ ...fresh, search: emptySearch(s.search.recent), prefs: s.prefs, live: s.live, requests: s.requests }));
   }
 
   /** The servers, and the first that answers: the one last used, else the account's own. */
-  async connect(token: string) {
-    this.setPlex({ finding: true, error: null });
+  /**
+   * The servers this account can use, and the first that answers made the one in use.
+   * [quiet], at a start that went straight to last time's server: nothing's said while it
+   * looks, what's in use stays when it finds nothing, and Home is fetched again only if
+   * it found something different.
+   */
+  async connect(token: string, quiet = false) {
+    if (!quiet) this.setPlex({ finding: true, error: null });
     let servers: PlexServer[];
     try {
       servers = await plex.servers(token);
     } catch (error) {
-      this.setPlex({ finding: false, error: readable(error) });
+      if (!quiet) this.setPlex({ finding: false, error: readable(error) });
       return;
     }
     if (this.current.plex.token !== token) return;
@@ -808,6 +843,10 @@ export class App {
       }
     }
     if (this.current.plex.token !== token) return;
+    if (!chosen && quiet) {
+      this.setPlex({ servers });
+      return;
+    }
     if (!chosen) {
       this.setPlex({ servers, finding: false, error: servers.length
         ? `Found ${servers.map((s) => s.name).join(" and ")}, but couldn't reach ${servers.length > 1 ? "any of them" : "it"}. Make sure it's on. Reely keeps trying.`
@@ -817,9 +856,14 @@ export class App {
       return;
     }
     this.store.set("server", chosen.server.name);
+    const was = this.current.plex;
+    const changed = was.baseUrl !== chosen.base || was.serverToken !== chosen.server.accessToken
+      || was.libraries.map(choiceId).join(",") !== libraries.map(choiceId).join(",");
     this.setPlex({ servers, serverName: chosen.server.name, baseUrl: chosen.base, serverToken: chosen.server.accessToken, libraries, finding: false, error: null });
+    this.store.setJson("connection", { token, serverName: chosen.server.name, baseUrl: chosen.base, serverToken: chosen.server.accessToken, libraries } satisfies SavedConnection);
+    if (quiet && !changed) return;
     await this.refreshHome();
-    void this.loadIptv();
+    if (!quiet) void this.loadIptv();
   }
 
   private retry: ReturnType<typeof setTimeout> | null = null;
@@ -888,6 +932,9 @@ export class App {
       const token = await plex.switchHomeUser(account, user.uuid, pin);
       this.store.set("plexToken", token);
       this.store.setJson("plexUser", user);
+      // Someone else's servers and Home: last time's were the last person's.
+      this.store.remove("connection");
+      this.store.remove("homeKept");
       this.set((s) => ({ ...s, home: emptyHome(), plex: { ...s.plex, token, user } }));
       await this.connect(token);
       return null;
@@ -917,6 +964,9 @@ export class App {
     this.plexHome = rows;
     this.set((s) => ({ ...s, homeBusy: false, homeError: null }));
     this.composeHome();
+    // Kept for the next start, to show at once while they're fetched again.
+    const p = this.current.plex;
+    if (p.token && p.baseUrl) this.store.setJson("homeKept", { owner: homeOwner(p.token, p.baseUrl), rows });
     void this.refreshWatchlist();
     void this.checkReadyRequests();
   }
