@@ -82,7 +82,8 @@ vega device install-app --packagePath reely-vega-armv7.vpkg
 ```
 
 Reely is then in the stick's apps. Each release has a package for each kind of device:
-`armv7` is for Fire TV sticks, `aarch64` for the Vega Virtual Device.
+`armv7` is for Fire TV sticks; `aarch64` and `x86_64` are for the Vega Virtual Device on an
+Apple-silicon Mac or an Intel computer.
 
 Or, to install your own build:
 
