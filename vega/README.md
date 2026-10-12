@@ -18,8 +18,9 @@ channel.
 - **`src/player`**: Vega's own video player (W3C Media), with Amazon's build of hls.js for HLS:
   Plex's conversions and live channels. Several at once for Multiview.
 
-Vega has no way for an app to update itself, so there's no update prompt: a new version is
-installed as below, or from the Appstore once it's there.
+Like the Fire TV app, it looks for a new version when it starts and in **Settings → About**.
+Vega has no way for an app to install a new version of itself, so the notice shows a code for
+the release and the command that installs it from a computer, as below.
 
 ## What you need
 

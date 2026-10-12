@@ -18,7 +18,7 @@ import { BACKDROP_RISE } from './surfaces';
 import { LivePlayer } from './player/live';
 import { VodPlayer } from './player/vod';
 import { setBufferSeconds } from '../player/engine';
-import { ProfilePicker, ReminderCard, Screensaver, Tour, slidesFrom } from './overlays';
+import { ProfilePicker, ReminderCard, Screensaver, Tour, UpdatePrompt, slidesFrom } from './overlays';
 import { OverlayContext, OverlayHost, Overlays } from './overlay';
 
 /*
@@ -146,6 +146,12 @@ export function Root(props: { app: App }) {
     pressedAt.current = Date.now();
     if (event.eventKeyAction === 0 && ['left', 'right', 'up', 'down'].includes(event.eventType)) arrowAt.current = Date.now();
   });
+
+  // A newer version, looked for once a little after starting, as on the Fire TV.
+  useEffect(() => {
+    const t = setTimeout(() => void app.checkForUpdateAtStart(), 8_000);
+    return () => clearTimeout(t);
+  }, []);
 
   // Settings' Buffer, for every stream opened from now on.
   useEffect(() => setBufferSeconds(state.prefs.largerBuffer ? 120 : 50), [state.prefs.largerBuffer]);
@@ -312,6 +318,9 @@ export function Root(props: { app: App }) {
         {itemMenu ? (
           <ItemMenu app={app} item={itemMenu} onClose={() => setItemMenu(null)} open={(item) => open(routeFor(item))}
             inContinueWatching={state.home.continueWatching.some((i) => listKey(i) === listKey(itemMenu))} />
+        ) : null}
+        {state.updatePrompt && !playing && !watching && !choosingProfile && (state.prefs.tourSeen || !connected) ? (
+          <UpdatePrompt app={app} state={state} onClose={() => { app.dismissUpdatePrompt(); focusTab(); }} />
         ) : null}
         {state.live.due ? <ReminderCard app={app} state={state} /> : null}
         {connected && !state.prefs.tourSeen && !choosingProfile && !state.homeBusy && !playing && !watching ? <Tour onDone={() => app.finishTour()} /> : null}

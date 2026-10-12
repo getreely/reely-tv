@@ -13,6 +13,8 @@ import * as xtream from "../api/xtream";
 import * as vod from "../api/vod";
 import { IptvLibrary, IptvWatch, IPTV_SOURCE, isIptv } from "../api/vod";
 import type { Programme, XtreamAccount, XtreamCategory, XtreamChannel, XtreamCredentials } from "../api/xtream";
+import { checkVega, newer, type VegaUpdate } from "../core/updates";
+import { VERSION } from "./version";
 import type { RequestDetail, RequestPlaces, RequestRecord, RequestRow, RequestTitle, TitleMarks } from "../api/reely";
 
 /*
@@ -425,6 +427,10 @@ export interface AppState {
   browse: Record<Kind, Browse>;
   detail: DetailPage | null;
   askWho: boolean;
+  /** A newer Reely for Vega, looked for in Settings and once at start. */
+  update: UpdateStatus;
+  /** "A new version is available", up over everything until it's answered. */
+  updatePrompt: boolean;
   playing: Playing | null;
   playError: string | null;
   requests: RequestsState;
@@ -442,6 +448,13 @@ const emptyBrowse = (): Browse => ({
   view: "home", released: [], added: [], addedShows: [], collections: null,
 });
 
+export type UpdateStatus =
+  | { kind: "idle" }
+  | { kind: "checking" }
+  | { kind: "upToDate" }
+  | { kind: "available"; update: VegaUpdate }
+  | { kind: "failed"; message: string };
+
 export function initialState(): AppState {
   return {
     route: { name: "home" },
@@ -454,6 +467,8 @@ export function initialState(): AppState {
     browse: { movie: emptyBrowse(), show: emptyBrowse() },
     detail: null,
     askWho: false,
+    update: { kind: "idle" },
+    updatePrompt: false,
     playing: null,
     playError: null,
     requests: emptyRequests(),
@@ -808,6 +823,42 @@ export class App {
       const p = this.current.plex;
       if (p.token === token && !p.finding && (!p.baseUrl || this.current.homeError)) void this.connect(token);
     }, SERVER_RETRY_MS);
+  }
+
+  // ---------------------------------------------------------------- Updates
+
+  /** Settings' Check for updates: what GitHub's newest Vega release is, against this one. */
+  async checkForUpdate() {
+    if (this.current.update.kind === "checking") return;
+    this.set((s) => ({ ...s, update: { kind: "checking" } }));
+    try {
+      const found = await checkVega();
+      this.set((s) => ({ ...s, update: found && newer(found.version, VERSION) ? { kind: "available", update: found } : { kind: "upToDate" } }));
+    } catch (error) {
+      this.set((s) => ({ ...s, update: { kind: "failed", message: readable(error) } }));
+    }
+  }
+
+  /** Once, a little after starting: a newer version is said, as on the Fire TV. Nothing is said otherwise. */
+  async checkForUpdateAtStart() {
+    if (this.current.update.kind !== "idle") return;
+    try {
+      const found = await checkVega();
+      if (!found || !newer(found.version, VERSION) || this.current.update.kind !== "idle") return;
+      this.set((s) => ({ ...s, update: { kind: "available", update: found }, updatePrompt: true }));
+    } catch {
+      // Quietly: Settings can look again.
+    }
+  }
+
+  /** The notice again, from Settings. */
+  showUpdate() {
+    if (this.current.update.kind === "available") this.set((s) => ({ ...s, updatePrompt: true }));
+  }
+
+  /** Later: not asked again until the app next starts. */
+  dismissUpdatePrompt() {
+    this.set((s) => ({ ...s, updatePrompt: false }));
   }
 
   // ---------------------------------------------------------------- Profiles

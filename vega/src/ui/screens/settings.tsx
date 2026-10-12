@@ -439,6 +439,25 @@ function PlexSection({ kit, onProfiles }: { kit: Kit; onProfiles: () => void }) 
   );
 }
 
+/**
+ * One row that changes what it says, as on the Fire TV: Check for updates, Checking…, Up to
+ * date, or the version that's out, which opens the same notice the app gives at start.
+ */
+function UpdateRow({ kit, pressRef }: { kit: Kit; pressRef?: React.Ref<View> }) {
+  const { app, state } = kit;
+  const u = state.update;
+  const value = u.kind === 'checking' ? 'Checking…' : u.kind === 'upToDate' ? 'Up to date' : u.kind === 'available' ? `Version ${u.update.version}` : null;
+  const note = u.kind === 'failed' ? u.message
+    : u.kind === 'available' ? 'Installed from a computer: Fire TV doesn\'t let apps on Vega update themselves.' : null;
+  return (
+    <Setting pressRef={pressRef} title={u.kind === 'available' ? 'A new version is available' : 'Check for updates'} value={value} note={note}
+      onPress={() => {
+        if (u.kind === 'available') app.showUpdate();
+        else void app.checkForUpdate();
+      }} />
+  );
+}
+
 const LICENSES: Array<[string, string, string]> = [
   ['React Native', 'MIT', 'Draws the screens.'],
   ['hls.js', 'Apache 2.0', "Plays live channels and Plex's conversions, in Amazon's build."],
@@ -456,10 +475,13 @@ function About({ kit }: { kit: Kit }) {
       <View style={{ paddingLeft: dp(4), paddingBottom: dp(10), gap: dp(4) }}>
         <Text style={{ color: accent.color, fontSize: dp(40), lineHeight: dp(44), fontWeight: '700' }}>reely</Text>
         <Text style={[type.meta, { color: color.chalk }]}>Your Plex library and live TV, in one place.</Text>
-        <Text style={[type.label, { color: color.muted }]}>{`Version ${VERSION}`}</Text>
       </View>
+      <Group title="Reely">
+        <Setting title="Version" value={VERSION} />
+        <UpdateRow kit={kit} pressRef={firstRow(kit)} />
+      </Group>
       <Group title="Help">
-        <Setting pressRef={firstRow(kit)} title="Take the tour" note="How to get around with the remote." onPress={() => app.takeTour()} />
+        <Setting title="Take the tour" note="How to get around with the remote." onPress={() => app.takeTour()} />
       </Group>
       <Group title="Licenses">
         {LICENSES.map(([title, kind, note]) => <Setting key={title} title={title} value={kind} note={note} />)}

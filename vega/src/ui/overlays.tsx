@@ -11,6 +11,8 @@ import { useBack } from './menus';
 import { Overlay } from './overlay';
 import { Gradient, sheet } from './surfaces';
 import { Text } from './text';
+import { QrCode } from './screens/signin';
+import { VERSION } from '../app/version';
 import { color, dp, type } from './theme';
 
 /*
@@ -365,6 +367,49 @@ export function ReminderCard(props: { app: App; state: AppState }) {
             <ActionButton label="Dismiss" onPress={() => props.app.dismissReminder()} />
           </View>
         </TVFocusGuideView>
+      </View>
+    </Overlay>
+  );
+}
+
+/**
+ * "A new version is available" (UpdatePrompt.kt): asked once, when the app finds one at
+ * start. Vega gives an app no way to install itself, so where the Fire TV downloads it,
+ * this says how: the release's page as a code to scan, and the one command that puts it
+ * on the stick. Later puts it off until the next start.
+ */
+export function UpdatePrompt(props: { app: App; state: AppState; onClose: () => void }) {
+  const accent = useAccent();
+  const status = props.state.update;
+  useBack(() => { props.onClose(); return true; });
+  if (status.kind !== 'available') return null;
+  const u = status.update;
+  const size = u.sizeBytes ? ` (${Math.round(u.sizeBytes / 1_000_000)} MB)` : '';
+  return (
+    <Overlay>
+      <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, zIndex: 90, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(8, 9, 11, 0.72)' }}>
+        <View style={{
+          width: dp(640), borderRadius: dp(22), backgroundColor: color.surfaceRaised, borderWidth: dp(1), borderColor: 'rgba(242, 244, 247, 0.12)',
+          paddingHorizontal: dp(32), paddingVertical: dp(28), alignItems: 'center', gap: dp(14),
+        }}>
+          <Text style={{ color: accent.color, fontSize: dp(30), lineHeight: dp(34), fontWeight: '700' }}>reely</Text>
+          <Text style={[type.headline, { textAlign: 'center' }]}>A new version is available</Text>
+          <Text style={[type.body, { color: color.muted, textAlign: 'center' }]}>{`Version ${u.version} is ready${size}. You have ${VERSION}.`}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: dp(20), paddingTop: dp(4) }}>
+            <QrCode text={u.url} size={120} />
+            <View style={{ flex: 1, gap: dp(6) }}>
+              <Text style={[type.meta, { color: color.chalk }]}>Scan for the release, then on your computer:</Text>
+              <View>
+                <Text style={[type.label, { color: color.muted, fontFamily: 'monospace' }]}>vega device install-app</Text>
+                <Text style={[type.label, { color: color.muted, fontFamily: 'monospace' }]}>  --packagePath reely-vega-armv7.vpkg</Text>
+              </View>
+              <Text style={[type.label, { color: color.muted }]}>Fire TV doesn't let apps on Vega update themselves.</Text>
+            </View>
+          </View>
+          <TVFocusGuideView autoFocus trapFocusUp trapFocusDown trapFocusLeft trapFocusRight style={{ flexDirection: 'row', paddingTop: dp(10) }}>
+            <ActionButton label="Later" emphasised preferred onPress={props.onClose} />
+          </TVFocusGuideView>
+        </View>
       </View>
     </Overlay>
   );

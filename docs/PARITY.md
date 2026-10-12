@@ -10,8 +10,9 @@ SDK and its native video player, and made to look and work like the Fire TV app 
 screen, at the Fire TV's sizes, with the same remote. It isn't a column below because it
 does everything the Fire TV column does, with these differences, all Vega's own:
 
-- **No update prompt.** Vega gives an app no way to install a new version of itself; a new
-  one is installed from a computer (see `vega/README.md`), or from the Appstore.
+- **Updates are found, not installed.** As on the Fire TV, a new version is said at start and
+  in Settings, About; Vega gives an app no way to install itself, so the notice has a code for
+  the release and the command that installs it from a computer (see `vega/README.md`).
 - **No frame rate matching or choice of where sound plays.** Vega switches the screen's mode
   and picks the sound output itself.
 - **The Menu key** opens a poster's or a tile's menu as well as holding OK does.
