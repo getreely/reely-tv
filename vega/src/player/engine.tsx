@@ -73,6 +73,34 @@ function described(url: string) {
   return m ? `${m[1]} ${m[2] ?? ''}`.trim() : 'stream';
 }
 
+/**
+ * To the stick's log, as a warning: it holds an app to 300 lines a second and drops its
+ * ordinary ones first, and Amazon's player alone can pass that while a stream starts.
+ */
+function say(line: string) {
+  console.warn(`[reely] ${line}`);
+}
+
+/** hls.js's own account of what it's doing, its first lines for each stream: enough to see where one stops. */
+function hlsLogger(id: number) {
+  let left = 150;
+  const out = (level: string) => (...parts: unknown[]) => {
+    if (left <= 0) return;
+    left--;
+    say(`player ${id} hls.js ${level}: ${parts.map((p) => (typeof p === 'string' ? p : safeText(p))).join(' ').slice(0, 300)}`);
+  };
+  const quiet = () => undefined;
+  return { trace: quiet, debug: quiet, log: out('log'), info: out('info'), warn: out('warn'), error: out('error') };
+}
+
+function safeText(value: unknown) {
+  try {
+    return value instanceof Error ? `${value.name}: ${value.message}` : JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
 export class Engine {
   /** Which player this is: a surface belongs to one, and a new one gets a new surface. */
   readonly id = ++made;
@@ -89,6 +117,8 @@ export class Engine {
   private flowing = false;
   private lastTime = -1;
   private watch: ReturnType<typeof setInterval> | null = null;
+  private openedAt = 0;
+  private ticks = 0;
   /** The stream's own closed captions, chosen in Subtitles: off until they are. */
   private captionChoice = -1;
 
@@ -99,7 +129,7 @@ export class Engine {
       for (const event of ['playing', 'pause', 'waiting', 'timeupdate', 'ended', 'loadedmetadata'] as EngineEvent[]) {
         this.player.addEventListener(event, () => {
           if (event === 'playing') {
-            if (!this.flowing) console.log(`[reely] player ${this.id} playing`);
+            if (!this.flowing) say(`player ${this.id} playing`);
             this.flowing = true;
           }
           if (event === 'waiting' || event === 'pause') this.flowing = false;
@@ -134,7 +164,7 @@ export class Engine {
 
   private fail(f: EngineFailure) {
     if (this.gone) return;
-    console.warn(`[reely] player ${this.id} stopped: ${f.kind} ${f.status ?? ''} ${f.detail}`);
+    say(`player ${this.id} stopped: ${f.kind} ${f.status ?? ''} ${f.detail}`);
     this.failureListeners.forEach((h) => h(f));
   }
 
@@ -147,10 +177,12 @@ export class Engine {
     this.recovered = false;
     this.flowing = false;
     this.lastTime = -1;
+    this.openedAt = Date.now();
+    this.ticks = 0;
     this.captionChoice = -1;
     this.emit('captions');
     this.watchFlow();
-    console.log(`[reely] player ${this.id} opens ${described(url)}${isHls(url) ? ' (HLS)' : ''}${this.surface ? '' : ', no surface yet'}`);
+    say(`player ${this.id} opens ${described(url)}${isHls(url) ? ' (HLS)' : ''}${this.surface ? '' : ', no surface yet'}`);
     if (isHls(url)) {
       polyfill();
       (globalThis as unknown as { gmedia: unknown }).gmedia = this.player;
@@ -162,6 +194,7 @@ export class Engine {
         maxBufferLength: bufferSeconds,
         maxMaxBufferLength: bufferSeconds * 2,
         startPosition: startMs > 0 ? startMs / 1000 : -1,
+        debug: hlsLogger(this.id),
       });
       // Each step once, to the log: where a stream that won't start got to.
       const steps = ['MEDIA_ATTACHED', 'MANIFEST_PARSED', 'BUFFER_CREATED', 'FRAG_LOADED', 'FRAG_BUFFERED'];
@@ -170,12 +203,12 @@ export class Engine {
         hls.on(Hls.Events[step], () => {
           if (told) return;
           told = true;
-          console.log(`[reely] player ${this.id} hls ${step}`);
+          say(`player ${this.id} hls ${step}`);
         });
       }
       hls.on(Hls.Events.ERROR, (_e, data) => {
         if (!data?.fatal) {
-          console.warn(`[reely] player ${this.id} hls ${data?.type} ${data?.details}${data?.error ? `: ${String(data.error)}` : ''}`);
+          say(`player ${this.id} hls ${data?.type} ${data?.details}${data?.error ? `: ${String(data.error)}` : ''}`);
           return;
         }
         // A decode hiccup gets one try at carrying on, as hls.js suggests; the network,
@@ -267,6 +300,8 @@ export class Engine {
     if (this.watch) return;
     this.watch = setInterval(() => {
       if (this.gone) return;
+      // How it stands, every two seconds for a stream's first half-minute: for the log.
+      if (++this.ticks % 4 === 0 && Date.now() - this.openedAt < 30_000) this.report();
       let now = -1;
       try {
         now = this.player.paused ? -1 : this.player.currentTime || 0;
@@ -281,10 +316,23 @@ export class Engine {
       this.lastTime = now;
       if (moved && !this.flowing) {
         this.flowing = true;
-        console.log(`[reely] player ${this.id} playing`);
+        say(`player ${this.id} playing`);
         this.emit('playing');
       }
     }, 500);
+  }
+
+  private report() {
+    try {
+      const p = this.player as unknown as { paused: boolean; currentTime: number; readyState?: number; buffered: { length: number; start(i: number): number; end(i: number): number } };
+      const ranges: string[] = [];
+      for (let i = 0; i < p.buffered.length; i++) ranges.push(`${p.buffered.start(i).toFixed(1)}-${p.buffered.end(i).toFixed(1)}`);
+      const h = this.hls as unknown as { streamController?: { state?: string }; currentLevel?: number; levels?: unknown[] } | null;
+      say(`player ${this.id} at ${(p.currentTime || 0).toFixed(1)}s ${p.paused ? 'paused' : 'going'} ready=${p.readyState ?? '?'} buffered=[${ranges.join(',')}]` +
+        (h ? ` hls=${h.streamController?.state ?? '?'} level=${h.currentLevel ?? '?'}/${h.levels?.length ?? 0}` : '') + (this.surface ? '' : ' no surface'));
+    } catch (e) {
+      say(`player ${this.id} status unreadable: ${safeText(e)}`);
+    }
   }
 
   /** The stream's own closed captions (a channel's, in MPEG-TS): their names, in order. */
