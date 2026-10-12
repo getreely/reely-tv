@@ -104,6 +104,11 @@ export function LivePlayer(props: { app: App; state: AppState; channel: XtreamCh
   }, [url]);
 
   useEffect(() => {
+    // The shared player may be under way already, its 'playing' said before this was listening.
+    if (engine.isPlaying) {
+      setPlaying(true);
+      setBuffering(false);
+    }
     const off = [
       engine.on('playing', () => { setPlaying(true); setBuffering(false); setFailure(null); tries.current = 0; }),
       engine.on('pause', () => setPlaying(false)),

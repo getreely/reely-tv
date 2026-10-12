@@ -245,6 +245,8 @@ export class Engine {
   play() { this.player.play(); }
   pause() { this.player.pause(); }
   get paused() { return this.player.paused; }
+  /** Whether the picture's moving now: for a screen that starts listening after 'playing' was said. */
+  get isPlaying() { return this.flowing; }
   get positionMs() { return Math.max(0, Math.floor((this.player.currentTime || 0) * 1000)); }
   get durationMs() {
     const d = this.player.duration;
