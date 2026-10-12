@@ -132,7 +132,9 @@ export function VodPlayer(props: { app: App; state: AppState; playing: Playing }
     setError(null);
     stuckAt.current = null;
     setBuffering(true);
-    void engine.open(playing.url, playing.startMs);
+    // Plex's continuous stream starts where it was asked from, and is asked again to go elsewhere.
+    const continuous = !playing.direct && !playing.viaHls && playing.base !== IPTV_SOURCE;
+    void engine.open(playing.url, playing.startMs, continuous ? { restart: (ms) => app.convertedFrom(ms), durationMs: playing.item.durationMs } : {});
   }, [playing.url, playing.attempt]);
 
   // The TV to the film's own frame rate, when Settings says so and the stick allows it;

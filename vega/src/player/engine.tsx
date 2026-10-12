@@ -43,6 +43,17 @@ const isHls = (url: string) => /\.m3u8(\?|#|$)/i.test(url) || /\/video\/:\/trans
 
 export type EngineEvent = 'playing' | 'pause' | 'waiting' | 'timeupdate' | 'ended' | 'error' | 'loadedmetadata' | 'captions';
 
+/** How long skips in a stream that can't be sought in settle before it's asked for again. */
+const RESTART_SETTLE_MS = 600;
+
+/** How a stream that can't be sought in is played: asked for again from wherever's wanted. */
+export interface OpenOptions {
+  /** The stream's address from [ms] in; null if it's no longer wanted. */
+  restart?: (ms: number) => Promise<string | null>;
+  /** How long the whole title is: such a stream knows only what it has sent so far. */
+  durationMs?: number;
+}
+
 /** Why playback stopped for good: the network (try a fresh stream) or the media itself. */
 export interface EngineFailure {
   kind: 'network' | 'media';
@@ -111,6 +122,15 @@ export class Engine {
   private watch: ReturnType<typeof setInterval> | null = null;
   private openedAt = 0;
   private ticks = 0;
+  /** For a stream asked for from a point (see OpenOptions): where it starts, and how it's asked again. */
+  private base = 0;
+  private restart: OpenOptions['restart'] | null = null;
+  private knownDurationMs = 0;
+  /** Where it's going while it's asked for again from there; counted as there meanwhile. */
+  private pendingAt: number | null = null;
+  private restarts = 0;
+  /** While a new stream is being asked for: the old one playing on meanwhile isn't news. */
+  private switching = false;
   /** The stream's own closed captions, chosen in Subtitles: off until they are. */
   private captionChoice = -1;
 
@@ -121,8 +141,10 @@ export class Engine {
       for (const event of ['playing', 'pause', 'waiting', 'timeupdate', 'ended', 'loadedmetadata'] as EngineEvent[]) {
         this.player.addEventListener(event, () => {
           if (event === 'playing') {
+            if (this.switching) return;
             if (!this.flowing) say(`player ${this.id} playing`);
             this.flowing = true;
+            this.pendingAt = null;
           }
           if (event === 'waiting' || event === 'pause') this.flowing = false;
           this.emit(event);
@@ -155,17 +177,27 @@ export class Engine {
   }
 
   private fail(f: EngineFailure) {
-    if (this.gone) return;
+    // The stream being let go of, while its replacement is asked for, isn't a failure.
+    if (this.gone || this.switching) return;
     say(`player ${this.id} stopped: ${f.kind} ${f.status ?? ''} ${f.detail}`);
     this.failureListeners.forEach((h) => h(f));
   }
 
-  /** Plays [url] from [startMs] in: HLS through hls.js, anything else as it is. */
-  async open(url: string, startMs = 0) {
+  /**
+   * Plays [url] from [startMs] in: HLS through hls.js, anything else as it is. With
+   * [options].restart, [url] already starts at [startMs] and can't be sought in.
+   */
+  async open(url: string, startMs = 0, options: OpenOptions = {}) {
     await this.ready;
     if (this.gone) return;
     this.unloadSource();
     this.url = url;
+    this.restart = options.restart ?? null;
+    this.base = this.restart ? startMs : 0;
+    this.knownDurationMs = options.durationMs ?? 0;
+    this.pendingAt = null;
+    this.switching = false;
+    this.restarts++;
     this.recovered = false;
     this.flowing = false;
     this.lastTime = -1;
@@ -225,8 +257,35 @@ export class Engine {
       this.hls = hls;
     } else {
       this.player.src = url;
-      if (startMs > 0) this.player.currentTime = startMs / 1000;
+      if (startMs > 0 && !this.restart) this.player.currentTime = startMs / 1000;
     }
+    this.player.play();
+  }
+
+  /** The stream asked for again from [ms]: going elsewhere in one that can't be sought in. */
+  private async restartAt(ms: number) {
+    const restart = this.restart;
+    if (!restart) return;
+    const mine = ++this.restarts;
+    this.switching = true;
+    this.pendingAt = Math.max(0, ms);
+    this.flowing = false;
+    this.emit('waiting');
+    // A run of skips is one: asked for once they stop, from where they ended.
+    await new Promise<void>((done) => setTimeout(() => done(), RESTART_SETTLE_MS));
+    if (mine !== this.restarts || this.gone) return;
+    const url = await restart(this.pendingAt).catch(() => null);
+    if (mine !== this.restarts || this.gone) return;
+    this.switching = false;
+    if (!url) {
+      this.pendingAt = null;
+      return;
+    }
+    this.base = this.pendingAt;
+    this.url = url;
+    this.lastTime = -1;
+    say(`player ${this.id} asks again from ${Math.round(this.base / 1000)}s`);
+    this.player.src = url;
     this.player.play();
   }
 
@@ -240,8 +299,12 @@ export class Engine {
   get paused() { return this.player.paused; }
   /** Whether the picture's moving now: for a screen that starts listening after 'playing' was said. */
   get isPlaying() { return this.flowing; }
-  get positionMs() { return Math.max(0, Math.floor((this.player.currentTime || 0) * 1000)); }
+  get positionMs() {
+    if (this.pendingAt != null) return this.pendingAt;
+    return this.base + Math.max(0, Math.floor((this.player.currentTime || 0) * 1000));
+  }
   get durationMs() {
+    if (this.restart && this.knownDurationMs > 0) return this.knownDurationMs;
     const d = this.player.duration;
     return Number.isFinite(d) && d > 0 ? Math.floor(d * 1000) : 0;
   }
@@ -250,13 +313,16 @@ export class Engine {
     try {
       const b = this.player.buffered;
       const now = this.player.currentTime || 0;
-      for (let i = 0; i < b.length; i++) if (b.start(i) <= now + 0.5 && b.end(i) >= now) return Math.floor(b.end(i) * 1000);
+      for (let i = 0; i < b.length; i++) if (b.start(i) <= now + 0.5 && b.end(i) >= now) return this.base + Math.floor(b.end(i) * 1000);
     } catch {
       // Not loaded.
     }
     return this.positionMs;
   }
-  seek(ms: number) { this.player.currentTime = Math.max(0, ms / 1000); }
+  seek(ms: number) {
+    if (this.restart) void this.restartAt(ms);
+    else this.player.currentTime = Math.max(0, ms / 1000);
+  }
   /** Before the player's ready this is kept, and set once it is: Vega's player isn't there to be told yet. */
   set muted(on: boolean) {
     void this.ready.then(() => {
@@ -300,6 +366,10 @@ export class Engine {
       if (this.gone) return;
       // How it stands, every two seconds for a stream's first half-minute: for the log.
       if (++this.ticks % 4 === 0 && Date.now() - this.openedAt < 30_000) this.report();
+      if (this.switching) {
+        this.lastTime = -1;
+        return;
+      }
       let now = -1;
       try {
         now = this.player.paused ? -1 : this.player.currentTime || 0;
@@ -314,6 +384,7 @@ export class Engine {
       this.lastTime = now;
       if (moved && !this.flowing) {
         this.flowing = true;
+        this.pendingAt = null;
         say(`player ${this.id} playing`);
         this.emit('playing');
       }

@@ -808,6 +808,34 @@ export function transcodeUrl(
 }
 
 /**
+ * The server converting the file as one continuous MKV, from [offsetMs] in, for the TV's
+ * own player: it plays it in hardware, as it plays a file, where HLS goes through hls.js
+ * on the JavaScript thread and froze the controls while each segment was unpacked. It
+ * can't be sought in; going elsewhere asks for it again from there. The picture is passed
+ * through when the TV plays it (H.264, HEVC), the sound made stereo AAC.
+ */
+export function streamUrl(
+  base: string, token: string, ratingKey: string, sessionId: string, maxBitrateKbps: number, resolution: string, mediaIndex = 0,
+  subtitles: "burn" | "none" = "burn", subtitleSize = 100, offsetMs = 0,
+): string {
+  const bitrate = maxBitrateKbps > 0 ? `&maxVideoBitrate=${maxBitrateKbps}` : "";
+  return (
+    `${base}/video/:/transcode/universal/start.mkv?path=${enc(`/library/metadata/${ratingKey}`)}&mediaIndex=${mediaIndex}&partIndex=0` +
+    `&protocol=http&offset=${Math.max(0, Math.floor(offsetMs / 1000))}&directPlay=0&directStream=1&directStreamAudio=0` +
+    `&subtitles=${subtitles}&subtitleSize=${subtitleSize}&audioBoost=100&videoQuality=100&videoResolution=${resolution}${bitrate}` +
+    `&session=${sessionId}&location=lan` +
+    `&X-Plex-Client-Profile-Name=Generic&X-Plex-Platform=Generic&X-Plex-Client-Profile-Extra=${enc(STREAM_PROFILE)}` +
+    `&X-Plex-Client-Identifier=${enc(identity.clientId)}&X-Plex-Product=${enc(PRODUCT)}&X-Plex-Token=${token}`
+  );
+}
+
+/** What the continuous stream may be: the picture as it is where the TV plays it, stereo AAC. */
+export const STREAM_PROFILE =
+  "add-settings(DirectPlayStreamSelection=true)" +
+  "+add-transcode-target(type=videoProfile&context=streaming&protocol=http&container=mkv&videoCodec=h264%2Chevc&audioCodec=aac)" +
+  "+add-limitation(scope=videoAudioCodec&scopeName=aac&type=upperBound&name=audio.channels&value=2)";
+
+/**
  * What Plex sends back when it converts: H.264 in MPEG-TS for hls.js, and stereo AAC, the
  * sound every Vega stick plays (a file's own surround track is what the stick's sound
  * output turned away). The commas are encoded inside the clause: Plex decodes the

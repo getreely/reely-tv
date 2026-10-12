@@ -319,8 +319,8 @@ function LiveSection({ kit }: { kit: Kit }) {
         {!playlist ? (
           <Choice kit={kit} title="Stream type" note="Try the other if channels stutter or won't start."
             options={[
-              { value: 'm3u8' as const, label: 'HLS', note: 'Works with most providers.' },
-              { value: 'ts' as const, label: 'MPEG-TS', note: 'Starts faster with some providers.' },
+              { value: 'ts' as const, label: 'MPEG-TS', note: 'Played by the Fire TV itself. Recommended.' },
+              { value: 'm3u8' as const, label: 'HLS', note: 'Played through the app; the controls can be slow to respond.' },
             ]}
             selected={prefs.streamFormat} onSelect={(f) => app.setStreamFormat(f)} />
         ) : null}
