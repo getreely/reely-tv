@@ -7,6 +7,7 @@ import Element from '../hls/polyfills/ElementPolyfill';
 import MiscPolyfill from '../hls/polyfills/MiscPolyfill';
 import TextDecoderPolyfill from '../hls/polyfills/TextDecoderPolyfill';
 import W3CMediaPolyfill from '../hls/polyfills/W3CMediaPolyfill';
+import { letGoOf, playersLetGo } from './release';
 
 /*
  * Video on Vega, in Amazon's own player (the W3C Media API: VideoPlayer, drawn on a
@@ -46,21 +47,9 @@ export type EngineEvent = 'playing' | 'pause' | 'waiting' | 'timeupdate' | 'ende
 /** How long a stream the player opens itself waits for its picture to have somewhere to go. */
 const SURFACE_WAIT_MS = 2_000;
 
-/** How long a new player waits for those being let go: past that, it starts regardless. */
-const LET_GO_WAIT_MS = 3_000;
-
-/**
- * Players being let go, which a new one waits for: the stick plays so many at once, and a
- * channel opened while the last one's was still being let go never started.
- */
-let lettingGo: Promise<unknown> = Promise.resolve();
+/** [p] let go, counted among the players a new one waits for (release.ts). */
 function letGo(p: VideoPlayer): Promise<void> {
-  const done = p.deinitialize().then(() => undefined, () => undefined);
-  lettingGo = Promise.all([lettingGo, done]);
-  return done;
-}
-function within(p: Promise<unknown>, ms: number): Promise<void> {
-  return Promise.race([p.then(() => undefined, () => undefined), new Promise<void>((done) => setTimeout(() => done(), ms))]);
+  return letGoOf(p.deinitialize());
 }
 
 /** How a stream that can't be sought in is played: asked for again from wherever's wanted. */
@@ -173,7 +162,7 @@ export class Engine {
 
   /** [p] made ready, and listened to for as long as it's the one in use. */
   private setUp(p: VideoPlayer): Promise<void> {
-    return within(lettingGo, LET_GO_WAIT_MS).then(() => p.initialize()).then(() => {
+    return playersLetGo().then(() => p.initialize()).then(() => {
       p.autoplay = false;
       p.muted = this.mutedNow;
       for (const event of ['playing', 'pause', 'waiting', 'timeupdate', 'ended', 'loadedmetadata'] as EngineEvent[]) {
