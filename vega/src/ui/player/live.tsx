@@ -6,7 +6,7 @@ import type { PlexStream } from '../../api/plex';
 import type { XtreamChannel } from '../../api/xtream';
 import { isOnAt } from '../../api/xtream';
 import { REFUSED, hasSpareCell, focusRects, gridRects, movedTile, nextPlace, tileOrder, withoutTile, MAX_TILES } from '../../core/multiview';
-import { liveEngine, playLive, stopLive } from '../../player/live';
+import { playLive, stopLive, useLiveEngine } from '../../player/live';
 import { useEngine, VideoSurface, type Engine } from '../../player/engine';
 import { ActionButton, Spinner } from '../controls';
 import { Press, focusWhenReady } from '../focus';
@@ -52,7 +52,7 @@ export function LivePlayer(props: { app: App; state: AppState; channel: XtreamCh
   const { app, state, channel } = props;
   const live = state.live;
   const prefs = state.prefs;
-  const engine = liveEngine();
+  const engine = useLiveEngine();
   const catchUp = live.catchUp;
   const [controls, setControls] = useState(false);
   const [playing, setPlaying] = useState(false);

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Engine } from './engine';
 
 /*
@@ -8,10 +9,33 @@ import { Engine } from './engine';
 
 let shared: Engine | null = null;
 let url: string | null = null;
+const listeners = new Set<() => void>();
+
+/** Whoever draws the live picture, told the player has been let go: it draws the next one. */
+function changed() {
+  // After the drawing under way, not during it.
+  setTimeout(() => listeners.forEach((l) => l()), 0);
+}
 
 export function liveEngine(): Engine {
   if (!shared) shared = new Engine();
   return shared;
+}
+
+/**
+ * The live player, for a component that draws it, drawn again when it's replaced. Kept
+ * from one drawing to the next, a guide's preview held on to a player that had been let
+ * go: it showed that one's last picture, and the next channel opened with nowhere to be
+ * drawn and never started.
+ */
+export function useLiveEngine(): Engine {
+  const [, bump] = useState(0);
+  useEffect(() => {
+    const listener = () => bump((n) => n + 1);
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
+  }, []);
+  return liveEngine();
 }
 
 /** Plays [next] unless it's already what's playing. */
@@ -21,6 +45,20 @@ export function playLive(next: string) {
   void liveEngine().open(next);
 }
 
+/**
+ * The channel left behind stops at once, the player kept for the next (the Fire TV's
+ * guide stops its preview as the cursor moves, and plays the next once it rests).
+ */
+export function pauseLive() {
+  if (url == null || !shared) return;
+  url = null;
+  try {
+    shared.pause();
+  } catch {
+    // Not started.
+  }
+}
+
 /** Nothing live playing: the player stopped, and let go, until it's wanted again. */
 export function stopLive() {
   url = null;
@@ -28,6 +66,7 @@ export function stopLive() {
     const gone = shared;
     shared = null;
     void gone.release();
+    changed();
   }
 }
 

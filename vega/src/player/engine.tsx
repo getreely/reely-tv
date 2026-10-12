@@ -43,6 +43,9 @@ const isHls = (url: string) => /\.m3u8(\?|#|$)/i.test(url) || /\/video\/:\/trans
 
 export type EngineEvent = 'playing' | 'pause' | 'waiting' | 'timeupdate' | 'ended' | 'error' | 'loadedmetadata' | 'captions';
 
+/** How long a stream the player opens itself waits for its picture to have somewhere to go. */
+const SURFACE_WAIT_MS = 2_000;
+
 /** How long skips in a stream that can't be sought in settle before it's asked for again. */
 const RESTART_SETTLE_MS = 600;
 
@@ -303,10 +306,26 @@ export class Engine {
       hls.attachMedia(this.player);
       this.hls = hls;
     } else {
+      // A stream the player opens itself waits for its picture to have somewhere to go:
+      // opened first, it got as far as "playing after buffering" and stayed there.
+      const mine = this.restarts;
+      await this.surfaceReady(SURFACE_WAIT_MS);
+      if (this.gone || mine !== this.restarts) return;
       this.player.src = url;
       if (startMs > 0 && !this.restart) this.player.currentTime = startMs / 1000;
     }
     this.player.play();
+  }
+
+  /** Resolves once a surface is attached, or after [ms] regardless. */
+  private async surfaceReady(ms: number) {
+    const until = Date.now() + ms;
+    while (!this.surface && !this.gone && Date.now() < until) {
+      await new Promise<void>((done) => setTimeout(() => done(), 50));
+    }
+    if (!this.surface) say(`player ${this.id} opens with no surface yet`);
+    // The handle's given to the player once it's ready; it is by now, but a turn for it.
+    await this.ready;
   }
 
   /** The stream asked for again from [ms]: going elsewhere in one that can't be sought in. */

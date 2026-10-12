@@ -13,7 +13,7 @@ import { glass } from '../surfaces';
 import { Text } from '../text';
 import { color, dp, type } from '../theme';
 import { VideoSurface } from '../../player/engine';
-import { liveEngine, playLive, stopLive } from '../../player/live';
+import { liveUrl, pauseLive, playLive, stopLive, useLiveEngine } from '../../player/live';
 
 /*
  * Live TV (LiveScreen.kt, GuideScreen.kt, GuideGrid.kt): signing in to a provider, its
@@ -224,7 +224,8 @@ export function GuideRow(props: {
 }
 
 /** How long the cursor rests on a channel before its preview starts: walking past doesn't open each. */
-const PREVIEW_DELAY_MS = 900;
+/** As the Fire TV's guide: long enough that walking past channels doesn't open each. */
+const PREVIEW_DELAY_MS = 1_200;
 
 /**
  * A category's guide. The grid is one place for the cursor: up and down change channel,
@@ -272,13 +273,22 @@ export function Guide(props: { app: App; state: AppState }) {
   // The highlighted channel plays beside the grid, once the cursor rests on it, in the
   // player the channel goes on in full screen.
   const watching = live.watching != null;
+  const previewEngine = useLiveEngine();
+  // As GuideScreen.kt: the channel left stops at once, the one rested on plays after a
+  // moment, one already showing carries on, and no preview means nothing playing.
   useEffect(() => {
-    if (!channel || !state.prefs.guidePreview || watching) return;
+    if (watching) return;
+    if (!state.prefs.guidePreview) {
+      stopLive();
+      return;
+    }
+    if (!channel) return;
     const url = app.channelUrl(channel);
-    if (!url) return;
+    if (!url || liveUrl() === url) return;
+    pauseLive();
     const t = setTimeout(() => playLive(url), PREVIEW_DELAY_MS);
     return () => clearTimeout(t);
-  }, [channel?.streamId, watching]);
+  }, [channel?.streamId, watching, state.prefs.guidePreview]);
   // Leaving the guide stops the preview.
   useEffect(() => () => stopLive(), []);
 
@@ -349,7 +359,7 @@ export function Guide(props: { app: App; state: AppState }) {
         </View>
         {state.prefs.guidePreview ? (
           <View style={{ width: dp(252), aspectRatio: 16 / 9, borderRadius: dp(10), overflow: 'hidden', backgroundColor: '#000000', borderWidth: dp(1), borderColor: color.glassEdge }}>
-            {!watching ? <VideoSurface engine={liveEngine()} style={{ flex: 1 }} /> : null}
+            {!watching ? <VideoSurface engine={previewEngine} style={{ flex: 1 }} /> : null}
           </View>
         ) : null}
       </View>
