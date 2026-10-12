@@ -780,33 +780,6 @@ export async function reportTimeline(
   }
 }
 
-/** The server converting the file to HLS, from the start; the player seeks. */
-export function transcodeUrl(
-  base: string, token: string, ratingKey: string, sessionId: string, maxBitrateKbps: number, resolution: string, mediaIndex = 0,
-  /** "burn" draws the chosen subtitles into the picture; "none" leaves them to the app. */
-  subtitles: "burn" | "none" = "burn",
-  /** The size burned subtitles are drawn at, in percent. */
-  subtitleSize = 100,
-  /**
-   * The file's video codec. Only H.264 is passed through as it is: anything else (HEVC,
-   * say) Plex makes H.264 of, as the TV's own player can't play it from Plex's stream, and
-   * playback failed with the file's HEVC copied into it.
-   */
-  videoCodec: string | null = null,
-): string {
-  const bitrate = maxBitrateKbps > 0 ? `&maxVideoBitrate=${maxBitrateKbps}` : "";
-  const copyVideo = !videoCodec || videoCodec.toLowerCase() === "h264";
-  return (
-    `${base}/video/:/transcode/universal/start.m3u8?path=${enc(`/library/metadata/${ratingKey}`)}&mediaIndex=${mediaIndex}&partIndex=0` +
-    `&protocol=hls&fastSeek=1&directPlay=0&directStream=${copyVideo ? 1 : 0}&directStreamAudio=0&subtitles=${subtitles}&subtitleSize=${subtitleSize}&audioBoost=100&videoQuality=100` +
-    `&videoResolution=${resolution}${bitrate}&session=${sessionId}&location=lan` +
-    // Plex has no profile for Vega and turns the request away (400) without one: the Generic
-    // profile, with what to send spelled out, as the Fire TV asks when it converts sound.
-    `&X-Plex-Client-Profile-Name=Generic&X-Plex-Platform=Generic&X-Plex-Client-Profile-Extra=${enc(CONVERT_PROFILE)}` +
-    `&X-Plex-Client-Identifier=${enc(identity.clientId)}&X-Plex-Product=${enc(PRODUCT)}&X-Plex-Token=${token}`
-  );
-}
-
 /**
  * The server converting the file as one continuous MKV, from [offsetMs] in, for the TV's
  * own player: it plays it in hardware, as it plays a file, where HLS goes through hls.js
@@ -833,17 +806,6 @@ export function streamUrl(
 export const STREAM_PROFILE =
   "add-settings(DirectPlayStreamSelection=true)" +
   "+add-transcode-target(type=videoProfile&context=streaming&protocol=http&container=mkv&videoCodec=h264%2Chevc&audioCodec=aac)" +
-  "+add-limitation(scope=videoAudioCodec&scopeName=aac&type=upperBound&name=audio.channels&value=2)";
-
-/**
- * What Plex sends back when it converts: H.264 in MPEG-TS for hls.js, and stereo AAC, the
- * sound every Vega stick plays (a file's own surround track is what the stick's sound
- * output turned away). The commas are encoded inside the clause: Plex decodes the
- * parameter once, then reads the clause as a query of its own.
- */
-export const CONVERT_PROFILE =
-  "add-settings(DirectPlayStreamSelection=true)" +
-  "+add-transcode-target(type=videoProfile&context=streaming&protocol=hls&container=mpegts&videoCodec=h264&audioCodec=aac)" +
   "+add-limitation(scope=videoAudioCodec&scopeName=aac&type=upperBound&name=audio.channels&value=2)";
 
 export async function stopTranscode(base: string, token: string, sessionId: string): Promise<void> {

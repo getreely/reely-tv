@@ -129,8 +129,6 @@ export interface Playing {
   textSubtitle: plex.PlexSubtitle | null;
   /** How many times it's been asked for afresh after the connection dropped; see reopen. */
   attempt?: number;
-  /** Plex's conversion as HLS, through hls.js: only when the continuous stream wouldn't play. */
-  viaHls?: boolean;
 }
 
 /** As the Fire TV offers them; 0.9 is its standard. */
@@ -1560,16 +1558,7 @@ export class App {
       this.set((s) => ({ ...s, playing: { ...p, url, direct: false, startMs: positionMs } }));
       return true;
     }
-    // Plex's continuous stream wouldn't play either: its HLS, through hls.js, as a last resort,
-    // once the continuous one's conversion has stopped (started alongside it, every segment 404'd).
-    if (p.viaHls) return false;
-    void plex.stopTranscode(p.base, p.token, p.sessionId).then(() => {
-      if (this.current.playing?.sessionId !== p.sessionId) return;
-      const sessionId = randomHex(12);
-      const url = this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, burn, p.playback.videoCodec, positionMs, true);
-      this.set((s) => ({ ...s, playing: { ...p, url, startMs: positionMs, sessionId, viaHls: true } }));
-    });
-    return true;
+    return false;
   }
 
   /**
@@ -1578,7 +1567,7 @@ export class App {
    */
   async convertedFrom(ms: number): Promise<string | null> {
     const p = this.current.playing;
-    if (!p || p.direct || p.viaHls || p.base === IPTV_SOURCE) return null;
+    if (!p || p.direct || p.base === IPTV_SOURCE) return null;
     // A new session for the new stream; the old one's conversion stopped once the player has
     // let it go, so its end isn't taken for a dropped connection.
     const sessionId = randomHex(12);
@@ -1609,22 +1598,20 @@ export class App {
     const sessionId = randomHex(12);
     const url = p.direct
       ? found?.url ?? p.url
-      : this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, subtitlePlan(p.playback).burn ? "burn" : "none", p.playback.videoCodec, positionMs, p.viaHls);
+      : this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, subtitlePlan(p.playback).burn ? "burn" : "none", p.playback.videoCodec, positionMs);
     this.set((s) => ({ ...s, playing: { ...p, url, startMs: positionMs, sessionId, attempt } }));
   }
 
   /** Plex's conversion, at the quality chosen in Settings. */
   /**
-   * Plex's conversion, at the quality chosen in Settings: the continuous stream the TV's own
-   * player plays from [offsetMs], or (viaHls) HLS for hls.js, which starts at the top.
+   * Plex's conversion, at the quality chosen in Settings: one continuous stream from
+   * [offsetMs], which the TV's own player plays (HLS would go through hls.js, on the thread
+   * the controls wait on).
    */
-  private converted(base: string, token: string, ratingKey: string, sessionId: string, mediaIndex: number, subtitles: "burn" | "none", videoCodec: string | null, offsetMs: number, viaHls = false) {
+  private converted(base: string, token: string, ratingKey: string, sessionId: string, mediaIndex: number, subtitles: "burn" | "none", _videoCodec: string | null, offsetMs: number) {
     const kbps = this.current.prefs.maxBitrateKbps;
     const resolution = kbps >= 20_000 ? "3840x2160" : kbps === 0 || kbps >= 8_000 ? "1920x1080" : "1280x720";
-    const size = Math.round(this.current.prefs.subtitleScale * 100);
-    return viaHls
-      ? plex.transcodeUrl(base, token, ratingKey, sessionId, kbps, resolution, mediaIndex, subtitles, size, videoCodec)
-      : plex.streamUrl(base, token, ratingKey, sessionId, kbps, resolution, mediaIndex, subtitles, size, offsetMs);
+    return plex.streamUrl(base, token, ratingKey, sessionId, kbps, resolution, mediaIndex, subtitles, Math.round(this.current.prefs.subtitleScale * 100), offsetMs);
   }
 
   /**
@@ -1654,8 +1641,8 @@ export class App {
       this.set((s) => ({ ...s, playing: { ...p, playback, textSubtitle: text } }));
       return;
     }
-    const url = asIs ? playback.url : this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, burn ? "burn" : "none", playback.videoCodec, positionMs, !p.direct && p.viaHls);
-    this.set((s) => ({ ...s, playing: { ...p, playback, url, direct: asIs, startMs: positionMs, sessionId, textSubtitle: text, viaHls: !asIs && !p.direct && p.viaHls } }));
+    const url = asIs ? playback.url : this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, burn ? "burn" : "none", playback.videoCodec, positionMs);
+    this.set((s) => ({ ...s, playing: { ...p, playback, url, direct: asIs, startMs: positionMs, sessionId, textSubtitle: text } }));
   }
 
   /** Subtitles online for what's playing, in the TV's language, found by the Plex server. */

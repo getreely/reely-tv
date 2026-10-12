@@ -107,7 +107,8 @@ function safeText(value: unknown) {
 export class Engine {
   /** Which player this is: a surface belongs to one, and a new one gets a new surface. */
   readonly id = ++made;
-  readonly player = new VideoPlayer();
+  /** Replaced by a fresh one for a stream that can't be sought in (see renew). */
+  player = new VideoPlayer();
   private hls: HlsInstance | null = null;
   private ready: Promise<void>;
   private surface: string | null = null;
@@ -135,11 +136,21 @@ export class Engine {
   private captionChoice = -1;
 
   constructor(options: { muted?: boolean } = {}) {
-    this.ready = this.player.initialize().then(() => {
-      this.player.autoplay = false;
-      this.player.muted = !!options.muted;
+    this.mutedNow = !!options.muted;
+    this.ready = this.setUp(this.player);
+  }
+
+  private mutedNow = false;
+  private captionsHandle: string | null = null;
+
+  /** [p] made ready, and listened to for as long as it's the one in use. */
+  private setUp(p: VideoPlayer): Promise<void> {
+    return p.initialize().then(() => {
+      p.autoplay = false;
+      p.muted = this.mutedNow;
       for (const event of ['playing', 'pause', 'waiting', 'timeupdate', 'ended', 'loadedmetadata'] as EngineEvent[]) {
-        this.player.addEventListener(event, () => {
+        p.addEventListener(event, () => {
+          if (p !== this.player) return;
           if (event === 'playing') {
             if (this.switching) return;
             if (!this.flowing) say(`player ${this.id} playing`);
@@ -152,12 +163,46 @@ export class Engine {
       }
       // A caption track the stream brings is kept hidden unless it's the one chosen.
       try {
-        (this.player.textTracks as unknown as { addEventListener?: (t: string, h: () => void) => void }).addEventListener?.('addtrack', () => this.applyCaptions());
+        (p.textTracks as unknown as { addEventListener?: (t: string, h: () => void) => void }).addEventListener?.('addtrack', () => { if (p === this.player) this.applyCaptions(); });
       } catch {
         // No captions here.
       }
-      this.player.addEventListener('error', () => this.fail({ kind: 'media', status: null, detail: this.player.error?.message ?? 'The player stopped.' }));
+      p.addEventListener('error', () => {
+        if (p === this.player) this.fail({ kind: 'media', status: null, detail: p.error?.message ?? 'The player stopped.' });
+      });
     });
+  }
+
+  /**
+   * A fresh player on the same surface. Vega's player carries the position its last source
+   * was at into the next ("resumed position") and seeks there, which a stream that can't be
+   * sought in fails on: so such a stream gets a player with nothing to carry.
+   */
+  private async renew() {
+    const old = this.player;
+    try {
+      old.pause();
+    } catch {
+      // Not started.
+    }
+    this.unloadSource();
+    if (this.surface) {
+      try {
+        old.clearSurfaceHandle(this.surface);
+      } catch {
+        // Let go already.
+      }
+    }
+    const fresh = new VideoPlayer();
+    this.player = fresh;
+    this.ready = this.setUp(fresh).then(() => {
+      if (this.gone || fresh !== this.player) return;
+      if (this.surface) fresh.setSurfaceHandle(this.surface);
+      if (this.captionsHandle) (fresh as unknown as { setCaptionViewHandle?: (h: string) => void }).setCaptionViewHandle?.(this.captionsHandle);
+    });
+    void old.deinitialize().catch(() => undefined);
+    await this.ready;
+    say(`player ${this.id} renewed`);
   }
 
   on(event: EngineEvent, handler: () => void): () => void {
@@ -189,6 +234,8 @@ export class Engine {
    */
   async open(url: string, startMs = 0, options: OpenOptions = {}) {
     await this.ready;
+    if (this.gone) return;
+    if (options.restart && this.url) await this.renew();
     if (this.gone) return;
     this.unloadSource();
     this.url = url;
@@ -258,10 +305,6 @@ export class Engine {
     } else {
       this.player.src = url;
       if (startMs > 0 && !this.restart) this.player.currentTime = startMs / 1000;
-      // A stream that starts where it's wanted: no seek in it. Vega's player keeps a seek
-      // asked of the source before (a file that wouldn't play, at the resume point) and
-      // would make it here, where it fails and takes playback down with it.
-      else if (this.restart) this.clearPendingSeek();
     }
     this.player.play();
   }
@@ -280,27 +323,22 @@ export class Engine {
     if (mine !== this.restarts || this.gone) return;
     const url = await restart(this.pendingAt).catch(() => null);
     if (mine !== this.restarts || this.gone) return;
-    this.switching = false;
     if (!url) {
+      this.switching = false;
       this.pendingAt = null;
       return;
     }
+    say(`player ${this.id} asks again from ${Math.round(this.pendingAt / 1000)}s`);
+    await this.renew();
+    if (mine !== this.restarts || this.gone) return;
+    this.switching = false;
     this.base = this.pendingAt;
     this.url = url;
     this.lastTime = -1;
-    say(`player ${this.id} asks again from ${Math.round(this.base / 1000)}s`);
     this.player.src = url;
-    this.clearPendingSeek();
     this.player.play();
   }
 
-  private clearPendingSeek() {
-    try {
-      this.player.currentTime = 0;
-    } catch {
-      // Nothing pending.
-    }
-  }
 
   /** The same address again: a dropped connection's fresh stream. */
   async reload(startMs = 0) {
@@ -338,6 +376,7 @@ export class Engine {
   }
   /** Before the player's ready this is kept, and set once it is: Vega's player isn't there to be told yet. */
   set muted(on: boolean) {
+    this.mutedNow = on;
     void this.ready.then(() => {
       if (this.gone) return;
       try {
@@ -486,6 +525,7 @@ export class Engine {
   }
 
   attachCaptions(handle: string) {
+    this.captionsHandle = handle;
     void this.ready.then(() => {
       if (this.gone) return;
       (this.player as unknown as { setCaptionViewHandle?: (h: string) => void }).setCaptionViewHandle?.(handle);
