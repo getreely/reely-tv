@@ -20,8 +20,9 @@ differences are Vega's own:
   screen, Back closes the one with the cursor, and the set can be saved. A provider that won't
   open another channel at once is said so on its tile.
 
-None of it has been tried on a Vega device yet: building the app needs Amazon's Vega SDK (see
-`vega/README.md`).
+None of it has been tried on a Vega device yet. GitHub builds it with Amazon's Vega SDK, and
+each `vega-v…` release has the package for Fire TV sticks; putting it on one needs the stick in
+developer mode (see `vega/README.md`).
 
 | Feature | Fire TV / Android TV | Android phone & tablet | LG (webOS) | Roku | iPhone, iPad and Apple TV |
 |---|---|---|---|---|---|

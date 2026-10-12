@@ -67,7 +67,18 @@ Once, to put the stick in developer mode:
 3. On the computer, run `vega devmode enable-device --code <the code>`. The stick restarts.
 4. Run `vega device list` and check that the stick is listed.
 
-Then, each time:
+Then, to install a release, with nothing to build: download `reely-vega-armv7.vpkg` from the
+latest `vega-v…` release on <https://github.com/getreely/reely-tv/releases>, and with the
+computer on the same network as the stick:
+
+```bash
+vega device install-app --packagePath reely-vega-armv7.vpkg
+```
+
+Reely is then in the stick's apps. Each release has a package for each kind of device:
+`armv7` is for Fire TV sticks, `aarch64` for the Vega Virtual Device.
+
+Or, to install your own build:
 
 ```bash
 npm run build:release
