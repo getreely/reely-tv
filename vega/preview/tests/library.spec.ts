@@ -62,4 +62,30 @@ test('Movies: the tab home, the whole library with its chips and rail, sorting, 
   await expect(page.getByText('Space Films').last()).toBeVisible({ timeout: 10_000 });
   await page.waitForTimeout(500);
   await page.screenshot({ path: 'shots/library-collections.png' });
+  // A collection's own page.
+  await press(page, 'Enter');
+  await page.waitForTimeout(1500);
+  await expect(page.getByText('In this collection')).toBeVisible({ timeout: 10_000 });
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: 'shots/collection.png' });
+  await expect(page.locator(':focus')).toContainText('Low Orbit');
+  await press(page, 'Escape');
+  await page.waitForTimeout(500);
+  await expect(page.locator(':focus')).toContainText('Space Films');
+  // Home's playlist, and its page.
+  await press(page, 'ArrowUp');
+  await press(page, 'ArrowLeft');
+  await expect(page.getByText('Continue Watching')).toBeVisible({ timeout: 10_000 });
+  await page.waitForTimeout(500);
+  for (let i = 0; i < 10; i++) {
+    await press(page, 'ArrowDown');
+    await page.waitForTimeout(150);
+    if ((await page.locator(':focus').textContent())?.includes('Weekend Films')) break;
+  }
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: 'shots/home-playlists.png' });
+  await press(page, 'Enter');
+  await expect(page.getByText('Shuffle')).toBeVisible({ timeout: 10_000 });
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: 'shots/playlist.png' });
 });

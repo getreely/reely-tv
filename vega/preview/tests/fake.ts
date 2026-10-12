@@ -85,6 +85,10 @@ export async function fakePlex(page: Page, options: { tour?: boolean; many?: boo
     }
     if ((options.many || options.big) && path === "/library/sections/1/all" && !url.searchParams.get("genre") && !url.searchParams.get("actor")) return meta(route, movies);
     if (path === "/hubs") return json(route, { MediaContainer: { Hub: [{ Metadata: [episode("e2", 2)].map((e) => ({ ...e, viewOffset: 20_000, lastViewedAt: 5 })) }] } });
+    if (options.big && path === "/playlists") return meta(route, [{ ratingKey: "p1", type: "playlist", title: "Weekend Films", leafCount: 4, duration: 24_000_000, composite: "/thumb/m3" }]);
+    if (options.big && path === "/playlists/p1/items") return meta(route, movies.slice(2, 6));
+    if (options.big && path === "/library/metadata/c1") return meta(route, [{ ratingKey: "c1", type: "collection", title: "Space Films", childCount: 3, thumb: "/thumb/m1", art: "/art/m1", summary: "Films set above the atmosphere." }]);
+    if (options.big && path === "/library/collections/c1/children") return meta(route, movies.slice(0, 3));
     if (path === "/playlists") return meta(route, []);
     if (url.searchParams.get("actor") === "77") {
       return meta(route, path === "/library/sections/1/all" ? [{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025 }] : []);
@@ -103,6 +107,13 @@ export async function fakePlex(page: Page, options: { tour?: boolean; many?: boo
     if (path === "/library/metadata/show1") return meta(route, [{ ratingKey: "show1", type: "show", title: "Northbound", year: 2024, art: "/art/show1", thumb: "/thumb/show1",
       rating: 8.1, audienceRating: 8.6, contentRating: "TV-14", studio: "Harbourside", childCount: 1,
       summary: "A long-haul driver takes the jobs nobody else will, on roads that don't appear on any map, and starts to notice who keeps booking her." }]);
+    if (path === "/library/metadata/m1") return meta(route, [{ ratingKey: "m1", type: "movie", title: "Low Orbit", year: 2025, art: "/art/m1", thumb: "/thumb/m1",
+      rating: 7.4, audienceRating: 8.1, contentRating: "PG-13", studio: "Northlight", duration: 6_000_000, guid: "plex://movie/lo",
+      summary: "A satellite engineer is stranded on the station she built, and has to talk the ground crew through bringing her home before the orbit decays.",
+      Genre: [{ tag: "Drama" }, { tag: "Thriller" }], Director: [{ tag: "Mara Quinn" }], Writer: [{ tag: "Tom Ellis" }],
+      Role: [{ id: "77", tag: "Ana Orbit", role: "Dr. Vale" }, { id: "78", tag: "Joe Field", role: "Flight" }],
+      Media: [{ videoResolution: "4k", container: "mkv", videoCodec: "hevc", audioCodec: "eac3", Part: [{ id: 1 }] }, { videoResolution: "1080", container: "mp4", videoCodec: "h264", audioCodec: "aac", Part: [{ id: 2 }] }] }]);
+    if (path === "/library/metadata/m1/related") return json(route, { MediaContainer: { Hub: [{ Metadata: movies.slice(1, 8) }] } });
     if (path === "/library/metadata/show1/children") return meta(route, [{ ratingKey: "s1", type: "season", title: "Season 1", index: 1 }]);
     if (path === "/library/metadata/s1/children") return meta(route, [episode("e1", 1, true), episode("e2", 2), episode("e3", 3)]);
     if (path === "/library/metadata/show1/related") return json(route, { MediaContainer: {} });

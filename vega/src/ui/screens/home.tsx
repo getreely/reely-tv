@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Image, View } from 'react-native';
-import type { App, AppState, HomeRowId } from '../../app/store';
+import type { App, AppState, HomeRowId, Route } from '../../app/store';
 import { isConnected, requestBadge, shownRequestRows } from '../../app/store';
 import type { EpisodeGroup } from '../../app/home';
 import { homeIsEmpty } from '../../app/home';
@@ -47,6 +47,11 @@ export interface ScreenProps {
   open: (item: PlexItem) => void;
   openRequest: (title: RequestTitle) => void;
   hold: (item: PlexItem) => void;
+  /** Plays [item]: from where it was left, or the top; [queue] what follows it. */
+  play: (item: PlexItem, resume: boolean, queue?: PlexItem[]) => void;
+  /** Asks again for a page that couldn't be loaded. */
+  retry: () => void;
+  openRoute: (route: Route) => void;
 }
 
 /** "Dune is ready to watch": something asked for through Requests, now on the server. */

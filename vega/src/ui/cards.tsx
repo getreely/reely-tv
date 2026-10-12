@@ -163,10 +163,10 @@ export function EpisodeTile(props: {
 }
 
 /** A face from the cast. Focusable even with nowhere to go, so the row can be reached. */
-export function CastCircle(props: { name: string; role?: string | null; image?: string | null; onPress?: () => void }) {
+export function CastCircle(props: { name: string; role?: string | null; image?: string | null; onPress?: () => void; focusKey?: string }) {
   const [focused, setFocused] = useState(false);
   return (
-    <Press onPress={props.onPress} onFocusChange={setFocused} style={{ width: dp(108), alignItems: 'center' }}>
+    <Press onPress={props.onPress} focusKey={props.focusKey} onFocusChange={setFocused} style={{ width: dp(108), alignItems: 'center' }}>
       {() => (
         <>
           <View style={{ width: dp(84), height: dp(84), borderRadius: dp(42), overflow: 'hidden', backgroundColor: color.surfaceHigh, borderWidth: focused ? dp(3) : 0, borderColor: color.chalk, alignItems: 'center', justifyContent: 'center' }}>

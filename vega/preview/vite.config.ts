@@ -19,6 +19,7 @@ export default defineConfig({
       { find: '@amazon-devices/react-native-async-storage__async-storage', replacement: here('shims/storage.ts') },
       // The player's engine itself, rather than Amazon's media pieces under it.
       { find: /^(\.\.?\/)+(player\/)?engine$/, replacement: here('shims/engine.tsx') },
+      { find: /^@amazon-devices\/react-native-w3cmedia$/, replacement: here('shims/w3cmedia.ts') },
       { find: 'react-native-url-polyfill/auto', replacement: here('shims/empty.ts') },
       { find: /^react$/, replacement: here('node_modules/react') },
       { find: /^react-dom$/, replacement: here('node_modules/react-dom') },

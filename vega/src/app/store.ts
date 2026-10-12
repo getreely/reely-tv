@@ -384,10 +384,15 @@ export function subtitlePlan(playback: Pick<plex.PlexPlayback, "subtitleStreams"
 
 /** A bare item: the film a page is about, when there's nothing more to go on. */
 function emptyItemFor(ratingKey: string, title: string, type: string): PlexItem {
+  return emptyItem(ratingKey, title, type, IPTV_SOURCE);
+}
+
+/** A bare item on [serverBase], for playing what a page is about. */
+export function emptyItem(ratingKey: string, title: string, type: string, serverBase: string | null): PlexItem {
   return {
     ratingKey, title, type, thumb: null, art: null, summary: null, year: null, index: null, parentIndex: null, parentRatingKey: null,
     parentTitle: null, grandparentRatingKey: null, grandparentTitle: null, grandparentThumb: null, durationMs: 0, viewOffsetMs: 0,
-    leafCount: 0, viewedLeafCount: 0, viewCount: 0, addedAt: 0, lastViewedAt: 0, qualities: [], librarySectionId: null, serverBase: IPTV_SOURCE,
+    leafCount: 0, viewedLeafCount: 0, viewCount: 0, addedAt: 0, lastViewedAt: 0, qualities: [], librarySectionId: null, serverBase,
   };
 }
 
@@ -514,7 +519,13 @@ export class App {
   }
 
   private set(change: (s: AppState) => AppState) {
+    const before = this.current.list;
     this.current = change(this.current);
+    const list = this.current.list;
+    if (list && list !== before && !list.busy && !list.error) {
+      this.listPages.set(list.key, list);
+      if (this.listPages.size > 12) this.listPages.delete(this.listPages.keys().next().value!);
+    }
     this.listeners.forEach((l) => l(this.current));
   }
 
@@ -537,8 +548,47 @@ export class App {
     if (route.name === "live") void this.loadLive();
     if (route.name === "requestTitle") void this.openRequestTitle(route.title);
     if (route.name === "person") void this.openPerson(route.person);
-    if (route.name === "collection") void this.openCollection(route.item);
+    if (route.name === "collection") {
+      void this.openCollection(route.item);
+      void this.openDetail(route.item.ratingKey, route.item.serverBase, null);
+    }
     if (route.name === "playlist") void this.openPlaylist(route.item);
+  }
+
+  /** Pages left for another, kept as they were so going back finds them so. */
+  private detailPages = new Map<string, DetailPage>();
+  private listPages = new Map<string, ListPage>();
+
+  /** The page gone back to, as it was left: one title's page or list replaced another's. */
+  private restorePage(route: Route) {
+    if (route.name === "detail" || route.name === "collection") {
+      const ratingKey = route.name === "detail" ? route.ratingKey : route.item.ratingKey;
+      const serverBase = route.name === "detail" ? route.serverBase : route.item.serverBase;
+      const key = `${serverBase ?? this.current.plex.baseUrl}|${ratingKey}`;
+      if (this.current.detail?.key === key) return;
+      const kept = this.detailPages.get(key);
+      if (kept) this.set((s) => ({ ...s, detail: kept }));
+      else void this.openDetail(ratingKey, serverBase, route.name === "detail" ? route.episodeKey ?? null : null);
+      if (route.name === "detail") return;
+    }
+    const listKey = route.name === "person" ? `person:${route.person.serverBase ?? ""}|${route.person.id}`
+      : route.name === "collection" ? `collection:${plex.listKey(route.item)}`
+      : route.name === "playlist" ? `playlist:${plex.listKey(route.item)}`
+      : null;
+    if (!listKey || this.current.list?.key === listKey) return;
+    const kept = this.listPages.get(listKey);
+    if (kept) {
+      this.listRun++;
+      this.set((s) => ({ ...s, list: kept }));
+    } else if (route.name === "person") void this.openPerson(route.person);
+    else if (route.name === "collection") void this.openCollection(route.item);
+    else if (route.name === "playlist") void this.openPlaylist(route.item);
+  }
+
+  /** The episode a show's page is about: the one the cursor is on in its rail. */
+  focusEpisode(episode: PlexItem) {
+    const page = this.current.detail;
+    if (page && page.focused?.ratingKey !== episode.ratingKey) this.setDetail(page.key, { focused: episode });
   }
 
   /** Back one page; false when there's nowhere back to go (Home's Back leaves the app). */
@@ -559,7 +609,9 @@ export class App {
     }
     if (s.stack.length > 1) {
       const stack = s.stack.slice(0, -1);
-      this.set((x) => ({ ...x, stack, route: stack[stack.length - 1] }));
+      const back = stack[stack.length - 1];
+      this.set((x) => ({ ...x, stack, route: back }));
+      this.restorePage(back);
       return true;
     }
     if (s.route.name !== "home") {
@@ -1302,6 +1354,12 @@ export class App {
 
   private setDetail(key: string, change: Partial<DetailPage>) {
     this.set((s) => (s.detail?.key === key ? { ...s, detail: { ...s.detail, ...change } } : s));
+    const page = this.current.detail;
+    if (page?.key === key && page.detail) {
+      this.detailPages.set(key, page);
+      // A handful kept: a chain of titles opened from one another.
+      if (this.detailPages.size > 12) this.detailPages.delete(this.detailPages.keys().next().value!);
+    }
   }
 
   // ---------------------------------------------------------------- Playing
