@@ -89,7 +89,7 @@ const MOON = (() => {
   const py = (h * (x2 - x1)) / d;
   const [ax, ay] = [mx + px, my - py];
   const [bx, by] = [mx - px, my + py];
-  return `M ${ax} ${ay} A ${r1} ${r1} 0 1 1 ${bx} ${by} A ${r2} ${r2} 0 0 0 ${ax} ${ay} Z`;
+  return `M ${ax} ${ay} A ${r1} ${r1} 0 1 0 ${bx} ${by} A ${r2} ${r2} 0 0 1 ${ax} ${ay} Z`;
 })();
 
 export const MoonGlyph = ({ color, size }: GlyphProps) => (

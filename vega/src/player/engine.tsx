@@ -157,6 +157,17 @@ export class Engine {
     const d = this.player.duration;
     return Number.isFinite(d) && d > 0 ? Math.floor(d * 1000) : 0;
   }
+  /** How far ahead of the playhead the picture is in hand. */
+  get bufferedMs() {
+    try {
+      const b = this.player.buffered;
+      const now = this.player.currentTime || 0;
+      for (let i = 0; i < b.length; i++) if (b.start(i) <= now + 0.5 && b.end(i) >= now) return Math.floor(b.end(i) * 1000);
+    } catch {
+      // Not loaded.
+    }
+    return this.positionMs;
+  }
   seek(ms: number) { this.player.currentTime = Math.max(0, ms / 1000); }
   set muted(on: boolean) { this.player.muted = on; }
 

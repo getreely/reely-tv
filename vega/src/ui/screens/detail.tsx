@@ -54,7 +54,7 @@ export function Detail(props: ScreenProps) {
   // What Play would resume. For a show that's the part-watched episode.
   const resumeFrom = episode ? episode.viewOffsetMs : show ? page.episodes.find((e) => plex.resumeFraction(e) != null)?.viewOffsetMs ?? 0 : d.viewOffsetMs;
   const filmItem = (): PlexItem => ({
-    ...emptyItem(d.ratingKey, d.title, d.type, base), durationMs: d.durationMs, viewOffsetMs: d.viewOffsetMs, thumb: d.thumb, art: d.art,
+    ...emptyItem(d.ratingKey, d.title, d.type, base), durationMs: d.durationMs, viewOffsetMs: d.viewOffsetMs, thumb: d.thumb, art: d.art, year: d.year,
   });
   const target = (): PlexItem | null => episode ?? (show ? null : filmItem());
   const play = (resume: boolean) => {

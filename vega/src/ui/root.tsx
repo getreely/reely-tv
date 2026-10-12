@@ -16,6 +16,7 @@ import { TopBar, type TabId } from './topbar';
 import { Screens, routeFor } from './screens';
 import { BACKDROP_RISE } from './surfaces';
 import { LivePlayer } from './player/live';
+import { VodPlayer } from './player/vod';
 import { OverlayContext, OverlayHost, Overlays } from './overlay';
 
 /*
@@ -68,6 +69,23 @@ function ConfirmExit(props: { onStay: () => void; onLeave: () => void }) {
           <ActionButton label="Stay" emphasised preferred onPress={props.onStay} />
           <ActionButton label="Close" onPress={props.onLeave} />
         </View>
+      </TVFocusGuideView>
+    </View>
+  );
+}
+
+/** Something that wouldn't start playing, said over the page it was started from. */
+function PlayError(props: { message: string; onDismiss: () => void }) {
+  useBack(() => {
+    props.onDismiss();
+    return true;
+  });
+  return (
+    <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 60, backgroundColor: 'rgba(8, 9, 11, 0.6)' }}>
+      <TVFocusGuideView autoFocus trapFocusUp trapFocusDown trapFocusLeft trapFocusRight
+        style={{ alignItems: 'center', gap: dp(14), borderRadius: dp(14), backgroundColor: 'rgba(8, 9, 11, 0.97)', borderWidth: dp(1), borderColor: color.line, padding: dp(24), maxWidth: dp(640) }}>
+        <Text style={{ color: color.chalk, fontSize: dp(18), lineHeight: dp(24), textAlign: 'center' }}>{props.message}</Text>
+        <ActionButton label="OK" emphasised preferred onPress={props.onDismiss} />
       </TVFocusGuideView>
     </View>
   );
@@ -218,6 +236,20 @@ export function Root(props: { app: App }) {
   const overlays = useRef(new Overlays()).current;
   const connected = isConnected(state);
   const watching = state.live.watching != null && !!state.live.channels[state.live.watching];
+  const playing = state.playing;
+  // Back from a film or an episode: the page it was played from, drawn afresh with the
+  // cursor where it was, as the Fire TV puts it back on the episode.
+  const [returns, setReturns] = useState(0);
+  const wasPlaying = useRef(false);
+  useEffect(() => {
+    if (playing) wasPlaying.current = true;
+    else if (wasPlaying.current) {
+      wasPlaying.current = false;
+      memory.restoring = true;
+      setReturns((n) => n + 1);
+    }
+  }, [playing == null]);
+  const away = watching || !!playing;
   return (
     <AccentContext.Provider value={accentValue}>
       <OverlayContext.Provider value={overlays}>
@@ -226,11 +258,11 @@ export function Root(props: { app: App }) {
           {/* Kept while a channel plays over it, so the guide is as it was on the way back,
               but out of the cursor's reach. */}
           <TVFocusGuideView trapFocusLeft trapFocusRight trapFocusDown
-            style={{ position: 'absolute', left: 0, right: 0, top: BACKDROP_RISE, bottom: 0, display: watching ? 'none' : 'flex' }}>
-            <Screens app={app} state={state} open={open} openMenu={setItemMenu} key={key} />
+            style={{ position: 'absolute', left: 0, right: 0, top: BACKDROP_RISE, bottom: 0, display: away ? 'none' : 'flex' }}>
+            {playing ? null : <Screens app={app} state={state} open={open} openMenu={setItemMenu} key={`${key}:${returns}`} />}
           </TVFocusGuideView>
         </ScreenContext.Provider>
-        {(connected || route.name === 'settings') && !watching ? (
+        {(connected || route.name === 'settings') && !away ? (
           <TopBar current={current} tabRefs={tabRefs} onFocusTab={onFocusTab} onPressTab={onPressTab}
             onTabLayout={(tab, x) => { tabX.current[tab] = x; }}
             profile={state.plex.user} onProfile={state.plex.homeUsers.length > 1 ? () => app.askedWho() : null} />
@@ -239,7 +271,9 @@ export function Root(props: { app: App }) {
           <TabMenu app={app} state={state} kind={menuFor} left={tabX.current[menuFor] ?? dp(200)} top={BACKDROP_RISE}
             onClose={() => { const tab = menuFor; setMenuFor(null); focusTab(tab); }} />
         ) : null}
-        {watching ? <LivePlayer app={app} state={state} channel={state.live.channels[state.live.watching!]} /> : null}
+        {playing ? <VodPlayer app={app} state={state} playing={playing} /> : null}
+        {state.playError && !playing ? <PlayError message={state.playError} onDismiss={() => app.dismissPlayError()} /> : null}
+        {watching && !playing ? <LivePlayer app={app} state={state} channel={state.live.channels[state.live.watching!]} /> : null}
         {itemMenu ? (
           <ItemMenu app={app} item={itemMenu} onClose={() => setItemMenu(null)} open={(item) => open(routeFor(item))}
             inContinueWatching={state.home.continueWatching.some((i) => listKey(i) === listKey(itemMenu))} />

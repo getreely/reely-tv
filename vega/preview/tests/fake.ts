@@ -45,8 +45,10 @@ export async function fakePlex(page: Page, options: { tour?: boolean; many?: boo
     if (path === "/identity") return json(route, {});
     // Pictures: a dusk sky over hills, coloured by what's asked for, so the screenshots
     // show artwork where a real library would have it.
-    if (path === "/photo/:/transcode") {
-      const of = url.searchParams.get("url") ?? "";
+    // The scrub bar's preview pictures, one for each moment asked for.
+    const previewAt = path.match(/^\/library\/parts\/\d+\/indexes\/sd\/(\d+)$/);
+    if (path === "/photo/:/transcode" || previewAt) {
+      const of = previewAt ? `preview${Math.floor(Number(previewAt[1]) / 60_000)}` : url.searchParams.get("url") ?? "";
       const hue = [...of].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
       const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90" preserveAspectRatio="none">
         <defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="hsl(${hue},45%,18%)"/><stop offset="1" stop-color="hsl(${(hue + 30) % 360},60%,55%)"/></linearGradient></defs>
@@ -112,7 +114,19 @@ export async function fakePlex(page: Page, options: { tour?: boolean; many?: boo
       summary: "A satellite engineer is stranded on the station she built, and has to talk the ground crew through bringing her home before the orbit decays.",
       Genre: [{ tag: "Drama" }, { tag: "Thriller" }], Director: [{ tag: "Mara Quinn" }], Writer: [{ tag: "Tom Ellis" }],
       Role: [{ id: "77", tag: "Ana Orbit", role: "Dr. Vale" }, { id: "78", tag: "Joe Field", role: "Flight" }],
-      Media: [{ videoResolution: "4k", container: "mkv", videoCodec: "hevc", audioCodec: "eac3", Part: [{ id: 1 }] }, { videoResolution: "1080", container: "mp4", videoCodec: "h264", audioCodec: "aac", Part: [{ id: 2 }] }] }]);
+      Chapter: [{ tag: "Launch", startTimeOffset: 0, endTimeOffset: 900_000 }, { tag: "The station", startTimeOffset: 900_000, endTimeOffset: 3_000_000 }, { tag: "Coming home", startTimeOffset: 3_000_000, endTimeOffset: 6_000_000 }],
+      Media: [
+        { videoResolution: "4k", container: "mkv", videoCodec: "hevc", audioCodec: "eac3", Part: [{ id: 1, key: "/library/parts/1/file.mkv", Stream: [
+          { id: 11, streamType: 2, displayTitle: "English (EAC3 5.1)", language: "English", selected: true, codec: "eac3", channels: 6 },
+          { id: 12, streamType: 2, displayTitle: "Commentary (AAC Stereo)", language: "English", codec: "aac", channels: 2 },
+          { id: 21, streamType: 3, displayTitle: "English (SRT)", language: "English", codec: "srt", key: "/library/streams/21" },
+          { id: 22, streamType: 3, displayTitle: "Spanish (SRT)", language: "Spanish", codec: "srt", key: "/library/streams/22" },
+        ] }] },
+        { videoResolution: "1080", container: "mp4", videoCodec: "h264", audioCodec: "aac", Part: [{ id: 2, key: "/library/parts/2/file.mp4" }] },
+      ] }]);
+    if (path === "/library/streams/21") {
+      return route.fulfill({ status: 200, contentType: "text/plain", headers: { "Access-Control-Allow-Origin": "*" }, body: "1\n00:00:00,000 --> 00:30:00,000\nStation, this is ground. Do you read me?\n" });
+    }
     if (path === "/library/metadata/m1/related") return json(route, { MediaContainer: { Hub: [{ Metadata: movies.slice(1, 8) }] } });
     if (path === "/library/metadata/show1/children") return meta(route, [{ ratingKey: "s1", type: "season", title: "Season 1", index: 1 }]);
     if (path === "/library/metadata/s1/children") return meta(route, [episode("e1", 1, true), episode("e2", 2), episode("e3", 3)]);
@@ -124,7 +138,9 @@ export async function fakePlex(page: Page, options: { tour?: boolean; many?: boo
       ] } });
     }
     if (path === "/library/metadata/e2") {
-      return meta(route, [{ ...episode("e2", 2), Media: [{ container: "mkv", videoCodec: "h264", audioCodec: "dca", Part: [{ id: 5, key: "/library/parts/5/file.mkv", Stream: [] }] }] }]);
+      return meta(route, [{ ...episode("e2", 2), duration: 600_000,
+        Marker: [{ type: "intro", startTimeOffset: 0, endTimeOffset: 90_000 }, { type: "credits", startTimeOffset: 120_000, endTimeOffset: 600_000 }],
+        Media: [{ container: "mkv", videoCodec: "h264", audioCodec: "dca", Part: [{ id: 5, key: "/library/parts/5/file.mkv", Stream: [] }] }] }]);
     }
     if (path === "/library/metadata/e3") {
       return meta(route, [{ ...episode("e3", 3), Media: [{ container: "mp4", videoCodec: "h264", audioCodec: "aac", Part: [{ id: 6, key: "/library/parts/6/file.mp4", Stream: [] }] }] }]);
