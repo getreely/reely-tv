@@ -29,6 +29,12 @@ function polyfill() {
   MiscPolyfill.install();
 }
 
+/** How far ahead hls.js keeps, in seconds: Settings' Buffer, Normal or Larger. */
+let bufferSeconds = 50;
+export function setBufferSeconds(seconds: number) {
+  bufferSeconds = seconds;
+}
+
 const isHls = (url: string) => /\.m3u8(\?|#|$)/i.test(url) || /\/video\/:\/transcode\/universal\/start\.m3u8/.test(url);
 
 export type EngineEvent = 'playing' | 'pause' | 'waiting' | 'timeupdate' | 'ended' | 'error' | 'loadedmetadata';
@@ -117,8 +123,8 @@ export class Engine {
         enableWorker: false,
         lowLatencyMode: false,
         backBufferLength: 30,
-        maxBufferLength: 30,
-        maxMaxBufferLength: 60,
+        maxBufferLength: bufferSeconds,
+        maxMaxBufferLength: bufferSeconds * 2,
         startPosition: startMs > 0 ? startMs / 1000 : -1,
       });
       hls.on(Hls.Events.ERROR, (_e, data) => {

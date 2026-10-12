@@ -221,6 +221,12 @@ function Playback({ kit }: { kit: Kit }) {
         <Choice kit={kit} title="Conversion quality" note="The highest quality Plex uses when it converts a video."
           options={BITRATE_CHOICES.map((kbps) => ({ value: kbps, label: bitrateLabel(kbps), note: bitrateNote(kbps) }))}
           selected={prefs.maxBitrateKbps} onSelect={(kbps) => app.setMaxBitrate(kbps)} />
+        <Choice kit={kit} title="Buffer" note="Larger helps on a slow or unsteady connection."
+          options={[
+            { value: false, label: 'Normal', note: 'Keeps about 50 seconds ahead. Starts quickly.' },
+            { value: true, label: 'Larger', note: 'Keeps up to two minutes ahead. Takes a moment longer to start.' },
+          ]}
+          selected={prefs.largerBuffer} onSelect={(on) => app.setLargerBuffer(on)} />
       </Group>
       <Group title="Subtitles">
         <Choice kit={kit} title="At the start" note="Whether movies and episodes start with subtitles on."

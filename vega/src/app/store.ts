@@ -273,6 +273,8 @@ export interface Prefs {
   skipIntros: boolean;
   /** Straight on to the next episode when the credits start, rather than Up Next. */
   skipCredits: boolean;
+  /** Keeps up to two minutes ahead rather than about fifty seconds: for a slow or unsteady connection. */
+  largerBuffer: boolean;
   /** Up Next's count before the next episode plays; 0 waits to be asked. */
   upNextSeconds: number;
   /** Home's rows switched off, by id. */
@@ -360,7 +362,7 @@ export const ACCENTS: Array<{ id: string; label: string; color: string; on: stri
 export const accentOf = (id: string | undefined) => ACCENTS.find((a) => a.id === id) ?? ACCENTS[0];
 
 export const UP_NEXT_CHOICES = [0, 5, 10, 12, 15, 20, 30];
-const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, upNextSeconds: 12, hiddenRows: [], iptvLibrary: false, pinnedLibraries: [], iptvWins: false, screensaverMinutes: 3, tourSeen: false, subtitleScale: 0.9, subtitleBackground: false, subtitlesAtStart: "plex", accent: "blue", iptvInMenus: true, themeLevel: -1, guidePreview: true, streamFormat: "m3u8", multiviewLayout: "grid" };
+const DEFAULT_PREFS: Prefs = { playbackMode: "auto", maxBitrateKbps: 0, skipIntros: false, skipCredits: false, largerBuffer: false, upNextSeconds: 12, hiddenRows: [], iptvLibrary: false, pinnedLibraries: [], iptvWins: false, screensaverMinutes: 3, tourSeen: false, subtitleScale: 0.9, subtitleBackground: false, subtitlesAtStart: "plex", accent: "blue", iptvInMenus: true, themeLevel: -1, guidePreview: true, streamFormat: "m3u8", multiviewLayout: "grid" };
 
 /** As the Fire TV offers them. */
 export const BITRATE_CHOICES = [0, 20_000, 12_000, 8_000, 4_000, 2_000];
@@ -647,6 +649,7 @@ export class App {
         maxBitrateKbps: BITRATE_CHOICES.includes(prefs.maxBitrateKbps ?? 0) ? prefs.maxBitrateKbps ?? 0 : 0,
         skipIntros: prefs.skipIntros === true,
         skipCredits: prefs.skipCredits === true,
+        largerBuffer: prefs.largerBuffer === true,
         upNextSeconds: typeof prefs.upNextSeconds === "number" ? Math.max(0, Math.min(30, prefs.upNextSeconds)) : DEFAULT_PREFS.upNextSeconds,
         hiddenRows: Array.isArray(prefs.hiddenRows) ? prefs.hiddenRows.filter((r) => HOME_ROWS.some(([id]) => id === r)) : [],
         iptvLibrary: prefs.iptvLibrary === true,
@@ -2488,6 +2491,10 @@ export class App {
 
   setSkipCredits(skipCredits: boolean) {
     this.setPrefs({ skipCredits });
+  }
+
+  setLargerBuffer(largerBuffer: boolean) {
+    this.setPrefs({ largerBuffer });
   }
 
   toggleHomeRow(id: HomeRowId) {

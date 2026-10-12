@@ -17,6 +17,7 @@ import { Screens, routeFor } from './screens';
 import { BACKDROP_RISE } from './surfaces';
 import { LivePlayer } from './player/live';
 import { VodPlayer } from './player/vod';
+import { setBufferSeconds } from '../player/engine';
 import { ProfilePicker, ReminderCard, Screensaver, Tour, slidesFrom } from './overlays';
 import { OverlayContext, OverlayHost, Overlays } from './overlay';
 
@@ -145,6 +146,9 @@ export function Root(props: { app: App }) {
     pressedAt.current = Date.now();
     if (event.eventKeyAction === 0 && ['left', 'right', 'up', 'down'].includes(event.eventType)) arrowAt.current = Date.now();
   });
+
+  // Settings' Buffer, for every stream opened from now on.
+  useEffect(() => setBufferSeconds(state.prefs.largerBuffer ? 120 : 50), [state.prefs.largerBuffer]);
 
   // "Who's watching?": from the avatar or Settings, and once straight after signing in to a Plex Home.
   const [choosingProfile, setChoosingProfile] = useState(false);

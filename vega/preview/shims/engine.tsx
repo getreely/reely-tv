@@ -64,3 +64,5 @@ export function VideoSurface(props: { engine?: Engine; style?: object }) {
   const background = url ? `linear-gradient(135deg, hsl(${hue}, 45%, 22%), hsl(${(hue + 40) % 360}, 50%, 12%))` : '#000';
   return <View style={[{ backgroundColor: '#000', backgroundImage: background } as object, props.style]} />;
 }
+
+export function setBufferSeconds(_seconds: number) {}
