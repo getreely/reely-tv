@@ -418,6 +418,8 @@ export class Engine {
   play() { this.player.play(); }
   pause() { this.player.pause(); }
   get paused() { return this.player.paused; }
+  /** Whether a new stream is being asked for, a jump in one that can't be sought in: its pause isn't the viewer's. */
+  get isSwitching() { return this.switching; }
   /** Whether the picture's moving now: for a screen that starts listening after 'playing' was said. */
   get isPlaying() { return this.flowing; }
   get positionMs() {

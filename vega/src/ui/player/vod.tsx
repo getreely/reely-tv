@@ -177,7 +177,9 @@ export function VodPlayer(props: { app: App; state: AppState; playing: Playing }
       }),
       engine.on('pause', () => {
         setPlaying(false);
-        if (!leaving.current) void app.report(now(), total(), 'paused');
+        // A jump holds the picture while Plex is asked for the stream from there: not a
+        // pause to report, and reporting it named the new session before it was decided.
+        if (!leaving.current && !engine.isSwitching) void app.report(now(), total(), 'paused');
       }),
       engine.on('waiting', () => setBuffering(true)),
       engine.on('loadedmetadata', () => { if (engine.durationMs > 0) setDuration(engine.durationMs); }),

@@ -1552,7 +1552,7 @@ export class App {
       const startMs = resume && item.viewOffsetMs > 0 && !(item.durationMs > 0 && item.viewOffsetMs >= item.durationMs * 0.95) ? item.viewOffsetMs : 0;
       // Always convert: the sound made again (in surround where the TV takes it), the picture copied where it can be.
       const plan = mode === "transcode" ? fallbackPlan : verdict.plan;
-      const url = asIs ? plex.directUrl(playback.url, sessionId) : this.converted(base, token, item.ratingKey, sessionId, mediaIndex, burn ? "burn" : "none", plan, startMs);
+      const url = asIs ? plex.directUrl(playback.url, sessionId) : await this.converted(base, token, item.ratingKey, sessionId, mediaIndex, burn ? "burn" : "none", plan, startMs);
       this.set((s) => ({ ...s, playError: null, playing: { item, base, token, playback, url, direct: asIs, startMs, sessionId, queue, mediaIndex, textSubtitle: text, plan, fallbackPlan, reason } }));
       await this.queueRestOfShow();
     } catch (error) {
@@ -1617,8 +1617,11 @@ export class App {
     const burn = subtitlePlan(p.playback).burn ? "burn" : "none";
     if (p.direct) {
       const plan = p.fallbackPlan ?? plex.BASIC_PLAN;
-      const url = this.converted(p.base, p.token, p.item.ratingKey, p.sessionId, p.mediaIndex, burn, plan, positionMs);
-      this.set((s) => ({ ...s, playing: { ...p, url, direct: false, startMs: positionMs, plan, reason: "It didn't play as it is on this TV" } }));
+      void this.converted(p.base, p.token, p.item.ratingKey, p.sessionId, p.mediaIndex, burn, plan, positionMs).then((url) => {
+        // Unless something else started meanwhile.
+        if (this.current.playing?.sessionId !== p.sessionId) return;
+        this.set((s) => ({ ...s, playing: { ...p, url, direct: false, startMs: positionMs, plan, reason: "It didn't play as it is on this TV" } }));
+      });
       return true;
     }
     return false;
@@ -1631,20 +1634,20 @@ export class App {
   async convertedFrom(ms: number): Promise<string | null> {
     const p = this.current.playing;
     if (!p || p.direct || p.base === IPTV_SOURCE) return null;
-    // A new session for the new stream; the old one's conversion stopped once the player has
-    // let it go, so its end isn't taken for a dropped connection.
-    const sessionId = randomHex(12);
-    const old = p.sessionId;
-    this.set((s) => ({ ...s, playing: s.playing === p ? { ...p, sessionId, startMs: ms } : s.playing }));
-    setTimeout(() => void plex.stopTranscode(p.base, p.token, old), 2_000);
-    return this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, subtitlePlan(p.playback).burn ? "burn" : "none", p.plan ?? plex.BASIC_PLAN, ms);
+    // The same session from the new spot, as Plex's apps and Plezy ask: Plex restarts its
+    // conversion there, and the server goes on knowing this as one sitting.
+    const url = await this.converted(p.base, p.token, p.item.ratingKey, p.sessionId, p.mediaIndex, subtitlePlan(p.playback).burn ? "burn" : "none", p.plan ?? plex.BASIC_PLAN, ms);
+    if (this.current.playing !== p) return null;
+    this.set((s) => ({ ...s, playing: s.playing === p ? { ...p, startMs: ms } : s.playing }));
+    return url;
   }
 
   /**
    * The connection dropped part-way. The same address again is no use when Plex has
    * already ended the session behind it — every try fails the same way, while Plex's own
-   * app carries on — so the title is asked for again as a new session, the same way it
-   * was playing, from [positionMs]. The provider's files are simply loaded again.
+   * app carries on — so the title is asked for again, decided afresh under the same
+   * session, the same way it was playing, from [positionMs]. The provider's files are
+   * simply loaded again.
    */
   async reopen(positionMs: number) {
     const p = this.current.playing;
@@ -1656,13 +1659,12 @@ export class App {
     }
     const found = await plex.playback(p.base, p.token, p.item.ratingKey, p.mediaIndex).catch(() => null);
     // Something else started meanwhile.
-    if (this.current.playing?.sessionId !== p.sessionId) return;
-    if (!p.direct) void plex.stopTranscode(p.base, p.token, p.sessionId);
-    const sessionId = randomHex(12);
+    if (this.current.playing !== p) return;
     const url = p.direct
-      ? plex.directUrl(found?.url ?? p.playback.url, sessionId)
-      : this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, subtitlePlan(p.playback).burn ? "burn" : "none", p.plan ?? plex.BASIC_PLAN, positionMs);
-    this.set((s) => ({ ...s, playing: { ...p, url, startMs: positionMs, sessionId, attempt } }));
+      ? plex.directUrl(found?.url ?? p.playback.url, p.sessionId)
+      : await this.converted(p.base, p.token, p.item.ratingKey, p.sessionId, p.mediaIndex, subtitlePlan(p.playback).burn ? "burn" : "none", p.plan ?? plex.BASIC_PLAN, positionMs);
+    if (this.current.playing !== p) return;
+    this.set((s) => ({ ...s, playing: { ...p, url, startMs: positionMs, attempt } }));
   }
 
   /** Plex's conversion, at the quality chosen in Settings. */
@@ -1671,10 +1673,13 @@ export class App {
    * [offsetMs], which the TV's own player plays (HLS would go through hls.js, on the thread
    * the controls wait on).
    */
-  private converted(base: string, token: string, ratingKey: string, sessionId: string, mediaIndex: number, subtitles: "burn" | "none", plan: plex.ConvertPlan, offsetMs: number) {
+  private async converted(base: string, token: string, ratingKey: string, sessionId: string, mediaIndex: number, subtitles: "burn" | "none", plan: plex.ConvertPlan, offsetMs: number): Promise<string> {
     const kbps = this.current.prefs.maxBitrateKbps;
     const resolution = kbps >= 20_000 ? "3840x2160" : kbps === 0 || kbps >= 8_000 ? "1920x1080" : "1280x720";
-    return plex.streamUrl(base, token, ratingKey, sessionId, kbps, resolution, mediaIndex, subtitles, Math.round(this.current.prefs.subtitleScale * 100), offsetMs, plan);
+    const url = plex.streamUrl(base, token, ratingKey, sessionId, kbps, resolution, mediaIndex, subtitles, Math.round(this.current.prefs.subtitleScale * 100), offsetMs, plan);
+    // The session decided before the TV asks for its stream (plex.decide).
+    await plex.decide(url);
+    return url;
   }
 
   /**
@@ -1700,9 +1705,10 @@ export class App {
     const asIs = mode === "transcode" ? false : !burn && !otherSound && (mode === "direct" || verdict.direct);
     const reason = mode === "direct" || mode === "transcode" ? null : burn ? "Plex draws in these subtitles"
       : otherSound && verdict.direct ? "Plex plays the sound track chosen" : verdict.reason;
-    // A conversion running for the old choice stops; the new one starts afresh.
-    if (!p.direct) void plex.stopTranscode(p.base, p.token, p.sessionId);
-    const sessionId = randomHex(12);
+    // The same session throughout, as Plezy keeps it across sound and subtitle changes: a
+    // conversion asked for again under it is Plex's to restart. Only one no longer wanted,
+    // as the file plays as it is again, is stopped.
+    const sessionId = p.sessionId;
     // Only text subtitles changed, and the file plays as it is either way: the picture
     // carries on where it is, and the words change over it.
     if (asIs && p.direct && playback.url === p.playback.url) {
@@ -1710,8 +1716,10 @@ export class App {
       return;
     }
     const plan = mode === "transcode" ? p.fallbackPlan ?? plex.BASIC_PLAN : verdict.plan;
-    const url = asIs ? plex.directUrl(playback.url, sessionId) : this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, burn ? "burn" : "none", plan, positionMs);
-    this.set((s) => ({ ...s, playing: { ...p, playback, url, direct: asIs, startMs: positionMs, sessionId, textSubtitle: text, plan, reason } }));
+    const url = asIs ? plex.directUrl(playback.url, sessionId) : await this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, burn ? "burn" : "none", plan, positionMs);
+    if (this.current.playing !== p) return;
+    if (asIs && !p.direct) void plex.stopTranscode(p.base, p.token, sessionId);
+    this.set((s) => ({ ...s, playing: { ...p, playback, url, direct: asIs, startMs: positionMs, textSubtitle: text, plan, reason } }));
   }
 
   /** Subtitles online for what's playing, in the TV's language, found by the Plex server. */

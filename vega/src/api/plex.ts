@@ -904,6 +904,24 @@ function unique(list: Array<string | null | undefined>): string[] {
 }
 
 /**
+ * Plex asked to decide [streamUrl]'s session before the TV asks for the stream, as
+ * Plex's own apps do (universal/decision, then universal/start). A stream named for a
+ * session the server already knows without a decision for it is refused ("Denying
+ * access due to session lacking decision for transcode", 400). Answered or not, the
+ * stream is asked for next; the answer isn't needed, only that the session has its
+ * decision.
+ */
+export async function decide(streamUrl: string): Promise<void> {
+  try {
+    // Only what the stream's own address says: it names this TV, its token and the Generic
+    // profile Plex decides for, which a Vega platform header would contradict.
+    await ask(streamUrl.replace("/transcode/universal/start.mkv?", "/transcode/universal/decision?"), { headers: { accept: "application/json" }, timeoutMs: 8_000 });
+  } catch {
+    /* the start request decides for itself, as it did before */
+  }
+}
+
+/**
  * The file itself, asked for as this TV and this sitting. Without them the server can't
  * tell one app from another signed in with the same token: it took the Fire TV app on
  * another TV, reading its own film, for this one starting something new, and ended what
