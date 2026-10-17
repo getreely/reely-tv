@@ -53,7 +53,6 @@ export class Engine {
   }
   async reload() {}
   play() { this.paused = false; this.emit('playing'); }
-  get isSwitching() { return false; }
   get isPlaying() { return !this.paused; }
   pause() { this.paused = true; this.emit('pause'); }
   seek(ms: number) { this.positionMs = ms; }

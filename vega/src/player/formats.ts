@@ -25,9 +25,8 @@ export interface Verdict {
  * Files the stick plays as they are: MP4 and QuickTime. The stick's player reads a file
  * from the network as a stream, and in that mode its Matroska reader can't go elsewhere
  * in one ("Seek failed. Internal error 0" on the stick, at once, for every skip and every
- * scrub), so MKV, WebM and MPEG-TS come through Plex as a stream instead, with whatever
- * this TV plays copied as it is, and going elsewhere asks Plex for it from there: as
- * Plex's own apps on televisions whose players can't seek in them.
+ * scrub), so MKV, WebM and MPEG-TS come through Plex as HLS instead, with whatever this
+ * TV plays copied as it is into fMP4 chunks, which the player goes anywhere in.
  */
 const CONTAINERS = ['mp4', 'm4v', 'mov'];
 
