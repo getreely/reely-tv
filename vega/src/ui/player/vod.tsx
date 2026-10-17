@@ -132,9 +132,7 @@ export function VodPlayer(props: { app: App; state: AppState; playing: Playing }
     setError(null);
     stuckAt.current = null;
     setBuffering(true);
-    // Plex's continuous stream starts where it was asked from, and is asked again to go elsewhere.
-    const continuous = !playing.direct && playing.base !== IPTV_SOURCE;
-    void engine.open(playing.url, playing.startMs, continuous ? { restart: (ms) => app.convertedFrom(ms), durationMs: playing.item.durationMs } : {});
+    void engine.open(playing.url, playing.startMs);
   }, [playing.url, playing.attempt]);
 
   // The TV to the film's own frame rate, when Settings says so and the stick allows it;
@@ -172,7 +170,7 @@ export function VodPlayer(props: { app: App; state: AppState; playing: Playing }
         setError(null);
         drops.current = 0;
         // Plex told where it's playing from at once, not ten seconds on: its conversion is
-        // held to a minute ahead of what it was last told (see plex.streamUrl).
+        // held to a minute ahead of what it was last told.
         if (!leaving.current) void app.report(now(), total(), 'playing');
       }),
       engine.on('pause', () => {

@@ -128,7 +128,7 @@ export interface Playing {
   mediaIndex: number;
   /** Text subtitles the app draws itself, with the size and background from Settings. */
   textSubtitle: plex.PlexSubtitle | null;
-  /** How many times it's been asked for afresh after the connection dropped; see reopen. */
+  /** How many times it's been asked for afresh (a dropped connection, another sound track): each opens it again. */
   attempt?: number;
   /** What Plex's conversion keeps and makes again, as the TV answered for this title. */
   plan?: plex.ConvertPlan;
@@ -1552,7 +1552,7 @@ export class App {
       const startMs = resume && item.viewOffsetMs > 0 && !(item.durationMs > 0 && item.viewOffsetMs >= item.durationMs * 0.95) ? item.viewOffsetMs : 0;
       // Always convert: the sound made again (in surround where the TV takes it), the picture copied where it can be.
       const plan = mode === "transcode" ? fallbackPlan : verdict.plan;
-      const url = asIs ? plex.directUrl(playback.url, sessionId) : await this.converted(base, token, item.ratingKey, sessionId, mediaIndex, burn ? "burn" : "none", plan, startMs);
+      const url = asIs ? plex.directUrl(playback.url, sessionId) : await this.converted(base, token, item.ratingKey, sessionId, mediaIndex, burn ? "burn" : "none", plan);
       this.set((s) => ({ ...s, playError: null, playing: { item, base, token, playback, url, direct: asIs, startMs, sessionId, queue, mediaIndex, textSubtitle: text, plan, fallbackPlan, reason } }));
       await this.queueRestOfShow();
     } catch (error) {
@@ -1617,7 +1617,7 @@ export class App {
     const burn = subtitlePlan(p.playback).burn ? "burn" : "none";
     if (p.direct) {
       const plan = p.fallbackPlan ?? plex.BASIC_PLAN;
-      void this.converted(p.base, p.token, p.item.ratingKey, p.sessionId, p.mediaIndex, burn, plan, positionMs).then((url) => {
+      void this.converted(p.base, p.token, p.item.ratingKey, p.sessionId, p.mediaIndex, burn, plan).then((url) => {
         // Unless something else started meanwhile.
         if (this.current.playing?.sessionId !== p.sessionId) return;
         this.set((s) => ({ ...s, playing: { ...p, url, direct: false, startMs: positionMs, plan, reason: "It didn't play as it is on this TV" } }));
@@ -1625,21 +1625,6 @@ export class App {
       return true;
     }
     return false;
-  }
-
-  /**
-   * The continuous stream again from [ms]: it can't be sought in, so going elsewhere in it
-   * is asking Plex for it from there. Null when what's playing isn't that stream.
-   */
-  async convertedFrom(ms: number): Promise<string | null> {
-    const p = this.current.playing;
-    if (!p || p.direct || p.base === IPTV_SOURCE) return null;
-    // The same session from the new spot, as Plex's apps and Plezy ask: Plex restarts its
-    // conversion there, and the server goes on knowing this as one sitting.
-    const url = await this.converted(p.base, p.token, p.item.ratingKey, p.sessionId, p.mediaIndex, subtitlePlan(p.playback).burn ? "burn" : "none", p.plan ?? plex.BASIC_PLAN, ms);
-    if (this.current.playing !== p) return null;
-    this.set((s) => ({ ...s, playing: s.playing === p ? { ...p, startMs: ms } : s.playing }));
-    return url;
   }
 
   /**
@@ -1662,24 +1647,28 @@ export class App {
     if (this.current.playing !== p) return;
     const url = p.direct
       ? plex.directUrl(found?.url ?? p.playback.url, p.sessionId)
-      : await this.converted(p.base, p.token, p.item.ratingKey, p.sessionId, p.mediaIndex, subtitlePlan(p.playback).burn ? "burn" : "none", p.plan ?? plex.BASIC_PLAN, positionMs);
+      : await this.converted(p.base, p.token, p.item.ratingKey, p.sessionId, p.mediaIndex, subtitlePlan(p.playback).burn ? "burn" : "none", p.plan ?? plex.BASIC_PLAN);
     if (this.current.playing !== p) return;
     this.set((s) => ({ ...s, playing: { ...p, url, startMs: positionMs, attempt } }));
   }
 
-  /** Plex's conversion, at the quality chosen in Settings. */
   /**
-   * Plex's conversion, at the quality chosen in Settings: one continuous stream from
-   * [offsetMs], which the TV's own player plays (HLS would go through hls.js, on the thread
-   * the controls wait on).
+   * Plex's conversion, at the quality chosen in Settings, as HLS in fragmented MP4 chunks.
+   * As Plezy: the session decided first, and should the server's decision not keep to
+   * those chunks, asked again for MPEG-TS, never handed to the player as something it
+   * didn't agree to.
    */
-  private async converted(base: string, token: string, ratingKey: string, sessionId: string, mediaIndex: number, subtitles: "burn" | "none", plan: plex.ConvertPlan, offsetMs: number): Promise<string> {
+  private async converted(base: string, token: string, ratingKey: string, sessionId: string, mediaIndex: number, subtitles: "burn" | "none", plan: plex.ConvertPlan): Promise<string> {
     const kbps = this.current.prefs.maxBitrateKbps;
     const resolution = kbps >= 20_000 ? "3840x2160" : kbps === 0 || kbps >= 8_000 ? "1920x1080" : "1280x720";
-    const url = plex.streamUrl(base, token, ratingKey, sessionId, kbps, resolution, mediaIndex, subtitles, Math.round(this.current.prefs.subtitleScale * 100), offsetMs, plan);
-    // The session decided before the TV asks for its stream (plex.decide).
-    await plex.decide(url);
-    return url;
+    const at = (chunks: plex.HlsChunks) => plex.streamUrl(base, token, ratingKey, sessionId, kbps, resolution, mediaIndex, subtitles, Math.round(this.current.prefs.subtitleScale * 100), plan, chunks);
+    const url = at("mp4");
+    const chose = await plex.decide(url);
+    console.warn(`[reely] plex decided ${chose ?? "nothing"} chunks`);
+    if (chose === null || chose === "mp4") return url;
+    const again = at("mpegts");
+    console.warn(`[reely] plex decided ${(await plex.decide(again)) ?? "nothing"} chunks, asked again for mpegts`);
+    return again;
   }
 
   /**
@@ -1716,10 +1705,13 @@ export class App {
       return;
     }
     const plan = mode === "transcode" ? p.fallbackPlan ?? plex.BASIC_PLAN : verdict.plan;
-    const url = asIs ? plex.directUrl(playback.url, sessionId) : await this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, burn ? "burn" : "none", plan, positionMs);
+    const url = asIs ? plex.directUrl(playback.url, sessionId) : await this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, burn ? "burn" : "none", plan);
     if (this.current.playing !== p) return;
     if (asIs && !p.direct) void plex.stopTranscode(p.base, p.token, sessionId);
-    this.set((s) => ({ ...s, playing: { ...p, playback, url, direct: asIs, startMs: positionMs, textSubtitle: text, plan, reason } }));
+    // Asked for afresh even where the address is the same: the sound track chosen is Plex's
+    // to switch to, server side (selectStream), and only a new start picks it up.
+    const attempt = (p.attempt ?? 0) + 1;
+    this.set((s) => ({ ...s, playing: { ...p, playback, url, direct: asIs, startMs: positionMs, textSubtitle: text, plan, reason, attempt } }));
   }
 
   /** Subtitles online for what's playing, in the TV's language, found by the Plex server. */

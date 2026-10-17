@@ -855,47 +855,56 @@ export async function reportTimeline(
   }
 }
 
+/** The chunks Plex's HLS comes in: fragmented MP4, which Vega's player reads itself, else MPEG-TS. */
+export type HlsChunks = "mp4" | "mpegts";
+
 /**
- * The server converting the file as one continuous MKV, from [offsetMs] in, for the TV's
- * own player: it plays it in hardware, as it plays a file, where HLS goes through hls.js
- * on the JavaScript thread and froze the controls while each segment was unpacked. It
- * can't be sought in; going elsewhere asks for it again from there. The picture is passed
- * through when the TV plays it (H.264, HEVC), the sound made stereo AAC.
+ * The server converting the file to HLS, as Plex's own apps and Plezy ask for it, from the
+ * start; the player goes anywhere in it, and a jump is just other chunks of the same
+ * session. The chunks are fragmented MP4 ([chunks]), as Plezy asks: hls.js hands those to
+ * Vega's player as they are, where MPEG-TS ones it rewrites first, on the JavaScript thread
+ * the remote's presses wait on (Vega has no workers), and that froze the controls.
  */
 export function streamUrl(
   base: string, token: string, ratingKey: string, sessionId: string, maxBitrateKbps: number, resolution: string, mediaIndex = 0,
-  subtitles: "burn" | "none" = "burn", subtitleSize = 100, offsetMs = 0, plan: ConvertPlan = BASIC_PLAN,
+  subtitles: "burn" | "none" = "burn", subtitleSize = 100, plan: ConvertPlan = BASIC_PLAN, chunks: HlsChunks = "mp4",
 ): string {
   const bitrate = maxBitrateKbps > 0 ? `&maxVideoBitrate=${maxBitrateKbps}` : "";
   return (
-    `${base}/video/:/transcode/universal/start.mkv?path=${enc(`/library/metadata/${ratingKey}`)}&mediaIndex=${mediaIndex}&partIndex=0` +
-    `&protocol=http&offset=${Math.max(0, Math.floor(offsetMs / 1000))}&fastSeek=1&directPlay=0&directStream=${plan.video === "copy" ? 1 : 0}&directStreamAudio=${plan.audio === "copy" ? 1 : 0}` +
+    `${base}/video/:/transcode/universal/start.m3u8?hasMDE=1&path=${enc(`/library/metadata/${ratingKey}`)}&mediaIndex=${mediaIndex}&partIndex=0` +
+    `&protocol=hls&fastSeek=1&directPlay=0&directStream=${plan.video === "copy" ? 1 : 0}&directStreamAudio=${plan.audio === "copy" ? 1 : 0}` +
     `&subtitles=${subtitles}&subtitleSize=${subtitleSize}&audioBoost=100&videoQuality=100&videoResolution=${resolution}${bitrate}` +
-    // The same session the timeline reports name (X-Plex-Session-Identifier): it's how the
-    // server knows where in the stream the TV has got to. Not knowing, it holds the
-    // conversion a minute ahead of the start ("sloth mode") and sends nothing more, and
-    // the stick's reader gives up after 15 s without data: "streaming stopped, reason
-    // error (-5)". Asked in the address, as the TV's player sends no headers of ours.
+    `&mediaBufferSize=102400&autoAdjustQuality=0` +
+    // The same session the timeline reports name (X-Plex-Session-Identifier), and the same
+    // one for as long as the title plays, as Plezy keeps it.
     `&session=${sessionId}&X-Plex-Session-Identifier=${sessionId}&location=lan` +
-    `&X-Plex-Client-Profile-Name=Generic&X-Plex-Platform=Generic&X-Plex-Client-Profile-Extra=${enc(streamProfile(plan))}` +
-    `&X-Plex-Client-Identifier=${enc(identity.clientId)}&X-Plex-Product=${enc(PRODUCT)}&X-Plex-Token=${token}`
+    // Plex has no profile for Vega and turns the request away (400) without one: the Generic
+    // profile, with what to send spelled out.
+    `&X-Plex-Client-Profile-Name=Generic&X-Plex-Platform=Generic&X-Plex-Client-Profile-Extra=${enc(streamProfile(plan, chunks))}` +
+    `&X-Plex-Client-Identifier=${enc(identity.clientId)}&X-Plex-Product=${enc(PRODUCT)}&X-Plex-Version=${enc(identity.version)}` +
+    `&X-Plex-Device=${enc(identity.device)}&X-Plex-Device-Name=${enc(identity.deviceName)}&X-Plex-Token=${token}`
   );
 }
 
+/** Sound HLS carries, as Plezy offers it. */
+const HLS_AUDIO = ["aac", "ac3", "eac3", "mp3"];
+
 /**
- * What the continuous stream may be, as [plan] has it: the picture copied where the TV plays
- * it (H.264, HEVC, or the file's own when the TV said it plays that), else made H.264; the
- * sound copied, or made Dolby surround the TV plays, or stereo AAC, which every TV plays.
+ * What the stream may be, as [plan] has it: the picture copied where the TV plays it (H.264,
+ * HEVC), else made H.264; the sound copied, or made Dolby surround the TV plays, or stereo
+ * AAC, which every TV plays. HEVC only in fragmented MP4: Plezy keeps it out of MPEG-TS,
+ * where Plex's HEVC chunks don't play, and so did this TV.
  */
-export function streamProfile(plan: ConvertPlan): string {
-  const video = plan.video === "copy" ? unique(["h264", "hevc", plan.videoCodec]) : ["h264"];
-  const audio = plan.audio === "copy" ? unique([plan.audioCodec, "aac"]) : plan.audio === "surround" ? unique([...plan.surround, "aac"]) : ["aac"];
+export function streamProfile(plan: ConvertPlan, chunks: HlsChunks = "mp4"): string {
+  const video = plan.video === "copy" && chunks === "mp4" ? ["h264", "hevc"] : ["h264"];
+  const kept = plan.audio === "copy" && plan.audioCodec && HLS_AUDIO.includes(plan.audioCodec) ? plan.audioCodec : null;
+  const audio = plan.audio === "copy" ? unique([kept, "aac"]) : plan.audio === "surround" ? unique([...plan.surround, "aac"]) : ["aac"];
   const limits = audio.map((codec) => {
-    const most = codec === "aac" && plan.audio !== "copy" ? 2 : codec === "ac3" || codec === "eac3" ? 6 : 0;
+    const most = codec === "aac" && kept !== "aac" ? 2 : codec === "ac3" || codec === "eac3" ? 6 : 0;
     return most ? `+add-limitation(scope=videoAudioCodec&scopeName=${codec}&type=upperBound&name=audio.channels&value=${most})` : "";
   });
   return "add-settings(DirectPlayStreamSelection=true)" +
-    `+add-transcode-target(type=videoProfile&context=streaming&protocol=http&container=mkv&videoCodec=${video.join("%2C")}&audioCodec=${audio.join("%2C")})` +
+    `+add-transcode-target(type=videoProfile&context=streaming&protocol=hls&container=${chunks}&videoCodec=${video.join("%2C")}&audioCodec=${audio.join("%2C")})` +
     limits.join("");
 }
 
@@ -904,20 +913,23 @@ function unique(list: Array<string | null | undefined>): string[] {
 }
 
 /**
- * Plex asked to decide [streamUrl]'s session before the TV asks for the stream, as
- * Plex's own apps do (universal/decision, then universal/start). A stream named for a
- * session the server already knows without a decision for it is refused ("Denying
- * access due to session lacking decision for transcode", 400). Answered or not, the
- * stream is asked for next; the answer isn't needed, only that the session has its
- * decision.
+ * Plex asked to decide [streamUrl]'s session before the TV asks for the stream, as Plex's
+ * own apps and Plezy do (universal/decision, then universal/start). A stream named for a
+ * session the server knows without a decision for it is refused ("Denying access due to
+ * session lacking decision for transcode", 400). The answer says which chunks Plex chose
+ * (Plezy reads it the same way); null when there was no answer, and the start request
+ * decides for itself.
  */
-export async function decide(streamUrl: string): Promise<void> {
+export async function decide(streamUrl: string): Promise<string | null> {
   try {
     // Only what the stream's own address says: it names this TV, its token and the Generic
     // profile Plex decides for, which a Vega platform header would contradict.
-    await ask(streamUrl.replace("/transcode/universal/start.mkv?", "/transcode/universal/decision?"), { headers: { accept: "application/json" }, timeoutMs: 8_000 });
+    const response = await ask(streamUrl.replace("/transcode/universal/start.m3u8?", "/transcode/universal/decision?"), { headers: { accept: "application/json" }, timeoutMs: 8_000 });
+    const answer = JSON.parse(await response.text());
+    const container = answer?.MediaContainer?.Metadata?.[0]?.Media?.[0]?.container;
+    return typeof container === "string" ? container : null;
   } catch {
-    /* the start request decides for itself, as it did before */
+    return null;
   }
 }
 

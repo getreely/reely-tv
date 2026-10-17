@@ -15,7 +15,10 @@ test('A DTS episode: the TV asked, the picture kept and the sound made Dolby sur
   await press(page, 'Enter');
   await expect(page.getByText('Skip Intro')).toBeVisible({ timeout: 10_000 });
   const opened = decodeURIComponent(await page.evaluate(() => (window as unknown as { lastOpened?: string }).lastOpened ?? ''));
-  expect(opened).toContain('/video/:/transcode/universal/start.mkv');
+  // Plex's HLS, in fragmented MP4 chunks the TV's player reads itself, as Plezy asks.
+  expect(opened).toContain('/video/:/transcode/universal/start.m3u8');
+  expect(opened).toContain('protocol=hls');
+  expect(opened).toContain('container=mp4');
   expect(opened).toContain('directStream=1');
   expect(opened).toContain('directStreamAudio=0');
   // The picture the TV plays, copied; the 5.1 DTS made Dolby Digital Plus, else Dolby Digital, else AAC.

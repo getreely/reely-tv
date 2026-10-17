@@ -138,6 +138,8 @@ export class Engine {
   private flowing = false;
   private lastTime = -1;
   private watch: ReturnType<typeof setInterval> | null = null;
+  /** While hls.js feeds the player: how long the JavaScript thread the remote waits on is held up. */
+  private lagProbe: ReturnType<typeof setInterval> | null = null;
   private openedAt = 0;
   private ticks = 0;
   /** For a stream asked for from a point (see OpenOptions): where it starts, and how it's asked again. */
@@ -347,6 +349,7 @@ export class Engine {
       hls.loadSource(url);
       hls.attachMedia(this.player);
       this.hls = hls;
+      this.probeLag();
     } else {
       // A stream the player opens itself waits for its picture to have somewhere to go:
       // opened first, it got as far as "playing after buffering" and stayed there.
@@ -613,7 +616,36 @@ export class Engine {
     });
   }
 
+  /**
+   * Every ten seconds, to the log: the longest the JavaScript thread was held up, and how
+   * often by more than a remote press can wait unnoticed (150 ms). hls.js works on that
+   * thread, so this is how smooth the controls are while it feeds the player.
+   */
+  private probeLag() {
+    if (this.lagProbe) clearInterval(this.lagProbe);
+    const TICK = 100;
+    let last = Date.now();
+    let worst = 0;
+    let stalls = 0;
+    let since = last;
+    this.lagProbe = setInterval(() => {
+      const now = Date.now();
+      const late = now - last - TICK;
+      last = now;
+      if (late > worst) worst = late;
+      if (late > 150) stalls++;
+      if (now - since >= 10_000) {
+        say(`player ${this.id} js thread: longest hold-up ${Math.max(0, Math.round(worst))}ms, ${stalls} over 150ms in ${Math.round((now - since) / 1000)}s${this.player.paused ? ' (paused)' : ''}`);
+        worst = 0;
+        stalls = 0;
+        since = now;
+      }
+    }, TICK);
+  }
+
   private unloadSource() {
+    if (this.lagProbe) clearInterval(this.lagProbe);
+    this.lagProbe = null;
     if (this.hls) {
       try {
         this.hls.stopLoad();
