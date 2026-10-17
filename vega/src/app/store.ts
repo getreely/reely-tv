@@ -1536,6 +1536,10 @@ export class App {
       this.set((s) => ({ ...s, playError: "Couldn't reach the server this is on." }));
       return;
     }
+    // Up Next goes from one episode to the next without leaving: the one before's conversion
+    // ended here, as leaving ends it (stop).
+    const before = this.current.playing;
+    if (before && !before.direct && before.base !== IPTV_SOURCE) void plex.stopTranscode(before.base, before.token, before.sessionId);
     try {
       const found = await plex.playback(base, token, item.ratingKey, mediaIndex);
       if (!found) throw new Error("That file isn't on the server any more.");

@@ -114,6 +114,8 @@ export class Engine {
   private bound: string | null = null;
   /** Whether this player has been given a stream to open itself (not through hls.js). */
   private sourced = false;
+  /** Whether this player has had a stream at all, either way: the next one gets a fresh player. */
+  private used = false;
   /** Where that stream was opened from, for opening it again on another surface. */
   private openedFrom = 0;
   /** Opens one at a time, each counted, so one asked for meanwhile replaces the one waiting. */
@@ -181,7 +183,7 @@ export class Engine {
 
   /**
    * A fresh player on the same surface, the old one let go first. Vega's player opens one
-   * stream of its own: given a second, it carries the first's position into it ("resumed
+   * stream: given a second, it carries the first's position into it ("resumed
    * position") and a live channel never got past buffering, as a channel opened without its
    * surface never did. A fresh player, its surface given before the stream, starts each time.
    */
@@ -202,6 +204,7 @@ export class Engine {
     }
     this.bound = null;
     this.sourced = false;
+    this.used = false;
     void letGo(old);
     const fresh = new VideoPlayer();
     this.player = fresh;
@@ -259,9 +262,13 @@ export class Engine {
     const stale = () => this.gone || ticket !== this.asked;
     await this.ready;
     if (stale()) return;
-    if (this.sourced) await this.renew();
+    // Each stream on a fresh player, through hls.js as much as not: one that has played to
+    // its end and been given the next episode's never started, where a fresh one, as
+    // leaving and coming back gives, did.
+    if (this.used) await this.renew();
     if (stale()) return;
     this.unloadSource();
+    this.used = true;
     this.url = url;
     this.recovered = false;
     this.flowing = false;
