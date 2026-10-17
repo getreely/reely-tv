@@ -2902,7 +2902,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                                 subtitles = startsWithServerSubtitles(resolved.subtitleStreams, it.prefs.subtitlesAtStart),
                             )
                         } else {
-                            resolved.url
+                            PlexApi.directUrl(resolved.url, clientId)
                         },
                         isLive = false,
                         ratingKey = item.ratingKey,
@@ -3431,7 +3431,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                                 mediaIndex = current.mediaIndex,
                                 subtitles = startsWithServerSubtitles(current.subtitleStreams, it.prefs.subtitlesAtStart),
                             )
-                            else -> resolved?.url ?: current.url
+                            else -> resolved?.url?.let { PlexApi.directUrl(it, clientId) } ?: current.url
                         },
                         subtitles = if (current.transcoding) current.subtitles else resolved?.subtitles ?: current.subtitles,
                         startPositionMs = positionMs,

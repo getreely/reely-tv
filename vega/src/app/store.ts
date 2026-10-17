@@ -1552,7 +1552,7 @@ export class App {
       const startMs = resume && item.viewOffsetMs > 0 && !(item.durationMs > 0 && item.viewOffsetMs >= item.durationMs * 0.95) ? item.viewOffsetMs : 0;
       // Always convert: the sound made again (in surround where the TV takes it), the picture copied where it can be.
       const plan = mode === "transcode" ? fallbackPlan : verdict.plan;
-      const url = asIs ? playback.url : this.converted(base, token, item.ratingKey, sessionId, mediaIndex, burn ? "burn" : "none", plan, startMs);
+      const url = asIs ? plex.directUrl(playback.url, sessionId) : this.converted(base, token, item.ratingKey, sessionId, mediaIndex, burn ? "burn" : "none", plan, startMs);
       this.set((s) => ({ ...s, playError: null, playing: { item, base, token, playback, url, direct: asIs, startMs, sessionId, queue, mediaIndex, textSubtitle: text, plan, fallbackPlan, reason } }));
       await this.queueRestOfShow();
     } catch (error) {
@@ -1660,7 +1660,7 @@ export class App {
     if (!p.direct) void plex.stopTranscode(p.base, p.token, p.sessionId);
     const sessionId = randomHex(12);
     const url = p.direct
-      ? found?.url ?? p.url
+      ? plex.directUrl(found?.url ?? p.playback.url, sessionId)
       : this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, subtitlePlan(p.playback).burn ? "burn" : "none", p.plan ?? plex.BASIC_PLAN, positionMs);
     this.set((s) => ({ ...s, playing: { ...p, url, startMs: positionMs, sessionId, attempt } }));
   }
@@ -1705,12 +1705,12 @@ export class App {
     const sessionId = randomHex(12);
     // Only text subtitles changed, and the file plays as it is either way: the picture
     // carries on where it is, and the words change over it.
-    if (asIs && p.direct && playback.url === p.url) {
+    if (asIs && p.direct && playback.url === p.playback.url) {
       this.set((s) => ({ ...s, playing: { ...p, playback, textSubtitle: text } }));
       return;
     }
     const plan = mode === "transcode" ? p.fallbackPlan ?? plex.BASIC_PLAN : verdict.plan;
-    const url = asIs ? playback.url : this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, burn ? "burn" : "none", plan, positionMs);
+    const url = asIs ? plex.directUrl(playback.url, sessionId) : this.converted(p.base, p.token, p.item.ratingKey, sessionId, p.mediaIndex, burn ? "burn" : "none", plan, positionMs);
     this.set((s) => ({ ...s, playing: { ...p, playback, url, direct: asIs, startMs: positionMs, sessionId, textSubtitle: text, plan, reason } }));
   }
 

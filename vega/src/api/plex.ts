@@ -904,6 +904,19 @@ function unique(list: Array<string | null | undefined>): string[] {
 }
 
 /**
+ * The file itself, asked for as this TV and this sitting. Without them the server can't
+ * tell one app from another signed in with the same token: it took the Fire TV app on
+ * another TV, reading its own film, for this one starting something new, and ended what
+ * this one was watching ("Client stopped playback"), over and over. Plex's own apps send
+ * these as headers; the TV's player sends none of ours, so they're in the address.
+ */
+export function directUrl(fileUrl: string, sessionId: string): string {
+  return `${fileUrl}${fileUrl.includes("?") ? "&" : "?"}X-Plex-Client-Identifier=${enc(identity.clientId)}` +
+    `&X-Plex-Session-Identifier=${sessionId}&X-Plex-Product=${enc(PRODUCT)}&X-Plex-Platform=${enc(identity.platform)}` +
+    `&X-Plex-Device-Name=${enc(identity.deviceName)}`;
+}
+
+/**
  * The conversion for [sessionId] told it's still wanted, as Plex's own apps tell it while
  * they play one: a server that hears nothing from a conversion's client ends it, and the
  * stream the TV is reading stops part-way.

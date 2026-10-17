@@ -1232,6 +1232,22 @@ object PlexApi {
             "&container=mpegts&videoCodec=h264%2Chevc" +
             "&audioCodec=" + audioCodecs.ifEmpty { listOf("aac") }.joinToString("%2C") + ")"
 
+    /**
+     * The file itself, asked for as this app. Without a client identifier the server files
+     * the request under the token alone, and two apps signed in with the same token look
+     * like one: this one reading its file was taken for the Vega app on another television
+     * starting something new, and the server ended what that one was watching ("Client
+     * stopped playback"), over and over. Plex's own apps send it as a header; ExoPlayer is
+     * handed only the address, so it goes in the address.
+     */
+    fun directUrl(fileUrl: String, clientId: String): String {
+        val separator = if (fileUrl.contains('?')) '&' else '?'
+        return fileUrl + separator +
+            "X-Plex-Client-Identifier=" + URLEncoder.encode(clientId, "UTF-8") +
+            "&X-Plex-Product=" + URLEncoder.encode(PRODUCT, "UTF-8") +
+            "&X-Plex-Platform=Android"
+    }
+
     /** Releases the server's encoder. Without this a session lingers and keeps working. */
     suspend fun stopTranscode(base: String, token: String, sessionId: String) =
         withContext(Dispatchers.IO) {
