@@ -166,7 +166,15 @@ export function VodPlayer(props: { app: App; state: AppState; playing: Playing }
       else stop();
     };
     const off = [
-      engine.on('playing', () => { setPlaying(true); setBuffering(false); setError(null); drops.current = 0; }),
+      engine.on('playing', () => {
+        setPlaying(true);
+        setBuffering(false);
+        setError(null);
+        drops.current = 0;
+        // Plex told where it's playing from at once, not ten seconds on: its conversion is
+        // held to a minute ahead of what it was last told (see plex.streamUrl).
+        if (!leaving.current) void app.report(now(), total(), 'playing');
+      }),
       engine.on('pause', () => {
         setPlaying(false);
         if (!leaving.current) void app.report(now(), total(), 'paused');
@@ -198,7 +206,8 @@ export function VodPlayer(props: { app: App; state: AppState; playing: Playing }
         }
         // The TV said it could and then couldn't: Plex converts it.
         if (app.convert(at)) return;
-        setError(`This didn't play. Check the connection to your Plex server and try again. (${f.detail})`);
+        // What the player said is in the log (engine.fail); on the screen, what to do.
+        setError("This didn't play. Check the connection to your Plex server and try again.");
       }),
     ];
     return () => off.forEach((o) => o());
@@ -213,7 +222,12 @@ export function VodPlayer(props: { app: App; state: AppState; playing: Playing }
       // They go away after a quiet spell, while something plays and nothing's open.
       if (!engine.paused && Date.now() - lastPress.current > CONTROLS_TIMEOUT_MS) setControls(false);
     }, 500);
-    const report = setInterval(() => { if (!engine.paused && !leaving.current) void app.report(now(), total(), 'playing'); }, REPORT_EVERY_MS);
+    const report = setInterval(() => {
+      if (leaving.current) return;
+      if (!engine.paused) void app.report(now(), total(), 'playing');
+      // Paused, Plex's conversion is still told it's wanted, or it's ended under the pause.
+      else app.keepConversion();
+    }, REPORT_EVERY_MS);
     return () => {
       clearInterval(t);
       clearInterval(report);

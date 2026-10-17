@@ -1751,7 +1751,15 @@ export class App {
       this.iptv.watch?.progress(p.item, positionMs, durationMs || p.item.durationMs);
       return Promise.resolve();
     }
+    // A conversion kept alive while it's watched, paused included (plex.pingTranscode).
+    if (state !== "stopped") this.keepConversion();
     return plex.reportTimeline(p.base, p.token, p.item.ratingKey, positionMs, durationMs || p.item.durationMs, state, p.sessionId);
+  }
+
+  /** Plex's conversion of what's playing told it's still wanted (plex.pingTranscode). */
+  keepConversion() {
+    const p = this.current.playing;
+    if (p && !p.direct && p.base !== IPTV_SOURCE) void plex.pingTranscode(p.base, p.token, p.sessionId);
   }
 
   async stop(positionMs: number, durationMs: number) {

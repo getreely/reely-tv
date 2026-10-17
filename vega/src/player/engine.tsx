@@ -185,7 +185,13 @@ export class Engine {
         // No captions here.
       }
       p.addEventListener('error', () => {
-        if (p === this.player) this.fail({ kind: 'media', status: null, detail: p.error?.message ?? 'The player stopped.' });
+        if (p !== this.player) return;
+        const detail = p.error?.message ?? 'The player stopped.';
+        // The stick's network reader giving up part-way ("GstSoupHTTPSrc ... streaming
+        // stopped, reason error (-5)") is the connection, not the file: the screen picks
+        // the stream up again from there rather than calling the title unplayable.
+        const network = /souphttpsrc|httpsrc|streaming stopped|could not (read|connect)|timed? ?out|connection|http/i.test(detail);
+        this.fail({ kind: network ? 'network' : 'media', status: null, detail });
       });
     });
   }

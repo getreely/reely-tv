@@ -871,7 +871,12 @@ export function streamUrl(
     `${base}/video/:/transcode/universal/start.mkv?path=${enc(`/library/metadata/${ratingKey}`)}&mediaIndex=${mediaIndex}&partIndex=0` +
     `&protocol=http&offset=${Math.max(0, Math.floor(offsetMs / 1000))}&fastSeek=1&directPlay=0&directStream=${plan.video === "copy" ? 1 : 0}&directStreamAudio=${plan.audio === "copy" ? 1 : 0}` +
     `&subtitles=${subtitles}&subtitleSize=${subtitleSize}&audioBoost=100&videoQuality=100&videoResolution=${resolution}${bitrate}` +
-    `&session=${sessionId}&location=lan` +
+    // The same session the timeline reports name (X-Plex-Session-Identifier): it's how the
+    // server knows where in the stream the TV has got to. Not knowing, it holds the
+    // conversion a minute ahead of the start ("sloth mode") and sends nothing more, and
+    // the stick's reader gives up after 15 s without data: "streaming stopped, reason
+    // error (-5)". Asked in the address, as the TV's player sends no headers of ours.
+    `&session=${sessionId}&X-Plex-Session-Identifier=${sessionId}&location=lan` +
     `&X-Plex-Client-Profile-Name=Generic&X-Plex-Platform=Generic&X-Plex-Client-Profile-Extra=${enc(streamProfile(plan))}` +
     `&X-Plex-Client-Identifier=${enc(identity.clientId)}&X-Plex-Product=${enc(PRODUCT)}&X-Plex-Token=${token}`
   );
@@ -896,6 +901,19 @@ export function streamProfile(plan: ConvertPlan): string {
 
 function unique(list: Array<string | null | undefined>): string[] {
   return [...new Set(list.filter((x): x is string => !!x))];
+}
+
+/**
+ * The conversion for [sessionId] told it's still wanted, as Plex's own apps tell it while
+ * they play one: a server that hears nothing from a conversion's client ends it, and the
+ * stream the TV is reading stops part-way.
+ */
+export async function pingTranscode(base: string, token: string, sessionId: string): Promise<void> {
+  try {
+    await ask(`${base}/video/:/transcode/universal/ping?session=${sessionId}&X-Plex-Token=${token}`);
+  } catch {
+    /* the next one's in ten seconds */
+  }
 }
 
 export async function stopTranscode(base: string, token: string, sessionId: string): Promise<void> {
