@@ -1551,8 +1551,12 @@ export class App {
       const { text, burn } = subtitlePlan(playback);
       // The TV asked about this title as it is: its picture and its sound.
       const [verdict, fallbackPlan] = await Promise.all([direct.check(playback), direct.fallback(playback)]);
-      const asIs = mode === "direct" ? true : mode === "transcode" || burn ? false : verdict.direct;
-      const reason = mode === "direct" || mode === "transcode" ? null : burn ? "Plex draws in these subtitles" : verdict.reason;
+      // A trailer always through Plex, as the Fire TV plays it: an online one's file is
+      // indirect, and the server turns away a request for it as it is (401), which the
+      // player took for a dropped connection and reconnected to until it gave up.
+      const trailer = item.type === "clip";
+      const asIs = trailer ? false : mode === "direct" ? true : mode === "transcode" || burn ? false : verdict.direct;
+      const reason = trailer ? "Plex streams trailers" : mode === "direct" || mode === "transcode" ? null : burn ? "Plex draws in these subtitles" : verdict.reason;
       const startMs = resume && item.viewOffsetMs > 0 && !(item.durationMs > 0 && item.viewOffsetMs >= item.durationMs * 0.95) ? item.viewOffsetMs : 0;
       // Always convert: the sound made again (in surround where the TV takes it), the picture copied where it can be.
       const plan = mode === "transcode" ? fallbackPlan : verdict.plan;
@@ -1695,7 +1699,7 @@ export class App {
     // The TV asked again, about the sound now chosen.
     const verdict = await canDirect.check(playback);
     if (this.current.playing !== p) return;
-    const asIs = mode === "transcode" ? false : !burn && !otherSound && (mode === "direct" || verdict.direct);
+    const asIs = mode === "transcode" || p.item.type === "clip" ? false : !burn && !otherSound && (mode === "direct" || verdict.direct);
     const reason = mode === "direct" || mode === "transcode" ? null : burn ? "Plex draws in these subtitles"
       : otherSound && verdict.direct ? "Plex plays the sound track chosen" : verdict.reason;
     // The same session throughout, as Plezy keeps it across sound and subtitle changes: a

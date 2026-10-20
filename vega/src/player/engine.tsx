@@ -159,6 +159,13 @@ export class Engine {
             if (!this.flowing) say(`player ${this.id} playing`);
             this.flowing = true;
           }
+          // A stall part-way, to the log as it stands, and how it goes for a few seconds after:
+          // a glitch well into a stream otherwise leaves nothing there.
+          if (event === 'waiting' && this.flowing) {
+            say(`player ${this.id} stalls`);
+            this.report();
+            this.reportUntil = Date.now() + 10_000;
+          }
           if (event === 'waiting' || event === 'pause') this.flowing = false;
           this.emit(event);
         });
@@ -565,12 +572,23 @@ export class Engine {
       if (late > worst) worst = late;
       if (late > 150) stalls++;
       if (now - since >= 10_000) {
-        say(`player ${this.id} js thread: longest hold-up ${Math.max(0, Math.round(worst))}ms, ${stalls} over 150ms in ${Math.round((now - since) / 1000)}s${this.player.paused ? ' (paused)' : ''}`);
+        say(`player ${this.id} js thread: longest hold-up ${Math.max(0, Math.round(worst))}ms, ${stalls} over 150ms in ${Math.round((now - since) / 1000)}s, ` +
+          `${((this.bufferedMs - this.positionMs) / 1000).toFixed(1)}s ahead${this.droppedFrames()}${this.player.paused ? ' (paused)' : ''}`);
         worst = 0;
         stalls = 0;
         since = now;
       }
     }, TICK);
+  }
+
+  /** The frames the player has dropped so far, where it counts them, for the log. */
+  private droppedFrames(): string {
+    try {
+      const q = (this.player as unknown as { getVideoPlaybackQuality?: () => { droppedVideoFrames?: number; totalVideoFrames?: number } }).getVideoPlaybackQuality?.();
+      return q && typeof q.droppedVideoFrames === 'number' ? `, ${q.droppedVideoFrames}/${q.totalVideoFrames ?? '?'} frames dropped` : '';
+    } catch {
+      return '';
+    }
   }
 
   private unloadSource() {
