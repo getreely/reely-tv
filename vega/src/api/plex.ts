@@ -855,6 +855,50 @@ export async function reportTimeline(
   }
 }
 
+/**
+ * The server sending the file as one continuous MKV, from [offsetMs] in, which the TV's own
+ * player plays as it plays a file: how HEVC that comes through Plex is played. Fed through
+ * hls.js instead, the stick's HEVC decoder sooner or later puts its frames out in the order
+ * they're stored rather than shown ("decreasing timestamp" on the stick), and the picture
+ * stutters until a jump; H.264 there plays clean, and HEVC as a file always has. It can't
+ * be sought in: going elsewhere asks for it again from there, under the same session.
+ */
+export function continuousUrl(
+  base: string, token: string, ratingKey: string, sessionId: string, maxBitrateKbps: number, resolution: string, mediaIndex = 0,
+  subtitles: "burn" | "none" = "burn", subtitleSize = 100, offsetMs = 0, plan: ConvertPlan = BASIC_PLAN,
+): string {
+  const bitrate = maxBitrateKbps > 0 ? `&maxVideoBitrate=${maxBitrateKbps}` : "";
+  return (
+    `${base}/video/:/transcode/universal/start.mkv?path=${enc(`/library/metadata/${ratingKey}`)}&mediaIndex=${mediaIndex}&partIndex=0` +
+    `&protocol=http&offset=${Math.max(0, Math.floor(offsetMs / 1000))}&fastSeek=1&directPlay=0&directStream=${plan.video === "copy" ? 1 : 0}&directStreamAudio=${plan.audio === "copy" ? 1 : 0}` +
+    `&subtitles=${subtitles}&subtitleSize=${subtitleSize}&audioBoost=100&videoQuality=100&videoResolution=${resolution}${bitrate}` +
+    // The same session the timeline reports name: not knowing where the TV has got to, the
+    // server holds the conversion a minute ahead of the start ("sloth mode"), and the
+    // stick's reader gives up after 15 s without data. Asked in the address, as the TV's
+    // player sends no headers of ours.
+    `&session=${sessionId}&X-Plex-Session-Identifier=${sessionId}&location=lan` +
+    `&X-Plex-Client-Profile-Name=Generic&X-Plex-Platform=Generic&X-Plex-Client-Profile-Extra=${enc(continuousProfile(plan))}` +
+    `&X-Plex-Client-Identifier=${enc(identity.clientId)}&X-Plex-Product=${enc(PRODUCT)}&X-Plex-Version=${enc(identity.version)}` +
+    `&X-Plex-Device=${enc(identity.device)}&X-Plex-Device-Name=${enc(identity.deviceName)}&X-Plex-Token=${token}`
+  );
+}
+
+/** What the continuous stream may be: the picture copied as [plan] has it, the sound as the HLS stream's. */
+export function continuousProfile(plan: ConvertPlan): string {
+  const video = plan.video === "copy" ? unique(["h264", "hevc", plan.videoCodec]) : ["h264"];
+  const audio = plan.audio === "copy" ? unique([plan.audioCodec, "aac"]) : plan.audio === "surround" ? unique([...plan.surround, "aac"]) : ["aac"];
+  const limits = audio.map((codec) => {
+    const most = codec === "aac" && plan.audio !== "copy" ? 2 : codec === "ac3" || codec === "eac3" ? 6 : 0;
+    return most ? `+add-limitation(scope=videoAudioCodec&scopeName=${codec}&type=upperBound&name=audio.channels&value=${most})` : "";
+  });
+  return "add-settings(DirectPlayStreamSelection=true)" +
+    `+add-transcode-target(type=videoProfile&context=streaming&protocol=http&container=mkv&videoCodec=${video.join("%2C")}&audioCodec=${audio.join("%2C")})` +
+    limits.join("");
+}
+
+/** Whether [url] is the continuous stream, which is asked for again to go elsewhere in it. */
+export const isContinuous = (url: string) => url.includes("/video/:/transcode/universal/start.mkv?");
+
 /** The chunks Plex's HLS comes in: fragmented MP4, which Vega's player reads itself, else MPEG-TS. */
 export type HlsChunks = "mp4" | "mpegts";
 
@@ -924,7 +968,7 @@ export async function decide(streamUrl: string): Promise<string | null> {
   try {
     // Only what the stream's own address says: it names this TV, its token and the Generic
     // profile Plex decides for, which a Vega platform header would contradict.
-    const response = await ask(streamUrl.replace("/transcode/universal/start.m3u8?", "/transcode/universal/decision?"), { headers: { accept: "application/json" }, timeoutMs: 8_000 });
+    const response = await ask(streamUrl.replace(/\/transcode\/universal\/start\.(m3u8|mkv)\?/, "/transcode/universal/decision?"), { headers: { accept: "application/json" }, timeoutMs: 8_000 });
     const answer = JSON.parse(await response.text());
     const container = answer?.MediaContainer?.Metadata?.[0]?.Media?.[0]?.container;
     return typeof container === "string" ? container : null;

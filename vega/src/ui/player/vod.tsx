@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, AppState as RNAppState, Easing, View } from 'react-native';
 import { useTVEventHandler } from '@amazon-devices/react-native-kepler';
 import type { PlexItem, PlexOnlineSubtitle } from '../../api/plex';
-import { caption } from '../../api/plex';
+import { caption, isContinuous } from '../../api/plex';
 import { IPTV_SOURCE } from '../../api/vod';
 import type { App, AppState, Playing } from '../../app/store';
 import { REPORT_EVERY_MS } from '../../app/playback';
@@ -132,7 +132,9 @@ export function VodPlayer(props: { app: App; state: AppState; playing: Playing }
     setError(null);
     stuckAt.current = null;
     setBuffering(true);
-    void engine.open(playing.url, playing.startMs);
+    // HEVC through Plex comes as one continuous stream: it starts where it was asked from,
+    // and is asked again to go elsewhere (plex.continuousUrl).
+    void engine.open(playing.url, playing.startMs, isContinuous(playing.url) ? { restart: (ms) => app.convertedFrom(ms), durationMs: playing.item.durationMs } : {});
   }, [playing.url, playing.attempt]);
 
   // The TV to the film's own frame rate, when Settings says so and the stick allows it;
@@ -175,7 +177,9 @@ export function VodPlayer(props: { app: App; state: AppState; playing: Playing }
       }),
       engine.on('pause', () => {
         setPlaying(false);
-        if (!leaving.current) void app.report(now(), total(), 'paused');
+        // A jump holds the picture while Plex is asked for the stream from there: not a
+        // pause to report, and reporting it named the new session before it was decided.
+        if (!leaving.current && !engine.isSwitching) void app.report(now(), total(), 'paused');
       }),
       engine.on('waiting', () => setBuffering(true)),
       engine.on('loadedmetadata', () => { if (engine.durationMs > 0) setDuration(engine.durationMs); }),
