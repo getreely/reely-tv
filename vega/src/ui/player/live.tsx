@@ -8,6 +8,7 @@ import { isOnAt } from '../../api/xtream';
 import { REFUSED, hasSpareCell, focusRects, gridRects, movedTile, nextPlace, tileOrder, withoutTile, MAX_TILES } from '../../core/multiview';
 import { playLive, stopLive, useLiveEngine } from '../../player/live';
 import { useEngine, VideoSurface, type Engine } from '../../player/engine';
+import { freshToggle } from '../../player/remote';
 import { ActionButton, Spinner } from '../controls';
 import { Press, focusWhenReady } from '../focus';
 import { ArrowGlyph, CrossGlyph, HeartGlyph, PlayGlyph, PlusGlyph, TilesGlyph } from '../glyphs';
@@ -308,11 +309,13 @@ export function LivePlayer(props: { app: App; state: AppState; channel: XtreamCh
     if (showing && !busy && !barFocused.current) focusWhenReady(behind ? goLiveRef : playRef);
   }, [!!catchUp, behind]);
 
+  const nudges = useRef(0);
   const startScrub = (direction: 1 | -1, stepMs: number) => {
     if (!window) return;
-    nudging.current = true;
+    // With the controls away the bar isn't there yet, and gets the cursor once it is.
+    if (!controls) nudging.current = true;
     showControls();
-    setNudge({ direction, stepMs, serial: (nudge?.serial ?? 0) + 1 });
+    setNudge({ direction, stepMs, serial: ++nudges.current });
     focusWhenReady(barRef);
   };
   const openPanel = (p: PanelName) => { keepUp(); setPanel(p); };
@@ -365,6 +368,8 @@ export function LivePlayer(props: { app: App; state: AppState; channel: XtreamCh
       return;
     }
     if (t === 'playpause' || t === 'play' || t === 'pause') {
+      // One press, one change: a key held a moment repeats (remote.ts).
+      if (!freshToggle()) return;
       togglePlay();
       if (single) showControls();
       return;

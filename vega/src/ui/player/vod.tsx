@@ -11,6 +11,7 @@ import { cueAt, parseSubtitles, type Cue } from '../../core/subtitles';
 import { canDirect } from '../../player/canplay';
 import { useEngine, VideoSurface } from '../../player/engine';
 import { matchFrameRate, restoreFrameRate } from '../../player/display';
+import { freshToggle } from '../../player/remote';
 import { ActionButton, Spinner } from '../controls';
 import { Press, focusWhenReady } from '../focus';
 import { useBack } from '../menus';
@@ -109,6 +110,8 @@ export function VodPlayer(props: { app: App; state: AppState; playing: Playing }
   };
   const togglePlay = () => {
     keepUp();
+    // Held while Plex is asked for the stream from elsewhere: it starts by itself.
+    if (engine.isSwitching) return;
     if (engine.paused) engine.play(); else engine.pause();
   };
   const seekTo = (ms: number) => {
@@ -331,10 +334,16 @@ export function VodPlayer(props: { app: App; state: AppState; playing: Playing }
     else if (!controls) focusWhenReady(rootRef);
   }, [controls, panel, !!upNext, !!skipLabel]);
 
+  // Counted here, not from the last nudge: that one's cleared once used, and two presses
+  // before the screen was drawn again were numbered alike and taken for one.
+  const nudges = useRef(0);
   const startScrub = (direction: 1 | -1, stepMs: number) => {
-    nudging.current = true;
+    // With the controls away the bar isn't there yet, and gets the cursor once it is. Up
+    // already, it gets it now: left set, this sent the cursor to the bar the next time
+    // anything changed (a panel closing, Skip Intro appearing).
+    if (!controls) nudging.current = true;
     showControls();
-    setNudge({ direction, stepMs, serial: (nudge?.serial ?? 0) + 1 });
+    setNudge({ direction, stepMs, serial: ++nudges.current });
     focusWhenReady(barRef);
   };
   const openPanel = (p: PanelName) => {
@@ -362,6 +371,8 @@ export function VodPlayer(props: { app: App; state: AppState; playing: Playing }
       return;
     }
     if (t === 'playpause' || t === 'play' || t === 'pause') {
+      // One press, one change: a key held a moment repeats (remote.ts).
+      if (!freshToggle()) return;
       togglePlay();
       showControls();
       return;

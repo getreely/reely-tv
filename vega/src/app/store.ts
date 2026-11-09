@@ -1644,8 +1644,11 @@ export class App {
     const p = this.current.playing;
     if (!p || p.direct || p.base === IPTV_SOURCE || !plex.isContinuous(p.url)) return null;
     const url = await this.converted(p.base, p.token, p.item.ratingKey, p.sessionId, p.mediaIndex, subtitlePlan(p.playback).burn ? "burn" : "none", p.plan ?? plex.BASIC_PLAN, p.playback, ms);
-    if (this.current.playing !== p) return null;
-    this.set((s) => ({ ...s, playing: s.playing === p ? { ...p, startMs: ms } : s.playing }));
+    // The same sitting, not the same object: a jump made while another was still being asked
+    // for found the state changed under it (by that one) and was dropped, and the engine,
+    // told there was no stream, left the picture held where it was.
+    if (this.current.playing?.sessionId !== p.sessionId || this.current.playing.direct) return null;
+    this.set((s) => ({ ...s, playing: s.playing?.sessionId === p.sessionId ? { ...s.playing, startMs: ms } : s.playing }));
     return url;
   }
 

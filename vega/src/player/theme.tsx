@@ -2,6 +2,7 @@ import { useLayoutEffect } from 'react';
 import { AudioPlayer } from '@amazon-devices/react-native-w3cmedia';
 import { THEME_LEVELS } from '../app/store';
 import { letGoOf } from './release';
+import { ownRemoteKeys } from './remote';
 
 /*
  * A show's theme, quietly, while its page is up (DetailScreen's theme music on the Fire
@@ -13,6 +14,7 @@ export function ThemeMusic(props: { url: string; level: number }) {
   // A layout effect, so going is said as the page goes, before an episode's player asks.
   useLayoutEffect(() => {
     let gone = false;
+    ownRemoteKeys(AudioPlayer);
     const player = new AudioPlayer();
     const ready = player.initialize().then(() => {
       if (gone) return;

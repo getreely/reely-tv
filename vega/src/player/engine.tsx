@@ -8,6 +8,7 @@ import MiscPolyfill from '../hls/polyfills/MiscPolyfill';
 import TextDecoderPolyfill from '../hls/polyfills/TextDecoderPolyfill';
 import W3CMediaPolyfill from '../hls/polyfills/W3CMediaPolyfill';
 import { letGoOf, playersLetGo } from './release';
+import { ownRemoteKeys } from './remote';
 
 /*
  * Video on Vega, in Amazon's own player (the W3C Media API: VideoPlayer, drawn on a
@@ -43,6 +44,10 @@ export function setBufferSeconds(seconds: number) {
 const isHls = (url: string) => /\.m3u8(\?|#|$)/i.test(url) || /\/video\/:\/transcode\/universal\/start\.m3u8/.test(url);
 
 export type EngineEvent = 'playing' | 'pause' | 'waiting' | 'timeupdate' | 'ended' | 'error' | 'loadedmetadata' | 'captions';
+
+/** A jump counts as made once the clock is this near where it was sent, or after this long regardless. */
+const JUMP_NEAR_MS = 2_000;
+const JUMP_HOLD_MS = 3_000;
 
 /** How long a stream the player opens itself waits for its picture to have somewhere to go. */
 const SURFACE_WAIT_MS = 2_000;
@@ -110,6 +115,9 @@ function safeText(value: unknown) {
   }
 }
 
+// Before the first player is made ready: the remote's keys are the app's (remote.ts).
+ownRemoteKeys(VideoPlayer);
+
 export class Engine {
   /** Which player this is: a surface belongs to one, and a new one gets a new surface. */
   readonly id = ++made;
@@ -155,6 +163,13 @@ export class Engine {
   private switching = false;
   /** The stream's own closed captions, chosen in Subtitles: off until they are. */
   private captionChoice = -1;
+  /**
+   * Where a jump in a stream that can be sought in is going, until the player's clock says
+   * so itself: read meanwhile, the clock can still say where it was, and the bar went back
+   * there for a moment (and Skip Intro, just pressed, came back with it).
+   */
+  private jumpTo: number | null = null;
+  private jumpAt = 0;
 
   constructor(options: { muted?: boolean } = {}) {
     this.mutedNow = !!options.muted;
@@ -169,6 +184,11 @@ export class Engine {
     return playersLetGo().then(() => p.initialize()).then(() => {
       p.autoplay = false;
       p.muted = this.mutedNow;
+      try {
+        p.addEventListener('seeked', () => { if (p === this.player) this.jumpTo = null; });
+      } catch {
+        // The clock catching up says so instead (positionMs).
+      }
       for (const event of ['playing', 'pause', 'waiting', 'timeupdate', 'ended', 'loadedmetadata'] as EngineEvent[]) {
         p.addEventListener(event, () => {
           if (p !== this.player) return;
@@ -231,6 +251,7 @@ export class Engine {
     this.bound = null;
     this.sourced = false;
     this.used = false;
+    this.jumpTo = null;
     void letGo(old);
     const fresh = new VideoPlayer();
     this.player = fresh;
@@ -312,6 +333,7 @@ export class Engine {
     this.openedAt = Date.now();
     this.ticks = 0;
     this.captionChoice = -1;
+    this.jumpTo = null;
     this.emit('captions');
     this.watchFlow();
     say(`player ${this.id} opens ${described(url)}${isHls(url) ? ' (HLS)' : ''}${this.surface ? '' : ', no surface yet'}`);
@@ -410,8 +432,16 @@ export class Engine {
     const url = await restart(this.pendingAt).catch(() => null);
     if (mine !== this.restarts || this.gone) return;
     if (!url) {
+      // Plex wouldn't give it from there: the stream it has carries on from where it was,
+      // rather than staying held under a spinner with nothing coming.
       this.switching = false;
       this.pendingAt = null;
+      say(`player ${this.id} couldn't be asked again: playing on`);
+      try {
+        void this.player.play();
+      } catch {
+        // Let go meanwhile.
+      }
       return;
     }
     say(`player ${this.id} asks again from ${Math.round(this.pendingAt / 1000)}s`);
@@ -442,7 +472,13 @@ export class Engine {
   get isPlaying() { return this.flowing; }
   get positionMs() {
     if (this.pendingAt != null) return this.pendingAt;
-    return this.base + Math.max(0, Math.floor((this.player.currentTime || 0) * 1000));
+    const at = this.base + Math.max(0, Math.floor((this.player.currentTime || 0) * 1000));
+    if (this.jumpTo != null) {
+      // There (or as near as the file's key frames allow), or long enough that it isn't going to be.
+      if (Math.abs(at - this.jumpTo) < JUMP_NEAR_MS || Date.now() - this.jumpAt > JUMP_HOLD_MS) this.jumpTo = null;
+      else return this.jumpTo;
+    }
+    return at;
   }
   get durationMs() {
     if (this.restart && this.knownDurationMs > 0) return this.knownDurationMs;
@@ -464,8 +500,13 @@ export class Engine {
     // Each jump, and how the player stands for a few seconds after, to the log.
     say(`player ${this.id} seeks to ${Math.round(ms / 1000)}s from ${Math.round(this.positionMs / 1000)}s${this.restart ? ', asking Plex from there' : ''}`);
     this.reportUntil = Date.now() + 10_000;
-    if (this.restart) void this.restartAt(ms);
-    else this.player.currentTime = Math.max(0, ms / 1000);
+    if (this.restart) {
+      void this.restartAt(ms);
+      return;
+    }
+    this.jumpTo = Math.max(0, ms);
+    this.jumpAt = Date.now();
+    this.player.currentTime = this.jumpTo / 1000;
   }
   /** Before the player's ready this is kept, and set once it is: Vega's player isn't there to be told yet. */
   set muted(on: boolean) {
@@ -601,7 +642,9 @@ export class Engine {
       // (One being opened binds whatever surface there is by then itself.)
       if (this.sourced && this.url && !this.restart && this.inFlight === 0) {
         say(`player ${this.id} moves to another surface`);
-        void this.open(this.url, this.openedFrom);
+        // A film from where it has got to, not where it was first opened from; a channel
+        // (no length) as it was opened.
+        void this.open(this.url, this.durationMs > 0 ? this.positionMs : this.openedFrom);
         return;
       }
       this.bind(handle);
