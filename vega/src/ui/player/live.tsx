@@ -8,7 +8,7 @@ import { isOnAt } from '../../api/xtream';
 import { REFUSED, hasSpareCell, focusRects, gridRects, movedTile, nextPlace, tileOrder, withoutTile, MAX_TILES } from '../../core/multiview';
 import { playLive, stopLive, useLiveEngine } from '../../player/live';
 import { useEngine, VideoSurface, type Engine } from '../../player/engine';
-import { freshToggle } from '../../player/remote';
+import { freshToggle, sawJumpKey } from '../../player/remote';
 import { ActionButton, Spinner } from '../controls';
 import { Press, focusWhenReady } from '../focus';
 import { ArrowGlyph, CrossGlyph, HeartGlyph, PlayGlyph, PlusGlyph, TilesGlyph } from '../glyphs';
@@ -375,6 +375,7 @@ export function LivePlayer(props: { app: App; state: AppState; channel: XtreamCh
       return;
     }
     if (FORWARD.includes(t) || BACKWARD.includes(t)) {
+      sawJumpKey();
       // Back into the archive where there's one; forward from live is nowhere.
       startScrub(FORWARD.includes(t) ? 1 : -1, 30_000);
       return;

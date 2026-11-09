@@ -8,7 +8,7 @@ import MiscPolyfill from '../hls/polyfills/MiscPolyfill';
 import TextDecoderPolyfill from '../hls/polyfills/TextDecoderPolyfill';
 import W3CMediaPolyfill from '../hls/polyfills/W3CMediaPolyfill';
 import { letGoOf, playersLetGo } from './release';
-import { ownRemoteKeys } from './remote';
+import { sessionMayJump, sessionMayToggle } from './remote';
 
 /*
  * Video on Vega, in Amazon's own player (the W3C Media API: VideoPlayer, drawn on a
@@ -115,9 +115,6 @@ function safeText(value: unknown) {
   }
 }
 
-// Before the first player is made ready: the remote's keys are the app's (remote.ts).
-ownRemoteKeys(VideoPlayer);
-
 export class Engine {
   /** Which player this is: a surface belongs to one, and a new one gets a new surface. */
   readonly id = ++made;
@@ -179,8 +176,58 @@ export class Engine {
   private mutedNow = false;
   private captionsHandle: string | null = null;
 
+  /** Each player's own play and pause, which the engine uses; the ones on the player are the session's way in. */
+  private own = new WeakMap<VideoPlayer, { play: () => unknown; pause: () => void }>();
+
+  /**
+   * What the system's player session asks of [p] (Alexa, and the remote's media keys) comes
+   * through here rather than straight to the player: it calls the player's play, pause and
+   * fastSeek, which nothing else does once the engine has its own (remote.ts).
+   */
+  private guard(p: VideoPlayer) {
+    const play = p.play.bind(p);
+    const pause = p.pause.bind(p);
+    this.own.set(p, { play, pause });
+    const open = p as unknown as { play: () => Promise<void>; pause: () => void; fastSeek: (s: number) => void };
+    const asked = (what: 'play' | 'pause') => {
+      if (this.gone || p !== this.player || this.switching) return;
+      if (!sessionMayToggle()) {
+        say(`player ${this.id}: the system's ${what} left, a key did it`);
+        return;
+      }
+      say(`player ${this.id}: the system asks to ${what}`);
+      if (what === 'play') void play(); else pause();
+    };
+    open.play = () => { asked('play'); return Promise.resolve(); };
+    open.pause = () => asked('pause');
+    open.fastSeek = (seconds: number) => {
+      // A moment later: the key for the same press may be just behind it, and scrubs instead.
+      setTimeout(() => {
+        if (this.gone || p !== this.player || !sessionMayJump() || !Number.isFinite(seconds)) return;
+        say(`player ${this.id}: the system asks for a jump`);
+        // In the stream's own time, which a stream asked for from a point counts from there.
+        this.seek(Math.max(0, this.base + seconds * 1000));
+      }, 400);
+    };
+  }
+
+  private playNow(p: VideoPlayer = this.player) {
+    const own = this.own.get(p);
+    void (own ? own.play() : p.play());
+  }
+
+  private pauseNow(p: VideoPlayer = this.player) {
+    const own = this.own.get(p);
+    if (own) own.pause(); else p.pause();
+  }
+
   /** [p] made ready, and listened to for as long as it's the one in use. */
   private setUp(p: VideoPlayer): Promise<void> {
+    try {
+      this.guard(p);
+    } catch (e) {
+      console.warn('[reely] player session', e);
+    }
     return playersLetGo().then(() => p.initialize()).then(() => {
       p.autoplay = false;
       p.muted = this.mutedNow;
@@ -236,7 +283,7 @@ export class Engine {
   private async renew() {
     const old = this.player;
     try {
-      old.pause();
+      this.pauseNow(old);
     } catch {
       // Not started.
     }
@@ -398,7 +445,7 @@ export class Engine {
       this.player.src = url;
       if (startMs > 0 && !this.restart) this.player.currentTime = startMs / 1000;
     }
-    this.player.play();
+    this.playNow();
   }
 
   /** Resolves once a surface is attached, or after [ms] regardless. */
@@ -422,7 +469,7 @@ export class Engine {
     this.flowing = false;
     // Held where it is at once, rather than playing on while the new stream's asked for.
     try {
-      this.player.pause();
+      this.pauseNow();
     } catch {
       // Not started.
     }
@@ -438,7 +485,7 @@ export class Engine {
       this.pendingAt = null;
       say(`player ${this.id} couldn't be asked again: playing on`);
       try {
-        void this.player.play();
+        this.playNow();
       } catch {
         // Let go meanwhile.
       }
@@ -454,7 +501,7 @@ export class Engine {
     this.sourced = true;
     this.used = true;
     this.player.src = url;
-    this.player.play();
+    this.playNow();
   }
 
 
@@ -463,8 +510,8 @@ export class Engine {
     if (this.url) await this.open(this.url, startMs);
   }
 
-  play() { this.player.play(); }
-  pause() { this.player.pause(); }
+  play() { this.playNow(); }
+  pause() { this.pauseNow(); }
   get paused() { return this.player.paused; }
   /** Whether a new stream is being asked for, a jump in one that can't be sought in: its pause isn't the viewer's. */
   get isSwitching() { return this.switching; }
@@ -734,7 +781,7 @@ export class Engine {
     if (this.watch) clearInterval(this.watch);
     this.watch = null;
     try {
-      this.player.pause();
+      this.pauseNow();
     } catch {
       // Not started.
     }

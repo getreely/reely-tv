@@ -1648,6 +1648,15 @@ export class App {
     // for found the state changed under it (by that one) and was dropped, and the engine,
     // told there was no stream, left the picture held where it was.
     if (this.current.playing?.sessionId !== p.sessionId || this.current.playing.direct) return null;
+    // Plex told where the TV is going before the stream's asked for. It holds a conversion to
+    // about a minute past where it was last told the TV had got to, and that was still before
+    // the jump: past an intro, the new stream was already "far enough ahead" and sent nothing,
+    // so the picture stayed where it was. (Nearer jumps, inside that minute, played.)
+    await Promise.race([
+      plex.reportTimeline(p.base, p.token, p.item.ratingKey, ms, p.item.durationMs, "playing", p.sessionId),
+      new Promise<void>((done) => setTimeout(() => done(), 2_000)),
+    ]);
+    if (this.current.playing?.sessionId !== p.sessionId) return null;
     this.set((s) => ({ ...s, playing: s.playing?.sessionId === p.sessionId ? { ...s.playing, startMs: ms } : s.playing }));
     return url;
   }

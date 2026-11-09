@@ -11,7 +11,7 @@ import { cueAt, parseSubtitles, type Cue } from '../../core/subtitles';
 import { canDirect } from '../../player/canplay';
 import { useEngine, VideoSurface } from '../../player/engine';
 import { matchFrameRate, restoreFrameRate } from '../../player/display';
-import { freshToggle } from '../../player/remote';
+import { freshToggle, sawJumpKey } from '../../player/remote';
 import { ActionButton, Spinner } from '../controls';
 import { Press, focusWhenReady } from '../focus';
 import { useBack } from '../menus';
@@ -379,6 +379,7 @@ export function VodPlayer(props: { app: App; state: AppState; playing: Playing }
     }
     // Vega names these forward and rewind; a remote's skip keys go the same way.
     if (FORWARD.includes(t) || BACKWARD.includes(t)) {
+      sawJumpKey();
       startScrub(FORWARD.includes(t) ? 1 : -1, 30_000);
       return;
     }
