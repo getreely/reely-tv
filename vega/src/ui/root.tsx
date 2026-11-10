@@ -192,6 +192,10 @@ export function Root(props: { app: App }) {
       const s = app.state;
       const minutes = s.prefs.screensaverMinutes;
       const busy = s.playing != null || s.live.watching != null || s.live.due != null;
+      // Watching counts as being here: an episode longer than the minutes set, watched
+      // without a press, ended with the last press that long ago, and the screensaver came
+      // up the moment it was over. The minutes run from when it ends.
+      if (busy) pressedAt.current = Date.now();
       if (minutes > 0 && !busy && Date.now() - pressedAt.current > minutes * 60_000) setSaver(true);
     }, 5_000);
     return () => clearInterval(t);
