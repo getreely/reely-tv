@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
-import { TVFocusGuideView, useTVEventHandler } from '@amazon-devices/react-native-kepler';
+import { TVFocusGuideView } from '@amazon-devices/react-native-kepler';
+import { useKeys } from '../keys';
 import type { App, AppState, GuideStatus, PlaybackMode } from '../../app/store';
 import { ACCENTS, BITRATE_CHOICES, HOME_ROWS, SCREENSAVER_CHOICES, SUBTITLE_SIZES, THEME_LEVELS, UP_NEXT_CHOICES } from '../../app/store';
 import { VERSION } from '../../app/version';
@@ -175,7 +176,7 @@ export function Settings(props: ScreenProps & { onProfiles: () => void }) {
   }, inOptions && !choosing);
   // Right from the sections: the page's first setting, rather than whichever sits level.
   const onSections = useRef(false);
-  useTVEventHandler((event) => {
+  useKeys((event) => {
     if (event.eventKeyAction !== 0 || choosing) return;
     if (event.eventType === 'right' && onSections.current) focusWhenReady(firstRef);
   });

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { BackHandler, View } from 'react-native';
-import { TVFocusGuideView, useTVEventHandler } from '@amazon-devices/react-native-kepler';
+import { TVFocusGuideView } from '@amazon-devices/react-native-kepler';
+import { useKeys } from './keys';
 import type { App, AppState, Route } from '../app/store';
 import { accentOf, isConnected } from '../app/store';
 import type { PlexItem } from '../api/plex';
@@ -144,7 +145,7 @@ export function Root(props: { app: App }) {
   const arrowAt = useRef(0);
   // When a button was last pressed, for the screensaver.
   const pressedAt = useRef(Date.now());
-  useTVEventHandler((event) => {
+  useKeys((event) => {
     pressedAt.current = Date.now();
     if (event.eventKeyAction === 0) sawKey();
     if (event.eventKeyAction === 0 && ['left', 'right', 'up', 'down'].includes(event.eventType)) arrowAt.current = Date.now();

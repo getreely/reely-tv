@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Image, ScrollView, View } from 'react-native';
-import { TVFocusGuideView, useTVEventHandler } from '@amazon-devices/react-native-kepler';
+import { TVFocusGuideView } from '@amazon-devices/react-native-kepler';
+import { useKeys } from '../keys';
 import type { App, AppState } from '../../app/store';
 import type { Programme, XtreamCategory, XtreamChannel } from '../../api/xtream';
 import { isOnAt } from '../../api/xtream';
@@ -310,7 +311,7 @@ export function Guide(props: { app: App; state: AppState }) {
     app.watchIn(live.category!, channels, index, past);
   };
 
-  useTVEventHandler((event) => {
+  useKeys((event) => {
     // Not while a channel plays over it: the guide's kept underneath, and the presses are the player's.
     if (watching || !gridFocused || menu || event.eventKeyAction !== 0) return;
     switch (event.eventType) {

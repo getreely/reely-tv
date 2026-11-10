@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Animated, BackHandler, Easing, Image, ScrollView, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Text } from './text';
-import { TVFocusGuideView, useTVEventHandler } from '@amazon-devices/react-native-kepler';
+import { TVFocusGuideView } from '@amazon-devices/react-native-kepler';
+import { useKeys } from './keys';
 import { Press, useAccent } from './focus';
 import { CheckGlyph } from './glyphs';
 import { Overlay } from './overlay';
@@ -66,7 +67,7 @@ export function MenuLayer(props: { onClose: () => void; width?: number; scrim?: 
   // while its repeats keep coming, let go once it's seen to come up.
   const openedAt = useRef(Date.now());
   const key = useRef({ downAt: Date.now(), held: true, afresh: false, upAt: 0 });
-  useTVEventHandler((event) => {
+  useKeys((event) => {
     if (event.eventType !== 'select' && event.eventType !== 'enter') return;
     const k = key.current;
     const now = Date.now();

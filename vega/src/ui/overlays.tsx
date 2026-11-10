@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Image, View } from 'react-native';
-import { TVFocusGuideView, useTVEventHandler } from '@amazon-devices/react-native-kepler';
+import { TVFocusGuideView } from '@amazon-devices/react-native-kepler';
+import { useKeys } from './keys';
 import Svg, { Circle, Path, Rect } from '@amazon-devices/react-native-svg';
 import type { PlexHomeUser } from '../api/plex';
 import * as plex from '../api/plex';
@@ -99,7 +100,7 @@ export function ProfilePicker(props: { app: App; state: AppState; onClose: () =>
     if (next.length === 4) void pick(asking, next);
   };
   // The remote's number keys type the PIN too.
-  useTVEventHandler((event) => {
+  useKeys((event) => {
     if (!asking || event.eventKeyAction !== 0) return;
     const d = /^(?:digit|num|number)?_?(\d)$/i.exec(event.eventType)?.[1];
     if (d) typeDigit(d);
@@ -314,7 +315,7 @@ export function Screensaver(props: { slides: Slide[]; onWake: () => void }) {
     Animated.timing(zoom, { toValue: 1.08, duration: SLIDE_MS + FADE_MS, easing: Easing.linear, useNativeDriver: true }).start();
   }, [index]);
   // Any button wakes it: taken here, and the press goes no further.
-  useTVEventHandler((event) => { if (event.eventKeyAction === 0) props.onWake(); });
+  useKeys((event) => { if (event.eventKeyAction === 0) props.onWake(); });
   useBack(() => { props.onWake(); return true; });
   const slide = props.slides.length ? props.slides[index % props.slides.length] : null;
   const d = new Date(now);

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, AppState as RNAppState, Easing, View } from 'react-native';
-import { useTVEventHandler } from '@amazon-devices/react-native-kepler';
+import { useKeys } from '../keys';
 import type { PlexItem, PlexOnlineSubtitle } from '../../api/plex';
 import { caption, isContinuous } from '../../api/plex';
 import { IPTV_SOURCE } from '../../api/vod';
@@ -369,7 +369,7 @@ export function VodPlayer(props: { app: App; state: AppState; playing: Playing }
     keepUp();
   };
 
-  useTVEventHandler((event) => {
+  useKeys((event) => {
     if (event.eventKeyAction !== 0 || leaving.current) return;
     const t = event.eventType;
     if (upNext || panel) return;

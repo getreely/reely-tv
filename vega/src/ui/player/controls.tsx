@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Image, View } from 'react-native';
-import { TVFocusGuideView, useTVEventHandler } from '@amazon-devices/react-native-kepler';
+import { TVFocusGuideView } from '@amazon-devices/react-native-kepler';
+import { useKeys } from '../keys';
 import type { PlexChapter } from '../../api/plex';
 import { ActionButton } from '../controls';
 import { Press, useAccent } from '../focus';
@@ -113,7 +114,7 @@ function Scrubber(props: {
     step(props.nudge.direction, props.nudge.stepMs);
   }, [props.nudge?.serial]);
 
-  useTVEventHandler((event) => {
+  useKeys((event) => {
     if (!focused || event.eventKeyAction !== 0) return;
     if (event.eventType === 'left') step(-1);
     if (event.eventType === 'right') step(1);

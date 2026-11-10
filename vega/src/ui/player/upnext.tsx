@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Image, View } from 'react-native';
-import { TVFocusGuideView, useTVEventHandler } from '@amazon-devices/react-native-kepler';
+import { TVFocusGuideView } from '@amazon-devices/react-native-kepler';
+import { useKeys } from '../keys';
 import type { PlexItem } from '../../api/plex';
 import { ActionButton } from '../controls';
 import { Press, pillColors, useAccent } from '../focus';
@@ -34,7 +35,7 @@ export function UpNextScreen(props: {
   const { item } = props;
   const [held, setHeld] = useState(false);
   const playFocused = useRef(false);
-  useTVEventHandler((event) => {
+  useKeys((event) => {
     if (event.eventKeyAction !== 0) return;
     if (!(event.eventType === 'select' && playFocused.current)) setHeld(true);
   });

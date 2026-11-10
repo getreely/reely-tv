@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AppState as RNAppState, View } from 'react-native';
-import { TVFocusGuideView, useTVEventHandler } from '@amazon-devices/react-native-kepler';
+import { TVFocusGuideView } from '@amazon-devices/react-native-kepler';
+import { useKeys } from '../keys';
 import type { App, AppState } from '../../app/store';
 import type { PlexStream } from '../../api/plex';
 import type { XtreamChannel } from '../../api/xtream';
@@ -342,7 +343,7 @@ export function LivePlayer(props: { app: App; state: AppState; channel: XtreamCh
     if (focusedId !== addSlot) setTileMenu(focusedId);
   };
 
-  useTVEventHandler((event) => {
+  useKeys((event) => {
     if (event.eventKeyAction !== 0 || busy) return;
     const t = event.eventType;
     // Numbers type a channel: one picture on screen, live, nothing open over it.

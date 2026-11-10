@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
-import { TVFocusGuideView, useTVEventHandler } from '@amazon-devices/react-native-kepler';
+import { TVFocusGuideView } from '@amazon-devices/react-native-kepler';
+import { useKeys } from '../keys';
 import type { App, AppState } from '../../app/store';
 import type { Programme, XtreamCategory, XtreamChannel } from '../../api/xtream';
 import { catchUpProgramme, isOnAt } from '../../api/xtream';
@@ -123,7 +124,7 @@ export function GuideOverlay(props: {
     if (target) focusWhenReady({ current: target });
   };
 
-  useTVEventHandler((event) => {
+  useKeys((event) => {
     if (menu || event.eventKeyAction !== 0) return;
     const t = event.eventType;
     if (inCategories) {
