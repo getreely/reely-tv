@@ -292,8 +292,10 @@ export function LivePlayer(props: { app: App; state: AppState; channel: XtreamCh
       focusWhenReady(panelRefs[cameFrom]);
       return;
     }
-    if (showing && !barFocused.current) focusWhenReady(catchUp?.behindLive ? goLiveRef : playRef);
-    else if (!showing) focusWhenReady(rootRef);
+    // Insisted on: the guide is kept under a channel, and a request lost as the picture's
+    // own button goes left the cursor there (focusWhenReady).
+    if (showing && !barFocused.current) focusWhenReady(catchUp?.behindLive ? goLiveRef : playRef, 16, true);
+    else if (!showing) focusWhenReady(rootRef, 16, true);
   }, [showing, busy]);
 
   // Into the archive or back out of it, the button pressed (Start over, Go live) goes:

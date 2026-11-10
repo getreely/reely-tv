@@ -7,7 +7,7 @@ import type { PlexItem } from '../api/plex';
 import { listKey } from '../api/plex';
 import { ItemMenu } from './itemmenu';
 import { ActionButton, EmptyNote } from './controls';
-import { AccentContext, ScreenContext, ScreenMemory, focusWhenReady } from './focus';
+import { AccentContext, ScreenContext, ScreenMemory, focusWhenReady, sawKey } from './focus';
 import { useBack } from './menus';
 import { TabMenu } from './tabmenu';
 import { Text } from './text';
@@ -146,6 +146,7 @@ export function Root(props: { app: App }) {
   const pressedAt = useRef(Date.now());
   useTVEventHandler((event) => {
     pressedAt.current = Date.now();
+    if (event.eventKeyAction === 0) sawKey();
     if (event.eventKeyAction === 0 && ['left', 'right', 'up', 'down'].includes(event.eventType)) arrowAt.current = Date.now();
   });
 

@@ -225,22 +225,30 @@ function withAlphaHex(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+/** When a button on the remote was last pressed, told by the root: the cursor moved by hand isn't taken back. */
+let keyAt = 0;
+export function sawKey() {
+  keyAt = Date.now();
+}
+
 /**
  * The cursor onto [target], trying for a few frames until it's there to take it: asked
  * in the same pass that draws it, a single request is lost (Focus.kt's requestWhenReady).
- * Asked twice more shortly after it's taken, too: a request made as the thing that had
- * the cursor goes away can be lost without a word, and over a channel the cursor then
- * fell back to the guide kept underneath, out of sight, where the arrows couldn't bring
- * it out again. The latest asked for is the one that gets it.
+ *
+ * With [insist], asked twice more shortly after, unless a button's been pressed since: a
+ * request made as the thing that had the cursor goes away can be lost without a word, and
+ * over a channel the cursor then fell back to the guide kept underneath, out of sight,
+ * where the arrows couldn't bring it out again. The latest insisted on is the one kept to.
  */
-let asked = 0;
+let insisted = 0;
 
-export function focusWhenReady(target: React.RefObject<View | null>, attempts = 16) {
-  const mine = ++asked;
+export function focusWhenReady(target: React.RefObject<View | null>, attempts = 16, insist = false) {
+  const mine = insist ? ++insisted : 0;
+  const since = Date.now();
   let left = attempts;
-  let again = 2;
+  let again = insist ? 2 : 0;
   const attempt = () => {
-    if (mine !== asked) return;
+    if (insist && (mine !== insisted || keyAt > since)) return;
     const el = target.current;
     if (el) {
       try {

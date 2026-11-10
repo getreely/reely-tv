@@ -37,6 +37,10 @@ const FreshPress = createContext<() => boolean>(() => true);
 
 /** How long after a menu opens a release of OK is still the one that opened it. */
 const HELD_RELEASE_MS = 700;
+/** OK going down again this soon after the last time is the same hold repeating. */
+const REPEAT_GAP_MS = 250;
+/** How long after OK is first seen to come up a press counts as a new one. */
+const RELEASE_SETTLE_MS = 250;
 
 export function MenuScrim(props: { strength?: number }) {
   const s = props.strength ?? 1;
@@ -56,12 +60,35 @@ export function MenuLayer(props: { onClose: () => void; width?: number; scrim?: 
     props.onClose();
     return true;
   });
-  const fresh = useRef(false);
+  // The OK that opened the menu is usually still down, and a held key repeats: each repeat
+  // came as OK going down again, was taken for a fresh press, and the release (or the next
+  // repeat) pressed the first row the moment the menu was up. So OK is followed: still held
+  // while its repeats keep coming, let go once it's seen to come up.
   const openedAt = useRef(Date.now());
+  const key = useRef({ downAt: Date.now(), held: true, afresh: false, upAt: 0 });
   useTVEventHandler((event) => {
-    if ((event.eventType === 'select' || event.eventType === 'enter') && event.eventKeyAction === 0) fresh.current = true;
+    if (event.eventType !== 'select' && event.eventType !== 'enter') return;
+    const k = key.current;
+    const now = Date.now();
+    if (event.eventKeyAction === 0) {
+      // Close on the last one: the same hold repeating. After a gap: pressed anew.
+      if (now - k.downAt < REPEAT_GAP_MS) k.held = true;
+      else {
+        k.held = false;
+        k.afresh = true;
+      }
+      k.downAt = now;
+    } else if (event.eventKeyAction === 1 && !k.upAt) k.upAt = now;
   });
-  const pressedAfresh = () => fresh.current || Date.now() - openedAt.current > HELD_RELEASE_MS;
+  const pressedAfresh = () => {
+    const k = key.current;
+    const now = Date.now();
+    // Seen to come up: anything a moment after that is a press of its own.
+    if (k.upAt) return now - k.upAt > RELEASE_SETTLE_MS;
+    // Still repeating: the hold that opened the menu, however long it's kept down.
+    if (k.held && now - k.downAt < REPEAT_GAP_MS) return false;
+    return k.afresh || now - openedAt.current > HELD_RELEASE_MS;
+  };
   const width = props.width ?? MENU_WIDTH;
   return (
     <Overlay>
