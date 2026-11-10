@@ -18,7 +18,7 @@ function changed() {
 }
 
 export function liveEngine(): Engine {
-  if (!shared) shared = new Engine();
+  if (!shared) shared = new Engine({ live: true });
   return shared;
 }
 

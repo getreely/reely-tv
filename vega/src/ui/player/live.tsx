@@ -657,7 +657,7 @@ const TILE_RETRIES = 3;
  * play, says so on the tile rather than sitting black.
  */
 function ExtraTile(props: { app: App; channel: XtreamChannel; rect: { left: number; top: number; width: number; height: number }; heard: boolean; focused: boolean }) {
-  const engine: Engine = useEngine({ muted: true });
+  const engine: Engine = useEngine({ muted: true, live: true });
   const url = props.app.channelUrl(props.channel);
   const [failure, setFailure] = useState<string | null>(null);
   const attempts = useRef(0);

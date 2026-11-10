@@ -49,6 +49,10 @@ export type EngineEvent = 'playing' | 'pause' | 'waiting' | 'timeupdate' | 'ende
 const JUMP_NEAR_MS = 2_000;
 const JUMP_HOLD_MS = 3_000;
 
+/** How long a channel's picture may stand still before it's taken as dropped: once playing, and while starting. */
+const STALL_MS = 6_000;
+const START_MS = 20_000;
+
 /** How long a stream the player opens itself waits for its picture to have somewhere to go. */
 const SURFACE_WAIT_MS = 2_000;
 
@@ -168,7 +172,15 @@ export class Engine {
   private jumpTo: number | null = null;
   private jumpAt = 0;
 
-  constructor(options: { muted?: boolean } = {}) {
+  /** A channel: a picture that stops by itself, with nothing said, is taken as dropped (watchFlow). */
+  private live = false;
+  /** Whether this stream's picture has moved at all yet: one still starting is given longer. */
+  private everFlowed = false;
+  /** When the clock last moved, or the stream was opened, or it was last not meant to be going. */
+  private movedAt = 0;
+
+  constructor(options: { muted?: boolean; live?: boolean } = {}) {
+    this.live = !!options.live;
     this.mutedNow = !!options.muted;
     this.ready = this.setUp(this.player);
   }
@@ -379,6 +391,8 @@ export class Engine {
     this.flowing = false;
     this.lastTime = -1;
     this.openedAt = Date.now();
+    this.movedAt = this.openedAt;
+    this.everFlowed = false;
     this.ticks = 0;
     this.captionChoice = -1;
     this.jumpTo = null;
@@ -633,6 +647,7 @@ export class Engine {
       if (++this.ticks % 4 === 0 && (Date.now() - this.openedAt < 30_000 || Date.now() < this.reportUntil)) this.report();
       if (this.switching) {
         this.lastTime = -1;
+        this.movedAt = Date.now();
         return;
       }
       let now = -1;
@@ -643,10 +658,22 @@ export class Engine {
       }
       if (now < 0) {
         this.lastTime = -1;
+        this.movedAt = Date.now();
         return;
       }
       const moved = this.lastTime >= 0 && now > this.lastTime + 0.05;
       this.lastTime = now;
+      if (moved) this.movedAt = Date.now();
+      // A channel whose picture has stood still this long, not paused and nothing said: some
+      // froze a little way in and stayed so until the channel was changed and changed back,
+      // which is a fresh stream. Said as a dropped connection, so the screen asks for one.
+      else if (this.live && this.used && Date.now() - this.movedAt > (this.everFlowed ? STALL_MS : START_MS)) {
+        this.movedAt = Date.now();
+        say(`player ${this.id} stood still: taken as dropped`);
+        this.report();
+        this.fail({ kind: 'network', status: null, detail: 'stalled' });
+      }
+      if (moved) this.everFlowed = true;
       if (moved && !this.flowing) {
         this.flowing = true;
         this.pendingAt = null;
@@ -824,7 +851,7 @@ export class Engine {
 }
 
 /** An engine for as long as the component using it is up. */
-export function useEngine(options: { muted?: boolean } = {}): Engine {
+export function useEngine(options: { muted?: boolean; live?: boolean } = {}): Engine {
   const engine = useRef<Engine | null>(null);
   if (!engine.current) engine.current = new Engine(options);
   useEffect(() => {
