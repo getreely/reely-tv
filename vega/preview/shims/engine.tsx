@@ -57,6 +57,8 @@ export class Engine {
   get isPlaying() { return !this.paused; }
   pause() { this.paused = true; this.emit('pause'); }
   seek(ms: number) { this.positionMs = ms; }
+  canJumpTo(_ms: number) { return true; }
+  hold(_ms: number) {}
   async release() { if (this.timer) clearInterval(this.timer); }
 }
 

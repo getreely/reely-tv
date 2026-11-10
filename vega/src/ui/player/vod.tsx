@@ -114,10 +114,22 @@ export function VodPlayer(props: { app: App; state: AppState; playing: Playing }
     if (engine.isSwitching) return;
     if (engine.paused) engine.play(); else engine.pause();
   };
+  /**
+   * Elsewhere in the title: where the player can go itself, it does; past what Plex's HLS
+   * has in hand, the stream is opened again from there, as a resume opens it (engine.canJumpTo).
+   */
+  const jump = (to: number) => {
+    if (engine.canJumpTo(to)) engine.seek(to);
+    else {
+      engine.hold(to);
+      setBuffering(true);
+      void app.reopen(to);
+    }
+  };
   const seekTo = (ms: number) => {
     keepUp();
     const to = Math.max(0, Math.min(ms, Math.max(0, total() - 1_000)));
-    engine.seek(to);
+    jump(to);
     setPosition(to);
   };
 
@@ -277,7 +289,7 @@ export function VodPlayer(props: { app: App; state: AppState; playing: Playing }
   useEffect(() => {
     if (inIntro && prefs.skipIntros && intro && introSkipped.current !== key) {
       introSkipped.current = key;
-      engine.seek(intro.endMs);
+      jump(intro.endMs);
       setNotice('Intro skipped');
     }
   }, [inIntro]);
@@ -298,7 +310,7 @@ export function VodPlayer(props: { app: App; state: AppState; playing: Playing }
   const skip = () => {
     keepUp();
     if (prompt === 'intro' && intro) {
-      engine.seek(intro.endMs);
+      jump(intro.endMs);
       setPosition(intro.endMs);
     } else if (next) playNext(next);
   };

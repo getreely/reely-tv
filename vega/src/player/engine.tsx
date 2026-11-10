@@ -371,7 +371,8 @@ export class Engine {
     this.restart = options.restart ?? null;
     this.base = this.restart ? startMs : 0;
     this.knownDurationMs = options.durationMs ?? 0;
-    this.pendingAt = null;
+    // Counted as where it's opening from until it plays: the fresh player's clock says nothing yet.
+    this.pendingAt = !this.restart && startMs > 0 ? startMs : null;
     this.switching = false;
     this.restarts++;
     this.recovered = false;
@@ -543,6 +544,37 @@ export class Engine {
     }
     return this.positionMs;
   }
+  /**
+   * Whether a jump to [ms] is one the player makes where it stands. Through hls.js only
+   * inside what's already in hand: sent past it (Skip Intro, in H.264 Plex converts the
+   * sound of), Vega's player held its last picture and never took the chunks hls.js then
+   * fetched, where the same stream opened from that point, as resuming opens it, plays.
+   */
+  canJumpTo(ms: number): boolean {
+    if (!this.hls) return true;
+    try {
+      const b = this.player.buffered;
+      const t = ms / 1000;
+      for (let i = 0; i < b.length; i++) if (b.start(i) <= t && t < b.end(i) - 1) return true;
+    } catch {
+      // Not loaded.
+    }
+    return false;
+  }
+
+  /** Held at [ms] while the screen has the stream opened again from there. */
+  hold(ms: number) {
+    say(`player ${this.id} held for ${Math.round(ms / 1000)}s from ${Math.round(this.positionMs / 1000)}s: past what's in hand, opened again from there`);
+    this.pendingAt = Math.max(0, ms);
+    this.flowing = false;
+    try {
+      this.pauseNow();
+    } catch {
+      // Not started.
+    }
+    this.emit('waiting');
+  }
+
   seek(ms: number) {
     // Each jump, and how the player stands for a few seconds after, to the log.
     say(`player ${this.id} seeks to ${Math.round(ms / 1000)}s from ${Math.round(this.positionMs / 1000)}s${this.restart ? ', asking Plex from there' : ''}`);

@@ -1661,6 +1661,8 @@ export class App {
     return url;
   }
 
+  private reopens = 0;
+
   /**
    * The connection dropped part-way. The same address again is no use when Plex has
    * already ended the session behind it — every try fails the same way, while Plex's own
@@ -1676,14 +1678,16 @@ export class App {
       this.set((s) => ({ ...s, playing: { ...p, startMs: positionMs, attempt } }));
       return;
     }
+    // The latest asked for is the one that opens: an earlier one still on its way is dropped.
+    const mine = ++this.reopens;
     const found = await plex.playback(p.base, p.token, p.item.ratingKey, p.mediaIndex).catch(() => null);
     // Something else started meanwhile.
-    if (this.current.playing !== p) return;
+    if (this.current.playing?.sessionId !== p.sessionId || mine !== this.reopens) return;
     const url = p.direct
       ? plex.directUrl(found?.url ?? p.playback.url, p.sessionId)
       : await this.converted(p.base, p.token, p.item.ratingKey, p.sessionId, p.mediaIndex, subtitlePlan(p.playback).burn ? "burn" : "none", p.plan ?? plex.BASIC_PLAN, p.playback, positionMs);
-    if (this.current.playing !== p) return;
-    this.set((s) => ({ ...s, playing: { ...p, url, startMs: positionMs, attempt } }));
+    if (this.current.playing?.sessionId !== p.sessionId || mine !== this.reopens) return;
+    this.set((s) => ({ ...s, playing: s.playing && { ...s.playing, url, startMs: positionMs, attempt: (s.playing.attempt ?? 0) + 1 } }));
   }
 
   /**
