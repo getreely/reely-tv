@@ -311,7 +311,8 @@ export function Guide(props: { app: App; state: AppState }) {
   };
 
   useTVEventHandler((event) => {
-    if (!gridFocused || menu || event.eventKeyAction !== 0) return;
+    // Not while a channel plays over it: the guide's kept underneath, and the presses are the player's.
+    if (watching || !gridFocused || menu || event.eventKeyAction !== 0) return;
     switch (event.eventType) {
       case 'up':
         if (index === 0) focusWhenReady(buttons);

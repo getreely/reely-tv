@@ -228,14 +228,24 @@ function withAlphaHex(hex: string, alpha: number): string {
 /**
  * The cursor onto [target], trying for a few frames until it's there to take it: asked
  * in the same pass that draws it, a single request is lost (Focus.kt's requestWhenReady).
+ * Asked twice more shortly after it's taken, too: a request made as the thing that had
+ * the cursor goes away can be lost without a word, and over a channel the cursor then
+ * fell back to the guide kept underneath, out of sight, where the arrows couldn't bring
+ * it out again. The latest asked for is the one that gets it.
  */
+let asked = 0;
+
 export function focusWhenReady(target: React.RefObject<View | null>, attempts = 16) {
+  const mine = ++asked;
   let left = attempts;
+  let again = 2;
   const attempt = () => {
+    if (mine !== asked) return;
     const el = target.current;
     if (el) {
       try {
         FocusManager.focus(el as unknown as Parameters<typeof FocusManager.focus>[0]);
+        if (again-- > 0) setTimeout(attempt, again === 1 ? 80 : 160);
         return;
       } catch {
         // Not laid out yet.
