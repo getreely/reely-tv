@@ -240,8 +240,6 @@ function HomePage(props: ScreenProps) {
               ))}
             </PosterRow>
           ) : null}
-          {reelyRow('Trending', ['movies', 'shows'])}
-          {reelyRow('Popular', ['popularMovies', 'popularShows'])}
           {channels.length && shows('channels') ? (
             <PosterRow title="Your Channels">
               {channels.map((c, i) => (
@@ -251,6 +249,8 @@ function HomePage(props: ScreenProps) {
               ))}
             </PosterRow>
           ) : null}
+          {reelyRow('Trending', ['movies', 'shows'])}
+          {reelyRow('Popular', ['popularMovies', 'popularShows'])}
           {homeIsEmpty(home) && !state.homeBusy ? (
             <EmptyNote text="Nothing to show yet. Watch something and it will appear here." style={{ marginHorizontal: EDGE, marginVertical: dp(20) }} />
           ) : null}

@@ -20,8 +20,8 @@ does everything the Fire TV column does, with these differences, all Vega's own:
 - **The Menu key** opens a poster's or a tile's menu as well as holding OK does.
 - **A channel's own subtitles and sound tracks** are those hls.js finds in its stream; a
   channel played as MPEG-TS offers the closed captions the stream itself carries.
-- **Your Channels on Home.** The favorite channels, then the ones watched lately, as the
-  last row on Home, switched off in Settings, Home like the other rows. Only on Vega so far.
+- **Your Channels on Home.** The favorite channels, then the ones watched lately, under
+  Home's own rows and above what's trending, switched off in Settings, Home like the other rows. Only on Vega so far.
 - **A playback log in Settings, About.** What the app did to play things since it opened,
   a page at a time, for reading or photographing after something goes wrong: the stick's
   own log needs a computer and Amazon's tools. Kept in memory on the TV; nothing is sent.
