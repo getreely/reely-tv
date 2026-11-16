@@ -216,15 +216,6 @@ function HomePage(props: ScreenProps) {
               {home.continueWatching.map((i) => poster(i, plex.rowTitle(i), episodeLine(i), posterArt(i)))}
             </PosterRow>
           ) : null}
-          {channels.length && shows('channels') ? (
-            <PosterRow title="Your Channels">
-              {channels.map((c, i) => (
-                <ChannelCard key={c.streamId} channel={c} favorite={favorites.includes(c.streamId)} first={isFirst()}
-                  pressRef={c.streamId === played ? playedRef : undefined}
-                  onPress={() => { setPlayed(c.streamId); app.watchFromHome(channels, i); }} />
-              ))}
-            </PosterRow>
-          ) : null}
           {home.recentEpisodes.length && shows('recentEpisodes') ? (
             <PosterRow title="Recently Added Episodes">{home.recentEpisodes.map(group)}</PosterRow>
           ) : null}
@@ -251,6 +242,15 @@ function HomePage(props: ScreenProps) {
           ) : null}
           {reelyRow('Trending', ['movies', 'shows'])}
           {reelyRow('Popular', ['popularMovies', 'popularShows'])}
+          {channels.length && shows('channels') ? (
+            <PosterRow title="Your Channels">
+              {channels.map((c, i) => (
+                <ChannelCard key={c.streamId} channel={c} favorite={favorites.includes(c.streamId)} first={isFirst()}
+                  pressRef={c.streamId === played ? playedRef : undefined}
+                  onPress={() => { setPlayed(c.streamId); app.watchFromHome(channels, i); }} />
+              ))}
+            </PosterRow>
+          ) : null}
           {homeIsEmpty(home) && !state.homeBusy ? (
             <EmptyNote text="Nothing to show yet. Watch something and it will appear here." style={{ marginHorizontal: EDGE, marginVertical: dp(20) }} />
           ) : null}

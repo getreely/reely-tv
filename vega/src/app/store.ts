@@ -351,13 +351,13 @@ const HOME_CHANNELS = 24;
 export type HomeRowId = "continueWatching" | "channels" | "recentEpisodes" | "recentMovies" | "watchlist" | "playlists" | "iptvMovies" | "iptvShows";
 export const HOME_ROWS: Array<[HomeRowId, string]> = [
   ["continueWatching", "Continue Watching"],
-  ["channels", "Your Channels"],
   ["recentEpisodes", "Recently Added Episodes"],
   ["recentMovies", "Recently Added Movies"],
   ["watchlist", "Watchlist"],
   ["playlists", "Playlists"],
   ["iptvMovies", "New Movies on IPTV"],
   ["iptvShows", "New Shows on IPTV"],
+  ["channels", "Your Channels"],
 ];
 
 export type SubtitlesAtStart = "plex" | "off";

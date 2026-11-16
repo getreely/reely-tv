@@ -12,19 +12,26 @@ test('Home: Your Channels, the favorites and the ones watched lately, and one pl
   });
   await page.goto('/');
   await expect(page.getByText('Continue Watching')).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByText('Your Channels')).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText('Favorite', { exact: true })).toBeVisible();
+  await expect(page.getByText('Your Channels')).toBeAttached({ timeout: 10_000 });
+  await expect(page.getByText('Favorite', { exact: true })).toBeAttached();
   await page.waitForTimeout(400);
   await page.screenshot({ path: 'shots/home-channels.png' });
   // Down to its card and OK: the channel plays, and Back comes home to it.
-  await press(page, 'ArrowDown', 2);
-  await page.waitForTimeout(300);
+  // The last row: down until the cursor's on its card.
+  for (let i = 0; i < 14; i++) {
+    if (await page.evaluate(() => document.activeElement?.textContent?.includes('News 24') ?? false)) break;
+    await press(page, 'ArrowDown');
+    await page.waitForTimeout(200);
+  }
+  expect(await page.evaluate(() => document.activeElement?.textContent?.includes('News 24') ?? false)).toBe(true);
+  await page.screenshot({ path: 'shots/home-channels-row.png' });
   await press(page, 'Enter');
   await page.waitForTimeout(800);
   await press(page, 'Enter');
   await expect(page.getByText('LIVE')).toBeVisible({ timeout: 5_000 });
   await press(page, 'Escape', 2);
   await expect(page.getByText('Your Channels')).toBeVisible({ timeout: 5_000 });
+  expect(await page.evaluate(() => document.activeElement?.textContent?.includes('News 24') ?? false)).toBe(true);
 });
 
 test('Settings, About: the playback log, a page of what the app has said', async ({ page }) => {
