@@ -344,10 +344,14 @@ export const iptvChoice = (kind: Kind): LibraryChoice => ({
 export const isIptvChoice = (c: LibraryChoice | null) => c?.baseUrl === IPTV_SOURCE;
 const IPTV_SORTS: Record<string, vod.Sort> = { "titleSort:asc": "TITLE", "addedAt:desc": "ADDED", "originallyAvailableAt:desc": "RELEASED", "originallyAvailableAt:asc": "OLDEST", "rating:desc": "RATED", "lastViewedAt:desc": "WATCHED" };
 
+/** How many channels Home's row shows. */
+const HOME_CHANNELS = 24;
+
 /** Home's rows, as Settings lists them. */
-export type HomeRowId = "continueWatching" | "recentEpisodes" | "recentMovies" | "watchlist" | "playlists" | "iptvMovies" | "iptvShows";
+export type HomeRowId = "continueWatching" | "channels" | "recentEpisodes" | "recentMovies" | "watchlist" | "playlists" | "iptvMovies" | "iptvShows";
 export const HOME_ROWS: Array<[HomeRowId, string]> = [
   ["continueWatching", "Continue Watching"],
+  ["channels", "Your Channels"],
   ["recentEpisodes", "Recently Added Episodes"],
   ["recentMovies", "Recently Added Movies"],
   ["watchlist", "Watchlist"],
@@ -2538,6 +2542,25 @@ export class App {
         peopleFirst: !matches.length && people.some((x) => namesAll(x.name, query)),
       },
     }));
+  }
+
+  /**
+   * The channels for Home's row: the favorites, then the ones watched lately, so the usual
+   * few are a press away without going through Live TV. Empty without a provider, or with
+   * neither marked nor watched.
+   */
+  async homeChannels(): Promise<XtreamChannel[]> {
+    const { favorites, recent, credentials } = this.current.live;
+    if (!credentials || (!favorites.length && !recent.length)) return [];
+    const all = await this.everyChannel();
+    const byId = new Map(all.map((ch) => [ch.streamId, ch]));
+    const ids = [...favorites, ...recent.filter((id) => !favorites.includes(id))];
+    return ids.map((id) => byId.get(id)).filter((ch): ch is XtreamChannel => !!ch).slice(0, HOME_CHANNELS);
+  }
+
+  /** One of Home's channels played: channel up and down step through the rest of the row. */
+  watchFromHome(channels: XtreamChannel[], index: number) {
+    this.watchIn(null, channels, index);
   }
 
   /** Every channel the provider has, asked for once. */

@@ -7,6 +7,7 @@ import { ACCENTS, BITRATE_CHOICES, HOME_ROWS, SCREENSAVER_CHOICES, SUBTITLE_SIZE
 import { VERSION } from '../../app/version';
 import * as xtream from '../../api/xtream';
 import { clearProblem, lastProblem } from '../../core/crash';
+import { logLength, logPage, logTime } from '../../core/log';
 import { FORMATS, checkCodecs, codecAnswers, onCodecs } from '../../player/codecs';
 import { frameRateRefused, onFrameRateChange } from '../../player/display';
 import { outputs, type OutputsState } from '../../player/outputs';
@@ -289,7 +290,8 @@ function HomeSection({ kit }: { kit: Kit }) {
   const { app, state } = kit;
   const prefs = state.prefs;
   // IPTV's rows only while its movies and shows are switched on.
-  const rows = HOME_ROWS.filter(([id]) => prefs.iptvLibrary || (id !== 'iptvMovies' && id !== 'iptvShows'));
+  // IPTV's rows only while its movies and shows are switched on; channels only with a provider signed in.
+  const rows = HOME_ROWS.filter(([id]) => (prefs.iptvLibrary || (id !== 'iptvMovies' && id !== 'iptvShows')) && (!!state.live.credentials || id !== 'channels'));
   return (
     <>
       <Group title="Rows on Home">
@@ -573,6 +575,37 @@ const LICENSES: Array<[string, string, string]> = [
   ['Geist', 'SIL Open Font License', 'The typeface.'],
 ];
 
+/** How many lines of the playback log fit a page on the TV. */
+const LOG_PAGE = 14;
+
+/**
+ * What the app has said about playing things since it opened, a page at a time, newest
+ * first to hand: for reading, or a photograph, straight after something goes wrong.
+ */
+function PlaybackLog() {
+  const [reading, setReading] = useState(false);
+  const [back, setBack] = useState(0);
+  const total = logLength();
+  const page = reading ? logPage(LOG_PAGE, back) : [];
+  return (
+    <Group title="Playback log" note="What the app has done to play things since it opened. Kept on this TV only, and nothing is sent anywhere: a photo of it right after something goes wrong says what happened.">
+      <Setting title="Playback log" note={total ? `${total} lines` : 'Nothing yet. Play something first.'} value={reading ? 'Hide' : 'View'}
+        onPress={() => { setBack(0); setReading(!reading); }} />
+      {reading ? (
+        <>
+          <View style={{ paddingHorizontal: dp(14), paddingVertical: dp(8), gap: dp(2) }}>
+            {page.length ? page.map((l, i) => (
+              <Text key={`${l.at}:${i}`} numberOfLines={2} style={{ color: color.muted, fontSize: dp(13), lineHeight: dp(17) }}>{`${logTime(l.at)}  ${l.text}`}</Text>
+            )) : <Text style={[type.label, { color: color.muted }]}>Nothing here.</Text>}
+          </View>
+          {back + LOG_PAGE < total ? <Setting title="Earlier" onPress={() => setBack(back + LOG_PAGE)} /> : null}
+          {back > 0 ? <Setting title="Later" onPress={() => setBack(Math.max(0, back - LOG_PAGE))} /> : null}
+        </>
+      ) : null}
+    </Group>
+  );
+}
+
 function About({ kit }: { kit: Kit }) {
   const { app } = kit;
   const accent = useAccent();
@@ -588,6 +621,7 @@ function About({ kit }: { kit: Kit }) {
         <Setting title="Version" value={VERSION} />
         <UpdateRow kit={kit} pressRef={firstRow(kit)} />
       </Group>
+      <PlaybackLog />
       <Group title="Help">
         <Setting title="Take the tour" note="How to get around with the remote." onPress={() => app.takeTour()} />
       </Group>

@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, View } from 'react-native';
 import type { App, AppState, HomeRowId, Route } from '../../app/store';
 import { isConnected, requestBadge, shownRequestRows } from '../../app/store';
@@ -8,8 +8,10 @@ import type { PlexItem } from '../../api/plex';
 import * as plex from '../../api/plex';
 import { sourceTag } from '../../api/vod';
 import type { RequestTitle } from '../../api/reely';
+import type { XtreamChannel } from '../../api/xtream';
 import { formatDuration } from '../../core/quality';
 import { PosterCard } from '../cards';
+import { CardLift, CardRing, Press, focusWhenReady } from '../focus';
 import { type FocusSignal, useFocused, useFocusSignal } from '../focussignal';
 import { ActionButton, EmptyNote, ErrorNote } from '../controls';
 import { hasItemMenu } from '../itemmenu';
@@ -73,6 +75,30 @@ function ReadyCard(props: { app: App; title: RequestTitle; more: number }) {
   );
 }
 
+/** A channel on Home: its logo whole on a dark tile, its number and name under it. */
+function ChannelCard(props: { channel: XtreamChannel; favorite: boolean; onPress: () => void; first?: boolean; pressRef?: React.RefObject<View | null> }) {
+  const [focused, setFocused] = useState(false);
+  const { channel } = props;
+  return (
+    <Press ref={props.pressRef} onPress={props.onPress} first={props.first} focusKey={`channel:${channel.streamId}`} onFocusChange={setFocused}>
+      {() => (
+        <CardLift focused={focused} style={{ width: dp(186), padding: dp(4) }}>
+          <CardRing focused={focused} corner={dp(10)} style={{ width: '100%', aspectRatio: 16 / 9 }}>
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#14171C' }}>
+              {channel.icon ? <Image source={{ uri: channel.icon }} resizeMode="contain" style={{ width: '62%', height: '62%' }} />
+                : <Text numberOfLines={2} style={[type.body, { fontWeight: '600', textAlign: 'center', paddingHorizontal: dp(10) }]}>{channel.name}</Text>}
+            </View>
+          </CardRing>
+          <Text numberOfLines={1} style={{ color: focused ? color.chalk : color.muted, fontSize: dp(14), lineHeight: dp(18), marginTop: dp(8) }}>
+            {channel.number > 0 ? `${channel.number}  ${channel.name}` : channel.name}
+          </Text>
+          <Text numberOfLines={1} style={{ color: color.faint, fontSize: dp(14), lineHeight: dp(19) }}>{props.favorite ? 'Favorite' : 'Watched lately'}</Text>
+        </CardLift>
+      )}
+    </Press>
+  );
+}
+
 export function Home(props: ScreenProps) {
   if (!isConnected(props.state)) return <PlexSignIn app={props.app} state={props.state} />;
   return <HomePage {...props} />;
@@ -111,6 +137,31 @@ function HomePage(props: ScreenProps) {
   const actions = useRef(props);
   actions.current = props;
   const home = state.home;
+  // The favorite channels and the ones watched lately, asked of the provider's list once
+  // and again as either changes.
+  const { favorites, recent, credentials } = state.live;
+  const [channels, setChannels] = useState<XtreamChannel[]>([]);
+  useEffect(() => {
+    let live = true;
+    // A moment after Home is up: the provider's whole list is a lot to read while it draws.
+    const t = setTimeout(() => {
+      void app.homeChannels().then((found) => { if (live) setChannels(found); }).catch(() => undefined);
+    }, channels.length ? 0 : 1_500);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [app, credentials, favorites, recent]);
+  // Back from a channel started here: the cursor onto its card again. Home stays as it
+  // was under the channel, and nothing else would put the cursor back.
+  const [played, setPlayed] = useState<number | null>(null);
+  const playedRef = useRef<View>(null);
+  const watching = state.live.watching != null;
+  const wasWatching = useRef(false);
+  useEffect(() => {
+    if (wasWatching.current && !watching && played != null) focusWhenReady(playedRef, 16, true);
+    wasWatching.current = watching;
+  }, [watching]);
   const hiddenRows = state.prefs.hiddenRows;
   const hidden = new Set<HomeRowId>(hiddenRows);
   const shows = (id: HomeRowId) => !hidden.has(id);
@@ -165,6 +216,15 @@ function HomePage(props: ScreenProps) {
               {home.continueWatching.map((i) => poster(i, plex.rowTitle(i), episodeLine(i), posterArt(i)))}
             </PosterRow>
           ) : null}
+          {channels.length && shows('channels') ? (
+            <PosterRow title="Your Channels">
+              {channels.map((c, i) => (
+                <ChannelCard key={c.streamId} channel={c} favorite={favorites.includes(c.streamId)} first={isFirst()}
+                  pressRef={c.streamId === played ? playedRef : undefined}
+                  onPress={() => { setPlayed(c.streamId); app.watchFromHome(channels, i); }} />
+              ))}
+            </PosterRow>
+          ) : null}
           {home.recentEpisodes.length && shows('recentEpisodes') ? (
             <PosterRow title="Recently Added Episodes">{home.recentEpisodes.map(group)}</PosterRow>
           ) : null}
@@ -196,7 +256,7 @@ function HomePage(props: ScreenProps) {
           ) : null}
         </Rows>
     );
-  }, [app, home, hiddenRows, state.requests, state.homeError, state.homeBusy, focus]);
+  }, [app, home, hiddenRows, state.requests, state.homeError, state.homeBusy, focus, channels, favorites, played]);
   return (
     <View style={{ flex: 1 }}>
       <HomeHero app={app} focus={focus} fallback={fallback} />

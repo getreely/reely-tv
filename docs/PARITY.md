@@ -18,13 +18,25 @@ does everything the Fire TV column does, with these differences, all Vega's own:
   own Settings. Where it's granted they work as on the Fire TV; where it isn't, Settings says
   where the Fire TV's own setting is.
 - **The Menu key** opens a poster's or a tile's menu as well as holding OK does.
-- **A channel's own subtitles and sound tracks** are those hls.js finds in its stream: a
-  channel played as MPEG-TS lists none.
+- **A channel's own subtitles and sound tracks** are those hls.js finds in its stream; a
+  channel played as MPEG-TS offers the closed captions the stream itself carries.
+- **Your Channels on Home.** The favorite channels, then the ones watched lately, as a row
+  on Home, switched off in Settings, Home like the other rows. Only on Vega so far.
+- **A playback log in Settings, About.** What the app did to play things since it opened,
+  a page at a time, for reading or photographing after something goes wrong: the stick's
+  own log needs a computer and Amazon's tools. Kept in memory on the TV; nothing is sent.
+- **A channel that stops by itself is asked for again.** A live picture standing still for
+  six seconds is taken as a dropped connection and reopened, a few times.
+- **Alexa and the remote's media keys** reach the player through Amazon's player session;
+  the app acts on a press once, whichever of the key and the session says it first.
 
-Each screen has been checked in a browser against the Fire TV's (`vega/preview`: the screens
-through react-native-web, driven by the keyboard as the remote, with screenshots), but **not
-yet on a Vega stick**. GitHub builds it with the Vega SDK; each `vega-v…` release has the
-package for Fire TV sticks, and the `vega-test` pre-release has the latest build.
+Each screen is checked in a browser against the Fire TV's (`vega/preview`: the screens
+through react-native-web, driven by the keyboard as the remote, with screenshots). The
+preview stands in for Amazon's player and the stick's cursor, so playback, the remote's
+timing and where the cursor lands are only settled **on a Vega stick**, where the app is in
+use. GitHub builds it with the Vega SDK; each `vega-v…` release has the package for Fire TV
+sticks, and the `vega-test` pre-release (the Vega workflow, run by hand with its test box
+ticked) is for trying a build before it's offered as an update.
 
 | Feature | Fire TV / Android TV | Android phone & tablet | LG (webOS) | Roku | iPhone, iPad and Apple TV |
 |---|---|---|---|---|---|
