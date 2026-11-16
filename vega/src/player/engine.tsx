@@ -233,14 +233,32 @@ export class Engine {
     if (own) own.pause(); else p.pause();
   }
 
+  private sayTracks(p: VideoPlayer) {
+    try {
+      const list = (p as unknown as { audioTracks?: ArrayLike<{ language?: string; label?: string; enabled?: boolean }> }).audioTracks;
+      const n = list?.length ?? 0;
+      const names: string[] = [];
+      for (let i = 0; i < n && i < 8; i++) names.push(`${list![i]?.language || list![i]?.label || '?'}${list![i]?.enabled ? '*' : ''}`);
+      say(`player ${this.id} has ${n} sound track${n === 1 ? '' : 's'}${n ? `: ${names.join(', ')}` : ''}`);
+    } catch (e) {
+      say(`player ${this.id} sound tracks unreadable: ${safeText(e)}`);
+    }
+  }
+
   /** [p] made ready, and listened to for as long as it's the one in use. */
-  private setUp(p: VideoPlayer): Promise<void> {
+  private setUp(p: VideoPlayer, early = false): Promise<void> {
     try {
       this.guard(p);
     } catch (e) {
       console.warn('[reely] player session', e);
     }
-    return playersLetGo().then(() => p.initialize()).then(() => {
+    // Made ready once the players being let go have been. [early], for a channel change: made
+    // ready while the last channel's player is still being let go, so the two waits overlap
+    // rather than follow each other; it's still given no stream until that one has gone
+    // (the wait below), which is what a channel opened too soon never got past.
+    const gone = playersLetGo();
+    const made = early ? p.initialize() : gone.then(() => p.initialize());
+    return Promise.all([gone, made]).then(() => {
       p.autoplay = false;
       p.muted = this.mutedNow;
       try {
@@ -253,7 +271,7 @@ export class Engine {
           if (p !== this.player) return;
           if (event === 'playing') {
             if (this.switching) return;
-            if (!this.flowing) say(`player ${this.id} playing`);
+            if (!this.flowing) say(`player ${this.id} playing${this.sinceAsked()}`);
             this.flowing = true;
             this.pendingAt = null;
           }
@@ -264,6 +282,9 @@ export class Engine {
             this.report();
             this.reportUntil = Date.now() + 10_000;
           }
+          // The sound tracks the player itself finds in a file, to the log once: whether another
+          // language could be switched to here, rather than by having Plex convert the film.
+          if (event === 'loadedmetadata' && !this.hls) this.sayTracks(p);
           if (event === 'waiting' || event === 'pause') this.flowing = false;
           this.emit(event);
         });
@@ -311,16 +332,19 @@ export class Engine {
     this.sourced = false;
     this.used = false;
     this.jumpTo = null;
-    void letGo(old);
+    const began = Date.now();
+    let letGoMs = -1;
+    void letGo(old).then(() => { letGoMs = Date.now() - began; });
     const fresh = new VideoPlayer();
     this.player = fresh;
-    this.ready = this.setUp(fresh).then(() => {
+    this.ready = this.setUp(fresh, this.live).then(() => {
       if (this.gone || fresh !== this.player) return;
       if (this.surface) this.bind(this.surface);
       if (this.captionsHandle) (fresh as unknown as { setCaptionViewHandle?: (h: string) => void }).setCaptionViewHandle?.(this.captionsHandle);
     });
     await this.ready;
-    say(`player ${this.id} renewed`);
+    // How long each part took, for the log: where a channel change's time goes.
+    say(`player ${this.id} renewed in ${Date.now() - began}ms (the last one let go in ${letGoMs < 0 ? 'over that' : `${letGoMs}ms`})`);
   }
 
   /** The player given [handle] to draw on. */
@@ -360,8 +384,19 @@ export class Engine {
    * Plays [url] from [startMs] in: HLS through hls.js, anything else as it is. With
    * [options].restart, [url] already starts at [startMs] and can't be sought in.
    */
+  /** When the stream now opening was asked for, until its picture first moves: how long a channel change took. */
+  private askedAt = 0;
+
+  private sinceAsked(): string {
+    if (!this.askedAt) return '';
+    const ms = Date.now() - this.askedAt;
+    this.askedAt = 0;
+    return `, ${ms}ms after it was asked for`;
+  }
+
   open(url: string, startMs = 0, options: OpenOptions = {}): Promise<void> {
     const ticket = ++this.asked;
+    this.askedAt = Date.now();
     this.inFlight++;
     const run = this.opening.then(() => this.openNow(ticket, url, startMs, options)).finally(() => { this.inFlight--; });
     this.opening = run.catch(() => undefined);
@@ -677,7 +712,7 @@ export class Engine {
       if (moved && !this.flowing) {
         this.flowing = true;
         this.pendingAt = null;
-        say(`player ${this.id} playing`);
+        say(`player ${this.id} playing${this.sinceAsked()}`);
         this.emit('playing');
       }
     }, 500);

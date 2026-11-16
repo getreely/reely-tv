@@ -233,8 +233,18 @@ export function VodPlayer(props: { app: App; state: AppState; playing: Playing }
   // Where it is, read twice a second; Plex told every ten seconds while it plays.
   useEffect(() => {
     const t = setInterval(() => {
-      setPosition(engine.positionMs);
-      setBuffered(engine.bufferedMs);
+      const at = engine.positionMs;
+      const d = drawn.current;
+      if (d.showing) {
+        setPosition(at);
+        setBuffered(engine.bufferedMs);
+      } else {
+        // With only the picture up, nothing shows the time: the player's drawn again when
+        // what the time decides changes (the subtitle on screen, into or out of the intro,
+        // the credits starting), not twice a second for the whole film. On the stick each
+        // of those drawings ran on the thread the remote's presses wait on.
+        setPosition((was) => (d.cueOf(was) === d.cueOf(at) && d.partOf(was) === d.partOf(at) ? was : at));
+      }
       if (engine.durationMs > 0) setDuration(engine.durationMs);
       // They go away after a quiet spell, while something plays and nothing's open.
       if (!engine.paused && Date.now() - lastPress.current > CONTROLS_TIMEOUT_MS) setControls(false);
@@ -285,6 +295,21 @@ export function VodPlayer(props: { app: App; state: AppState; playing: Playing }
   }, [notice]);
 
   // Past the intro by itself, when Settings says so; once, so going back into it stays.
+  // What the twice-a-second reading goes by (above), as things stand now.
+  const drawn = useRef({ showing: true, cueOf: (_ms: number): string | null => null, partOf: (_ms: number): number => 0 });
+  drawn.current = {
+    showing: (controls && !upNext) || !!panel,
+    cueOf: (ms) => cueAt(cues, ms),
+    // 1 in the intro, 2 in the credits, 0 elsewhere: Skip Intro and Up Next go by these.
+    partOf: (ms) => (intro && ms >= intro.startMs && ms < intro.endMs - INTRO_GRACE_MS ? 1 : 0) + (credits && ms >= credits.startMs ? 2 : 0),
+  };
+  // The time shown the moment the controls or a panel come up, not at the next reading.
+  useEffect(() => {
+    if (drawn.current.showing) {
+      setPosition(engine.positionMs);
+      setBuffered(engine.bufferedMs);
+    }
+  }, [controls, !!panel, !!upNext]);
   const inIntro = !!intro && positionMs >= intro.startMs && positionMs < intro.endMs - INTRO_GRACE_MS;
   useEffect(() => {
     if (inIntro && prefs.skipIntros && intro && introSkipped.current !== key) {

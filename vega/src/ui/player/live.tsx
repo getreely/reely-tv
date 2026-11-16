@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AppState as RNAppState, View } from 'react-native';
+import { AppState as RNAppState, Image, View } from 'react-native';
 import { TVFocusGuideView } from '@amazon-devices/react-native-kepler';
 import { useKeys } from '../keys';
 import type { App, AppState } from '../../app/store';
@@ -36,6 +36,10 @@ import { BACKWARD, FORWARD } from './vod';
 /** How long the controls stay up without a press. */
 const CONTROLS_MS = 5_000;
 const NOTICE_MS = 2_500;
+/** How long a channel's name and what's on stay up after tuning to it. */
+const ZAP_MS = 3_500;
+/** How long a channel is rested on before its listings are asked for: flicking past asks for none. */
+const ZAP_LISTINGS_MS = 600;
 /** A typed channel number tunes this long after its last digit, or on OK. */
 const CHANNEL_ENTRY_MS = 2_000;
 const CHANNEL_DIGITS = 5;
@@ -191,6 +195,21 @@ export function LivePlayer(props: { app: App; state: AppState; channel: XtreamCh
     const t = setTimeout(() => setNotice(null), NOTICE_MS);
     return () => clearTimeout(t);
   }, [notice]);
+
+  // ---------------------------------------------------------------- Tuning
+
+  // Which channel this is, said the moment it's tuned to, before its picture's there: its
+  // number, name and what's on. Flicking through channels, it's the first thing to change.
+  const [zap, setZap] = useState(true);
+  useEffect(() => {
+    setZap(true);
+    const hide = setTimeout(() => setZap(false), ZAP_MS);
+    const ask = setTimeout(() => void app.loadTable([channel]), ZAP_LISTINGS_MS);
+    return () => {
+      clearTimeout(hide);
+      clearTimeout(ask);
+    };
+  }, [channel.streamId]);
 
   // ---------------------------------------------------------------- Rewinding
 
@@ -494,6 +513,17 @@ export function LivePlayer(props: { app: App; state: AppState; channel: XtreamCh
         <View pointerEvents="none" style={[sheet(16), { position: 'absolute', left: dp(48), top: dp(27), minWidth: dp(200), maxWidth: dp(460), paddingHorizontal: dp(22), paddingVertical: dp(14), gap: dp(2) }]}>
           <Text style={type.display}>{typed}</Text>
           <Text numberOfLines={1} style={[type.body, { color: typedMatch ? color.chalk : color.muted }]}>{typedMatch?.name ?? 'No channel with this number'}</Text>
+        </View>
+      ) : null}
+
+      {/* Tuned to: bottom left, inside the safe area, until the controls or the guide come up. */}
+      {zap && single && !showing && !guide && !typed && !catchUp && !failure ? (
+        <View pointerEvents="none" style={[sheet(16), { position: 'absolute', left: dp(48), bottom: dp(27), maxWidth: dp(620), flexDirection: 'row', alignItems: 'center', gap: dp(14), paddingHorizontal: dp(18), paddingVertical: dp(12) }]}>
+          {channel.icon ? <Image source={{ uri: channel.icon }} resizeMode="contain" style={{ width: dp(52), height: dp(52), borderRadius: dp(8) }} /> : null}
+          <View style={{ flexShrink: 1, gap: dp(2) }}>
+            <Text numberOfLines={1} style={[type.body, { fontWeight: '600' }]}>{number + channel.name}</Text>
+            {onNow ? <Text numberOfLines={1} style={[type.label, { color: color.muted }]}>{`${onNow.title}  ·  ${timeRange(onNow)}`}</Text> : null}
+          </View>
         </View>
       ) : null}
 
