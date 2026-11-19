@@ -9,7 +9,7 @@
 # out. Google does not publish this module prebuilt (ExoPlayer issue 2781).
 #
 # FFmpeg is built as LGPL (no --enable-gpl, no --enable-nonfree), statically into the
-# JNI library, with only the audio decoders below. To rebuild:
+# JNI library, with only the decoders below. To rebuild:
 #
 #   git clone --depth 1 --branch n6.0.1 https://github.com/FFmpeg/FFmpeg /tmp/ffmpeg
 #   ffmpeg/build-native.sh /tmp/ffmpeg "$ANDROID_HOME/ndk/<version>"
@@ -21,6 +21,10 @@ NDK="$(cd "$2" && pwd)"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 API=23
 DECODERS=(ac3 eac3 dca truehd mlp mp2 mp3 aac_latm flac alac opus vorbis)
+# Old video a Fire TV's own decoders play badly or not at all, decoded in the app
+# (ffmpeg_video_jni.cc): MPEG-4 part 2 (Xvid, DivX), its Microsoft variants and H.263.
+# All LGPL, as the rest.
+DECODERS+=(mpeg4 msmpeg4v2 msmpeg4v3 h263)
 TOOLS="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
 JOBS="$(nproc)"
 STAGE="$(mktemp -d)"
@@ -53,7 +57,8 @@ build_jni() {
     # The CMake file expects FFmpeg's headers and libraries under jni/ffmpeg.
     local src="$STAGE/jni-$abi"
     mkdir -p "$src/ffmpeg/android-libs"
-    cp "$HERE/src/main/jni/CMakeLists.txt" "$HERE/src/main/jni/ffmpeg_jni.cc" "$src/"
+    cp "$HERE/src/main/jni/CMakeLists.txt" "$HERE/src/main/jni/ffmpeg_jni.cc" \
+        "$HERE/src/main/jni/ffmpeg_video_jni.cc" "$src/"
     cp -r "$STAGE/$abi/include/." "$src/ffmpeg/"
     cp -r "$STAGE/$abi/lib" "$src/ffmpeg/android-libs/$abi"
     cmake -S "$src" -B "$src/out" -G Ninja \

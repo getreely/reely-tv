@@ -1,4 +1,4 @@
-// media3's FFmpeg audio decoder, with FFmpeg prebuilt into src/main/jniLibs by
+// media3's FFmpeg audio decoder and Reely's video one beside it, with FFmpeg prebuilt into src/main/jniLibs by
 // build-native.sh. Nothing native is compiled here, so building the app needs no NDK.
 plugins {
     id("com.android.library")
@@ -23,6 +23,7 @@ android {
             project.findProperty("ffmpegHost")?.toString()?.let { dir ->
                 test.systemProperty("java.library.path", dir)
                 test.systemProperty("reely.ffmpegClip", "$dir/tone.eac3frames")
+                test.systemProperty("reely.ffmpegVideoClip", "$dir/picture.mpeg4frames")
             }
         }
     }

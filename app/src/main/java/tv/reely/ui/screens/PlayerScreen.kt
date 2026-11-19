@@ -249,7 +249,8 @@ fun PlayerScreen(
     savedMultiview: String? = null,
     onOpenSavedMultiview: () -> Unit = {},
     onStepEpisode: (Int) -> Unit,
-    onDecodeFailure: (Long) -> Unit,
+    /** The device couldn't play the file: where it had got to, and the player's number for what went wrong. */
+    onDecodeFailure: (Long, Int) -> Unit,
     /** The connection to the Plex server dropped: ask for the title again, afresh, from here. */
     onReopen: (Long) -> Unit = {},
     /** The file's sound cannot be played here; ask the server to convert just that. */
@@ -783,7 +784,7 @@ fun PlayerScreen(
                 }
                 // Only a Plex server can convert; an IPTV provider's file plays as it is or not at all.
                 if (deviceCannotPlay && !currentPlayback.transcoding && currentPlayback.onPlex) {
-                    onDecodeFailure(exoPlayer.currentPosition.coerceAtLeast(0))
+                    onDecodeFailure(exoPlayer.currentPosition.coerceAtLeast(0), playbackError.errorCode)
                 } else if (connection && !currentPlayback.isLive && reconnects < RECONNECT_TRIES) {
                     // Live channels have their own; see LivePlayer.
                     reconnects++
@@ -2538,6 +2539,8 @@ internal fun StatsPanel(
                     else -> "Original"
                 },
             )
+            // Why it isn't the file as it is, when the app knows: the question the line above raises.
+            playback.convertReason?.let { StatLine("Why", it) }
             StatLine("Picture", video?.let(::pictureSummary) ?: "—")
             StatLine(
                 "Sound",

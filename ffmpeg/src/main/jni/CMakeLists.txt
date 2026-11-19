@@ -42,9 +42,11 @@ endforeach()
 include_directories(${ffmpeg_location})
 find_library(android_log_lib log)
 
+# ffmpeg_video_jni.cc is Reely's: video, which media3's module leaves out.
 add_library(ffmpegJNI
             SHARED
-            ffmpeg_jni.cc)
+            ffmpeg_jni.cc
+            ffmpeg_video_jni.cc)
 
 set_target_properties(ffmpegJNI PROPERTIES
                       CXX_VISIBILITY_PRESET hidden

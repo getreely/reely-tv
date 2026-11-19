@@ -576,6 +576,8 @@ data class Playback(
      * the device failed to play it: kept across a reconnect. Implies [transcoding].
      */
     val pictureConverted: Boolean = false,
+    /** Why the server is converting it, said in Playback info; null when it isn't, or was asked to. */
+    val convertReason: String? = null,
     val transcodeSession: String? = null,
     /** Which of the title's files is playing, for a server fallback to ask for the same one. */
     /**
@@ -2936,6 +2938,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                         playlist = playlist,
                         transcoding = serverWorks,
                         audioConverted = convert != null,
+                        convertReason = if (convert != null) "This TV can't play ${resolved.audioCodec?.uppercase() ?: "its"} sound" else null,
                         transcodeSession = if (serverWorks) session else null,
                         audioCodec = resolved.audioCodec,
                         audioChannels = resolved.audioChannels,
@@ -3362,7 +3365,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
      * The device could not decode the file. Ask the server to do the work instead and
      * carry on from where it stopped — the point of having a transcoder at all.
      */
-    fun retryWithTranscode(positionMs: Long) {
+    fun retryWithTranscode(positionMs: Long, errorCode: Int = 0) {
         val playback = _state.value.playback ?: return
         if (playback.transcoding || playback.isLive) return
         if (_state.value.prefs.playbackMode == Settings.MODE_DIRECT) return
@@ -3401,6 +3404,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                         subtitles = emptyList(),
                         transcoding = true,
                         pictureConverted = !copyPicture,
+                        convertReason = "This TV couldn't play the file as it is" + if (errorCode > 0) " (error $errorCode)" else "",
                         transcodeSession = session,
                     )
                 )
@@ -3519,6 +3523,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                         startPositionMs = positionMs,
                         transcoding = true,
                         audioConverted = true,
+                        convertReason = "This TV couldn't play its sound",
                         transcodeSession = session,
                     )
                 )
