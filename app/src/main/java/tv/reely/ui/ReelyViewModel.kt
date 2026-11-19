@@ -569,6 +569,13 @@ data class Playback(
     /** The file's own sound, by Plex's name for it, and its channels, when known. */
     val audioCodec: String? = null,
     val audioChannels: Int = 0,
+    /** The file's own picture format, by Plex's name for it, when known. */
+    val videoCodec: String? = null,
+    /**
+     * True when the server is making the picture again rather than copying it, because
+     * the device failed to play it: kept across a reconnect. Implies [transcoding].
+     */
+    val pictureConverted: Boolean = false,
     val transcodeSession: String? = null,
     /** Which of the title's files is playing, for a server fallback to ask for the same one. */
     /**
@@ -2873,37 +2880,43 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             val serverWorks = transcode || convert != null
 
             releaseTranscode()
+            val url = if (convert != null) {
+                PlexApi.audioConvertUrl(
+                    base = base,
+                    token = token,
+                    clientId = clientId,
+                    ratingKey = item.ratingKey,
+                    sessionId = session,
+                    audioCodecs = convert.codecs,
+                    mediaIndex = mediaIndex,
+                    linked = true,
+                )
+            } else if (transcode) {
+                PlexApi.transcodeUrl(
+                    base = base,
+                    token = token,
+                    clientId = clientId,
+                    ratingKey = item.ratingKey,
+                    sessionId = session,
+                    maxBitrateKbps = _state.value.prefs.maxBitrateKbps,
+                    resolution = RESOLUTION,
+                    mediaIndex = mediaIndex,
+                    subtitles = startsWithServerSubtitles(resolved.subtitleStreams, _state.value.prefs.subtitlesAtStart),
+                    linked = true,
+                )
+            } else {
+                PlexApi.directUrl(resolved.url, clientId)
+            }
+            // A conversion is decided before its stream is asked for: see PlexApi.decide.
+            if (serverWorks) PlexApi.decide(url)
+
             _state.update {
                 it.copy(
                     upNext = null,
                     playback = Playback(
                         title = item.title,
                         subtitle = subtitleLineFor(item),
-                        url = if (convert != null) {
-                            PlexApi.audioConvertUrl(
-                                base = base,
-                                token = token,
-                                clientId = clientId,
-                                ratingKey = item.ratingKey,
-                                sessionId = session,
-                                audioCodecs = convert.codecs,
-                                mediaIndex = mediaIndex,
-                            )
-                        } else if (transcode) {
-                            PlexApi.transcodeUrl(
-                                base = base,
-                                token = token,
-                                clientId = clientId,
-                                ratingKey = item.ratingKey,
-                                sessionId = session,
-                                maxBitrateKbps = it.prefs.maxBitrateKbps,
-                                resolution = RESOLUTION,
-                                mediaIndex = mediaIndex,
-                                subtitles = startsWithServerSubtitles(resolved.subtitleStreams, it.prefs.subtitlesAtStart),
-                            )
-                        } else {
-                            PlexApi.directUrl(resolved.url, clientId)
-                        },
+                        url = url,
                         isLive = false,
                         ratingKey = item.ratingKey,
                         // Both start from the file's beginning and seek, so the clock the
@@ -2926,6 +2939,7 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                         transcodeSession = if (serverWorks) session else null,
                         audioCodec = resolved.audioCodec,
                         audioChannels = resolved.audioChannels,
+                        videoCodec = resolved.videoCodec,
                         mediaIndex = mediaIndex,
                     ),
                 )
@@ -3329,6 +3343,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
     /** The identifier for the sitting this item is part of, minted when the item opens. */
     private fun sessionFor(playback: Playback): String {
+        // A conversion's own session: its stream's address names the same one, which is how
+        // the server knows the reports and the conversion are one sitting (PlexApi.decide).
+        playback.transcodeSession?.let { return it }
         val title = titleOf(playback)
         if (timelineSessionFor != title) {
             timelineSession = UUID.randomUUID().toString()
@@ -3355,26 +3372,39 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val token = plex.tokenFor(playback.serverBase) ?: return
 
         val session = UUID.randomUUID().toString()
-        _state.update {
-            it.copy(
-                playback = playback.copy(
-                    url = PlexApi.transcodeUrl(
-                        base = base,
-                        token = token,
-                        clientId = clientId,
-                        ratingKey = ratingKey,
-                        sessionId = session,
-                        maxBitrateKbps = it.prefs.maxBitrateKbps,
-                        resolution = RESOLUTION,
-                        mediaIndex = playback.mediaIndex,
-                        subtitles = startsWithServerSubtitles(playback.subtitleStreams, it.prefs.subtitlesAtStart),
-                    ),
-                    startPositionMs = positionMs,
-                    subtitles = emptyList(),
-                    transcoding = true,
-                    transcodeSession = session,
+        // The picture the device just failed to play is made again by the server, unless
+        // it's one every stick decodes and the trouble was the file around it.
+        val copyPicture = PlexApi.copiesIntoStream(playback.videoCodec)
+        val url = PlexApi.transcodeUrl(
+            base = base,
+            token = token,
+            clientId = clientId,
+            ratingKey = ratingKey,
+            sessionId = session,
+            maxBitrateKbps = _state.value.prefs.maxBitrateKbps,
+            resolution = RESOLUTION,
+            mediaIndex = playback.mediaIndex,
+            subtitles = startsWithServerSubtitles(playback.subtitleStreams, _state.value.prefs.subtitlesAtStart),
+            copyPicture = copyPicture,
+            linked = true,
+        )
+        viewModelScope.launch {
+            PlexApi.decide(url)
+            _state.update {
+                // Something else started, or it was already handed to the server, meanwhile.
+                val current = it.playback
+                if (current == null || current.url != playback.url || current.transcoding) return@update it
+                it.copy(
+                    playback = current.copy(
+                        url = url,
+                        startPositionMs = positionMs,
+                        subtitles = emptyList(),
+                        transcoding = true,
+                        pictureConverted = !copyPicture,
+                        transcodeSession = session,
+                    )
                 )
-            )
+            }
         }
     }
 
@@ -3407,32 +3437,38 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             if (_state.value.playback?.url != playback.url) return@launch
             releaseTranscode()
             val session = UUID.randomUUID().toString()
+            val now = _state.value.playback ?: return@launch
+            val url = when {
+                now.audioConverted -> PlexApi.audioConvertUrl(
+                    base = base,
+                    token = token,
+                    clientId = clientId,
+                    ratingKey = ratingKey,
+                    sessionId = session,
+                    mediaIndex = now.mediaIndex,
+                    linked = true,
+                )
+                now.transcoding -> PlexApi.transcodeUrl(
+                    base = base,
+                    token = token,
+                    clientId = clientId,
+                    ratingKey = ratingKey,
+                    sessionId = session,
+                    maxBitrateKbps = _state.value.prefs.maxBitrateKbps,
+                    resolution = RESOLUTION,
+                    mediaIndex = now.mediaIndex,
+                    subtitles = startsWithServerSubtitles(now.subtitleStreams, _state.value.prefs.subtitlesAtStart),
+                    copyPicture = !now.pictureConverted,
+                    linked = true,
+                )
+                else -> resolved?.url?.let { PlexApi.directUrl(it, clientId) } ?: now.url
+            }
+            if (now.transcoding) PlexApi.decide(url)
             _state.update {
                 val current = it.playback ?: return@update it
                 it.copy(
                     playback = current.copy(
-                        url = when {
-                            current.audioConverted -> PlexApi.audioConvertUrl(
-                                base = base,
-                                token = token,
-                                clientId = clientId,
-                                ratingKey = ratingKey,
-                                sessionId = session,
-                                mediaIndex = current.mediaIndex,
-                            )
-                            current.transcoding -> PlexApi.transcodeUrl(
-                                base = base,
-                                token = token,
-                                clientId = clientId,
-                                ratingKey = ratingKey,
-                                sessionId = session,
-                                maxBitrateKbps = it.prefs.maxBitrateKbps,
-                                resolution = RESOLUTION,
-                                mediaIndex = current.mediaIndex,
-                                subtitles = startsWithServerSubtitles(current.subtitleStreams, it.prefs.subtitlesAtStart),
-                            )
-                            else -> resolved?.url?.let { PlexApi.directUrl(it, clientId) } ?: current.url
-                        },
+                        url = url,
                         subtitles = if (current.transcoding) current.subtitles else resolved?.subtitles ?: current.subtitles,
                         startPositionMs = positionMs,
                         transcodeSession = if (current.transcoding) session else null,
@@ -3462,23 +3498,31 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
         val token = plex.tokenFor(playback.serverBase) ?: return
 
         val session = UUID.randomUUID().toString()
-        _state.update {
-            it.copy(
-                playback = playback.copy(
-                    url = PlexApi.audioConvertUrl(
-                        base = base,
-                        token = token,
-                        clientId = clientId,
-                        ratingKey = ratingKey,
-                        sessionId = session,
-                        mediaIndex = playback.mediaIndex,
-                    ),
-                    startPositionMs = positionMs,
-                    transcoding = true,
-                    audioConverted = true,
-                    transcodeSession = session,
+        val url = PlexApi.audioConvertUrl(
+            base = base,
+            token = token,
+            clientId = clientId,
+            ratingKey = ratingKey,
+            sessionId = session,
+            mediaIndex = playback.mediaIndex,
+            linked = true,
+        )
+        viewModelScope.launch {
+            PlexApi.decide(url)
+            _state.update {
+                // Something else started, or it was already handed to the server, meanwhile.
+                val current = it.playback
+                if (current == null || current.url != playback.url || current.transcoding) return@update it
+                it.copy(
+                    playback = current.copy(
+                        url = url,
+                        startPositionMs = positionMs,
+                        transcoding = true,
+                        audioConverted = true,
+                        transcodeSession = session,
+                    )
                 )
-            )
+            }
         }
     }
 

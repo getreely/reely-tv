@@ -137,6 +137,8 @@ data class PlexPlayback(
     /** The sound that will play, by Plex's name for it — `eac3`, `ac3`, `aac` — if known. */
     val audioCodec: String? = null,
     val audioChannels: Int = 0,
+    /** The picture's format, by Plex's name for it: `h264`, `hevc`, `mpeg4`, `mpeg2video`. */
+    val videoCodec: String? = null,
     /**
      * Where the server's preview pictures for this file are, with `{ms}` for the moment
      * wanted; null when it hasn't made any. They are the pictures above the bar while
@@ -1017,6 +1019,7 @@ object PlexApi {
                 markers = markersOf(metadata),
                 audioCodec = sound?.first,
                 audioChannels = sound?.second ?: 0,
+                videoCodec = media.optString("videoCodec").takeIf(String::isNotBlank),
                 previewUrl = if (previews) "$base/library/parts/$partId/indexes/sd/{ms}?X-Plex-Token=$token" else null,
                 chapters = chaptersOf(metadata, base, token),
                 partId = partId,
@@ -1146,6 +1149,15 @@ object PlexApi {
         resolution: String,
         mediaIndex: Int = 0,
         subtitles: Boolean = true,
+        /**
+         * Whether the server may hand the picture over as it is where the Android profile
+         * takes it. False when the device has just failed to play this picture: copied
+         * into the stream it's the same picture, and an old MPEG-4 file the stick couldn't
+         * decode came back through the server untouched and played green.
+         */
+        copyPicture: Boolean = true,
+        /** Names the stream as part of the sitting the timeline reports: see [decide]. */
+        linked: Boolean = false,
     ): String {
         /*
          * No `offset`, on purpose. With one, the transcode starts part-way in and the
@@ -1159,12 +1171,12 @@ object PlexApi {
         val bitrate = if (maxBitrateKbps > 0) "&maxVideoBitrate=$maxBitrateKbps" else ""
         return "$base/video/:/transcode/universal/start.m3u8" +
             "?path=$path&mediaIndex=$mediaIndex&partIndex=0" +
-            "&protocol=hls&fastSeek=1&directPlay=0&directStream=1" +
+            "&protocol=hls&fastSeek=1&directPlay=0&directStream=${if (copyPicture) 1 else 0}" +
             // Burned in, because a transcode is exactly when the picture subtitles that
             // cannot be sideloaded become playable. None when they're to start off.
             "&subtitles=${if (subtitles) "burn" else "none"}&audioBoost=100&videoQuality=100" +
             "&videoResolution=$resolution$bitrate" +
-            "&session=$sessionId" +
+            "&session=$sessionId" + (if (linked) "&X-Plex-Session-Identifier=$sessionId" else "") +
             "&X-Plex-Client-Identifier=$clientId" +
             "&X-Plex-Platform=Android&X-Plex-Product=" + URLEncoder.encode(PRODUCT, "UTF-8") +
             "&X-Plex-Token=$token"
@@ -1204,6 +1216,8 @@ object PlexApi {
         sessionId: String,
         audioCodecs: List<String> = listOf("aac"),
         mediaIndex: Int = 0,
+        /** Names the stream as part of the sitting the timeline reports: see [decide]. */
+        linked: Boolean = false,
     ): String {
         val path = URLEncoder.encode("/library/metadata/$ratingKey", "UTF-8")
         val profile = URLEncoder.encode(audioConvertProfile(audioCodecs), "UTF-8")
@@ -1212,7 +1226,7 @@ object PlexApi {
             "&protocol=hls&fastSeek=1" +
             "&directPlay=0&directStream=1&directStreamAudio=0" +
             "&subtitles=none&audioBoost=100&location=lan" +
-            "&session=$sessionId" +
+            "&session=$sessionId" + (if (linked) "&X-Plex-Session-Identifier=$sessionId" else "") +
             "&X-Plex-Client-Profile-Name=Generic&X-Plex-Platform=Generic" +
             "&X-Plex-Client-Profile-Extra=$profile" +
             "&X-Plex-Client-Identifier=$clientId" +
@@ -1247,6 +1261,38 @@ object PlexApi {
             "&X-Plex-Product=" + URLEncoder.encode(PRODUCT, "UTF-8") +
             "&X-Plex-Platform=Android"
     }
+
+    /**
+     * The server asked to decide a conversion before the player asks for its stream, as
+     * Plex's own apps do (universal/decision, then universal/start).
+     *
+     * A conversion's address that names its session ([transcodeUrl]'s `linked`) is what
+     * ties it to the timeline reports made under the same name: without that the server
+     * couldn't tell the two were one sitting, and its dashboard showed a conversion as
+     * Direct Play with the file's own formats. But a stream named for a session the
+     * server already knows, with no decision made for it, is refused ("session lacking
+     * decision for transcode", 400), and a timeline report can get there first. So the
+     * decision is asked for first, with only what the stream's own address says. Whatever
+     * the answer, the stream is still asked for: the start request decides for itself.
+     */
+    suspend fun decide(streamUrl: String) = withContext(Dispatchers.IO) {
+        val url = streamUrl.replace("/transcode/universal/start.m3u8?", "/transcode/universal/decision?")
+        if (url == streamUrl) return@withContext
+        val request = Request.Builder().url(url).header("accept", "application/json").get().build()
+        runCatching { Http.client.newCall(request).execute().use { it.isSuccessful } }
+        Unit
+    }
+
+    /**
+     * Whether a picture in [videoCodec] is one to copy into a conversion's stream after
+     * the device failed to play the file: H.264 and HEVC, which every stick decodes, so
+     * the trouble was the file around them. Anything else is made again as H.264.
+     */
+    fun copiesIntoStream(videoCodec: String?): Boolean =
+        when (videoCodec?.lowercase()) {
+            "h264", "hevc", "h265" -> true
+            else -> false
+        }
 
     /** Releases the server's encoder. Without this a session lingers and keeps working. */
     suspend fun stopTranscode(base: String, token: String, sessionId: String) =
