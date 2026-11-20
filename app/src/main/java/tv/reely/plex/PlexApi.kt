@@ -1156,8 +1156,6 @@ object PlexApi {
          * decode came back through the server untouched and played green.
          */
         copyPicture: Boolean = true,
-        /** Names the stream as part of the sitting the timeline reports: see [decide]. */
-        linked: Boolean = false,
     ): String {
         /*
          * No `offset`, on purpose. With one, the transcode starts part-way in and the
@@ -1176,7 +1174,7 @@ object PlexApi {
             // cannot be sideloaded become playable. None when they're to start off.
             "&subtitles=${if (subtitles) "burn" else "none"}&audioBoost=100&videoQuality=100" +
             "&videoResolution=$resolution$bitrate" +
-            "&session=$sessionId" + (if (linked) "&X-Plex-Session-Identifier=$sessionId" else "") +
+            "&session=$sessionId" +
             "&X-Plex-Client-Identifier=$clientId" +
             "&X-Plex-Platform=Android&X-Plex-Product=" + URLEncoder.encode(PRODUCT, "UTF-8") +
             "&X-Plex-Token=$token"
@@ -1216,8 +1214,6 @@ object PlexApi {
         sessionId: String,
         audioCodecs: List<String> = listOf("aac"),
         mediaIndex: Int = 0,
-        /** Names the stream as part of the sitting the timeline reports: see [decide]. */
-        linked: Boolean = false,
     ): String {
         val path = URLEncoder.encode("/library/metadata/$ratingKey", "UTF-8")
         val profile = URLEncoder.encode(audioConvertProfile(audioCodecs), "UTF-8")
@@ -1226,7 +1222,7 @@ object PlexApi {
             "&protocol=hls&fastSeek=1" +
             "&directPlay=0&directStream=1&directStreamAudio=0" +
             "&subtitles=none&audioBoost=100&location=lan" +
-            "&session=$sessionId" + (if (linked) "&X-Plex-Session-Identifier=$sessionId" else "") +
+            "&session=$sessionId" +
             "&X-Plex-Client-Profile-Name=Generic&X-Plex-Platform=Generic" +
             "&X-Plex-Client-Profile-Extra=$profile" +
             "&X-Plex-Client-Identifier=$clientId" +
@@ -1260,27 +1256,6 @@ object PlexApi {
             "X-Plex-Client-Identifier=" + URLEncoder.encode(clientId, "UTF-8") +
             "&X-Plex-Product=" + URLEncoder.encode(PRODUCT, "UTF-8") +
             "&X-Plex-Platform=Android"
-    }
-
-    /**
-     * The server asked to decide a conversion before the player asks for its stream, as
-     * Plex's own apps do (universal/decision, then universal/start).
-     *
-     * A conversion's address that names its session ([transcodeUrl]'s `linked`) is what
-     * ties it to the timeline reports made under the same name: without that the server
-     * couldn't tell the two were one sitting, and its dashboard showed a conversion as
-     * Direct Play with the file's own formats. But a stream named for a session the
-     * server already knows, with no decision made for it, is refused ("session lacking
-     * decision for transcode", 400), and a timeline report can get there first. So the
-     * decision is asked for first, with only what the stream's own address says. Whatever
-     * the answer, the stream is still asked for: the start request decides for itself.
-     */
-    suspend fun decide(streamUrl: String) = withContext(Dispatchers.IO) {
-        val url = streamUrl.replace("/transcode/universal/start.m3u8?", "/transcode/universal/decision?")
-        if (url == streamUrl) return@withContext
-        val request = Request.Builder().url(url).header("accept", "application/json").get().build()
-        runCatching { Http.client.newCall(request).execute().use { it.isSuccessful } }
-        Unit
     }
 
     /**

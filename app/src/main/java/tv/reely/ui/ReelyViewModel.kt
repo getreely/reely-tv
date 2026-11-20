@@ -2891,7 +2891,6 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                     sessionId = session,
                     audioCodecs = convert.codecs,
                     mediaIndex = mediaIndex,
-                    linked = true,
                 )
             } else if (transcode) {
                 PlexApi.transcodeUrl(
@@ -2904,13 +2903,10 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                     resolution = RESOLUTION,
                     mediaIndex = mediaIndex,
                     subtitles = startsWithServerSubtitles(resolved.subtitleStreams, _state.value.prefs.subtitlesAtStart),
-                    linked = true,
                 )
             } else {
                 PlexApi.directUrl(resolved.url, clientId)
             }
-            // A conversion is decided before its stream is asked for: see PlexApi.decide.
-            if (serverWorks) PlexApi.decide(url)
 
             _state.update {
                 it.copy(
@@ -3346,9 +3342,6 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
 
     /** The identifier for the sitting this item is part of, minted when the item opens. */
     private fun sessionFor(playback: Playback): String {
-        // A conversion's own session: its stream's address names the same one, which is how
-        // the server knows the reports and the conversion are one sitting (PlexApi.decide).
-        playback.transcodeSession?.let { return it }
         val title = titleOf(playback)
         if (timelineSessionFor != title) {
             timelineSession = UUID.randomUUID().toString()
@@ -3389,10 +3382,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             mediaIndex = playback.mediaIndex,
             subtitles = startsWithServerSubtitles(playback.subtitleStreams, _state.value.prefs.subtitlesAtStart),
             copyPicture = copyPicture,
-            linked = true,
         )
         viewModelScope.launch {
-            PlexApi.decide(url)
             _state.update {
                 // Something else started, or it was already handed to the server, meanwhile.
                 val current = it.playback
@@ -3450,7 +3441,6 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                     ratingKey = ratingKey,
                     sessionId = session,
                     mediaIndex = now.mediaIndex,
-                    linked = true,
                 )
                 now.transcoding -> PlexApi.transcodeUrl(
                     base = base,
@@ -3463,11 +3453,9 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
                     mediaIndex = now.mediaIndex,
                     subtitles = startsWithServerSubtitles(now.subtitleStreams, _state.value.prefs.subtitlesAtStart),
                     copyPicture = !now.pictureConverted,
-                    linked = true,
                 )
                 else -> resolved?.url?.let { PlexApi.directUrl(it, clientId) } ?: now.url
             }
-            if (now.transcoding) PlexApi.decide(url)
             _state.update {
                 val current = it.playback ?: return@update it
                 it.copy(
@@ -3509,10 +3497,8 @@ class ReelyViewModel(application: Application) : AndroidViewModel(application) {
             ratingKey = ratingKey,
             sessionId = session,
             mediaIndex = playback.mediaIndex,
-            linked = true,
         )
         viewModelScope.launch {
-            PlexApi.decide(url)
             _state.update {
                 // Something else started, or it was already handed to the server, meanwhile.
                 val current = it.playback

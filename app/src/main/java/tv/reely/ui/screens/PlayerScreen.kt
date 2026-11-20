@@ -403,6 +403,8 @@ fun PlayerScreen(
     // panel. Null while nothing has been decoded, which with sound playing means it is
     // going out untouched to whatever is on the other end of the HDMI.
     var audioDecoder by remember { mutableStateOf<String?>(null) }
+    // What's decoding the picture: the TV's own decoder, or the app's for old formats.
+    var videoDecoder by remember { mutableStateOf<String?>(null) }
 
     // A film or episode opening is worth showing the transport for; a channel is not,
     // and raising it there cost six seconds of a dead d-pad before the timeout cleared it.
@@ -794,8 +796,13 @@ fun PlayerScreen(
                 } else {
                     reconnectFresh = connection
                     // The player's own number for what went wrong, for anyone helping find out why.
-                    val code = " (Error ${playbackError.errorCode})"
-                    error = if (connection && currentPlayback.fromIptv) "Lost the connection to your IPTV provider. Press OK to try again.$code"
+                    // A server that answered, and said no, isn't a lost connection: its answer is
+                    // said with it, since which refusal it was is the whole question.
+                    val refused = (playbackError.cause as? HttpDataSource.InvalidResponseCodeException)?.responseCode
+                    val code = " (Error ${playbackError.errorCode}" + (refused?.let { ", HTTP $it" } ?: "") + ")"
+                    error = if (connection && currentPlayback.fromIptv && refused != null) "Your IPTV provider wouldn't play this. Press OK to try again.$code"
+                        else if (connection && currentPlayback.fromIptv) "Lost the connection to your IPTV provider. Press OK to try again.$code"
+                        else if (connection && !currentPlayback.isLive && refused != null) "Your Plex server wouldn't play this. Press OK to try again.$code"
                         else if (connection && !currentPlayback.isLive) "Lost the connection to your Plex server. Press OK to try again.$code"
                         else describe(playbackError)
                 }
@@ -814,6 +821,15 @@ fun PlayerScreen(
                 initializationDurationMs: Long,
             ) {
                 audioDecoder = decoderName
+            }
+
+            override fun onVideoDecoderInitialized(
+                eventTime: AnalyticsListener.EventTime,
+                decoderName: String,
+                initializedTimestampMs: Long,
+                initializationDurationMs: Long,
+            ) {
+                videoDecoder = decoderName
             }
         }
         exoPlayer.addAnalyticsListener(listener)
@@ -839,6 +855,7 @@ fun PlayerScreen(
         if (playback.reopened <= reopenedSeen) reconnects = 0
         reopenedSeen = playback.reopened
         audioDecoder = null
+        videoDecoder = null
         error = null
         audioNotice = null
         panel = Panel.NONE
@@ -1871,6 +1888,7 @@ fun PlayerScreen(
             StatsPanel(
                 playback = playback,
                 player = exoPlayer,
+                videoDecoder = videoDecoder,
                 focusRequester = panelFocus,
                 onClose = { panel = Panel.NONE },
                 modifier = Modifier.align(Alignment.CenterEnd),
@@ -2497,6 +2515,8 @@ private val SCRUB_THUMB = 14.dp
 internal fun StatsPanel(
     playback: Playback,
     player: ExoPlayer,
+    /** The name of what's decoding the picture, as the player gives it; null until it has. */
+    videoDecoder: String? = null,
     focusRequester: FocusRequester,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
@@ -2542,6 +2562,9 @@ internal fun StatsPanel(
             // Why it isn't the file as it is, when the app knows: the question the line above raises.
             playback.convertReason?.let { StatLine("Why", it) }
             StatLine("Picture", video?.let(::pictureSummary) ?: "—")
+            // Old formats are decoded by the app itself (core/Renderers.kt); which one drew a
+            // picture that looks wrong is the first thing to know about it.
+            videoDecoder?.let { StatLine("Decoded by", if (it.startsWith("ffmpeg")) "Reely" else "This TV") }
             StatLine(
                 "Sound",
                 when {
